@@ -194,7 +194,7 @@ class ServiceModel {
       s.is_featured,
       s.is_popular,
       s.is_recommended,
-      s.section_type,
+      s.value_addition,
       sv.id AS variant_id,
       sv.price,
       sv.image_url
@@ -236,7 +236,7 @@ class ServiceModel {
         sections.recommended.push(service);
       }
 
-      if (item.section_type === "value_added") {
+      if (item.value_addition) {
         sections.value_added.push(service);
       }
     });
