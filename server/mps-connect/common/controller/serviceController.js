@@ -3,6 +3,11 @@ const ServiceModel = require("../models/serviceModel");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const sharp = require("sharp");
+const razorpay = require("../middlewares/razorpay");
+const InvoiceService = require("../../../services/Invoice/service-invoice");
+const { UPLOAD_BASE } = require("../../../config/path");
+const { uploadToR2 } = require("../../../utils/r2upload");
 
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
 function getPublicUrl(path) {
@@ -712,6 +717,201 @@ class ServiceController {
   }
 
   // =================================Create razor pay orders======================
+
+  // create razorpay order
+  async createPaymentOrder(req, res) {
+    try {
+      const apiClientId = req.client.api_client_id;
+      const userId = req.body?.user_id;
+
+      if (!userId) {
+        return res.status(403).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      const { parent_order_id } = req.body;
+
+      if (!parent_order_id) {
+        return res.status(400).json({
+          success: false,
+          message: "parent_order_id required",
+        });
+      }
+
+      //  Get total amount from DB
+      const [orders] = await db.execute(
+        `SELECT SUM(price) as total 
+        FROM external_service_orders 
+        WHERE parent_order_id = ?
+        AND user_id = ?`,
+        [parent_order_id, userId],
+      );
+
+      const totalAmount = Number(orders[0]?.total);
+
+      if (!totalAmount) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid parent_order_id",
+        });
+      }
+
+      const razorpayOrder = await razorpay.orders.create({
+        amount: Math.round(totalAmount * 100),
+        currency: "INR",
+        receipt: parent_order_id,
+        notes: {
+          module: "service",
+          parent_order_id,
+        },
+      });
+
+      await db.execute(
+        `INSERT INTO razorpay_orders
+      (razorpay_order_id, client_id, order_source, receipt, amount, status, ref_id, module)
+      VALUES (?, ?, ?, ?, ?, 'created', ?, 'service')`,
+        [
+          razorpayOrder.id,
+          apiClientId,
+          "external",
+          parent_order_id,
+          totalAmount,
+          parent_order_id,
+        ],
+      );
+
+      res.json({
+        success: true,
+        data: {
+          key: process.env.RAZOR_API_KEY,
+          orderId: razorpayOrder.id,
+          amount: razorpayOrder.amount,
+          currency: razorpayOrder.currency,
+          parent_order_id,
+        },
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  // verify payment
+  async verifyPayment(req, res) {
+    try {
+      const apiClientId = req.client.api_client_id;
+      const userId = req.body?.user_id;
+
+      if (!userId) {
+        return res.status(403).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
+        req.body;
+
+      // verify signature
+      const body = razorpay_order_id + "|" + razorpay_payment_id;
+
+      const expectedSignature = crypto
+        .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+        .update(body.toString())
+        .digest("hex");
+
+      if (expectedSignature !== razorpay_signature) {
+        return res.status(400).json({
+          success: false,
+          message: "Payment verification failed",
+        });
+      }
+
+      //  GET parent_order_id FROM DB
+      const [[rpOrder]] = await db.execute(
+        `SELECT ref_id FROM razorpay_orders 
+       WHERE razorpay_order_id = ?`,
+        [razorpay_order_id],
+      );
+
+      if (!rpOrder) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid razorpay order",
+        });
+      }
+
+      const parent_order_id = rpOrder.ref_id;
+
+      const [[alreadyPaid]] = await db.execute(
+        `SELECT id FROM external_service_orders 
+          WHERE parent_order_id = ? AND payment_status = 'paid' LIMIT 1`,
+        [parent_order_id],
+      );
+
+      if (alreadyPaid) {
+        return res.json({ success: true, message: "Already processed" });
+      }
+
+      //  TRANSACTION
+      await db.beginTransaction();
+
+      try {
+        // update service orders
+        await db.execute(
+          `UPDATE external_service_orders 
+         SET status = 'documents_pending',
+             payment_id = ?,
+             payment_status = 'paid'
+         WHERE parent_order_id = ?
+         AND payment_status != 'paid'`,
+          [razorpay_payment_id, parent_order_id],
+        );
+
+        // update razorpay_orders
+        await db.execute(
+          `UPDATE razorpay_orders
+         SET razorpay_payment_id = ?,
+             status = 'success',
+             raw_response = ?
+         WHERE razorpay_order_id = ?`,
+          [razorpay_payment_id, JSON.stringify(req.body), razorpay_order_id],
+        );
+
+        await InvoiceService.generateInvoice(parent_order_id);
+
+        await db.commit();
+      } catch (err) {
+        await db.rollback();
+        throw err;
+      }
+
+      // redirect
+      const [[firstOrder]] = await db.execute(
+        `SELECT id FROM external_service_orders 
+       WHERE parent_order_id = ? 
+       ORDER BY id ASC LIMIT 1`,
+        [parent_order_id],
+      );
+
+      res.json({
+        success: true,
+        message: "Payment successful",
+        data: {
+          redirect_to: `/service-order-documents/documents/${firstOrder.id}`,
+        },
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
 }
 
 module.exports = new ServiceController();
