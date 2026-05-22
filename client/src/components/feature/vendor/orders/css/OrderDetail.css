@@ -1,0 +1,147 @@
+.order-view-container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 30px 20px;
+  font-family: "Segoe UI", sans-serif;
+  background-color: #f5f7fa;
+}
+
+.order-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.back-btn {
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-weight: 500;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.back-btn:hover {
+  text-decoration: underline;
+}
+
+.card {
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 20px 25px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.card h3 {
+  margin-bottom: 15px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.card-row {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+}
+
+.label {
+  font-size: 12px;
+  color: #6b7280;
+  display: block;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.price {
+  font-weight: 600;
+  color: #111827;
+}
+
+.status {
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-block;
+  text-transform: capitalize;
+}
+
+.status.pending {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.status.completed {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+.status.cancelled {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.landmark {
+  font-style: italic;
+  color: #6b7280;
+  margin-top: 5px;
+}
+
+/* Table */
+.table-wrapper {
+  overflow-x: auto;
+}
+
+.order-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+.order-table th {
+  background-color: #f3f4f6;
+  text-align: left;
+  padding: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.order-table td {
+  padding: 12px;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 14px;
+}
+
+.order-table tbody tr:hover {
+  background-color: #f9fafb;
+}
+
+/* Summary */
+.summary {
+  margin-top: 20px;
+  text-align: right;
+}
+
+.summary div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 15px;
+  margin-bottom: 5px;
+}
+
+.grand-total {
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+}

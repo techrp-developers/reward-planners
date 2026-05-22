@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tax Invoice - INV-001</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@300;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --brand: #0f172a; 
+            --accent: #6366f1; 
+            --text-main: #334155;
+            --text-muted: #64748b;
+            --border: #f1f5f9;
+            --bg-light: #f8fafc;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
+            color: var(--text-main);
+            background-color: #f1f5f9;
+            margin: 0;
+            padding: 40px 20px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .invoice-card {
+            max-width: 850px;
+            margin: auto;
+            background: #ffffff;
+            padding: 50px;
+            border-radius: 20px;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.03);
+        }
+
+        h1, h2, label {
+            font-family: 'Outfit', sans-serif;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 40px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 30px;
+        }
+
+        .company-logo {
+            max-height: 40px;
+            margin-bottom: 10px;
+        }
+
+        .invoice-label h1 {
+            font-size: 40px;
+            margin: 0;
+            color: #e2e8f0;
+            line-height: 0.8;
+            text-transform: uppercase;
+        }
+
+        .meta-tag {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        /* Address Grid - Now 4 columns for Vendor, Billing, Shipping, & Logistics */
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        .info-block label {
+            display: block;
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 10px;
+            letter-spacing: 0.08em;
+            color: var(--accent);
+            margin-bottom: 8px;
+        }
+
+        .info-block p {
+            margin: 0;
+            line-height: 1.5;
+            color: var(--text-main);
+        }
+
+        .vendor-box {
+            background: var(--bg-light);
+            padding: 15px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+
+        /* Table */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 8px;
+            margin-bottom: 30px;
+        }
+
+        th {
+            text-align: left;
+            font-weight: 600;
+            font-size: 11px;
+            color: var(--text-muted);
+            padding: 0 15px;
+            text-transform: uppercase;
+        }
+
+        td {
+            padding: 15px;
+            background: #fff;
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+        }
+
+        td:first-child { border-left: 1px solid var(--border); border-radius: 10px 0 0 10px; }
+        td:last-child { border-right: 1px solid var(--border); border-radius: 0 10px 10px 0; }
+
+        /* Summary */
+        .summary-wrapper {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .logistics-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 12px;
+            background: #eff6ff;
+            color: #1e40af;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .total-box {
+            width: 300px;
+        }
+
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+        }
+
+        .grand-total {
+            margin-top: 10px;
+            padding-top: 15px;
+            border-top: 2px solid var(--brand);
+            font-family: 'Outfit';
+            font-weight: 700;
+            font-size: 18px;
+            color: var(--brand);
+        }
+
+        .disclaimer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+            font-size: 10px;
+            color: var(--text-muted);
+            text-align: center;
+        }
+
+        @media print {
+            body { background: white; padding: 0; }
+            .invoice-card { box-shadow: none; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="invoice-card">
+    <div class="header">
+        <div class="brand">
+            <img src="https://via.placeholder.com/120x40?text=MY-STORE" alt="Marketplace Logo" class="company-logo">
+            <div class="meta-tag">Official Marketplace Invoice</div>
+        </div>
+        <div class="invoice-label">
+            <h1>Invoice</h1>
+            <div class="meta-tag" style="text-align:right">#INV-ORD9921 &nbsp;•&nbsp; 12-03-2026</div>
+        </div>
+    </div>
+
+    <div class="info-grid">
+        <div class="info-block vendor-box">
+            <label>Sold By (Vendor)</label>
+            <p>
+                <strong>Electronics World Hub</strong><br>
+                GSTIN: 27VNDR8821F1Z2<br>
+                Warehouse 4, Industrial Area<br>
+                Pune, Maharashtra 411001
+            </p>
+        </div>
+        <div class="info-block">
+            <label>Shipping To</label>
+            <p>
+                <strong>John Doe</strong><br>
+                123 Sky Tower, Flat 4B<br>
+                Mumbai, MH 400001
+            </p>
+        </div>
+        <div class="info-block">
+            <label>Order & Logistics</label>
+            <p>
+                Order ID: #ORD-12345<br>
+                Order Date: 12-03-2026<br>
+                Payment: Prepaid (CC)
+            </p>
+            <div class="logistics-badge" style="margin-top: 10px;">
+                🚚 Logistics by Express
+            </div>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Product Description</th>
+                <th style="text-align: center;">Qty</th>
+                <th style="text-align: right;">Unit Price</th>
+                <th style="text-align: right;">Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>
+                    <div style="font-weight: 600;">Premium Wireless Headphones</div>
+                    <div style="font-size: 11px; color: var(--text-muted);">SKU: WH-1000XM4 • Vendor: Electronics World</div>
+                </td>
+                <td style="text-align: center;">02</td>
+                <td style="text-align: right;">500.00</td>
+                <td style="text-align: right; font-weight: 600;">1,000.00</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="summary-wrapper">
+        <div class="amount-words">
+            <label>Amount in Words</label>
+            <p style="font-size: 12px; font-style: italic; color: var(--text-muted);">One Thousand Two Hundred Thirty Rupees Only</p>
+        </div>
+        
+        <div class="total-box">
+            <div class="total-row">
+                <span>Subtotal</span>
+                <span>1,000.00</span>
+            </div>
+            <div class="total-row">
+                <span>GST (Collected by Vendor)</span>
+                <span>180.00</span>
+            </div>
+            <div class="total-row">
+                <span>Shipping Fee</span>
+                <span>50.00</span>
+            </div>
+            <div class="total-row grand-total">
+                <span>Grand Total</span>
+                <span>₹1,230.00</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="disclaimer">
+        This invoice is issued on behalf of the Vendor mentioned above. Any returns or warranty claims should be initiated via the MyStore App quoting the Order ID. <br>
+        <strong>Express Logistics:</strong> Track your shipment using the AWB number provided in your dashboard.
+    </div>
+</div>
+
+</body>
+</html>

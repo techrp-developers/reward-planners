@@ -1,0 +1,199 @@
+
+@import "tailwindcss";
+
+/* ============================================================
+   VENDOR PORTAL — GLOBAL ANIMATIONS & UTILITIES
+============================================================ */
+
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.93); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-18px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(133, 43, 175, 0.35); }
+  50%       { box-shadow: 0 0 0 10px rgba(133, 43, 175, 0); }
+}
+
+@keyframes shimmerLoad {
+  0%   { background-position: -400px center; }
+  100% { background-position: 400px center; }
+}
+
+@keyframes rowEntrance {
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ── Row stagger ── */
+.row-animate {
+  animation: rowEntrance 0.35s ease both;
+}
+
+/* ── Stats / section card scale-in ── */
+.stats-card-enter {
+  animation: scaleIn 0.32s ease both;
+}
+
+/* ── Sidebar active link glow ── */
+.sidebar-link-active {
+  box-shadow: 0 4px 20px rgba(133, 43, 175, 0.38);
+}
+
+/* ── Logo pulse ── */
+.logo-glow-pulse {
+  animation: glowPulse 3.5s ease-in-out infinite;
+}
+
+/* ── Gradient brand text ── */
+.gradient-text-brand {
+  background: linear-gradient(135deg, #852BAF 0%, #FC3F78 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Section card subtle lift on hover ── */
+.vendor-section-card {
+  transition: box-shadow 0.25s ease, transform 0.22s ease;
+}
+.vendor-section-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 28px rgba(133, 43, 175, 0.1);
+}
+
+/* ── Vendor sidebar custom scrollbar ── */
+.vendor-sidebar-scroll::-webkit-scrollbar { width: 3px; }
+.vendor-sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+.vendor-sidebar-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #e9d5ff, #fbcfe8);
+  border-radius: 10px;
+}
+
+/* ── Page-level fade-slide entrance ── */
+.page-enter {
+  animation: fadeSlideUp 0.4s ease both;
+}
+
+/* ── Toggle switch smooth transition ── */
+.toggle-track {
+  transition: background-color 0.25s ease;
+}
+.toggle-thumb {
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ── Stat number pop ── */
+.stat-value-pop {
+  animation: scaleIn 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* ── Action button group ── */
+.action-btn {
+  transition: all 0.18s ease;
+}
+.action-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+}
+.action-btn:active {
+  transform: scale(0.93);
+}
+
+@layer components {
+  /* ===== PREMIUM FORM CONTAINER ===== */
+  .premium-form > div {
+    border-radius: 1.5rem;
+    box-shadow:
+      0 10px 30px rgba(133, 43, 175, 0.08),
+      0 1px 3px rgba(0, 0, 0, 0.04);
+    backdrop-filter: blur(10px);
+  }
+
+  /* ===== SECTION HEADERS ===== */
+  .premium-form h1 {
+    letter-spacing: -0.02em;
+  }
+
+  .premium-form h3 {
+    letter-spacing: -0.01em;
+  }
+
+  /* ===== INPUTS ===== */
+  .premium-form input,
+  .premium-form select,
+  .premium-form textarea {
+    background: linear-gradient(#fff, #fff) padding-box,
+      linear-gradient(135deg, #e9d5ff, #fbcfe8) border-box;
+    border: 1px solid transparent;
+    border-radius: 0.75rem;
+    transition: all 0.25s ease;
+  }
+
+  .premium-form input:focus,
+  .premium-form select:focus,
+  .premium-form textarea:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(133, 43, 175, 0.25);
+    transform: translateY(-1px);
+  }
+
+  /* ===== BUTTONS ===== */
+  .premium-form button {
+    transition: all 0.25s ease;
+  }
+
+  .premium-form button:hover {
+    transform: translateY(-1px);
+  }
+
+  .premium-form button:active {
+    transform: translateY(0);
+  }
+
+  /* ===== FILE UPLOAD ===== */
+  .premium-form label.cursor-pointer {
+    box-shadow: 0 4px 12px rgba(133, 43, 175, 0.25);
+  }
+
+  /* ===== VARIANT CARDS ===== */
+  .premium-form .bg-gray-50 {
+    background: linear-gradient(180deg, #ffffff, #faf7ff);
+  }
+
+  /* ===== IMAGE PREVIEW ===== */
+  .premium-form img {
+    transition: transform 0.3s ease;
+  }
+
+  .premium-form img:hover {
+    transform: scale(1.05);
+  }
+}
+
+
+/* prodouctview.tsx */
+.premium-form input[readonly],
+.premium-form textarea[readonly] {
+  pointer-events: none;
+}
+
+.premium-form input,
+.premium-form textarea {
+  transition: all 0.2s ease;
+}
+
+.premium-form input:hover,
+.premium-form textarea:hover {
+  background-color: #f9fafb;
+}

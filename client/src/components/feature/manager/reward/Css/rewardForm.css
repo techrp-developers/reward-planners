@@ -1,0 +1,178 @@
+.order-page {
+  background: #f5f7fb;
+  min-height: 100vh;
+  padding: 20px 16px;
+  display: flex;
+  justify-content: center;
+}
+
+.form-container {
+  width: 100%;
+  /* max-width: 800px; */
+  background: #ffffff;
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+/* Section titles */
+.form-container h3 {
+  font-size: 18px;
+  margin-bottom: 12px;
+  color: #333;
+}
+
+/* Form group */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 16px;
+}
+
+/* Labels */
+.form-group label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #555;
+  margin-bottom: 6px;
+}
+
+/* Inputs & selects */
+.form-group input,
+.form-group select {
+  padding: 10px 12px;
+  border: 1px solid #dcdcdc;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: 0.2s ease;
+}
+
+/* Focus effect */
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+/* Grid layout */
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.form-row-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+}
+
+/* Buttons */
+.save-btn {
+  background: #2563eb;
+  color: #fff;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: 0.2s;
+}
+
+.save-btn:hover {
+  background: #1e40af;
+}
+
+.cancel-btn {
+  background: #fff;
+  color: #555;
+  padding: 10px 18px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.cancel-btn:hover {
+  background: #f3f4f6;
+}
+
+/* Toggle switch */
+.toggle {
+  width: 50px;
+  height: 26px;
+  border-radius: 20px;
+  background: #ccc;
+  position: relative;
+  cursor: pointer;
+  transition: 0.3s;
+}
+
+.toggle.active {
+  background: #22c55e;
+}
+
+.toggle-circle {
+  width: 22px;
+  height: 22px;
+  background: #fff;
+  border-radius: 50%;
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  transition: 0.3s;
+}
+
+.toggle.active .toggle-circle {
+  transform: translateX(24px);
+}
+
+/* Add these to your existing CSS file */
+
+/* Spacing between sections */
+h3 {
+  border-bottom: 1px solid #f0f0f0;
+  padding-bottom: 8px;
+  margin-top: 24px !important;
+  color: #2563eb !important; /* Makes section titles pop */
+}
+
+/* Toggle alignment */
+.toggle-section {
+  display: flex;
+  gap: 40px;
+  margin-top: 20px;
+  background: #f9fafb;
+  padding: 15px;
+  border-radius: 10px;
+}
+
+.toggle-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.label-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: #444;
+}
+
+/* Specific styling for the textarea */
+textarea {
+  font-family: inherit;
+  resize: vertical;
+}
+
+/* Responsive fix for small screens */
+@media (max-width: 600px) {
+  .form-row, .form-row-3 {
+    grid-template-columns: 1fr;
+  }
+  .toggle-section {
+    flex-direction: column;
+    gap: 15px;
+  }
+}

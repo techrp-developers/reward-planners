@@ -1,0 +1,19 @@
+const express = require("express");
+const router = express.Router();
+const auth = require("../../../common/middlewares/auth");
+const ServiceOrderDocumentController = require("../controllers/serviceOrderDocumentController");
+
+// Get Required documents for a service order
+router.get(
+  "/required-documents/:orderId",
+  ServiceOrderDocumentController.getRequiredDocuments,
+);
+
+// service document page
+router.get(
+  "/documents/:orderId",
+  auth,
+  ServiceOrderDocumentController.getServiceOrderDocumentsPage,
+);
+
+module.exports = router;

@@ -1,0 +1,1744 @@
+const db = require("../../../../config/database");
+const fs = require("fs");
+const path = require("path");
+const AddressModel = require("../../../common/models/addressModel");
+const xpressService = require("../../../../services/ExpressBees/xpressbees_service");
+const RewardModel = require("../../../../models/rewardModel");
+
+const CDN_BASE_URL = "https://cdn.rewardplanners.com";
+function getPublicUrl(path) {
+  if (!path) return null;
+  return `${CDN_BASE_URL}/${path}`;
+}
+
+function calculateReward(amount, rules = []) {
+  let total = 0;
+
+  for (let rule of rules) {
+    if (!rule.can_earn_reward) continue;
+
+    let reward = 0;
+
+    if (rule.reward_type === "percentage") {
+      reward = (amount * rule.reward_value) / 100;
+
+      if (rule.max_reward) {
+        reward = Math.min(reward, rule.max_reward);
+      }
+    }
+
+    if (rule.reward_type === "fixed") {
+      reward = rule.reward_value;
+    }
+
+    total += reward;
+
+    // stop if not stackable
+    if (!rule.is_stackable) break;
+  }
+
+  return Math.floor(total);
+}
+
+function generateOrderRef() {
+  const date = new Date();
+  const ymd = date.toISOString().slice(0, 10).replace(/-/g, "");
+  const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
+  return `ORD-${ymd}-${rand}`;
+}
+
+function formatDate(date) {
+  if (!date) return null;
+  return date.toLocaleDateString("en-IN", {
+    weekday: "long",
+    day: "numeric",
+    month: "short",
+  });
+}
+
+async function generateInvoices(orderId, conn) {
+  try {
+    // 1 Fetch order items with vendor
+    const [items] = await conn.query(
+      `
+      SELECT 
+        oi.product_id,
+        oi.variant_id,
+        oi.quantity,
+        oi.price,
+        p.product_name,
+        p.vendor_id,
+        p.gst_slab,
+        p.hsn_sac_code,
+        v.sku
+      FROM eorder_items oi
+      JOIN eproducts p ON oi.product_id = p.product_id
+      JOIN product_variants v ON oi.variant_id = v.variant_id
+      WHERE oi.order_id = ?
+      `,
+      [orderId],
+    );
+
+    if (!items.length) {
+      return;
+    }
+
+    // 2 Group items by vendor
+    const vendorMap = {};
+
+    for (const item of items) {
+      if (!vendorMap[item.vendor_id]) {
+        vendorMap[item.vendor_id] = [];
+      }
+      vendorMap[item.vendor_id].push(item);
+    }
+
+    // 3 Create invoice per vendor
+    for (const vendorId of Object.keys(vendorMap)) {
+      // Prevent duplicates
+      const [[existing]] = await conn.query(
+        `SELECT invoice_id FROM invoices 
+         WHERE order_id = ? AND vendor_id = ? 
+         LIMIT 1`,
+        [orderId, vendorId],
+      );
+
+      if (existing) continue;
+
+      const vendorItems = vendorMap[vendorId];
+      const invoiceNumber = `INV-${orderId}-${vendorId}`;
+
+      let subtotal = 0;
+      let taxTotal = 0;
+
+      // Calculate totals
+      for (const item of vendorItems) {
+        const lineSubtotal = Number(item.price) * Number(item.quantity);
+        const gstRate = Number(item.gst_slab || 0);
+        const taxAmount = lineSubtotal * (gstRate / 100);
+
+        subtotal += lineSubtotal;
+        taxTotal += taxAmount;
+      }
+
+      // 4 Fetch shipping charges for vendor
+      const [[shipment]] = await conn.query(
+        `
+        SELECT shipping_charges
+        FROM order_shipments
+        WHERE order_id = ? AND vendor_id = ?
+        LIMIT 1
+        `,
+        [orderId, vendorId],
+      );
+
+      const shippingCharges = Number(shipment?.shipping_charges || 0);
+
+      const grandTotal = subtotal + taxTotal + shippingCharges;
+
+      // 5 Create invoice
+      const [invResult] = await conn.query(
+        `
+        INSERT INTO invoices
+        (
+          invoice_number,
+          order_id,
+          vendor_id,
+          user_id,
+          subtotal,
+          tax_total,
+          shipping_amount,
+          grand_total
+        )
+        SELECT ?, o.order_id, ?, o.user_id, ?, ?, ?, ?
+        FROM eorders o
+        WHERE o.order_id = ?
+        `,
+        [
+          invoiceNumber,
+          vendorId,
+          subtotal,
+          taxTotal,
+          shippingCharges,
+          grandTotal,
+          orderId,
+        ],
+      );
+
+      const invoiceId = invResult.insertId;
+
+      // 6 Insert invoice items
+      for (const item of vendorItems) {
+        const lineSubtotal = Number(item.price) * Number(item.quantity);
+        const gstRate = Number(item.gst_slab || 0);
+
+        const totalTax = lineSubtotal * (gstRate / 100);
+
+        const cgst = totalTax / 2;
+        const sgst = totalTax / 2;
+        const igst = 0;
+
+        const lineTotal = lineSubtotal + totalTax;
+
+        await conn.query(
+          `
+            INSERT INTO invoice_items
+            (
+              invoice_id,
+              product_id,
+              variant_id,
+              product_name,
+              sku,
+              quantity,
+              unit_price,
+              tax_rate,
+              hsn_code,
+              cgst_amount,
+              sgst_amount,
+              igst_amount,
+              line_total
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `,
+          [
+            invoiceId,
+            item.product_id,
+            item.variant_id,
+            item.product_name,
+            item.sku,
+            item.quantity,
+            item.price,
+            gstRate,
+            item.hsn_sac_code,
+            cgst,
+            sgst,
+            igst,
+            lineTotal,
+          ],
+        );
+      }
+    }
+  } catch (err) {
+    throw err;
+  }
+}
+
+class CheckoutModel {
+  // Buy cart items
+  async checkoutCart(
+    userId,
+    companyId,
+    addressId,
+    useRewards = true,
+    expectedTotal,
+    expectedRedeemable,
+  ) {
+    const conn = await db.getConnection();
+
+    try {
+      await conn.beginTransaction();
+
+      // ===============================
+      // ENSURE WALLET EXISTS
+      // ===============================
+
+      await conn.execute(
+        `INSERT INTO customer_wallet (user_id, balance)
+          VALUES (?, 0)
+          ON DUPLICATE KEY UPDATE balance = balance`,
+        [userId],
+      );
+
+      // ===============================
+      // 0. WALLET (LOCK)
+      // ===============================
+      const [[wallet]] = await conn.execute(
+        `SELECT balance FROM customer_wallet WHERE user_id = ? FOR UPDATE`,
+        [userId],
+      );
+
+      let walletBalance = Number(wallet?.balance || 0);
+      let remainingWallet = useRewards ? walletBalance : 0;
+
+      // 1 Fetch cart items
+      const [cartItems] = await conn.execute(
+        `
+        SELECT 
+          ci.product_id,
+          ci.variant_id,
+          ci.quantity,
+          v.sale_price,
+          v.mrp,
+          v.stock,
+          v.weight,
+          v.length,
+          v.breadth,
+          v.height,
+          v.reward_redemption_limit,
+          p.vendor_id,
+          p.category_id,
+          p.subcategory_id
+
+        FROM cart_items ci
+        JOIN product_variants v ON ci.variant_id = v.variant_id
+        JOIN eproducts p ON v.product_id = p.product_id
+
+        WHERE ci.user_id = ?  
+        FOR UPDATE
+        `,
+        [userId],
+      );
+
+      if (!cartItems.length) throw new Error("CART_EMPTY");
+
+      // 2 Validate stock
+      for (const item of cartItems) {
+        if (item.quantity > item.stock) {
+          throw new Error("OUT_OF_STOCK");
+        }
+      }
+
+      // 3 Get customer address
+      const customerAddress = await AddressModel.getAddressById(
+        addressId,
+        userId,
+      );
+
+      if (!customerAddress) {
+        throw new Error("INVALID_ADDRESS");
+      }
+
+      // =====================
+      //  PRICING CALCULATION
+      // =====================
+      let productTotal = 0;
+      let totalRedeemed = 0;
+      let totalRewardEarn = 0;
+
+      const itemPricingMap = {};
+      const rewardCache = {};
+
+      for (const item of cartItems) {
+        const itemTotal = Number(item.sale_price) * item.quantity;
+        productTotal += itemTotal;
+
+        const key = `${item.product_id}_${item.variant_id}_${item.category_id}_${item.subcategory_id}_${item.sale_price}`;
+
+        let rules = rewardCache[key];
+
+        if (!rules) {
+          rules = await RewardModel.getProductRewards(
+            item.product_id,
+            item.variant_id,
+            item.category_id,
+            item.subcategory_id,
+            item.sale_price,
+          );
+          rewardCache[key] = rules;
+        }
+
+        /* ---------- REDEEM ---------- */
+        let redeemable = 0;
+        const limit = Number(item.reward_redemption_limit || 0);
+
+        if (useRewards && limit > 0 && remainingWallet > 0) {
+          const maxAllowed = Math.floor((itemTotal * limit) / 100);
+
+          redeemable = Math.min(remainingWallet, maxAllowed, itemTotal);
+
+          remainingWallet -= redeemable;
+          totalRedeemed += redeemable;
+        }
+
+        const finalItemTotal = itemTotal - redeemable;
+
+        /* ---------- EARN ---------- */
+        let rewardEarn = 0;
+
+        if (rules.length) {
+          rewardEarn = calculateReward(finalItemTotal, rules);
+          totalRewardEarn += rewardEarn;
+        }
+
+        itemPricingMap[item.variant_id] = {
+          itemTotal,
+          redeemable,
+          finalItemTotal,
+          rewardEarn,
+        };
+      }
+      totalRedeemed = Math.min(totalRedeemed, productTotal);
+
+      // 4 Group Items by Vendor(Shipping)
+      const vendorGroups = {};
+
+      for (const item of cartItems) {
+        const vendorId = Number(item.vendor_id);
+
+        if (!vendorGroups[vendorId]) {
+          vendorGroups[vendorId] = {
+            items: [],
+            totalWeightKg: 0,
+            totalAmount: 0,
+            length: 0,
+            breadth: 0,
+            height: 0,
+          };
+        }
+
+        const group = vendorGroups[vendorId];
+
+        group.items.push(item);
+
+        group.totalWeightKg += item.quantity * Number(item.weight);
+        group.totalAmount += itemPricingMap[item.variant_id].finalItemTotal;
+
+        group.length = Math.max(group.length, Number(item.length));
+        group.breadth = Math.max(group.breadth, Number(item.breadth));
+        group.height += Number(item.height) * item.quantity;
+      }
+
+      // 5 calculate the service pricing
+      const shippingResults = [];
+
+      for (const vendorId in vendorGroups) {
+        const vendor = vendorGroups[vendorId];
+
+        const [[vendorAddress]] = await conn.execute(
+          `SELECT pincode FROM vendor_addresses 
+            WHERE vendor_id = ? AND type = 'shipping' LIMIT 1`,
+          [vendorId],
+        );
+
+        if (!vendorAddress) {
+          throw new Error("VENDOR_ADDRESS_MISSING");
+        }
+
+        const weightGrams = Math.round(vendor.totalWeightKg * 1000);
+        const length = Math.round(vendor.length);
+        const breadth = Math.round(vendor.breadth);
+        const height = Math.round(vendor.height);
+
+        const serviceResponse = await xpressService.checkServiceability({
+          origin: vendorAddress.pincode,
+          destination: customerAddress.zipcode,
+          payment_type: "prepaid",
+          order_amount: vendor.totalAmount.toString(),
+          weight: weightGrams.toString(),
+          length: length.toString(),
+          breadth: breadth.toString(),
+          height: height.toString(),
+        });
+
+        if (!serviceResponse.status || !serviceResponse.data.length) {
+          throw new Error("NOT_SERVICEABLE");
+        }
+
+        // const cheapest = serviceResponse.data
+        //   .filter((o) => o.total_charges > 0)
+        //   .sort((a, b) => a.total_charges - b.total_charges)[0];
+
+        const validOptions = serviceResponse.data.filter(
+          (o) => o.total_charges > 0,
+        );
+
+        if (!validOptions.length) {
+          throw new Error("NOT_SERVICEABLE");
+        }
+
+        const selectedCourier = [...validOptions].sort(
+          (a, b) => a.total_charges - b.total_charges,
+        )[0];
+
+        // =====================
+        // DELIVERY DATE
+        // =====================
+        let expectedDeliveryDate = null;
+
+        if (selectedCourier.estimated_delivery_date) {
+          expectedDeliveryDate = new Date(
+            selectedCourier.estimated_delivery_date,
+          );
+        } else if (selectedCourier.estimated_delivery_days) {
+          const date = new Date();
+          date.setDate(
+            date.getDate() + Number(selectedCourier.estimated_delivery_days),
+          );
+          expectedDeliveryDate = date;
+        }
+
+        // fallback
+        if (!expectedDeliveryDate) {
+          const fallback = new Date();
+          fallback.setDate(fallback.getDate() + 5);
+          expectedDeliveryDate = fallback;
+        }
+
+        shippingResults.push({
+          vendor_id: Number(vendorId),
+          courier_id: selectedCourier.id || selectedCourier.courier_id || null,
+          courier_name: selectedCourier.name,
+          shipping_charges: Number(selectedCourier.total_charges),
+          chargeable_weight: selectedCourier.chargeable_weight,
+          package_weight: weightGrams,
+          length,
+          breadth,
+          height,
+          courier_options: JSON.stringify(serviceResponse.data),
+          expected_delivery_date: expectedDeliveryDate,
+        });
+      }
+
+      // 6 Calculate Totals
+      const shippingTotal = shippingResults.reduce(
+        (sum, s) => sum + s.shipping_charges,
+        0,
+      );
+
+      const finalTotal = productTotal - totalRedeemed + shippingTotal;
+
+      /* ===============================
+       VALIDATION (ANTI-TAMPER)
+    =============================== */
+      if (Math.abs(finalTotal - expectedTotal) > 0.5) {
+        throw new Error("PRICE_MISMATCH");
+      }
+
+      if (Math.abs(totalRedeemed - expectedRedeemable) > 0.5) {
+        throw new Error("PRICE_MISMATCH");
+      }
+
+      // 7 Create order
+      const orderRef = generateOrderRef();
+
+      const [orderRes] = await conn.execute(
+        `
+        INSERT INTO eorders (user_id,company_id, total_amount,order_ref,address_id, product_total, reward_discount, reward_coins_used,reward_earned, reward_coins_earned, shipping_total)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        [
+          userId,
+          companyId,
+          finalTotal,
+          orderRef,
+          addressId,
+          productTotal,
+          totalRedeemed,
+          totalRedeemed,
+          totalRewardEarn,
+          totalRewardEarn,
+          shippingTotal,
+        ],
+      );
+
+      const orderId = orderRes.insertId;
+
+      // 8 create vendor Order
+      const vendorOrders = {};
+
+      for (const vendorId in vendorGroups) {
+        const vendor = vendorGroups[vendorId];
+
+        const [vendorOrderRes] = await conn.execute(
+          `
+        INSERT INTO vendor_orders
+        (order_id, vendor_id, vendor_total, shipping_status)
+        VALUES (?, ?, ?, 'pending')
+        `,
+          [orderId, vendorId, vendor.totalAmount],
+        );
+
+        vendorOrders[vendorId] = vendorOrderRes.insertId;
+      }
+
+      // 9 Order items + stock deduction
+      for (const item of cartItems) {
+        const pricing = itemPricingMap[item.variant_id];
+        const vendorOrderId = vendorOrders[item.vendor_id];
+
+        await conn.execute(
+          `
+        INSERT INTO eorder_items
+        (order_id, vendor_order_id, product_id, variant_id, quantity, price, reward_discount, reward_coins_used, reward_earned, reward_coins_earned, final_price)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+          [
+            orderId,
+            vendorOrderId,
+            item.product_id,
+            item.variant_id,
+            item.quantity,
+            item.sale_price,
+            pricing.redeemable,
+            pricing.redeemable,
+            pricing.rewardEarn,
+            pricing.rewardEarn,
+            pricing.finalItemTotal,
+          ],
+        );
+
+        const [updateRes] = await conn.execute(
+          `
+        UPDATE product_variants
+        SET stock = stock - ?
+        WHERE variant_id = ? AND stock >= ?
+        `,
+          [item.quantity, item.variant_id, item.quantity],
+        );
+
+        if (updateRes.affectedRows === 0) {
+          throw new Error("STOCK_RACE_CONDITION");
+        }
+      }
+
+      // 10 Shipment creation
+      for (const shipment of shippingResults) {
+        const vendorOrderId = vendorOrders[shipment.vendor_id];
+
+        await conn.execute(
+          `
+        INSERT INTO order_shipments
+        (order_id, vendor_order_id, vendor_id, courier_id, courier_name,
+        shipping_charges, chargeable_weight,
+        weight, length, breadth, height,
+        courier_options,
+        expected_delivery_date,
+        shipping_status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'awaiting_payment')
+        `,
+          [
+            orderId,
+            vendorOrderId,
+            shipment.vendor_id,
+            shipment.courier_id,
+            shipment.courier_name,
+            shipment.shipping_charges,
+            shipment.chargeable_weight,
+            shipment.package_weight,
+            shipment.length,
+            shipment.breadth,
+            shipment.height,
+            shipment.courier_options,
+            shipment.expected_delivery_date,
+          ],
+        );
+      }
+
+      // =====================
+      //  WALLET DEDUCTION
+      // =====================
+      const EXPIRY_MONTHS = parseInt(
+        process.env.WALLET_EXPIRY_MONTHS || "3",
+        10,
+      );
+      const expiryDate = new Date();
+      expiryDate.setMonth(expiryDate.getMonth() + EXPIRY_MONTHS);
+
+      if (useRewards && totalRedeemed > 0) {
+        if (walletBalance < totalRedeemed) {
+          throw new Error("INSUFFICIENT_REWARDS");
+        }
+
+        await conn.execute(
+          `UPDATE customer_wallet 
+         SET balance = balance - ? 
+         WHERE user_id = ?`,
+          [totalRedeemed, userId],
+        );
+
+        await conn.execute(
+          `INSERT INTO wallet_transactions
+         (user_id, title, transaction_type, coins, category, reference_id, description)
+         VALUES (?, ?, 'debit', ?, 'order', ?, ?)`,
+          [
+            userId,
+            "Coins used for order",
+            totalRedeemed,
+            orderId,
+            `Used ${totalRedeemed} coins for order`,
+          ],
+        );
+      }
+
+      if (totalRewardEarn > 0) {
+        const [insertResult] = await conn.execute(
+          `INSERT IGNORE INTO wallet_transactions
+       (user_id, title, transaction_type, coins, category, reference_id, description, expiry_date)
+       VALUES (?, ?, 'credit', ?, 'order', ?, ?, ?)`,
+          [
+            userId,
+            "Coins earned from order",
+            totalRewardEarn,
+            orderId,
+            `Earned ${totalRewardEarn} coins from order`,
+            expiryDate,
+          ],
+        );
+
+        if (insertResult.affectedRows > 0) {
+          await conn.execute(
+            `UPDATE customer_wallet
+         SET balance = balance + ?
+         WHERE user_id = ?`,
+            [totalRewardEarn, userId],
+          );
+        }
+      }
+
+      // 11 Invoice generation
+      await generateInvoices(orderId, conn);
+
+      // 12 Clear cart
+      await conn.execute(`DELETE FROM cart_items WHERE user_id = ?`, [userId]);
+
+      await conn.commit();
+      return orderId;
+    } catch (error) {
+      await conn.rollback();
+      throw error;
+    } finally {
+      conn.release();
+    }
+  }
+
+  // buy now
+  async buyNow({
+    userId,
+    productId,
+    variantId,
+    quantity,
+    companyId,
+    addressId,
+    useRewards = true,
+    expectedTotal,
+    expectedRedeemable,
+  }) {
+    const conn = await db.getConnection();
+
+    try {
+      await conn.beginTransaction();
+
+      // ===============================
+      // 1. ENSURE WALLET EXISTS
+      // ===============================
+      await conn.execute(
+        `INSERT INTO customer_wallet (user_id, balance)
+       VALUES (?, 0)
+       ON DUPLICATE KEY UPDATE balance = balance`,
+        [userId],
+      );
+
+      const [[wallet]] = await conn.execute(
+        `SELECT balance FROM customer_wallet WHERE user_id = ? FOR UPDATE`,
+        [userId],
+      );
+
+      let walletBalance = Number(wallet?.balance || 0);
+
+      // ===============================
+      // 2. FETCH PRODUCT + REWARD
+      // ===============================
+      const [[item]] = await conn.execute(
+        `
+      SELECT 
+        v.sale_price,
+        v.mrp,
+        v.stock,
+        v.weight,
+        v.length,
+        v.breadth,
+        v.height,
+        v.reward_redemption_limit,
+
+        p.vendor_id,
+        p.category_id,
+        p.subcategory_id
+
+      FROM product_variants v
+      JOIN eproducts p ON v.product_id = p.product_id
+
+      WHERE v.variant_id = ? AND v.product_id = ?
+      `,
+        [variantId, productId],
+      );
+
+      if (!item) throw new Error("INVALID_VARIANT");
+
+      if (quantity > item.stock) throw new Error("OUT_OF_STOCK");
+
+      // ===============================
+      // 3. CALCULATIONS
+      // ===============================
+      const itemTotal = Number(item.sale_price) * quantity;
+
+      const rules = await RewardModel.getProductRewards(
+        productId,
+        variantId,
+        item.category_id,
+        item.subcategory_id,
+        item.sale_price,
+      );
+
+      let redeemable = 0;
+      const limit = Number(item.reward_redemption_limit || 0);
+
+      if (useRewards && limit > 0 && walletBalance > 0) {
+        const maxAllowed = Math.floor((itemTotal * limit) / 100);
+        redeemable = Math.min(walletBalance, maxAllowed, itemTotal);
+        walletBalance -= redeemable;
+      }
+
+      const finalItemTotal = itemTotal - redeemable;
+
+      // ===============================
+      // 4. EARNING
+      // ===============================
+      let rewardEarn = 0;
+      if (rules.length) {
+        rewardEarn = calculateReward(finalItemTotal, rules);
+      }
+
+      // ===============================
+      // 5. ADDRESS + SHIPPING (UNCHANGED)
+      // ===============================
+      const customerAddress = await AddressModel.getAddressById(
+        addressId,
+        userId,
+      );
+
+      if (!customerAddress) throw new Error("INVALID_ADDRESS");
+
+      const [[vendorAddress]] = await conn.execute(
+        `SELECT pincode FROM vendor_addresses
+       WHERE vendor_id = ? AND type = 'shipping' LIMIT 1`,
+        [item.vendor_id],
+      );
+
+      if (!vendorAddress) throw new Error("VENDOR_ADDRESS_MISSING");
+
+      const weightGrams = Math.round(quantity * Number(item.weight) * 1000);
+      const length = Math.round(item.length);
+      const breadth = Math.round(item.breadth);
+      const height = Math.round(quantity * Number(item.height));
+
+      const serviceResponse = await xpressService.checkServiceability({
+        origin: vendorAddress.pincode,
+        destination: customerAddress.zipcode,
+        payment_type: "prepaid",
+        order_amount: finalItemTotal.toString(),
+        weight: weightGrams.toString(),
+        length: length.toString(),
+        breadth: breadth.toString(),
+        height: height.toString(),
+      });
+
+      if (!serviceResponse.status || !serviceResponse.data.length) {
+        throw new Error("NOT_SERVICEABLE");
+      }
+
+      const courier = serviceResponse.data
+        .filter((o) => o.total_charges > 0)
+        .sort((a, b) => a.total_charges - b.total_charges)[0];
+
+      if (!courier) throw new Error("NOT_SERVICEABLE");
+
+      const shippingCharge = Number(courier.total_charges);
+
+      // =====================
+      // DELIVERY DATE (FIXED)
+      // =====================
+      let expectedDeliveryDate = null;
+
+      if (courier.estimated_delivery_date) {
+        expectedDeliveryDate = new Date(courier.estimated_delivery_date);
+      } else if (courier.estimated_delivery_days) {
+        const date = new Date();
+        date.setDate(date.getDate() + Number(courier.estimated_delivery_days));
+        expectedDeliveryDate = date;
+      }
+
+      // fallback
+      if (!expectedDeliveryDate) {
+        const fallback = new Date();
+        fallback.setDate(fallback.getDate() + 5);
+        expectedDeliveryDate = fallback;
+      }
+
+      const finalTotal = finalItemTotal + shippingCharge;
+
+      /* ===============================
+       VALIDATION (ANTI-TAMPER)
+    =============================== */
+      if (Math.abs(finalTotal - expectedTotal) > 0.5) {
+        throw new Error("PRICE_MISMATCH");
+      }
+
+      if (Math.abs(redeemable - expectedRedeemable) > 0.5) {
+        throw new Error("PRICE_MISMATCH");
+      }
+
+      // ===============================
+      // 6. CREATE ORDER
+      // ===============================
+      const orderRef = generateOrderRef();
+
+      const [orderRes] = await conn.execute(
+        `
+      INSERT INTO eorders
+      (user_id, company_id, total_amount, order_ref, address_id,
+       product_total, reward_discount, reward_coins_used,
+       reward_earned, reward_coins_earned, shipping_total)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+        [
+          userId,
+          companyId,
+          finalTotal,
+          orderRef,
+          addressId,
+          itemTotal,
+          redeemable,
+          redeemable,
+          rewardEarn,
+          rewardEarn,
+          shippingCharge,
+        ],
+      );
+
+      const orderId = orderRes.insertId;
+
+      // ===============================
+      // 7. VENDOR ORDER
+      // ===============================
+      const [vendorOrderRes] = await conn.execute(
+        `INSERT INTO vendor_orders
+       (order_id, vendor_id, vendor_total, shipping_status)
+       VALUES (?, ?, ?, 'pending')`,
+        [orderId, item.vendor_id, finalItemTotal],
+      );
+
+      const vendorOrderId = vendorOrderRes.insertId;
+
+      // ===============================
+      // 8. ORDER ITEM
+      // ===============================
+      await conn.execute(
+        `
+      INSERT INTO eorder_items
+      (order_id, vendor_order_id, product_id, variant_id, quantity, price,
+       reward_discount, reward_coins_used,
+       reward_earned, reward_coins_earned,
+       final_price)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+        [
+          orderId,
+          vendorOrderId,
+          productId,
+          variantId,
+          quantity,
+          item.sale_price,
+          redeemable,
+          redeemable,
+          rewardEarn,
+          rewardEarn,
+          finalItemTotal,
+        ],
+      );
+
+      // ===============================
+      // 8.5 ORDER SHIPMENT
+      // ===============================
+      await conn.execute(
+        `
+        INSERT INTO order_shipments
+        (order_id, vendor_order_id, vendor_id, courier_id, courier_name,
+        shipping_charges, chargeable_weight,
+        weight, length, breadth, height,
+        courier_options,
+        expected_delivery_date,
+        shipping_status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'awaiting_payment')
+        `,
+        [
+          orderId,
+          vendorOrderId,
+          item.vendor_id,
+          courier.id,
+          courier.name,
+          shippingCharge,
+          courier.chargeable_weight,
+          weightGrams,
+          length,
+          breadth,
+          height,
+          JSON.stringify(serviceResponse.data),
+          expectedDeliveryDate,
+        ],
+      );
+
+      // ===============================
+      // 9. WALLET DEBIT
+      // ===============================
+      const EXPIRY_MONTHS = parseInt(
+        process.env.WALLET_EXPIRY_MONTHS || "3",
+        10,
+      );
+
+      const expiryDate = new Date();
+      expiryDate.setMonth(expiryDate.getMonth() + EXPIRY_MONTHS);
+
+      if (useRewards && redeemable > 0) {
+        await conn.execute(
+          `UPDATE customer_wallet SET balance = balance - ? WHERE user_id = ?`,
+          [redeemable, userId],
+        );
+
+        await conn.execute(
+          `INSERT INTO wallet_transactions
+         (user_id, title, transaction_type, coins, category, reference_id, description)
+         VALUES (?, ?, 'debit', ?, 'order', ?, ?)`,
+          [
+            userId,
+            "Coins used for order",
+            redeemable,
+            orderId,
+            `Used ${redeemable} coins`,
+          ],
+        );
+      }
+
+      // ===============================
+      // 10. WALLET CREDIT (SAFE)
+      // ===============================
+      if (rewardEarn > 0) {
+        const [insertResult] = await conn.execute(
+          `INSERT IGNORE INTO wallet_transactions
+         (user_id, title, transaction_type, coins, category, reference_id, description,expiry_date)
+         VALUES (?, ?, 'credit', ?, 'order', ?, ?, ?)`,
+          [
+            userId,
+            "Coins earned from order",
+            rewardEarn,
+            orderId,
+            `Earned ${rewardEarn} coins`,
+            expiryDate,
+          ],
+        );
+
+        if (insertResult.affectedRows > 0) {
+          await conn.execute(
+            `UPDATE customer_wallet SET balance = balance + ? WHERE user_id = ?`,
+            [rewardEarn, userId],
+          );
+        }
+      }
+
+      // 10.5 Invoice generation
+      await generateInvoices(orderId, conn);
+
+      // ===============================
+      // 11. STOCK
+      // ===============================
+      const [updateRes] = await conn.execute(
+        `UPDATE product_variants
+       SET stock = stock - ?
+       WHERE variant_id = ? AND stock >= ?`,
+        [quantity, variantId, quantity],
+      );
+
+      if (updateRes.affectedRows === 0) {
+        throw new Error("STOCK_RACE_CONDITION");
+      }
+
+      await conn.commit();
+      return orderId;
+    } catch (error) {
+      await conn.rollback();
+      throw error;
+    } finally {
+      conn.release();
+    }
+  }
+
+  async getCheckoutCart(userId, useRewards = true) {
+    // ===============================
+    // 1. WALLET
+    // ===============================
+    const [[wallet]] = await db.execute(
+      `SELECT balance FROM customer_wallet WHERE user_id = ?`,
+      [userId],
+    );
+
+    const walletBalance = Number(wallet?.balance || 0);
+
+    // ===============================
+    // 2. CART + REWARD JOIN (FIXED)
+    // ===============================
+    const [rows] = await db.execute(
+      `
+    SELECT 
+      ci.cart_item_id,
+      ci.quantity,
+
+      p.product_id,
+      p.product_name,
+      p.vendor_id,
+      p.category_id,
+      p.subcategory_id,
+
+      v.variant_id,
+      v.mrp,
+      v.sale_price,
+      v.stock,
+      v.reward_redemption_limit,
+      v.weight,
+      v.length,
+      v.breadth,
+      v.height,
+
+      GROUP_CONCAT(DISTINCT pi.image_url ORDER BY pi.sort_order ASC) AS images
+
+    FROM cart_items ci
+
+    JOIN eproducts p ON ci.product_id = p.product_id
+    JOIN product_variants v ON ci.variant_id = v.variant_id
+
+    LEFT JOIN product_images pi 
+      ON p.product_id = pi.product_id
+
+    WHERE ci.user_id = ?
+    GROUP BY ci.cart_item_id
+    `,
+      [userId],
+    );
+
+    if (!rows.length) throw new Error("CART_EMPTY");
+
+    // ===============================
+    // 3. BUILD ITEMS
+    // ===============================
+    let totalAmount = 0;
+
+    const items = rows.map((row) => {
+      if (row.quantity > row.stock || row.stock <= 0) {
+        throw new Error("OUT_OF_STOCK");
+      }
+
+      const itemTotal = Number(row.sale_price) * Number(row.quantity);
+      totalAmount += itemTotal;
+
+      const imagePath = row.images ? row.images.split(",")[0] : null;
+
+      return {
+        cart_item_id: row.cart_item_id,
+        product_id: row.product_id,
+        category_id: row.category_id,
+        subcategory_id: row.subcategory_id,
+        variant_id: row.variant_id,
+        vendor_id: row.vendor_id,
+
+        title: row.product_name,
+        image: getPublicUrl(imagePath),
+
+        mrp: Number(row.mrp),
+        price: Number(row.sale_price),
+        quantity: Number(row.quantity),
+
+        itemTotal,
+        redeemable: 0,
+        rewardEarn: 0,
+
+        reward_redemption_limit: Number(row.reward_redemption_limit || 0),
+
+        weight: Number(row.weight || 0),
+        length: Number(row.length || 0),
+        breadth: Number(row.breadth || 0),
+        height: Number(row.height || 0),
+      };
+    });
+
+    /* ===============================
+        REWARD ENGINE (UNIFIED)
+      =============================== */
+
+    items.sort((a, b) => a.itemTotal - b.itemTotal);
+
+    const rewardCache = {};
+
+    let remainingWallet = useRewards ? walletBalance : 0;
+    let totalRedeemed = 0;
+    let totalRewardEarn = 0;
+
+    /* ===============================
+     5. REWARD ENGINE
+  =============================== */
+    for (let item of items) {
+      const price = item.price;
+      const itemTotal = item.itemTotal;
+
+      const key = `${item.product_id}_${item.variant_id}_${item.category_id}_${item.subcategory_id}_${price}`;
+
+      let rules = rewardCache[key];
+
+      if (!rules) {
+        rules = await RewardModel.getProductRewards(
+          item.product_id,
+          item.variant_id,
+          item.category_id,
+          item.subcategory_id,
+          price,
+        );
+        rewardCache[key] = rules;
+      }
+
+      /* ===============================
+       REDEMPTION FIRST
+    =============================== */
+      const redemptionLimit = item.reward_redemption_limit;
+
+      if (useRewards && redemptionLimit > 0 && remainingWallet > 0) {
+        const maxAllowed = Math.floor((itemTotal * redemptionLimit) / 100);
+
+        const usable = Math.min(remainingWallet, maxAllowed, itemTotal);
+
+        item.redeemable = usable;
+
+        remainingWallet -= usable;
+        totalRedeemed += usable;
+      }
+
+      /* ===============================
+       EARNING AFTER REDEMPTION
+    =============================== */
+      let rewardEarn = 0;
+
+      if (rules.length) {
+        const effectiveAmount = itemTotal - item.redeemable;
+        rewardEarn = calculateReward(effectiveAmount, rules);
+      }
+
+      item.rewardEarn = rewardEarn;
+      totalRewardEarn += rewardEarn;
+    }
+
+    /* ===============================
+     SAFETY CAP
+  =============================== */
+    totalRedeemed = Math.min(totalRedeemed, totalAmount);
+
+    // ===============================
+    // 6. SHIPPING (UNCHANGED)
+    // ===============================
+    const [addressRows] = await db.execute(
+      `SELECT zipcode FROM customer_addresses 
+     WHERE user_id = ? AND is_default = 1 LIMIT 1`,
+      [userId],
+    );
+
+    if (!addressRows.length) throw new Error("INVALID_ADDRESS");
+
+    const destinationPincode = addressRows[0].zipcode;
+
+    const vendorGroups = {};
+
+    for (const item of items) {
+      const vendorId = item.vendor_id;
+
+      if (!vendorGroups[vendorId]) {
+        vendorGroups[vendorId] = {
+          totalWeightKg: 0,
+          totalAmount: 0,
+          length: 0,
+          breadth: 0,
+          height: 0,
+        };
+      }
+
+      const group = vendorGroups[vendorId];
+
+      group.totalWeightKg += item.quantity * item.weight;
+      group.totalAmount += item.itemTotal;
+
+      group.length = Math.max(group.length, item.length);
+      group.breadth = Math.max(group.breadth, item.breadth);
+      group.height += item.height * item.quantity;
+    }
+
+    let shippingTotal = 0;
+    const shippingBreakdown = [];
+    const eddList = [];
+
+    for (const vendorId in vendorGroups) {
+      const vendor = vendorGroups[vendorId];
+
+      const [[vendorAddress]] = await db.execute(
+        `SELECT pincode FROM vendor_addresses 
+       WHERE vendor_id = ? AND type = 'shipping' LIMIT 1`,
+        [vendorId],
+      );
+
+      if (!vendorAddress) continue;
+
+      const serviceResponse = await xpressService.checkServiceability({
+        origin: vendorAddress.pincode,
+        destination: destinationPincode,
+        payment_type: "prepaid",
+        order_amount: vendor.totalAmount.toString(),
+        weight: Math.round(vendor.totalWeightKg * 1000).toString(),
+        length: Math.round(vendor.length).toString(),
+        breadth: Math.round(vendor.breadth).toString(),
+        height: Math.round(vendor.height).toString(),
+      });
+
+      if (!serviceResponse.status || !serviceResponse.data.length) continue;
+
+      const courier = serviceResponse.data
+        .filter((o) => o.total_charges > 0)
+        .sort((a, b) => a.total_charges - b.total_charges)[0];
+
+      if (!courier) continue;
+
+      shippingTotal += Number(courier.total_charges);
+
+      const edd = courier.estimated_delivery_date
+        ? new Date(courier.estimated_delivery_date)
+        : new Date(Date.now() + courier.estimated_delivery_days * 86400000);
+
+      eddList.push(edd);
+
+      shippingBreakdown.push({
+        vendor_id: Number(vendorId),
+        courier_name: courier.name,
+        shipping_charges: Number(courier.total_charges),
+        estimated_delivery_date: edd,
+      });
+    }
+
+    const overallEDD = eddList.length ? eddList.sort((a, b) => b - a)[0] : null;
+
+    // ===============================
+    // 7. FINAL TOTAL
+    // ===============================
+    const finalProductTotal = totalAmount - totalRedeemed;
+    const payableAmount = finalProductTotal + shippingTotal;
+
+    // ===============================
+    // 8. RESPONSE
+    // ===============================
+    return {
+      items,
+      productTotal: totalAmount,
+
+      wallet: {
+        balance: walletBalance,
+        used: totalRedeemed,
+        remaining: remainingWallet,
+      },
+
+      reward: {
+        earnCoins: totalRewardEarn,
+        redeemCoins: totalRedeemed,
+      },
+
+      totalDiscount: totalRedeemed,
+      shippingTotal,
+      payableAmount,
+      shippingBreakdown,
+      estimated_delivery_date: overallEDD,
+    };
+  }
+
+  async getBuyNowCheckout({
+    productId,
+    variantId,
+    quantity,
+    useRewards = true,
+    userId,
+  }) {
+    // ===============================
+    // 1. WALLET
+    // ===============================
+    const [[wallet]] = await db.execute(
+      `SELECT balance FROM customer_wallet WHERE user_id = ?`,
+      [userId],
+    );
+
+    const walletBalance = Number(wallet?.balance || 0);
+
+    // ===============================
+    // 2. PRODUCT + REWARD JOIN
+    // ===============================
+    const [[row]] = await db.execute(
+      `
+    SELECT 
+      p.product_id,
+      p.product_name,
+      p.vendor_id,
+      p.category_id,
+      p.subcategory_id,
+
+      v.variant_id,
+      v.mrp,
+      v.sale_price,
+      v.stock,
+      v.reward_redemption_limit,
+      v.weight,
+      v.length,
+      v.breadth,
+      v.height,
+
+      GROUP_CONCAT(pi.image_url ORDER BY pi.sort_order ASC) AS images
+
+    FROM product_variants v
+    JOIN eproducts p ON v.product_id = p.product_id
+
+    LEFT JOIN product_images pi 
+      ON p.product_id = pi.product_id
+
+    WHERE v.variant_id = ? AND p.product_id = ?
+    GROUP BY v.variant_id
+    `,
+      [variantId, productId],
+    );
+
+    if (!row) throw new Error("INVALID_VARIANT");
+
+    if (quantity > row.stock || row.stock <= 0) {
+      throw new Error("OUT_OF_STOCK");
+    }
+
+    const salePrice = Number(row.sale_price || 0);
+    const itemTotal = salePrice * quantity;
+
+    /* ===============================
+     3. REWARD ENGINE
+  =============================== */
+    const rules = await RewardModel.getProductRewards(
+      row.product_id,
+      row.variant_id,
+      row.category_id,
+      row.subcategory_id,
+      salePrice,
+    );
+
+    let remainingWallet = useRewards ? walletBalance : 0;
+    let totalRedeemed = 0;
+    let redeemable = 0;
+
+    /* ===============================
+     4. REDEMPTION (variant based)
+  =============================== */
+    const redemptionLimit = Number(row.reward_redemption_limit || 0);
+
+    if (useRewards && redemptionLimit > 0 && remainingWallet > 0) {
+      const maxAllowed = Math.floor((itemTotal * redemptionLimit) / 100);
+
+      redeemable = Math.min(remainingWallet, maxAllowed, itemTotal);
+
+      totalRedeemed = redeemable;
+      remainingWallet -= redeemable;
+    }
+
+    /* ===============================
+     5. EARNING (after redemption)
+  =============================== */
+    let rewardEarn = 0;
+
+    if (rules.length) {
+      const effectiveAmount = itemTotal - redeemable;
+      rewardEarn = calculateReward(effectiveAmount, rules);
+    }
+
+    const finalItemTotal = itemTotal - totalRedeemed;
+
+    // ===============================
+    // 6. SHIPPING (UNCHANGED)
+    // ===============================
+    const [addressRows] = await db.execute(
+      `SELECT zipcode FROM customer_addresses
+     WHERE user_id = ? AND is_default = 1 LIMIT 1`,
+      [userId],
+    );
+
+    if (!addressRows.length) throw new Error("INVALID_ADDRESS");
+
+    const destinationPincode = addressRows[0].zipcode;
+
+    const [[vendorAddress]] = await db.execute(
+      `SELECT pincode FROM vendor_addresses
+     WHERE vendor_id = ? AND type = 'shipping' LIMIT 1`,
+      [row.vendor_id],
+    );
+
+    if (!vendorAddress) throw new Error("VENDOR_ADDRESS_MISSING");
+
+    const serviceResponse = await xpressService.checkServiceability({
+      origin: vendorAddress.pincode,
+      destination: destinationPincode,
+      payment_type: "prepaid",
+      order_amount: itemTotal.toString(),
+      weight: Math.round(quantity * Number(row.weight) * 1000).toString(),
+      length: Math.round(row.length).toString(),
+      breadth: Math.round(row.breadth).toString(),
+      height: Math.round(quantity * Number(row.height)).toString(),
+    });
+
+    if (!serviceResponse.status || !serviceResponse.data.length) {
+      throw new Error("NOT_SERVICEABLE");
+    }
+
+    const courier = serviceResponse.data
+      .filter((o) => o.total_charges > 0)
+      .sort((a, b) => a.total_charges - b.total_charges)[0];
+
+    if (!courier) throw new Error("NOT_SERVICEABLE");
+
+    const shippingCharge = Number(courier.total_charges);
+
+    let expectedDeliveryDate = null;
+
+    if (courier.estimated_delivery_date) {
+      expectedDeliveryDate = courier.estimated_delivery_date;
+    } else if (courier.estimated_delivery_days) {
+      const date = new Date();
+      date.setDate(date.getDate() + Number(courier.estimated_delivery_days));
+      expectedDeliveryDate = date.toISOString().split("T")[0];
+    }
+
+    // ===============================
+    // 7. FINAL
+    // ===============================
+    const payableAmount = finalItemTotal + shippingCharge;
+    const imagePath = row.images ? row.images.split(",")[0] : null;
+
+    return {
+      item: {
+        product_id: row.product_id,
+        variant_id: row.variant_id,
+        title: row.product_name,
+        image: getPublicUrl(imagePath),
+
+        price: salePrice,
+        quantity,
+
+        item_total: itemTotal,
+        redeemable,
+        final_item_total: finalItemTotal,
+        rewardEarn,
+
+        stock: row.stock,
+      },
+
+      wallet: {
+        balance: walletBalance,
+        used: totalRedeemed,
+        remaining: walletBalance - totalRedeemed,
+      },
+
+      reward: {
+        earnCoins: rewardEarn,
+        redeemCoins: totalRedeemed,
+      },
+
+      productTotal: itemTotal,
+      totalDiscount: totalRedeemed,
+      shippingTotal: shippingCharge,
+      payableAmount,
+
+      shippingBreakdown: [
+        {
+          vendor_id: row.vendor_id,
+          courier_name: courier.name,
+          shipping_charges: shippingCharge,
+          estimated_delivery_date: expectedDeliveryDate,
+        },
+      ],
+
+      estimated_delivery_date: expectedDeliveryDate,
+    };
+  }
+
+  // Order Receipt
+  async getOrderReceipt({ userId, orderId }) {
+    // 1 Fetch order
+    const [[order]] = await db.execute(
+      `
+    SELECT 
+      o.order_id,
+      o.order_ref,
+      o.address_id,
+      o.product_total,
+      o.reward_discount,
+      o.reward_coins_used,
+      o.reward_coins_earned,
+      o.shipping_total,
+      o.total_amount,
+      o.created_at,
+      o.status,
+
+      ca.address_type,
+      ca.address1,
+      ca.address2,
+      ca.city,
+      cu.name AS customer_name,
+      ca.zipcode,
+      ca.landmark,
+      s.state_name,
+      c.country_name
+      
+      FROM eorders o
+      JOIN customer_addresses ca 
+      ON o.address_id = ca.address_id
+
+      JOIN customer cu
+      on o.user_id = cu.user_id
+
+      LEFT JOIN states s
+      ON ca.state_id = s.state_id
+
+      LEFT JOIN countries c
+      ON ca.country_id = c.country_id
+    WHERE o.order_id = ?
+      AND o.user_id = ?
+    `,
+      [orderId, userId],
+    );
+
+    if (!order) {
+      throw new Error("ORDER_NOT_FOUND");
+    }
+
+    // 2 Fetch order items
+    const [items] = await db.execute(
+      `
+    SELECT
+      oi.product_id,
+      oi.variant_id,
+      oi.quantity,
+      oi.price,
+      oi.final_price,
+      oi.reward_discount,
+      p.product_name,
+
+      (
+        SELECT pi.image_url
+        FROM product_images pi
+        WHERE pi.product_id = p.product_id
+        ORDER BY pi.sort_order ASC
+        LIMIT 1
+      ) AS image
+
+    FROM eorder_items oi
+    JOIN eproducts p ON oi.product_id = p.product_id
+    WHERE oi.order_id = ?
+    `,
+      [orderId],
+    );
+
+    // 3 Fetch shipment dates
+    const [shipments] = await db.execute(
+      `
+      SELECT 
+        expected_delivery_date,
+        delivered_at,
+        shipping_charges
+      FROM order_shipments
+      WHERE order_id = ?
+      `,
+      [orderId],
+    );
+
+    let expectedDeliveryDate = null;
+    let actualDeliveryDate = null;
+
+    if (shipments.length) {
+      const expectedDates = shipments
+        .map((s) => s.expected_delivery_date)
+        .filter(Boolean)
+        .map((d) => new Date(d));
+
+      if (expectedDates.length) {
+        expectedDeliveryDate = new Date(
+          Math.max(...expectedDates.map((d) => d.getTime())),
+        );
+      }
+
+      const deliveredDates = shipments
+        .map((s) => s.delivered_at)
+        .filter(Boolean)
+        .map((d) => new Date(d));
+
+      if (deliveredDates.length) {
+        actualDeliveryDate = new Date(
+          Math.max(...deliveredDates.map((d) => d.getTime())),
+        );
+      }
+    }
+
+    if (!expectedDeliveryDate) {
+      const baseDate = new Date(order.created_at);
+
+      const fallback = new Date(baseDate);
+      fallback.setDate(baseDate.getDate() + 5);
+
+      expectedDeliveryDate = fallback;
+    }
+
+    // static for Now
+    const bagDiscount = 1032;
+
+    return {
+      orderId: order.order_id,
+      orderRef: order.order_ref,
+      orderDate: formatDate(new Date(order.created_at)),
+      status: order.status,
+
+      username: order.customer_name,
+
+      address: {
+        type: order.address_type,
+        line1: order.address1,
+        line2: order.address2,
+        city: order.city,
+        state: order.state_name,
+        country: order.country_name,
+        zipcode: order.zipcode,
+        landmark: order.landmark,
+      },
+
+      items: items.map((i) => ({
+        product_name: i.product_name,
+        image: i.image,
+        quantity: i.quantity,
+        price: Number(i.price),
+        item_total: Number(i.price) * i.quantity,
+        final_price: Number(i.final_price),
+        reward_discount: Number(i.reward_discount),
+      })),
+
+      bill: {
+        item_total: Number(order.product_total),
+        delivery_fee: Number(order.shipping_total),
+        bag_discount: 0, // add later if coupons implemented
+        reward_discount: Number(order.reward_discount),
+        order_total: Number(order.total_amount),
+      },
+
+      rewards: {
+        earned: Number(order.reward_coins_earned),
+        used: Number(order.reward_coins_used),
+      },
+
+      deliveryDate: actualDeliveryDate
+        ? formatDate(actualDeliveryDate)
+        : formatDate(expectedDeliveryDate),
+
+      expectedDeliveryDate: formatDate(expectedDeliveryDate),
+      actualDeliveryDate: actualDeliveryDate
+        ? formatDate(actualDeliveryDate)
+        : null,
+    };
+  }
+}
+module.exports = new CheckoutModel();
