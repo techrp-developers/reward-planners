@@ -390,9 +390,9 @@ async function updateShipmentTracking(shipment) {
 }
 
 // =====================
-// CRON JOB (Every 10 min)
+// CRON JOB (Every 30 min)
 // =====================
-cron.schedule("*/10 * * * *", async () => {
+cron.schedule("*/30 * * * *", async () => {
   try {
     console.log("🚚 Tracking cron running...");
     const [shipments] = await db.query(
