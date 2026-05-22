@@ -710,6 +710,8 @@ class ServiceController {
       });
     }
   }
+
+  // =================================Create razor pay orders======================
 }
 
 module.exports = new ServiceController();

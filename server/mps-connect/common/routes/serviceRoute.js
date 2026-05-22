@@ -51,4 +51,19 @@ router.get(
   ServiceController.getBuyNowPreview,
 );
 
+// =================================Create razor pay orders======================
+// create razorpay order
+router.post(
+  "/create-order",
+  authenticateClient,
+  ServiceController.createPaymentOrder,
+);
+
+// verify payment
+router.post(
+  "/verify-payment",
+  authenticateClient,
+  ServiceController.verifyPayment,
+);
+
 module.exports = router;
