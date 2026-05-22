@@ -479,7 +479,7 @@ class ServiceCheckoutController {
         });
       }
 
-      const [[variant]] = await db.execute(
+      const [rows] = await db.execute(
         `
       SELECT 
         sv.id,
@@ -487,31 +487,63 @@ class ServiceCheckoutController {
         sv.variant_name,
         sv.title,
         sv.image_url,
-        s.name AS service_name
+
+        s.name AS service_name,
+
+        sd.id AS document_id,
+        sd.document_name,
+        sd.is_mandatory
+
       FROM service_variants sv
       JOIN services s ON s.id = sv.service_id
+      LEFT JOIN service_documents sd ON sd.service_id = s.id
+
       WHERE sv.id = ?
       `,
         [variant_id],
       );
 
-      if (!variant) {
+      if (!rows.length) {
         return res.status(404).json({
           success: false,
           message: "Variant not found",
         });
       }
 
+      // base variant data
+      const firstRow = rows[0];
+
+      const documents = [];
+
+      rows.forEach((row) => {
+        if (row.document_id) {
+          const exists = documents.find((d) => d.id === row.document_id);
+
+          if (!exists) {
+            documents.push({
+              id: row.document_id,
+              document_name: row.document_name,
+              is_mandatory: row.is_mandatory,
+            });
+          }
+        }
+      });
+
       const items = [
         {
           service_id,
           variant_id,
-          service_name: variant.service_name,
-          variant_name: variant.variant_name,
-          image_url: getPublicUrl(variant.image_url),
-          title: variant.title,
-          price: parseFloat(variant.price),
+
+          service_name: firstRow.service_name,
+          variant_name: firstRow.variant_name,
+
+          image_url: getPublicUrl(firstRow.image_url),
+          title: firstRow.title,
+
+          price: parseFloat(firstRow.price),
           quantity: 1,
+
+          documents, // added here
         },
       ];
 
@@ -530,6 +562,7 @@ class ServiceCheckoutController {
       });
     } catch (err) {
       console.log(err);
+
       res.status(500).json({
         success: false,
         message: err.message,
