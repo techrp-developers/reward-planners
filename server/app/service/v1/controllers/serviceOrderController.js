@@ -212,9 +212,15 @@ class ServiceOrderController {
 
       await db.execute(
         `INSERT INTO razorpay_orders
-      (razorpay_order_id, receipt, amount, status, ref_id, module)
-      VALUES (?, ?, ?, 'created', ?, 'service')`,
-        [razorpayOrder.id, parent_order_id, totalAmount, parent_order_id],
+      (razorpay_order_id, order_source, receipt, amount, status, ref_id, module)
+      VALUES (?, ?, ?, ?, 'created', ?, 'service')`,
+        [
+          razorpayOrder.id,
+          "internal",
+          parent_order_id,
+          totalAmount,
+          parent_order_id,
+        ],
       );
 
       res.json({
