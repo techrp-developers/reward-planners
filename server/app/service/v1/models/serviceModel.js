@@ -220,7 +220,8 @@ class ServiceModel {
         description: item.description,
         enquiry: item.show_enquiry,
         price: Number(item.price),
-        image: item.image_url ? getPublicUrl(item.image_url) : null,
+        service_image: item.service_image ? getPublicUrl(item.service_image) : null,
+        variant_image: item.image_url ? getPublicUrl(item.image_url) : null,
       };
 
       if (item.is_featured) {
@@ -263,6 +264,7 @@ class ServiceModel {
         s.name,
         s.show_enquiry,
         s.total_orders,
+        s.service_image,
 
         sv.id AS variant_id,
         sv.price,
@@ -300,6 +302,7 @@ class ServiceModel {
         s.id,
         s.name,
         s.show_enquiry,
+        s.service_image,
         sv.id AS variant_id,
         sv.price,
         sv.original_price AS mrp,
@@ -327,14 +330,15 @@ class ServiceModel {
       title: r.title,
       price: Number(r.price),
       mrp: Number(r.mrp),
-      image_url: r.image_url ? getPublicUrl(r.image_url) : null,
+      service_image: r.service_image ? getPublicUrl(r.service_image) : null,
+      variant_image: r.image_url ? getPublicUrl(r.image_url) : null,
 
       // extra UI helpers
       discount_percent: r.mrp
         ? Math.round(((r.mrp - r.price) / r.mrp) * 100)
         : 0,
 
-      coins: Math.floor(Number(r.price) * 0.1), // optional
+      coins: Math.floor(Number(r.price) * 0.1), 
     }));
   }
 }
