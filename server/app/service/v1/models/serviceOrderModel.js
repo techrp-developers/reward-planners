@@ -309,12 +309,28 @@ class ServiceOrderModel {
 
   // update status
   async updateStatus(orderId, status) {
-    const [result] = await db.execute(
-      `UPDATE service_orders 
-     SET status = ? 
-     WHERE id = ?`,
-      [status, orderId],
-    );
+    let sql = `
+    UPDATE service_orders
+    SET status = ?
+  `;
+
+    const params = [status];
+
+    // completed
+    if (status === "completed") {
+      sql += `, completed_at = NOW()`;
+    }
+
+    // cancelled
+    if (status === "cancelled") {
+      sql += `, cancelled_at = NOW()`;
+    }
+
+    sql += ` WHERE id = ?`;
+
+    params.push(orderId);
+
+    const [result] = await db.execute(sql, params);
 
     return result.affectedRows;
   }
