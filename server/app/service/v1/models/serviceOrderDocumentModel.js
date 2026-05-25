@@ -51,6 +51,7 @@ class ServiceOrderDocumentModel {
     SELECT
       sd.id AS service_document_id,
       sd.document_name,
+      sd.document_key,
       sd.is_mandatory,
 
       od.id AS order_document_id,
@@ -76,6 +77,7 @@ class ServiceOrderDocumentModel {
         return {
           service_document_id: r.service_document_id,
           document_name: r.document_name,
+          document_key: r.document_key,
           is_mandatory: r.is_mandatory,
           uploaded: r.uploaded === 1,
           file_url: r.file_path ? await getPrivateFileUrl(r.file_path) : null,
@@ -99,6 +101,7 @@ class ServiceOrderDocumentModel {
 
       sd.id AS service_document_id,
       sd.document_name,
+      sd.document_key,
       sd.is_mandatory,
 
       od.id AS order_document_id,
@@ -152,6 +155,7 @@ class ServiceOrderDocumentModel {
         service_document_id: row.service_document_id,
         order_document_id: row.order_document_id,
         document_name: row.document_name,
+        document_key: row.document_key,
         is_mandatory: Boolean(row.is_mandatory),
         uploaded: Boolean(row.uploaded),
         file_url: row.file_path ? await getPrivateFileUrl(row.file_path) : null,
