@@ -165,6 +165,7 @@ class ServiceOrderController {
   async createPaymentOrder(req, res) {
     try {
       const userId = req.user?.user_id;
+      // const userId = 1;
 
       if (!userId) {
         return res.status(401).json({
@@ -243,8 +244,11 @@ class ServiceOrderController {
 
   // verify payment
   async verifyPayment(req, res) {
+    let connection;
+
     try {
       const userId = req.user?.user_id;
+      // const userId = 1;
 
       if (!userId) {
         return res.status(401).json({
@@ -271,7 +275,7 @@ class ServiceOrderController {
         });
       }
 
-      //  GET parent_order_id FROM DB
+      // GET parent_order_id FROM DB
       const [[rpOrder]] = await db.execute(
         `SELECT ref_id FROM razorpay_orders 
        WHERE razorpay_order_id = ?`,
@@ -289,46 +293,50 @@ class ServiceOrderController {
 
       const [[alreadyPaid]] = await db.execute(
         `SELECT id FROM service_orders 
-          WHERE parent_order_id = ? AND payment_status = 'paid' LIMIT 1`,
+       WHERE parent_order_id = ? 
+       AND payment_status = 'paid' 
+       LIMIT 1`,
         [parent_order_id],
       );
 
       if (alreadyPaid) {
-        return res.json({ success: true, message: "Already processed" });
+        return res.json({
+          success: true,
+          message: "Already processed",
+        });
       }
 
-      //  TRANSACTION
-      await db.beginTransaction();
+      // GET CONNECTION
+      connection = await db.getConnection();
 
-      try {
-        // update service orders
-        await db.execute(
-          `UPDATE service_orders 
-         SET status = 'documents_pending',
-             payment_id = ?,
-             payment_status = 'paid'
-         WHERE parent_order_id = ?
-         AND payment_status != 'paid'`,
-          [razorpay_payment_id, parent_order_id],
-        );
+      // START TRANSACTION
+      await connection.beginTransaction();
 
-        // update razorpay_orders
-        await db.execute(
-          `UPDATE razorpay_orders
-         SET razorpay_payment_id = ?,
-             status = 'success',
-             raw_response = ?
-         WHERE razorpay_order_id = ?`,
-          [razorpay_payment_id, JSON.stringify(req.body), razorpay_order_id],
-        );
+      // update service orders
+      await connection.execute(
+        `UPDATE service_orders 
+       SET status = 'documents_pending',
+           payment_id = ?,
+           payment_status = 'paid'
+       WHERE parent_order_id = ?
+       AND payment_status != 'paid'`,
+        [razorpay_payment_id, parent_order_id],
+      );
 
-        await InvoiceService.generateInvoice(parent_order_id);
+      // update razorpay_orders
+      await connection.execute(
+        `UPDATE razorpay_orders
+       SET razorpay_payment_id = ?,
+           status = 'success',
+           raw_response = ?
+       WHERE razorpay_order_id = ?`,
+        [razorpay_payment_id, JSON.stringify(req.body), razorpay_order_id],
+      );
 
-        await db.commit();
-      } catch (err) {
-        await db.rollback();
-        throw err;
-      }
+      await InvoiceService.generateInvoice(parent_order_id);
+
+      // COMMIT
+      await connection.commit();
 
       // redirect
       const [[firstOrder]] = await db.execute(
@@ -346,10 +354,20 @@ class ServiceOrderController {
         },
       });
     } catch (err) {
+      // ROLLBACK
+      if (connection) {
+        await connection.rollback();
+      }
+
       res.status(500).json({
         success: false,
         message: err.message,
       });
+    } finally {
+      // RELEASE CONNECTION
+      if (connection) {
+        connection.release();
+      }
     }
   }
 
@@ -384,8 +402,8 @@ class ServiceOrderController {
   // order details
   async getOrderDetails(req, res) {
     try {
-      // const userId = req.user?.user_id;
-      const userId=1;
+      const userId = req.user?.user_id;
+      // const userId = 1;
 
       if (!userId) {
         return res.status(401).json({
