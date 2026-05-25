@@ -20,7 +20,6 @@ function getPublicUrl(path) {
 // Utility
 const ALLOWED_STATUSES = [
   "pending_payment",
-  "payment_done",
   "documents_pending",
   "documents_uploaded",
   "in_progress",
@@ -898,18 +897,35 @@ class ServiceOrderController {
         });
       }
 
-      const affected = await ServiceOrderModel.updateStatus(id, status);
+      // validate order exists
+      const [[order]] = await db.execute(
+        `
+      SELECT id, status
+      FROM service_orders
+      WHERE id = ?
+      `,
+        [id],
+      );
 
-      if (!affected) {
+      if (!order) {
         return res.status(404).json({
           success: false,
-          message: "Order not found",
+          message: "Service order not found",
         });
       }
 
+      if (order.status === "completed" && status !== "completed") {
+        return res.status(400).json({
+          success: false,
+          message: "Completed service cannot be changed",
+        });
+      }
+
+      await ServiceOrderModel.updateStatus(id, status);
+
       res.json({
         success: true,
-        message: "Order status updated",
+        message: "Service order status updated",
       });
     } catch (err) {
       res.status(500).json({
