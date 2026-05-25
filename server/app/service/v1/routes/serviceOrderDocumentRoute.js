@@ -16,4 +16,11 @@ router.get(
   ServiceOrderDocumentController.getServiceOrderDocumentsPage,
 );
 
+// parent based document page
+router.get(
+  "/parent-documents/:parentOrderId",
+  auth,
+  ServiceOrderDocumentController.getServiceParentOrderDocumentPage,
+);
+
 module.exports = router;

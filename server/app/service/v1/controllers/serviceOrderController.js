@@ -350,7 +350,7 @@ class ServiceOrderController {
         success: true,
         message: "Payment successful",
         data: {
-          redirect_to: `/service-order-documents/documents/${firstOrder.id}`,
+          redirect_to: `/service-order-documents/parent-documents/${parent_order_id}`,
         },
       });
     } catch (err) {
