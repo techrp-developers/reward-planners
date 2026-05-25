@@ -110,6 +110,7 @@ class ServiceCheckoutController {
         for (let item of bundle.items) {
           const order = await ServiceOrderModel.create({
             user_id: userId,
+            addressId,
             service_id: item.service_id,
             variant_id: item.variant_id,
             enquiry_id: null,
