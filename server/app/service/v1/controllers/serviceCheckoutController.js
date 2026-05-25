@@ -203,6 +203,7 @@ class ServiceCheckoutController {
   async buyNow(req, res) {
     try {
       const userId = req.user?.user_id;
+      // const userId=1;
 
       if (!userId) {
         return res.status(401).json({

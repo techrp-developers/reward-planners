@@ -4,7 +4,10 @@ const path = require("path");
 const db = require("../../config/database");
 
 async function generateInvoice(parentOrderId) {
-  // 1. Fetch orders
+  // --------------------------------------------------
+  // FETCH ORDERS
+  // --------------------------------------------------
+
   const [orders] = await db.execute(
     `SELECT 
         so.*, 
@@ -20,13 +23,36 @@ async function generateInvoice(parentOrderId) {
     return null;
   }
 
-  // 2. Calculate total
+  // --------------------------------------------------
+  // FETCH COMPANY DETAILS
+  // --------------------------------------------------
+
+  const [companyDetails] = await db.execute(
+    `SELECT 
+        company_name,
+        address1,
+        address2,
+        company_phone,
+        company_email
+     FROM app_settings
+     LIMIT 1`
+  );
+
+  const company = companyDetails[0] || {};
+
+  // --------------------------------------------------
+  // CALCULATE TOTAL
+  // --------------------------------------------------
+
   const total = orders.reduce(
     (sum, order) => sum + Number(order.price),
     0
   );
 
-  // 3. Generate invoice details
+  // --------------------------------------------------
+  // GENERATE FILE DETAILS
+  // --------------------------------------------------
+
   const invoiceNumber = `INV-${Date.now()}`;
   const fileName = `${invoiceNumber}.pdf`;
 
@@ -37,16 +63,18 @@ async function generateInvoice(parentOrderId) {
 
   const filePath = path.join(invoiceDir, fileName);
 
-  // Ensure directory exists
+  // Ensure folder exists
   fs.mkdirSync(invoiceDir, { recursive: true });
 
-  // 4. Create PDF document
+  // --------------------------------------------------
+  // CREATE PDF
+  // --------------------------------------------------
+
   const doc = new PDFDocument({
     size: "A4",
     margin: 50,
   });
 
-  // 5. Create write stream
   const stream = fs.createWriteStream(filePath);
 
   doc.pipe(stream);
@@ -56,150 +84,173 @@ async function generateInvoice(parentOrderId) {
   // --------------------------------------------------
 
   const primaryColor = "#0F172A";
-  const secondaryColor = "#334155";
-  const borderColor = "#E5E7EB";
+  const secondaryColor = "#475569";
+  const borderColor = "#E2E8F0";
   const lightBg = "#F8FAFC";
+  const successColor = "#16A34A";
 
   // --------------------------------------------------
   // HEADER
   // --------------------------------------------------
 
-  // Company Name
   doc
     .fillColor(primaryColor)
-    .fontSize(26)
     .font("Helvetica-Bold")
+    .fontSize(26)
     .text("SERVICE INVOICE", {
       align: "center",
     });
 
-  doc.moveDown(0.5);
+  doc.moveDown(1);
+
+  // --------------------------------------------------
+  // COMPANY DETAILS
+  // --------------------------------------------------
 
   doc
-    .fontSize(12)
+    .fillColor(primaryColor)
+    .font("Helvetica-Bold")
+    .fontSize(14)
+    .text(company.company_name || "Company Name", 50, 100);
+
+  doc
     .fillColor(secondaryColor)
     .font("Helvetica")
-    .text("Your Company Name", 50, 100)
-    .text("Mumbai, Maharashtra")
-    .text("support@company.com")
-    .text("+91 9876543210");
+    .fontSize(11)
+    .text(company.address1 || "", 50, 125)
+    .text(company.address2 || "", 50, 142)
+    .text(`Phone: ${company.company_phone || "-"}`, 50, 159)
+    .text(`Email: ${company.company_email || "-"}`, 50, 176);
 
   // Divider
   doc
-    .moveTo(50, 160)
-    .lineTo(550, 160)
+    .moveTo(50, 210)
+    .lineTo(550, 210)
     .strokeColor(borderColor)
+    .lineWidth(1)
     .stroke();
 
   // --------------------------------------------------
-  // INVOICE INFO BOX
+  // INVOICE DETAILS BOX
   // --------------------------------------------------
 
   doc
-    .roundedRect(50, 180, 500, 90, 8)
+    .roundedRect(50, 230, 500, 90, 8)
     .fillAndStroke(lightBg, borderColor);
 
   doc
     .fillColor(primaryColor)
     .font("Helvetica-Bold")
-    .fontSize(12)
-    .text("Invoice Details", 70, 195);
+    .fontSize(13)
+    .text("Invoice Details", 70, 248);
 
   doc
     .font("Helvetica")
     .fontSize(11)
     .fillColor("#111827")
-    .text(`Invoice No: ${invoiceNumber}`, 70, 220)
-    .text(`Order ID: ${parentOrderId}`, 70, 240)
+    .text(`Invoice Number: ${invoiceNumber}`, 70, 275)
+    .text(`Order ID: ${parentOrderId}`, 70, 295);
+
+  doc
     .text(
       `Date: ${new Date().toLocaleDateString()}`,
       350,
-      220
+      275
     );
 
   // --------------------------------------------------
   // SERVICES TABLE
   // --------------------------------------------------
 
-  const tableTop = 320;
+  const tableTop = 360;
 
-  // Table Header Background
+  // Table Header
   doc
-    .roundedRect(50, tableTop, 500, 30, 5)
+    .roundedRect(50, tableTop, 500, 32, 5)
     .fill(primaryColor);
 
-  // Table Headers
   doc
     .fillColor("#FFFFFF")
     .font("Helvetica-Bold")
     .fontSize(12)
-    .text("#", 70, tableTop + 9)
-    .text("Service Name", 120, tableTop + 9)
-    .text("Amount", 450, tableTop + 9);
+    .text("#", 70, tableTop + 10)
+    .text("Service Name", 120, tableTop + 10)
+    .text("Amount", 450, tableTop + 10);
 
-  // Table Rows
-  let position = tableTop + 30;
+  // --------------------------------------------------
+  // TABLE ROWS
+  // --------------------------------------------------
+
+  let position = tableTop + 32;
 
   orders.forEach((order, index) => {
-    // Row background
-    doc
-      .rect(50, position, 500, 35)
-      .fillAndStroke(
-        index % 2 === 0 ? "#FFFFFF" : "#F9FAFB",
-        borderColor
-      );
+    const rowBg =
+      index % 2 === 0 ? "#FFFFFF" : "#F8FAFC";
 
-    // Row content
+    // Row Background
+    doc
+      .rect(50, position, 500, 38)
+      .fillAndStroke(rowBg, borderColor);
+
+    // Row Data
     doc
       .fillColor("#111827")
       .font("Helvetica")
       .fontSize(11)
-      .text(index + 1, 70, position + 11)
-      .text(order.service_name, 120, position + 11)
-      .text(`₹${Number(order.price).toFixed(2)}`, 450, position + 11);
+      .text(index + 1, 70, position + 13)
+      .text(order.service_name, 120, position + 13)
+      .text(
+        `Rs. ${Number(order.price).toFixed(2)}`,
+        450,
+        position + 13
+      );
 
-    position += 35;
+    position += 38;
   });
 
   // --------------------------------------------------
   // TOTAL SECTION
   // --------------------------------------------------
 
-  position += 20;
+  position += 25;
 
   doc
-    .roundedRect(350, position, 200, 50, 6)
+    .roundedRect(340, position, 210, 55, 8)
     .fillAndStroke(lightBg, borderColor);
 
   doc
     .fillColor(primaryColor)
     .font("Helvetica-Bold")
     .fontSize(14)
-    .text("Total Amount", 370, position + 12);
+    .text("Total Amount", 360, position + 15);
 
   doc
-    .fontSize(16)
-    .fillColor("#16A34A")
-    .text(`₹${total.toFixed(2)}`, 450, position + 12);
+    .fillColor(successColor)
+    .fontSize(18)
+    .text(
+      `Rs. ${Number(total).toFixed(2)}`,
+      450,
+      position + 15
+    );
 
   // --------------------------------------------------
   // FOOTER
   // --------------------------------------------------
 
   doc
-    .moveTo(50, 720)
-    .lineTo(550, 720)
+    .moveTo(50, 730)
+    .lineTo(550, 730)
     .strokeColor(borderColor)
     .stroke();
 
   doc
     .font("Helvetica")
     .fontSize(10)
-    .fillColor("#6B7280")
+    .fillColor("#64748B")
     .text(
       "Thank you for choosing our services!",
       50,
-      735,
+      745,
       {
         align: "center",
       }
@@ -208,25 +259,28 @@ async function generateInvoice(parentOrderId) {
   doc
     .fontSize(9)
     .text(
-      "This is a system-generated invoice.",
+      "This is a computer-generated invoice.",
       50,
-      750,
+      760,
       {
         align: "center",
       }
     );
 
-  // Finalize PDF
+  // --------------------------------------------------
+  // FINALIZE PDF
+  // --------------------------------------------------
+
   doc.end();
 
-  // Wait for file write completion
+  // Wait until file fully written
   await new Promise((resolve, reject) => {
     stream.on("finish", resolve);
     stream.on("error", reject);
   });
 
   // --------------------------------------------------
-  // SAVE TO DATABASE
+  // SAVE IN DATABASE
   // --------------------------------------------------
 
   await db.execute(
