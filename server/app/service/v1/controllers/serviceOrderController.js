@@ -701,7 +701,8 @@ class ServiceOrderController {
         });
       }
 
-      const { orderId } = req.params;
+      const { serviceOrderId } = req.params;
+
       const { document_id } = req.body;
 
       if (!document_id) {
@@ -711,12 +712,19 @@ class ServiceOrderController {
         });
       }
 
-      const order = await ServiceOrderModel.getOrderById(orderId, userId);
+      // validate service order ownership
+      const [[order]] = await db.execute(
+        `SELECT id
+       FROM service_orders
+       WHERE id = ?
+       AND user_id = ?`,
+        [serviceOrderId, userId],
+      );
 
       if (!order) {
         return res.status(404).json({
           success: false,
-          message: "Order not found",
+          message: "Service order not found",
         });
       }
 
@@ -727,28 +735,53 @@ class ServiceOrderController {
         });
       }
 
-      //  Read file buffer
+      // validate document belongs to this service
+      const [[validDoc]] = await db.execute(
+        `
+      SELECT sd.id
+      FROM service_documents sd
+
+      JOIN service_orders so
+        ON so.service_id = sd.service_id
+
+      WHERE sd.id = ?
+      AND so.id = ?
+      `,
+        [document_id, serviceOrderId],
+      );
+
+      if (!validDoc) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid document for this service",
+        });
+      }
+
+      // read file buffer
       const fileBuffer = fs.readFileSync(req.file.path);
 
-      //  Extract extension safely
+      // extension
       const originalName = req.file.originalname;
 
       const extension = originalName.includes(".")
         ? originalName.split(".").pop()
         : "bin";
 
-      //  Create R2 path
-      const r2Path = `private/service-order-documents/${orderId}/${document_id}_${Date.now()}.${extension}`;
+      // R2 path
+      const r2Path =
+        `private/service-order-documents/` +
+        `${serviceOrderId}/` +
+        `${document_id}_${Date.now()}.${extension}`;
 
-      //  Upload to R2 (no processing)
+      // upload to R2
       await uploadToR2(fileBuffer, r2Path, req.file.mimetype);
 
-      //  Delete temp file
+      // remove temp
       fs.unlinkSync(req.file.path);
 
-      // Save in DB
+      // save in DB
       await ServiceOrderDocumentModel.uploadOrUpdate({
-        order_id: orderId,
+        order_id: serviceOrderId,
         document_id,
         file_path: r2Path,
       });
@@ -761,6 +794,7 @@ class ServiceOrderController {
       if (req.file && fs.existsSync(req.file.path)) {
         fs.unlinkSync(req.file.path);
       }
+
       res.status(500).json({
         success: false,
         message: err.message,
@@ -780,20 +814,43 @@ class ServiceOrderController {
         });
       }
 
-      const { orderId } = req.params;
+      const { serviceOrderId } = req.params;
 
-      const order = await ServiceOrderModel.getOrderById(orderId, userId);
+      // validate service order
+      const [[order]] = await db.execute(
+        `
+      SELECT id, order_ref, status
+      FROM service_orders
+      WHERE id = ?
+      AND user_id = ?
+      `,
+        [serviceOrderId, userId],
+      );
 
       if (!order) {
         return res.status(404).json({
           success: false,
-          message: "Order not found",
+          message: "Service order not found",
         });
       }
 
-      const docs = await ServiceOrderDocumentModel.getRequiredDocs(orderId);
+      // already submitted
+      if (
+        ["documents_uploaded", "in_progress", "completed"].includes(
+          order.status,
+        )
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Documents already submitted",
+        });
+      }
 
-      // check mandatory docs
+      // required docs
+      const docs =
+        await ServiceOrderDocumentModel.getRequiredDocs(serviceOrderId);
+
+      // mandatory docs check
       const missingDocs = docs.filter((d) => d.is_mandatory && !d.uploaded);
 
       if (missingDocs.length) {
@@ -804,13 +861,18 @@ class ServiceOrderController {
         });
       }
 
-      // update order status
-      await ServiceOrderModel.updateStatus(orderId, "documents_uploaded");
+      // update status
+      await ServiceOrderModel.updateStatus(
+        serviceOrderId,
+        "documents_uploaded",
+      );
 
       res.json({
         success: true,
-        message: "Documents uploaded successfully",
+        message: "Documents submitted successfully",
+
         data: {
+          service_order_id: serviceOrderId,
           order_ref: order.order_ref,
         },
       });

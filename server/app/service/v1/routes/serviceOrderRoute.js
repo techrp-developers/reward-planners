@@ -20,25 +20,13 @@ router.post(
 );
 
 // create razorpay order
-router.post(
-  "/create-order",
-  auth,
-  ServiceOrderController.createPaymentOrder,
-);
+router.post("/create-order", auth, ServiceOrderController.createPaymentOrder);
 
 // verify payment
-router.post(
-  "/verify-payment",
-  auth,
-  ServiceOrderController.verifyPayment,
-);
+router.post("/verify-payment", auth, ServiceOrderController.verifyPayment);
 
 // Get all orders
-router.get(
-  "/my-orders",
-   auth,
-  ServiceOrderController.getMyOrders,
-);
+router.get("/my-orders", auth, ServiceOrderController.getMyOrders);
 
 // get order details
 // router.get(
@@ -62,7 +50,7 @@ router.get(
 
 // upload order document
 router.post(
-  "/upload-document/:orderId",
+  "/upload-document/:serviceOrderId",
   auth,
   upload.single("file"),
   ServiceOrderController.uploadDocument,
@@ -70,7 +58,7 @@ router.post(
 
 // submit document
 router.post(
-  "/submit-documents/:orderId",
+  "/submit-documents/:serviceOrderId",
   auth,
   ServiceOrderController.submitDocuments,
 );
