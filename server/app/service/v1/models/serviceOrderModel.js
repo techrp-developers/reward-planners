@@ -131,7 +131,7 @@ class ServiceOrderModel {
           // preview (bundle)
           order.preview.push({
             type: "bundle",
-            name: `Bundle #${row.bundle_id}`, 
+            name: `Bundle #${row.bundle_id}`,
           });
         }
 
@@ -185,18 +185,8 @@ class ServiceOrderModel {
   }
 
   // order detail by Id
-  async getOrderById(orderId, userId) {
-    // Get parent_order_id for the given order
-    const [[order]] = await db.execute(
-      `SELECT parent_order_id 
-     FROM service_orders 
-     WHERE id = ? AND user_id = ?`,
-      [orderId, userId],
-    );
-
-    if (!order) return null;
-
-    const parentId = order.parent_order_id;
+  async getOrderByParentId(orderId, userId) {
+    const parentId = orderId;
 
     // fetch all items of this order
     const [rows] = await db.execute(
@@ -263,18 +253,20 @@ class ServiceOrderModel {
       parent_order_id: parentId,
       status: finalStatus,
       created_at: rows[0].created_at,
-      address: {
-        address_type: rows[0].address_type,
-        address1: rows[0].address1,
-        address2: rows[0].address2,
-        city: rows[0].city,
-        zipcode: rows[0].zipcode,
-        landmark: rows[0].landmark,
-        contact_name: rows[0].contact_name,
-        contact_phone: rows[0].contact_phone,
-        state: rows[0].state_name,
-        country: rows[0].country_name,
-      },
+      address: rows[0].address1
+        ? {
+            address_type: rows[0].address_type,
+            address1: rows[0].address1,
+            address2: rows[0].address2,
+            city: rows[0].city,
+            zipcode: rows[0].zipcode,
+            landmark: rows[0].landmark,
+            contact_name: rows[0].contact_name,
+            contact_phone: rows[0].contact_phone,
+            state: rows[0].state_name,
+            country: rows[0].country_name,
+          }
+        : null,
       items: [],
       bundles: {},
       total_amount: 0,

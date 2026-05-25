@@ -338,14 +338,6 @@ class ServiceOrderController {
       // COMMIT
       await connection.commit();
 
-      // redirect
-      const [[firstOrder]] = await db.execute(
-        `SELECT id FROM service_orders 
-       WHERE parent_order_id = ? 
-       ORDER BY id ASC LIMIT 1`,
-        [parent_order_id],
-      );
-
       res.json({
         success: true,
         message: "Payment successful",
@@ -375,6 +367,7 @@ class ServiceOrderController {
   async getMyOrders(req, res) {
     try {
       const userId = req.user?.user_id;
+      // const userId = 1;
 
       if (!userId) {
         return res.status(401).json({
@@ -412,9 +405,12 @@ class ServiceOrderController {
         });
       }
 
-      const { id } = req.params;
+      const { parentOrderId } = req.params;
 
-      const order = await ServiceOrderModel.getOrderById(id, userId);
+      const order = await ServiceOrderModel.getOrderByParentId(
+        parentOrderId,
+        userId,
+      );
 
       if (!order) {
         return res.status(404).json({
@@ -608,6 +604,10 @@ class ServiceOrderController {
         {
           status: "Order Completed",
           completed: allItems.every((i) => i.status === "completed"),
+        },
+        {
+          status: "Order Cancelled",
+          completed: allItems.every((i) => i.status === "cancelled"),
         },
       ];
 
