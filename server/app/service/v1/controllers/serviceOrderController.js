@@ -1111,6 +1111,20 @@ class ServiceOrderController {
     }
   }
 
+  // Cancellation Reason
+  async getCancellationReasons(req, res) {
+    const [rows] = await db.execute(
+      `
+    SELECT reason_id, reason_text
+    FROM order_cancellation_reasons
+    WHERE is_active = 1
+    ORDER BY sort_order ASC
+    `,
+    );
+
+    res.json({ success: true, reasons: rows });
+  }
+
   // =================================================Cancel order=======================================================
   async cancelOrder(req, res) {
     let connection;
@@ -1119,12 +1133,12 @@ class ServiceOrderController {
       // const userId = req.user?.user_id;
       const userId = 1;
 
-      const { parent_order_id, reason, comment } = req.body;
+      const { parent_order_id, reason_id, comment } = req.body;
 
-      if (!parent_order_id || !reason) {
+      if (!parent_order_id || !reason_id) {
         return res.status(400).json({
           success: false,
-          message: "parent_order_id and reason required",
+          message: "parent_order_id and reason_id required",
         });
       }
 
