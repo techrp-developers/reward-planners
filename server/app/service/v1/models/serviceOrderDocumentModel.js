@@ -59,7 +59,8 @@ class ServiceOrderDocumentModel {
       od.uploaded
 
     FROM service_orders so
-    JOIN service_documents sd 
+
+    LEFT JOIN service_documents sd 
       ON sd.service_id = so.service_id
 
     LEFT JOIN order_documents od 
@@ -73,16 +74,23 @@ class ServiceOrderDocumentModel {
     );
 
     return await Promise.all(
-      rows.map(async (r) => {
-        return {
+      rows
+        .filter((r) => r.service_document_id) 
+        .map(async (r) => ({
           service_document_id: r.service_document_id,
+
+          order_document_id: r.order_document_id,
+
           document_name: r.document_name,
+
           document_key: r.document_key,
-          is_mandatory: r.is_mandatory,
-          uploaded: r.uploaded === 1,
+
+          is_mandatory: Boolean(r.is_mandatory),
+
+          uploaded: Boolean(r.uploaded),
+
           file_url: r.file_path ? await getPrivateFileUrl(r.file_path) : null,
-        };
-      }),
+        })),
     );
   }
 
@@ -116,7 +124,7 @@ class ServiceOrderDocumentModel {
     LEFT JOIN service_variants sv
       ON sv.id = so.variant_id
 
-    JOIN service_documents sd
+    LEFT JOIN service_documents sd
       ON sd.service_id = so.service_id
 
     LEFT JOIN order_documents od
@@ -151,15 +159,19 @@ class ServiceOrderDocumentModel {
         };
       }
 
-      orderMap[row.service_order_id].documents.push({
-        service_document_id: row.service_document_id,
-        order_document_id: row.order_document_id,
-        document_name: row.document_name,
-        document_key: row.document_key,
-        is_mandatory: Boolean(row.is_mandatory),
-        uploaded: Boolean(row.uploaded),
-        file_url: row.file_path ? await getPrivateFileUrl(row.file_path) : null,
-      });
+      if (row.service_document_id) {
+        orderMap[row.service_order_id].documents.push({
+          service_document_id: row.service_document_id,
+          order_document_id: row.order_document_id,
+          document_name: row.document_name,
+          document_key: row.document_key,
+          is_mandatory: Boolean(row.is_mandatory),
+          uploaded: Boolean(row.uploaded),
+          file_url: row.file_path
+            ? await getPrivateFileUrl(row.file_path)
+            : null,
+        });
+      }
     }
 
     return {
