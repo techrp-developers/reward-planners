@@ -75,7 +75,7 @@ class ServiceOrderDocumentModel {
 
     return await Promise.all(
       rows
-        .filter((r) => r.service_document_id) 
+        .filter((r) => r.service_document_id)
         .map(async (r) => ({
           service_document_id: r.service_document_id,
 
@@ -173,6 +173,17 @@ class ServiceOrderDocumentModel {
         });
       }
     }
+
+    // =========================================
+    // ADD can_submit
+    // =========================================
+
+    Object.values(orderMap).forEach((item) => {
+      const mandatoryDocs = item.documents.filter((d) => d.is_mandatory);
+
+      item.can_submit =
+        mandatoryDocs.length === 0 || mandatoryDocs.every((d) => d.uploaded);
+    });
 
     return {
       parent_order_id: parentOrderId,
