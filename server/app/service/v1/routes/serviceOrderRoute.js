@@ -75,7 +75,7 @@ router.put(
 // Get cancellation Reason
 router.get("/cancellation-reasons", ServiceOrderController.getCancellationReasons);
 
-router.post("/cancel-order", auth, ServiceOrderController.cancelOrder);
+router.post("/cancel-order-request", auth, ServiceOrderController.cancelOrderRequest);
 
 // ========================================Help section========================================================
 router.post(

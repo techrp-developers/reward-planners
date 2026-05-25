@@ -1126,45 +1126,69 @@ class ServiceOrderController {
   }
 
   // =================================================Cancel order=======================================================
-  async cancelOrder(req, res) {
+  async cancelOrderRequest(req, res) {
     let connection;
 
     try {
-      // const userId = req.user?.user_id;
-      const userId = 1;
+      const userId = req.user?.user_id;
+      // const userId = 1;
 
-      const { parent_order_id, reason_id, comment } = req.body;
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
 
-      if (!parent_order_id || !reason_id) {
+      const { service_order_id, reason_id, comment } = req.body;
+
+      if (!service_order_id || !reason_id) {
         return res.status(400).json({
           success: false,
-          message: "parent_order_id and reason_id required",
+          message: "service_order_id and reason_id required",
         });
       }
 
       connection = await db.getConnection();
+
       await connection.beginTransaction();
 
-      // 1 Validate order
+      // =====================================
+      // Validate order ownership
+      // =====================================
+
       const [[order]] = await connection.execute(
-        `SELECT status FROM service_orders 
-       WHERE parent_order_id = ? AND user_id = ?
-       LIMIT 1`,
-        [parent_order_id, userId],
+        `
+      SELECT
+        id,
+        status,
+        payment_status
+
+      FROM service_orders
+
+      WHERE id = ?
+      AND user_id = ?
+      `,
+        [service_order_id, userId],
       );
 
       if (!order) {
         await connection.rollback();
+
         return res.status(404).json({
           success: false,
-          message: "Order not found",
+          message: "Service order not found",
         });
       }
 
-      // 2 Check allowed states
+      // =====================================
+      // Allowed statuses
+      // =====================================
+
       const allowedStatuses = [
         "pending_payment",
         "documents_pending",
+        "documents_uploaded",
         "in_progress",
       ];
 
@@ -1173,15 +1197,23 @@ class ServiceOrderController {
 
         return res.status(400).json({
           success: false,
-          message: "Order cannot be cancelled at this stage",
+          message: "Cancellation not allowed at this stage",
         });
       }
 
-      // 3 Prevent duplicate requests
+      // =====================================
+      // Prevent duplicate requests
+      // =====================================
+
       const [[existing]] = await connection.execute(
-        `SELECT id FROM service_order_cancellations 
-       WHERE parent_order_id = ? AND user_id = ?`,
-        [parent_order_id, userId],
+        `
+      SELECT id
+
+      FROM service_order_cancellations
+
+      WHERE service_order_id = ?
+      `,
+        [service_order_id],
       );
 
       if (existing) {
@@ -1193,192 +1225,48 @@ class ServiceOrderController {
         });
       }
 
-      // 4 Calculate refund
-      const [orders] = await connection.execute(
-        `SELECT price, reward_coins_used FROM service_orders WHERE parent_order_id = ?`,
-        [parent_order_id],
-      );
+      // =====================================
+      // Create cancellation request
+      // =====================================
 
-      const totalRefund = orders.reduce((sum, o) => sum + Number(o.price), 0);
-
-      const coinsUsed = orders.reduce(
-        (sum, o) => sum + Number(o.reward_coins_used || 0),
-        0,
-      );
-
-      const refundToWallet = coinsUsed;
-      const refundToCard = totalRefund - coinsUsed;
-
-      if (refundToCard > 0) {
-        await connection.execute(
-          `INSERT INTO service_order_refunds
-        (parent_order_id, user_id, refund_amount, refund_method, status)
-        VALUES (?, ?, ?, 'original', 'pending')`,
-          [parent_order_id, userId, refundToCard],
-        );
-      }
-
-      const [[alreadyRefunded]] = await connection.execute(
-        `SELECT refund_amount 
-       FROM service_orders 
-       WHERE parent_order_id = ? 
-       AND refund_amount > 0 LIMIT 1`,
-        [parent_order_id],
-      );
-
-      if (alreadyRefunded) {
-        await connection.rollback();
-        return res.status(400).json({
-          success: false,
-          message: "Refund already processed",
-        });
-      }
-
-      // 5 Insert cancellation
       await connection.execute(
-        `INSERT INTO service_order_cancellations 
-       (parent_order_id, user_id, reason, comment, status, refund_amount, refund_status)
-       VALUES (?, ?, ?, ?, 'approved', ?, 'completed')`,
-        [parent_order_id, userId, reason, comment || null, totalRefund],
-      );
-
-      // 6 Update orders
-      await connection.execute(
-        `UPDATE service_orders 
-          SET status = 'cancelled',
-              cancelled_at = NOW(),
-              refund_amount = ?
-          WHERE parent_order_id = ?`,
-        [totalRefund, parent_order_id],
-      );
-
-      // 7 Refund coins (wallet)
-      if (coinsUsed > 0) {
-        // ensure wallet exists
-        await connection.execute(
-          `INSERT INTO customer_wallet (user_id, balance)
-         VALUES (?, 0)
-         ON DUPLICATE KEY UPDATE user_id = user_id`,
-          [userId],
-        );
-
-        // update balance
-        await connection.execute(
-          `UPDATE customer_wallet 
-         SET balance = balance + ?
-         WHERE user_id = ?`,
-          [coinsUsed, userId],
-        );
-
-        // fetch updated balance
-        const [[wallet]] = await connection.execute(
-          `SELECT balance FROM customer_wallet WHERE user_id = ?`,
-          [userId],
-        );
-
-        // log transaction
-        await connection.execute(
-          `INSERT INTO wallet_transactions
-         (user_id, title, description, transaction_type, coins, balance_after, category, reference_id, reason_code)
-         VALUES (?, ?, ?, 'credit', ?, ?, 'order', ?, 'ADMIN_ADJUSTMENT')`,
-          [
-            userId,
-            "Order Cancellation Refund",
-            `Coins refunded for order ${parent_order_id}`,
-            coinsUsed,
-            wallet.balance,
-            parent_order_id,
-          ],
-        );
-      }
-
-      const [[payment]] = await connection.execute(
-        `SELECT payment_id 
-        FROM service_orders
-        WHERE parent_order_id = ?
-        LIMIT 1`,
-        [parent_order_id],
+        `
+      INSERT INTO service_order_cancellations
+      (
+        service_order_id,
+        user_id,
+        reason_id,
+        comment,
+        status,
+        refund_status
+      )
+      VALUES
+      (
+        ?, ?, ?, ?, 'requested', 'pending'
+      )
+      `,
+        [service_order_id, userId, reason_id, comment || null],
       );
 
       await connection.commit();
 
-      if (payment?.payment_id && refundToCard > 0) {
-        await this.processRefund({
-          razorpay_payment_id: payment.payment_id,
-          amount: refundToCard,
-          parent_order_id,
-        });
-      }
-
       res.json({
         success: true,
-        message: "Order cancelled successfully",
-        data: {
-          total_refund: totalRefund,
-          breakdown: {
-            to_card: refundToCard,
-            coins_reversed: refundToWallet,
-          },
-        },
+        message: "Cancellation request submitted successfully",
       });
     } catch (err) {
-      if (connection) await connection.rollback();
+      if (connection) {
+        await connection.rollback();
+      }
 
       res.status(500).json({
         success: false,
         message: err.message,
       });
     } finally {
-      if (connection) connection.release();
-    }
-  }
-
-  async processRefund(data) {
-    try {
-      const { razorpay_payment_id, amount, parent_order_id } = data;
-
-      // idempotency check
-      const [existing] = await db.execute(
-        `SELECT id FROM service_order_refunds
-       WHERE parent_order_id = ?
-       AND status = 'completed'
-       LIMIT 1`,
-        [parent_order_id],
-      );
-
-      if (existing.length) {
-        console.log("Refund already processed");
-        return;
+      if (connection) {
+        connection.release();
       }
-
-      // call Razorpay
-      const refund = await razorpay.payments.refund(razorpay_payment_id, {
-        amount: Math.round(Number(amount) * 100),
-      });
-
-      // update refund record
-      await db.execute(
-        `UPDATE service_order_refunds
-       SET status = 'completed',
-           razorpay_refund_id = ?
-       WHERE parent_order_id = ?
-       AND status = 'pending'
-       ORDER BY created_at DESC
-       LIMIT 1`,
-        [refund.id, parent_order_id],
-      );
-    } catch (error) {
-      console.error("Refund failed:", error);
-
-      await db.execute(
-        `UPDATE service_order_refunds
-       SET status = 'failed'
-       WHERE parent_order_id = ?
-       AND status = 'pending'
-       ORDER BY created_at DESC
-       LIMIT 1`,
-        [parent_order_id],
-      );
     }
   }
 }
