@@ -384,7 +384,8 @@ class ServiceOrderController {
   // order details
   async getOrderDetails(req, res) {
     try {
-      const userId = req.user?.user_id;
+      // const userId = req.user?.user_id;
+      const userId=1;
 
       if (!userId) {
         return res.status(401).json({
@@ -404,101 +405,219 @@ class ServiceOrderController {
         });
       }
 
-      // Feedback
-      const [[feedback]] = await db.execute(
-        `SELECT id FROM service_feedback 
-       WHERE parent_order_id = ? AND user_id = ?`,
-        [order.parent_order_id, userId],
-      );
+      // =========================================
+      // PROCESS INDIVIDUAL ITEMS
+      // =========================================
 
-      const canGiveFeedback = order.status === "completed" && !feedback;
+      const processItem = async (item) => {
+        // documents
+        const documents = await ServiceOrderDocumentModel.getRequiredDocs(
+          item.id,
+        );
 
-      // Cancel orders
-      const canCancel = [
-        "pending_payment",
-        "documents_pending",
-        "in_progress",
-      ].includes(order.status);
+        // feedback
+        const [[feedback]] = await db.execute(
+          `SELECT * FROM service_feedback
+         WHERE service_order_id = ?
+         AND user_id = ?`,
+          [item.id, userId],
+        );
 
-      // documents
-      const documents = await ServiceOrderDocumentModel.getRequiredDocs(id);
+        const canGiveFeedback = item.status === "completed" && !feedback;
 
-      // Timeline
-      let timeline = null;
-      if (order.status !== "cancelled") {
-        timeline = [
-          { status: "Order Confirmed", completed: true },
-          {
-            status: "Order in Progress",
-            completed: ["in_progress", "completed"].includes(order.status),
-          },
-          {
-            status: "Order Delivered",
-            completed: order.status === "completed",
-          },
-        ];
-      }
+        // cancellation
+        const [[cancellation]] = await db.execute(
+          `SELECT * FROM service_order_cancellations
+         WHERE service_order_id = ?`,
+          [item.id],
+        );
 
-      // Cancellation
-      const [[cancellation]] = await db.execute(
-        `SELECT * FROM service_order_cancellations 
-          WHERE parent_order_id = ?`,
-        [order.parent_order_id],
-      );
+        // refund
+        const [[refund]] = await db.execute(
+          `SELECT * FROM service_order_refunds
+         WHERE service_order_id = ?`,
+          [item.id],
+        );
 
-      let cancellationTimeline = null;
+        // can cancel
+        const canCancel = [
+          "pending_payment",
+          "documents_pending",
+          "in_progress",
+        ].includes(item.status);
 
-      if (cancellation) {
-        cancellationTimeline = [
-          { status: "Cancellation Requested", completed: true },
-          {
-            status: "Cancellation Confirmed",
-            completed: cancellation.status === "approved",
-          },
-          {
-            status: "Refund Initiated",
-            completed: ["initiated", "completed"].includes(
-              cancellation.refund_status,
-            ),
-          },
-          {
-            status: "Refund Completed",
-            completed: cancellation.refund_status === "completed",
-          },
-        ];
-      }
-      // Refund Summary
-      const refund = cancellation
-        ? {
-            total_refund: Number(cancellation.refund_amount),
-            refund_method: "original",
-            status: cancellation.refund_status,
-          }
-        : null;
+        // timeline
+        let timeline = [];
 
-      res.json({
-        success: true,
-        data: {
-          order,
+        // cancelled flow
+        if (item.status === "cancelled") {
+          timeline = [
+            {
+              status: "Cancellation Requested",
+              completed: true,
+            },
+            {
+              status: "Cancellation Confirmed",
+              completed: cancellation?.status === "approved",
+            },
+            {
+              status: "Refund Initiated",
+              completed: ["initiated", "completed"].includes(
+                cancellation?.refund_status,
+              ),
+            },
+            {
+              status: "Refund Completed",
+              completed: cancellation?.refund_status === "completed",
+            },
+          ];
+        } else {
+          timeline = [
+            {
+              status: "Order Confirmed",
+              completed: true,
+            },
+            {
+              status: "Documents Submitted",
+              completed: [
+                "documents_uploaded",
+                "in_progress",
+                "completed",
+              ].includes(item.status),
+            },
+            {
+              status: "In Progress",
+              completed: ["in_progress", "completed"].includes(item.status),
+            },
+            {
+              status: "Completed",
+              completed: item.status === "completed",
+            },
+          ];
+        }
+
+        return {
+          ...item,
+
           documents,
-          timeline,
-          cancellation: cancellation
-            ? {
-                can_cancel: canCancel,
-                status: cancellation.status,
-                timeline: cancellationTimeline,
-              }
-            : {
-                can_cancel: canCancel,
-              },
 
-          refund,
+          timeline,
 
           feedback: {
             can_submit: canGiveFeedback,
             submitted: !!feedback,
             data: feedback || null,
           },
+
+          cancellation: cancellation
+            ? {
+                can_cancel: canCancel,
+                status: cancellation.status,
+                reason: cancellation.reason,
+                refund_status: cancellation.refund_status,
+              }
+            : {
+                can_cancel: canCancel,
+              },
+
+          refund: refund
+            ? {
+                amount: Number(refund.refund_amount),
+                method: refund.refund_method,
+                status: refund.status,
+              }
+            : null,
+        };
+      };
+
+      // =========================================
+      // PROCESS INDIVIDUAL ITEMS
+      // =========================================
+
+      const processedItems = [];
+
+      for (const item of order.items) {
+        processedItems.push(await processItem(item));
+      }
+
+      // =========================================
+      // PROCESS BUNDLES
+      // =========================================
+
+      const processedBundles = [];
+
+      for (const bundle of order.bundles) {
+        const processedBundleItems = [];
+
+        for (const item of bundle.items) {
+          processedBundleItems.push(await processItem(item));
+        }
+
+        processedBundles.push({
+          ...bundle,
+          items: processedBundleItems,
+        });
+      }
+
+      // =========================================
+      // SUMMARY
+      // =========================================
+
+      const allItems = [
+        ...processedItems,
+        ...processedBundles.flatMap((b) => b.items),
+      ];
+
+      const completedServices = allItems.filter(
+        (i) => i.status === "completed",
+      ).length;
+
+      // =========================================
+      // PARENT TIMELINE (AGGREGATE)
+      // =========================================
+
+      const parentTimeline = [
+        {
+          status: "Order Confirmed",
+          completed: true,
+        },
+        {
+          status: "Services In Progress",
+          completed: allItems.some((i) =>
+            ["in_progress", "completed"].includes(i.status),
+          ),
+        },
+        {
+          status: "Order Completed",
+          completed: allItems.every((i) => i.status === "completed"),
+        },
+      ];
+
+      res.json({
+        success: true,
+
+        data: {
+          parent_order_id: order.parent_order_id,
+
+          created_at: order.created_at,
+
+          status: order.status,
+
+          address: order.address,
+
+          total_amount: order.total_amount,
+
+          summary: {
+            total_services: allItems.length,
+            completed_services: completedServices,
+            total_bundles: processedBundles.length,
+          },
+
+          timeline: parentTimeline,
+
+          items: processedItems,
+
+          bundles: processedBundles,
         },
       });
     } catch (err) {
