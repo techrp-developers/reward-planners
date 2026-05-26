@@ -543,9 +543,52 @@ class ServiceOrderModel {
     );
 
     // =====================================
-    // 7 Cancel service order
+    // 7.Timeline: cancellation approved
     // =====================================
 
+    await conn.execute(
+      `
+    INSERT INTO
+    service_order_cancellation_timeline
+    (
+      service_order_id,
+      event
+    )
+    VALUES
+    (
+      ?,
+      'cancellation_approved'
+    )
+  `,
+      [serviceOrderId],
+    );
+
+    // =====================================
+    // 8 Timeline: refund initiated
+    // ONLY if Razorpay refund exists
+    // =====================================
+    if (refundToCard > 0) {
+      await conn.execute(
+      `
+        INSERT INTO
+        service_order_cancellation_timeline
+        (
+          service_order_id,
+          event
+        )
+        VALUES
+        (
+          ?,
+          'refund_initiated'
+        )
+      `,
+        [serviceOrderId],
+      );
+    }
+
+    // =====================================
+    // 8. Cancel service order
+    // =====================================
     await conn.execute(
       `
     UPDATE service_orders
@@ -606,6 +649,26 @@ class ServiceOrderModel {
       `,
         [service_order_id],
       );
+
+      // =====================================
+      // Timeline: refund completed
+      // =====================================
+      await db.execute(
+        `
+        INSERT INTO
+        service_order_cancellation_timeline
+        (
+          service_order_id,
+          event
+        )
+        VALUES
+        (
+          ?,
+          'refund_completed'
+        )
+        `,
+        [service_order_id],
+      );
     } catch (error) {
       console.error("Service refund failed:", error);
 
@@ -618,6 +681,23 @@ class ServiceOrderModel {
       WHERE service_order_id = ?
       AND status = 'pending'
       `,
+        [data.service_order_id],
+      );
+
+      await db.execute(
+        `
+        INSERT INTO
+        service_order_cancellation_timeline
+        (
+          service_order_id,
+          event
+        )
+        VALUES
+        (
+          ?,
+          'refund_failed'
+        )
+        `,
         [data.service_order_id],
       );
     }
