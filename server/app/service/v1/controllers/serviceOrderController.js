@@ -935,6 +935,20 @@ class ServiceOrderController {
     }
   }
 
+  // Issue Reasons
+  async getIssueTypes(req, res) {
+    const [rows] = await db.execute(
+      `
+    SELECT issue_id, issue_text
+    FROM service_order_issue_type
+    WHERE is_active = 1
+    ORDER BY sort_order ASC
+    `,
+    );
+
+    res.json({ success: true, reasons: rows });
+  }
+
   // create support request
   async createSupportRequest(req, res) {
     try {
@@ -1253,7 +1267,7 @@ class ServiceOrderController {
       // =====================================
 
       await connection.execute(
-      `
+        `
         INSERT INTO
         service_order_cancellation_timeline
         (

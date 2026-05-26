@@ -85,6 +85,12 @@ router.post(
 );
 
 // ========================================Help section========================================================
+// Get Issue Type
+router.get(
+  "/issue-types",
+  ServiceOrderController.getIssueTypes,
+);
+
 router.post(
   "/order-help",
   auth,
