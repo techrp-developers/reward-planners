@@ -1,6 +1,7 @@
 const orderModel = require("../models/orderModel");
 const db = require("../config/database");
 const xpressService = require("../services/ExpressBees/xpressbees_service");
+const ServiceOrderModel = require("../app/service/v1/models/serviceOrderModel");
 
 class OrderController {
   async getOrderList(req, res) {
@@ -264,6 +265,46 @@ class OrderController {
       return res.status(500).json({
         success: false,
         message: "Unable to reject cancellation",
+      });
+    } finally {
+      conn.release();
+    }
+  }
+
+  // ===========================================Service============================================================
+  // approve service cancellation
+  async approveServiceCancellation(req, res) {
+    const conn = await db.getConnection();
+
+    try {
+      await conn.beginTransaction();
+
+      const serviceOrderId = Number(req.params.serviceOrderId);
+
+      const refundData = await ServiceOrderModel.approveCancellation(
+        serviceOrderId,
+        conn,
+      );
+
+      await conn.commit();
+
+      // refund AFTER commit
+      if (refundData?.payment_id) {
+        await ServiceOrderModel.processRefund(refundData);
+      }
+
+      return res.json({
+        success: true,
+        message: "Cancellation approved successfully",
+      });
+    } catch (error) {
+      await conn.rollback();
+
+      console.error("Approve cancellation error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Unable to approve cancellation",
       });
     } finally {
       conn.release();

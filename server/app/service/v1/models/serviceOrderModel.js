@@ -334,6 +334,294 @@ class ServiceOrderModel {
 
     return result.affectedRows;
   }
+
+  // Approve cancellation
+  async approveCancellation(serviceOrderId, conn) {
+    // =====================================
+    // 1 Get cancellation request
+    // =====================================
+
+    const [[cancellation]] = await conn.execute(
+      `
+      SELECT
+        soc.id,
+        soc.status,
+
+        so.id AS service_order_id,
+        so.user_id,
+        so.price,
+        so.payment_id,
+        so.reward_coins_used,
+        so.status AS order_status
+
+      FROM service_order_cancellations soc
+
+      JOIN service_orders so
+        ON so.id = soc.service_order_id
+
+      WHERE soc.service_order_id = ?
+
+      LIMIT 1
+      FOR UPDATE
+      `,
+      [serviceOrderId],
+    );
+
+    if (!cancellation) {
+      throw new Error("CANCELLATION_REQUEST_NOT_FOUND");
+    }
+
+    if (cancellation.status !== "requested") {
+      throw new Error("INVALID_CANCELLATION_STATE");
+    }
+
+    if (cancellation.order_status === "cancelled") {
+      throw new Error("ORDER_ALREADY_CANCELLED");
+    }
+
+    // =====================================
+    // 2 Prevent duplicate refund
+    // =====================================
+
+    const [[existingRefund]] = await conn.execute(
+      `
+      SELECT id
+
+      FROM service_order_refunds
+
+      WHERE service_order_id = ?
+      AND status = 'completed'
+
+      LIMIT 1
+      `,
+      [serviceOrderId],
+    );
+
+    if (existingRefund) {
+      throw new Error("REFUND_ALREADY_DONE");
+    }
+
+    // =====================================
+    // 3 Refund calculations
+    // =====================================
+
+    const refundAmount = Number(cancellation.price);
+
+    const coinsUsed = Number(cancellation.reward_coins_used || 0);
+
+    const refundToWallet = coinsUsed;
+
+    const refundToCard = refundAmount - coinsUsed;
+
+    // =====================================
+    // 4 Reverse wallet coins
+    // =====================================
+
+    if (refundToWallet > 0) {
+      // ensure wallet exists
+      await conn.execute(
+        `
+      INSERT INTO customer_wallet
+      (user_id, balance)
+
+      VALUES (?, 0)
+
+      ON DUPLICATE KEY UPDATE
+      user_id = user_id
+      `,
+        [cancellation.user_id],
+      );
+
+      // update wallet
+      await conn.execute(
+        `
+      UPDATE customer_wallet
+
+      SET balance = balance + ?
+
+      WHERE user_id = ?
+      `,
+        [refundToWallet, cancellation.user_id],
+      );
+
+      // get updated balance
+      const [[wallet]] = await conn.execute(
+        `
+        SELECT balance
+
+        FROM customer_wallet
+
+        WHERE user_id = ?
+        `,
+        [cancellation.user_id],
+      );
+
+      // transaction entry
+      await conn.execute(
+        `
+      INSERT INTO wallet_transactions
+      (
+        user_id,
+        title,
+        description,
+        transaction_type,
+        coins,
+        balance_after,
+        category,
+        reference_id,
+        reason_code
+      )
+      VALUES
+      (
+        ?,
+        ?,
+        ?,
+        'credit',
+        ?,
+        ?,
+        'order',
+        ?,
+        'ADMIN_ADJUSTMENT'
+      )
+      `,
+        [
+          cancellation.user_id,
+
+          "Service Cancellation Refund",
+
+          `Coins refunded for service order ${serviceOrderId}`,
+
+          refundToWallet,
+
+          wallet.balance,
+
+          serviceOrderId,
+        ],
+      );
+    }
+
+    // =====================================
+    // 5 Create refund record
+    // =====================================
+
+    if (refundToCard > 0) {
+      await conn.execute(
+        `
+      INSERT INTO service_order_refunds
+      (
+        service_order_id,
+        user_id,
+        refund_amount,
+        refund_method,
+        status
+      )
+      VALUES
+      (
+        ?, ?, ?, 'original', 'pending'
+      )
+      `,
+        [serviceOrderId, cancellation.user_id, refundToCard],
+      );
+    }
+
+    // =====================================
+    // 6 Update cancellation request
+    // =====================================
+
+    await conn.execute(
+      `
+    UPDATE service_order_cancellations
+
+    SET
+      status = 'approved',
+      refund_amount = ?,
+      refund_status = 'initiated'
+
+    WHERE service_order_id = ?
+    `,
+      [refundAmount, serviceOrderId],
+    );
+
+    // =====================================
+    // 7 Cancel service order
+    // =====================================
+
+    await conn.execute(
+      `
+    UPDATE service_orders
+
+    SET
+      status = 'cancelled',
+      cancelled_at = NOW(),
+      refund_amount = ?
+
+    WHERE id = ?
+    `,
+      [refundAmount, serviceOrderId],
+    );
+
+    return refundToCard > 0
+      ? {
+          payment_id: cancellation.payment_id,
+
+          amount: refundToCard,
+
+          service_order_id: serviceOrderId,
+        }
+      : null;
+  }
+
+  async processRefund(data) {
+    try {
+      const { payment_id, amount, service_order_id } = data;
+
+      // refund
+      const refund = await razorpay.payments.refund(payment_id, {
+        amount: Math.round(Number(amount) * 100),
+      });
+
+      // update refund
+      await db.execute(
+        `
+      UPDATE service_order_refunds
+
+      SET
+        status = 'completed',
+        razorpay_refund_id = ?
+
+      WHERE service_order_id = ?
+      AND status = 'pending'
+      `,
+        [refund.id, service_order_id],
+      );
+
+      // update cancellation
+      await db.execute(
+        `
+      UPDATE service_order_cancellations
+
+      SET refund_status = 'completed'
+
+      WHERE service_order_id = ?
+      `,
+        [service_order_id],
+      );
+    } catch (error) {
+      console.error("Service refund failed:", error);
+
+      await db.execute(
+        `
+      UPDATE service_order_refunds
+
+      SET status = 'failed'
+
+      WHERE service_order_id = ?
+      AND status = 'pending'
+      `,
+        [data.service_order_id],
+      );
+    }
+  }
 }
 
 module.exports = new ServiceOrderModel();
