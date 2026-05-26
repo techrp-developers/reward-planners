@@ -84,6 +84,12 @@ router.post(
   ServiceOrderController.cancelOrderRequest,
 );
 
+router.get(
+  "/cancellation-details/:serviceOrderId",
+  auth,
+  ServiceOrderController.cancellationDetails,
+);
+
 // ========================================Help section========================================================
 // Get Issue Type
 router.get(

@@ -569,7 +569,7 @@ class ServiceOrderModel {
     // =====================================
     if (refundToCard > 0) {
       await conn.execute(
-      `
+        `
         INSERT INTO
         service_order_cancellation_timeline
         (
@@ -767,6 +767,229 @@ class ServiceOrderModel {
     `,
       [serviceOrderId],
     );
+  }
+
+  // get service cancellation details
+  async getCancellationDetails({ userId, serviceOrderId }) {
+    // =====================================
+    // Order details
+    // =====================================
+
+    const [[order]] = await db.execute(
+      `
+    SELECT
+
+      so.id,
+      so.order_ref,
+      so.status,
+      so.price,
+      so.reward_coins_used,
+      so.refund_amount,
+
+      so.address_id,
+
+      s.name AS service_name,
+
+      sv.variant_name,
+      sv.title,
+      sv.image_url,
+
+      ca.address_type,
+      ca.address1,
+      ca.address2,
+      ca.city,
+      ca.zipcode,
+      ca.landmark,
+      ca.contact_name,
+      ca.contact_phone,
+
+      st.state_name,
+      c.country_name
+
+    FROM service_orders so
+
+    JOIN services s
+      ON s.id = so.service_id
+
+    LEFT JOIN service_variants sv
+      ON sv.id = so.variant_id
+
+    LEFT JOIN customer_addresses ca
+      ON ca.address_id = so.address_id
+
+    LEFT JOIN states st
+      ON st.state_id = ca.state_id
+
+    LEFT JOIN countries c
+      ON c.country_id = ca.country_id
+
+    WHERE so.id = ?
+    AND so.user_id = ?
+    `,
+      [serviceOrderId, userId],
+    );
+
+    if (!order) {
+      throw new Error("SERVICE_ORDER_NOT_FOUND");
+    }
+
+    // =====================================
+    // Cancellation details
+    // =====================================
+
+    const [[cancellation]] = await db.execute(
+      `
+      SELECT
+        status,
+        refund_amount,
+        refund_status,
+        refund_method,
+        created_at
+
+      FROM service_order_cancellations
+
+      WHERE service_order_id = ?
+      `,
+      [serviceOrderId],
+    );
+
+    // =====================================
+    // Timeline
+    // =====================================
+
+    const [timeline] = await db.execute(
+      `
+    SELECT
+      event,
+      created_at
+
+    FROM service_order_cancellation_timeline
+
+    WHERE service_order_id = ?
+
+    ORDER BY created_at ASC
+    `,
+      [serviceOrderId],
+    );
+
+    // =====================================
+    // Refunds
+    // =====================================
+
+    const [refunds] = await db.execute(
+      `
+    SELECT
+      refund_amount,
+      refund_method,
+      status
+
+    FROM service_order_refunds
+
+    WHERE service_order_id = ?
+    `,
+      [serviceOrderId],
+    );
+
+    let moneyRefund = 0;
+    let coinRefund = 0;
+
+    refunds.forEach((r) => {
+      if (r.refund_method === "original") {
+        moneyRefund += Number(r.refund_amount);
+      }
+
+      if (r.refund_method === "wallet") {
+        coinRefund += Number(r.refund_amount);
+      }
+    });
+
+    // =====================================
+    // Final response
+    // =====================================
+
+    return {
+      service_order_id: order.id,
+
+      order_ref: order.order_ref,
+
+      status: order.status,
+
+      service: {
+        service_name: order.service_name,
+
+        variant_name: order.variant_name,
+
+        title: order.title,
+
+        image_url: order.image_url ? getPublicUrl(order.image_url) : null,
+      },
+
+      address: order.address_id
+        ? {
+            address_type: order.address_type,
+
+            address1: order.address1,
+
+            address2: order.address2,
+
+            city: order.city,
+
+            state: order.state_name,
+
+            country: order.country_name,
+
+            zipcode: order.zipcode,
+
+            landmark: order.landmark,
+
+            contact_name: order.contact_name,
+
+            contact_phone: order.contact_phone,
+          }
+        : null,
+
+      cancellation: cancellation
+        ? {
+            status: cancellation.status,
+
+            refund_status: cancellation.refund_status,
+
+            refund_method: cancellation.refund_method,
+
+            refund_amount: Number(cancellation.refund_amount),
+
+            created_at: cancellation.created_at,
+          }
+        : null,
+
+      timeline: timeline.map((t) => ({
+        label: mapServiceCancelEvent(t.event),
+
+        event: t.event,
+
+        date: t.created_at,
+      })),
+
+      refund: {
+        total: moneyRefund + coinRefund,
+
+        money_refund: moneyRefund,
+
+        coin_refund: coinRefund,
+      },
+
+      rewards: {
+        used: Number(order.reward_coins_used || 0),
+
+        reversed: coinRefund,
+      },
+
+      summary: {
+        service_total: Number(order.price),
+
+        order_total: Number(order.price),
+      },
+    };
   }
 }
 

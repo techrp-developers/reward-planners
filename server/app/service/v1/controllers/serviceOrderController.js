@@ -1437,6 +1437,33 @@ class ServiceOrderController {
       }
     }
   }
+
+  // get service cancellation details
+  async cancellationDetails(req, res) {
+    try {
+      const userId = req.user?.user_id;
+      // const userId = 1;
+
+      const serviceOrderId = Number(req.params.serviceOrderId);
+
+      const data = await ServiceOrderModel.getCancellationDetails({
+        userId,
+        serviceOrderId,
+      });
+
+      return res.json({
+        success: true,
+        data,
+      });
+    } catch (error) {
+      console.error("Service cancellation details error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Unable to fetch cancellation details",
+      });
+    }
+  }
 }
 
 module.exports = new ServiceOrderController();
