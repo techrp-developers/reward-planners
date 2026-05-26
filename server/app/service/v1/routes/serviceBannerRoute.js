@@ -16,6 +16,15 @@ router.post(
   ServiceBannerController.createBanner,
 );
 
+// update Banners
+router.put(
+  "/update/:id",
+  // authenticateToken,
+  // authorizeRoles("vendor_manager", "admin"),
+  upload.single("banner_image"),
+  ServiceBannerController.updateBanner,
+);
+
 // get Banners
 router.get("/", ServiceBannerController.getBanners);
 
