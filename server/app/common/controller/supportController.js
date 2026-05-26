@@ -40,10 +40,6 @@ class SupportController {
         description,
         category_id,
         // attachment_url,
-        // app_version,
-        // platform,
-        // device_info,
-        // os_version,
       } = req.body;
 
       // validation
@@ -75,19 +71,14 @@ class SupportController {
 
       const [result] = await db.execute(
         `INSERT INTO support_tickets 
-       (user_id, subject, description, category_id, attachment_url,
-        app_version, platform, device_info, os_version)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (user_id, subject, description, category_id, attachment_url)
+       VALUES (?, ?, ?, ?, ?)`,
         [
           userId,
           subject,
           description,
           category_id,
-          null,
-          null,
-          null,
-          null,
-          null,
+          null
         ],
       );
 
