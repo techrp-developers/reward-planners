@@ -1115,20 +1115,66 @@ class ServiceOrderController {
       });
     }
   }
-  
+
+  // support request list by service order
   async getSupportRequestsByOrderId(req, res) {
     try {
-      const { parentId } = req.params;
+      const userId = req.user?.user_id;
+      // const userId = 1;
 
-      // 1. Get support requests
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      const { serviceOrderId } = req.params;
+
+      // =====================================
+      // Validate service order ownership
+      // =====================================
+
+      const [[order]] = await db.execute(
+        `
+      SELECT id
+
+      FROM service_orders
+
+      WHERE id = ?
+      AND user_id = ?
+      `,
+        [serviceOrderId, userId],
+      );
+
+      if (!order) {
+        return res.status(404).json({
+          success: false,
+          message: "Service order not found",
+        });
+      }
+
+      // =====================================
+      // Get support requests
+      // =====================================
+
       const [requests] = await db.execute(
         `
-      SELECT *
-      FROM order_support_requests
-      WHERE parent_order_id = ?
-      ORDER BY created_at DESC
+      SELECT
+        osr.*,
+
+        soit.issue_text
+
+      FROM order_support_requests osr
+
+      LEFT JOIN service_order_issue_types soit
+        ON soit.issue_id = osr.issue_id
+
+      WHERE osr.service_order_id = ?
+
+      ORDER BY osr.created_at DESC
       `,
-        [parentId],
+        [serviceOrderId],
       );
 
       if (!requests.length) {
@@ -1138,20 +1184,32 @@ class ServiceOrderController {
         });
       }
 
-      // 2. Extract request IDs
+      // =====================================
+      // Extract request IDs
+      // =====================================
+
       const requestIds = requests.map((r) => r.id);
 
-      // 3. Get all attachments
+      // =====================================
+      // Get attachments
+      // =====================================
+
       const [attachments] = await db.execute(
         `
       SELECT *
+
       FROM order_support_attachments
-      WHERE request_id IN (${requestIds.map(() => "?").join(",")})
+
+      WHERE request_id IN
+      (${requestIds.map(() => "?").join(",")})
       `,
         requestIds,
       );
 
-      // 4. Group attachments by request_id
+      // =====================================
+      // Group attachments
+      // =====================================
+
       const attachmentMap = {};
 
       attachments.forEach((file) => {
@@ -1159,16 +1217,33 @@ class ServiceOrderController {
           attachmentMap[file.request_id] = [];
         }
 
-        attachmentMap[file.request_id].push(file);
+        attachmentMap[file.request_id].push({
+          id: file.id,
+          file_url: getPublicUrl(file.file_url),
+          created_at: file.created_at,
+        });
       });
 
-      // 5. Attach files to each request
+      // =====================================
+      // Final formatting
+      // =====================================
+
       const formatted = requests.map((request) => ({
-        ...request,
-        attachments: (attachmentMap[request.id] || []).map((file) => ({
-          ...file,
-          file_url: getPublicUrl(file.file_url),
-        })),
+        id: request.id,
+
+        service_order_id: request.service_order_id,
+
+        issue_id: request.issue_id,
+
+        issue_name: request.issue_text,
+
+        description: request.description,
+
+        status: request.status,
+
+        created_at: request.created_at,
+
+        attachments: attachmentMap[request.id] || [],
       }));
 
       res.json({

@@ -100,7 +100,7 @@ router.post(
 
 // support request list for admin
 router.get(
-  "/order-help/:parentId",
+  "/order-help/:serviceOrderId",
   auth,
   ServiceOrderController.getSupportRequestsByOrderId,
 );
