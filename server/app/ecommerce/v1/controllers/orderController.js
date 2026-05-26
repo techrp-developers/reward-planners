@@ -537,8 +537,8 @@ class OrderController {
   // Cancellation Details
   async cancellationDetails(req, res) {
     try {
-      // const userId = req.user.user_id;
-      const userId = 1;
+      const userId = req.user.user_id;
+      // const userId = 1;
       const orderId = Number(req.params.orderId);
 
       const data = await OrderModel.getCancellationDetails({
