@@ -140,6 +140,141 @@ class ServiceBundleController {
       res.status(500).json({ success: false, message: err.message });
     }
   }
+
+  // create Bundle
+  async createServiceBundle(req, res) {
+    try {
+      const { name, description, bundle_price, original_price, type, status } =
+        req.body;
+
+      const bannerImage = req.file ? req.file.path : null;
+
+      const [result] = await db.execute(
+        `INSERT INTO service_bundles
+      (name, description, banner_image, bundle_price, original_price, type, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          name,
+          description,
+          bannerImage,
+          bundle_price,
+          original_price,
+          type || "fixed",
+          status ?? 1,
+        ],
+      );
+
+      res.status(201).json({
+        success: true,
+        message: "Service bundle created successfully",
+        data: {
+          id: result.insertId,
+        },
+      });
+    } catch (err) {
+      console.error("Error creating service bundle:", err);
+
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  async updateServiceBundle(req, res) {
+    try {
+      const { id } = req.params;
+
+      const { name, description, bundle_price, original_price, type, status } =
+        req.body;
+
+      // check existing bundle
+      const [existing] = await db.execute(
+        `SELECT * FROM service_bundles WHERE id = ?`,
+        [id],
+      );
+
+      if (!existing.length) {
+        return res.status(404).json({
+          success: false,
+          message: "Service bundle not found",
+        });
+      }
+
+      let bannerImage = existing[0].banner_image;
+
+      if (req.file) {
+        bannerImage = req.file.path;
+      }
+
+      await db.execute(
+        `UPDATE service_bundles
+      SET
+        name = ?,
+        description = ?,
+        banner_image = ?,
+        bundle_price = ?,
+        original_price = ?,
+        type = ?,
+        status = ?
+      WHERE id = ?`,
+        [
+          name,
+          description,
+          bannerImage,
+          bundle_price,
+          original_price,
+          type,
+          status,
+          id,
+        ],
+      );
+
+      res.json({
+        success: true,
+        message: "Service bundle updated successfully",
+      });
+    } catch (err) {
+      console.error("Error updating service bundle:", err);
+
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  async deleteServiceBundle(req, res) {
+    try {
+      const { id } = req.params;
+
+      const [existing] = await db.execute(
+        `SELECT id FROM service_bundles WHERE id = ?`,
+        [id],
+      );
+
+      if (!existing.length) {
+        return res.status(404).json({
+          success: false,
+          message: "Service bundle not found",
+        });
+      }
+
+      await db.execute(`DELETE FROM service_bundles WHERE id = ?`, [id]);
+
+      res.json({
+        success: true,
+        message: "Service bundle deleted successfully",
+      });
+    } catch (err) {
+      console.error("Error deleting service bundle:", err);
+
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
 }
 
 module.exports = new ServiceBundleController();
