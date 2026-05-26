@@ -517,9 +517,11 @@ class ServiceController {
 
   // ===============================================Feedback from user======================================
   async submitFeedback(req, res) {
+    let connection;
+
     try {
-      // const userId = req.user?.user_id;
-      const userId = 1;
+      const userId = req.user?.user_id;
+      // const userId = 1;
 
       if (!userId) {
         return res.status(401).json({
@@ -529,20 +531,27 @@ class ServiceController {
       }
 
       const {
-        parent_order_id,
+        service_order_id,
+
         rating,
         ease_rating,
         expert_rating,
+
         completion_time,
         confidence,
         reuse_intent,
+
         comment,
       } = req.body;
 
-      if (!parent_order_id || !rating) {
+      // =====================================
+      // Validation
+      // =====================================
+
+      if (!service_order_id || !rating) {
         return res.status(400).json({
           success: false,
-          message: "parent_order_id and rating required",
+          message: "service_order_id and rating required",
         });
       }
 
@@ -553,104 +562,164 @@ class ServiceController {
         });
       }
 
-      await db.beginTransaction();
+      connection = await db.getConnection();
 
-      //  Check order belongs to user & is delivered
-      const [[order]] = await db.execute(
-        `SELECT status FROM service_orders 
-       WHERE parent_order_id = ? AND user_id = ?
-       LIMIT 1`,
-        [parent_order_id, userId],
+      await connection.beginTransaction();
+
+      // =====================================
+      // Validate order ownership
+      // =====================================
+
+      const [[order]] = await connection.execute(
+        `
+      SELECT
+        id,
+        service_id,
+        status
+
+      FROM service_orders
+
+      WHERE id = ?
+      AND user_id = ?
+      `,
+        [service_order_id, userId],
       );
 
       if (!order) {
-        await db.rollback();
+        await connection.rollback();
+
         return res.status(404).json({
           success: false,
-          message: "Order not found",
+          message: "Service order not found",
         });
       }
 
+      // =====================================
+      // Only completed orders
+      // =====================================
+
       if (order.status !== "completed") {
-        await db.rollback();
+        await connection.rollback();
+
         return res.status(400).json({
           success: false,
           message: "Feedback allowed only after completion",
         });
       }
 
-      //  Prevent duplicate feedback
-      const [[existing]] = await db.execute(
-        `SELECT id FROM service_feedback 
-       WHERE parent_order_id = ? AND user_id = ?`,
-        [parent_order_id, userId],
+      // =====================================
+      // Prevent duplicate feedback
+      // =====================================
+
+      const [[existing]] = await connection.execute(
+        `
+        SELECT id
+
+        FROM service_feedback
+
+        WHERE service_order_id = ?
+        AND user_id = ?
+        `,
+        [service_order_id, userId],
       );
 
       if (existing) {
-        await db.rollback();
+        await connection.rollback();
+
         return res.status(400).json({
           success: false,
           message: "Feedback already submitted",
         });
       }
 
-      //  Insert feedback
-      await db.execute(
-        `INSERT INTO service_feedback
-      (parent_order_id, user_id, rating, ease_rating, expert_rating,
-       completion_time, confidence, reuse_intent, comment)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      // =====================================
+      // Insert feedback
+      // =====================================
+
+      await connection.execute(
+        `
+      INSERT INTO service_feedback
+      (
+        service_order_id,
+        user_id,
+
+        rating,
+        ease_rating,
+        expert_rating,
+
+        completion_time,
+        confidence,
+        reuse_intent,
+
+        comment
+      )
+      VALUES
+      (
+        ?, ?, ?, ?, ?, ?, ?, ?, ?
+      )
+      `,
         [
-          parent_order_id,
+          service_order_id,
           userId,
+
           rating,
           ease_rating,
           expert_rating,
+
           completion_time,
           confidence,
           reuse_intent,
+
           comment || null,
         ],
       );
 
-      // Get services
-      const [services] = await db.execute(
-        `SELECT DISTINCT service_id 
-              FROM service_orders 
-              WHERE parent_order_id = ?`,
-        [parent_order_id],
+      // =====================================
+      // Update service average rating
+      // =====================================
+
+      await connection.execute(
+        `
+      UPDATE services
+
+      SET rating = (
+        SELECT ROUND(
+          AVG(sf.rating),
+          1
+        )
+
+        FROM service_feedback sf
+
+        JOIN service_orders so
+          ON so.id = sf.service_order_id
+
+        WHERE so.service_id = ?
+      )
+
+      WHERE id = ?
+      `,
+        [order.service_id, order.service_id],
       );
 
-      // update rating for each service
-      for (let s of services) {
-        await db.execute(
-          `UPDATE services 
-         SET rating = (
-           SELECT ROUND(AVG(sf.rating), 1)
-           FROM service_feedback sf
-           WHERE sf.parent_order_id IN (
-             SELECT parent_order_id 
-             FROM service_orders 
-             WHERE service_id = ?
-           )
-         )
-         WHERE id = ?`,
-          [s.service_id, s.service_id],
-        );
-      }
-
-      await db.commit();
+      await connection.commit();
 
       res.json({
         success: true,
         message: "Feedback submitted successfully",
       });
     } catch (err) {
-      await db.rollback();
+      if (connection) {
+        await connection.rollback();
+      }
+
       res.status(500).json({
         success: false,
         message: err.message,
       });
+    } finally {
+      if (connection) {
+        connection.release();
+      }
     }
   }
 }
