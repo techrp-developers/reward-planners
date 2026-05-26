@@ -1248,6 +1248,27 @@ class ServiceOrderController {
         [service_order_id, userId, reason_id, comment || null],
       );
 
+      // =====================================
+      // Timeline entry
+      // =====================================
+
+      await connection.execute(
+      `
+        INSERT INTO
+        service_order_cancellation_timeline
+        (
+          service_order_id,
+          event
+        )
+        VALUES
+        (
+          ?,
+          'cancellation_requested'
+        )
+      `,
+        [service_order_id],
+      );
+
       await connection.commit();
 
       res.json({
