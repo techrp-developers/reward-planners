@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const ServiceBundleController = require("../controllers/serviceBundleController");
 const auth = require("../../../common/middlewares/auth");
+const upload = require("../../../../middleware/mediaUpload/serviceCategoryUpload");
 
 // Get Bundles
 router.get("/", ServiceBundleController.getServiceBundles);

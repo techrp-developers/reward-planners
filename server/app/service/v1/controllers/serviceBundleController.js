@@ -1,6 +1,12 @@
 const db = require("../../../../config/database");
 const ServiceBundleModel = require("../models/serviceBundleModel");
 const ServiceFormModel = require("../models/serviceFormModel");
+const fs = require("fs");
+const path = require("path");
+const { UPLOAD_BASE } = require("../../../../config/path");
+const sharp = require("sharp");
+const { uploadToR2 } = require("../../../../utils/r2upload");
+const { deleteFromR2 } = require("../../../../utils/r2delete");
 
 // helper function
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
@@ -147,16 +153,55 @@ class ServiceBundleController {
       const { name, description, bundle_price, original_price, type, status } =
         req.body;
 
-      const bannerImage = req.file ? req.file.path : null;
+      // image required
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          message: "Banner image is required",
+        });
+      }
 
+      // validate image
+      if (!req.file.mimetype.startsWith("image/")) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid image file",
+        });
+      }
+
+      // generate unique filename
+      const fileName = `${Date.now()}-${Math.random()
+        .toString(36)
+        .substring(2, 8)}-${req.file.originalname}`;
+
+      // R2 storage key
+      const imageKey = `public/service-bundles/${fileName}`;
+
+      // upload to R2
+      await uploadToR2(req.file.path, imageKey, req.file.mimetype);
+
+      // cleanup local temp file
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+
+      // store R2 key in DB
       const [result] = await db.execute(
         `INSERT INTO service_bundles
-      (name, description, banner_image, bundle_price, original_price, type, status)
+      (
+        name,
+        description,
+        banner_image,
+        bundle_price,
+        original_price,
+        type,
+        status
+      )
       VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
           name,
           description,
-          bannerImage,
+          imageKey,
           bundle_price,
           original_price,
           type || "fixed",
@@ -169,10 +214,16 @@ class ServiceBundleController {
         message: "Service bundle created successfully",
         data: {
           id: result.insertId,
+          banner_image: imageKey,
         },
       });
     } catch (err) {
       console.error("Error creating service bundle:", err);
+
+      // cleanup temp file on error
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
 
       res.status(500).json({
         success: false,
@@ -188,25 +239,61 @@ class ServiceBundleController {
       const { name, description, bundle_price, original_price, type, status } =
         req.body;
 
-      // check existing bundle
-      const [existing] = await db.execute(
+      // existing bundle
+      const [rows] = await db.execute(
         `SELECT * FROM service_bundles WHERE id = ?`,
         [id],
       );
 
-      if (!existing.length) {
+      if (!rows.length) {
         return res.status(404).json({
           success: false,
           message: "Service bundle not found",
         });
       }
 
-      let bannerImage = existing[0].banner_image;
+      const existing = rows[0];
 
+      let bannerImage = existing.banner_image;
+
+      // new image uploaded
       if (req.file) {
-        bannerImage = req.file.path;
+        // validate image
+        if (!req.file.mimetype.startsWith("image/")) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid image file",
+          });
+        }
+
+        const extension = path.extname(req.file.originalname);
+
+        const filename = `bundle-${Date.now()}-${Math.random()
+          .toString(36)
+          .substring(2, 8)}${extension}`;
+
+        // R2 path
+        bannerImage = `public/service-bundles/${id}/${filename}`;
+
+        // upload to R2
+        await uploadToR2(req.file.path, bannerImage, req.file.mimetype);
+
+        // delete old image from R2
+        if (existing.banner_image) {
+          try {
+            await deleteFromR2(existing.banner_image);
+          } catch (deleteErr) {
+            console.error("OLD BUNDLE IMAGE DELETE ERROR:", deleteErr);
+          }
+        }
+
+        // remove temp file
+        if (fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
       }
 
+      // update bundle
       await db.execute(
         `UPDATE service_bundles
       SET
@@ -219,13 +306,13 @@ class ServiceBundleController {
         status = ?
       WHERE id = ?`,
         [
-          name,
-          description,
+          name ?? existing.name,
+          description ?? existing.description,
           bannerImage,
-          bundle_price,
-          original_price,
-          type,
-          status,
+          bundle_price ?? existing.bundle_price,
+          original_price ?? existing.original_price,
+          type ?? existing.type,
+          status ?? existing.status,
           id,
         ],
       );
@@ -233,9 +320,17 @@ class ServiceBundleController {
       res.json({
         success: true,
         message: "Service bundle updated successfully",
+        data: {
+          banner_image: bannerImage,
+        },
       });
     } catch (err) {
       console.error("Error updating service bundle:", err);
+
+      // cleanup temp file on error
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
 
       res.status(500).json({
         success: false,
