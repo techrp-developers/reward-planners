@@ -622,6 +622,72 @@ class ServiceOrderModel {
       );
     }
   }
+
+  // Reject cancellation
+  async rejectCancellation(serviceOrderId, conn) {
+    // =====================================
+    // Validate cancellation exists
+    // =====================================
+
+    const [[cancellation]] = await conn.execute(
+      `
+      SELECT
+        id,
+        status
+
+      FROM service_order_cancellations
+
+      WHERE service_order_id = ?
+
+      LIMIT 1
+      `,
+      [serviceOrderId],
+    );
+
+    if (!cancellation) {
+      throw new Error("CANCELLATION_REQUEST_NOT_FOUND");
+    }
+
+    if (cancellation.status !== "requested") {
+      throw new Error("INVALID_CANCELLATION_STATE");
+    }
+
+    // =====================================
+    // Reject cancellation
+    // =====================================
+
+    await conn.execute(
+      `
+    UPDATE service_order_cancellations
+
+    SET status = 'rejected'
+
+    WHERE service_order_id = ?
+    `,
+      [serviceOrderId],
+    );
+
+    // =====================================
+    // Add timeline event
+    // =====================================
+
+    await conn.execute(
+      `
+    INSERT INTO
+    service_order_cancellation_timeline
+    (
+      service_order_id,
+      event
+    )
+    VALUES
+    (
+      ?,
+      'cancellation_rejected'
+    )
+    `,
+      [serviceOrderId],
+    );
+  }
 }
 
 module.exports = new ServiceOrderModel();

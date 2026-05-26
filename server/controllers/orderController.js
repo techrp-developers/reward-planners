@@ -310,6 +310,37 @@ class OrderController {
       conn.release();
     }
   }
+
+  // reject service cancellation
+  async rejectServiceCancellation(req, res) {
+    const conn = await db.getConnection();
+
+    try {
+      await conn.beginTransaction();
+
+      const serviceOrderId = Number(req.params.serviceOrderId);
+
+      await ServiceOrderModel.rejectCancellation(serviceOrderId, conn);
+
+      await conn.commit();
+
+      return res.json({
+        success: true,
+        message: "Cancellation rejected",
+      });
+    } catch (error) {
+      await conn.rollback();
+
+      console.error("Reject cancellation error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Unable to reject cancellation",
+      });
+    } finally {
+      conn.release();
+    }
+  }
 }
 
 module.exports = new OrderController();

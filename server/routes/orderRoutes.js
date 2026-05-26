@@ -78,5 +78,12 @@ router.post(
   orderController.approveServiceCancellation,
 );
 
+// reject service cancellation
+router.post(
+  "/reject-service-cancellation/:serviceOrderId",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  orderController.rejectServiceCancellation,
+);
 
 module.exports = router;
