@@ -962,59 +962,117 @@ class ServiceOrderController {
         });
       }
 
-      const { parent_order_id, issue_type, description } = req.body;
+      const { service_order_id, issue_id, description } = req.body;
 
-      if (!parent_order_id || !issue_type) {
+      // =====================================
+      // Validation
+      // =====================================
+
+      if (!service_order_id || !issue_id) {
         return res.status(400).json({
           success: false,
-          message: "parent_order_id and issue_type required",
+          message: "service_order_id and issue_id required",
         });
       }
 
-      const allowedIssues = [
-        "document_missing",
-        "incorrect_details",
-        "status_issue",
-        "payment_issue",
-        "other",
-      ];
+      // =====================================
+      // Validate service order ownership
+      // =====================================
 
-      if (!allowedIssues.includes(issue_type)) {
-        return res.status(400).json({
+      const [[order]] = await db.execute(
+        `
+      SELECT
+        id,
+        status
+
+      FROM service_orders
+
+      WHERE id = ?
+      AND user_id = ?
+      `,
+        [service_order_id, userId],
+      );
+
+      if (!order) {
+        return res.status(404).json({
           success: false,
-          message: "Invalid issue type",
+          message: "Service order not found",
         });
       }
 
-      // 1 Insert request
+      // =====================================
+      // Validate issue exists
+      // =====================================
+
+      const [[issue]] = await db.execute(
+        `
+      SELECT id
+
+      FROM service_order_issue_types
+
+      WHERE id = ?
+      `,
+        [issue_id],
+      );
+
+      if (!issue) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid issue",
+        });
+      }
+
+      // =====================================
+      // Create support request
+      // =====================================
+
       const [result] = await db.execute(
-        `INSERT INTO order_support_requests 
-       (parent_order_id, user_id, issue_type, description)
-       VALUES (?, ?, ?, ?)`,
-        [parent_order_id, userId, issue_type, description || null],
+        `
+      INSERT INTO order_support_requests
+      (
+        service_order_id,
+        user_id,
+        issue_id,
+        description
+      )
+      VALUES
+      (
+        ?, ?, ?, ?
+      )
+      `,
+        [service_order_id, userId, issue_id, description || null],
       );
 
       const requestId = result.insertId;
 
-      // 2 Handle files (if any)
-      if (req.files && req.files.length) {
+      // =====================================
+      // Upload attachments
+      // =====================================
+
+      if (req.files?.length) {
         for (const file of req.files) {
           try {
             const fileName = `${Date.now()}-${Math.random()
               .toString(36)
               .substring(2, 8)}-${file.originalname}`;
 
-            const key = `public/support/${requestId}/${fileName}`;
+            const key = `public/service-support/${requestId}/${fileName}`;
 
             // upload to R2
             const fileUrl = await uploadToR2(file.path, key, file.mimetype);
 
-            // save in DB
+            // save attachment
             await db.execute(
               `
-            INSERT INTO order_support_attachments 
-            (request_id, file_url)
-            VALUES (?, ?)
+            INSERT INTO order_support_attachments
+            (
+              request_id,
+              file_url
+            )
+            VALUES
+            (
+              ?, ?
+            )
             `,
               [requestId, fileUrl],
             );
@@ -1026,7 +1084,7 @@ class ServiceOrderController {
           } catch (fileErr) {
             console.error("SUPPORT FILE UPLOAD ERROR:", fileErr);
 
-            // cleanup temp file on error
+            // cleanup temp file
             if (file.path && fs.existsSync(file.path)) {
               fs.unlinkSync(file.path);
             }
@@ -1036,13 +1094,13 @@ class ServiceOrderController {
 
       res.json({
         success: true,
-        message: "Support request submitted",
+        message: "Support request submitted successfully",
         data: {
           request_id: requestId,
         },
       });
     } catch (err) {
-      // cleanup all temp files
+      // cleanup temp files
       if (req.files?.length) {
         for (const file of req.files) {
           if (file.path && fs.existsSync(file.path)) {
@@ -1057,7 +1115,7 @@ class ServiceOrderController {
       });
     }
   }
-
+  
   async getSupportRequestsByOrderId(req, res) {
     try {
       const { parentId } = req.params;
