@@ -53,10 +53,13 @@ class ServiceOrderDocumentModel {
       sd.document_name,
       sd.document_key,
       sd.is_mandatory,
+      sd.is_expirable,
 
       od.id AS order_document_id,
       od.file_path,
-      od.uploaded
+      od.uploaded,
+      od.expiry_date,
+      od.document_number
 
     FROM service_orders so
 
@@ -87,7 +90,13 @@ class ServiceOrderDocumentModel {
 
           is_mandatory: Boolean(r.is_mandatory),
 
+          is_expirable: Boolean(r.is_expirable),
+
           uploaded: Boolean(r.uploaded),
+
+          expiry_date: r.expiry_date,
+
+          document_number: r.document_number,
 
           file_url: r.file_path ? await getPrivateFileUrl(r.file_path) : null,
         })),
