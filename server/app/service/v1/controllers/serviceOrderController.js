@@ -889,6 +889,24 @@ class ServiceOrderController {
         });
       }
 
+      // expirable docs validation
+      const invalidExpirableDocs = docs.filter(
+        (d) =>
+          d.uploaded &&
+          d.is_expirable &&
+          (!d.expiry_date || !d.document_number),
+      );
+
+      if (invalidExpirableDocs.length) {
+        return res.status(400).json({
+          success: false,
+
+          message: "Expiry details missing for some documents",
+
+          invalid_documents: invalidExpirableDocs,
+        });
+      }
+
       // update status
       await ServiceOrderModel.updateStatus(
         serviceOrderId,
