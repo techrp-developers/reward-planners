@@ -30,16 +30,38 @@ class ServiceOrderDocumentModel {
     if (existing.length) {
       await db.execute(
         `UPDATE order_documents 
-       SET file_path = ?,uploaded = 1 
+       SET
+        file_path = ?,
+        uploaded = 1,
+        expiry_date = ?,
+        document_number = ?
        WHERE id = ?`,
-        [data.file_path, existing[0].id],
+        [
+          data.file_path,
+          data.expiry_date,
+          data.document_number,
+          existing[0].id,
+        ],
       );
     } else {
       await db.execute(
         `INSERT INTO order_documents 
-      (order_id, service_document_id, file_path, uploaded)
-      VALUES (?, ?, ?, 1)`,
-        [data.order_id, data.document_id, data.file_path],
+        (
+          order_id,
+          service_document_id,
+          file_path,
+          uploaded,
+          expiry_date,
+          document_number
+        )
+        VALUES (?, ?, ?, 1, ?, ?)`,
+        [
+          data.order_id,
+          data.document_id,
+          data.file_path,
+          data.expiry_date,
+          data.document_number,
+        ],
       );
     }
   }

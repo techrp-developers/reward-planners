@@ -702,12 +702,19 @@ class ServiceOrderController {
 
       const { serviceOrderId } = req.params;
 
-      const { document_id } = req.body;
+      const { document_id, expiry_date, document_number } = req.body;
 
       if (!document_id) {
         return res.status(400).json({
           success: false,
           message: "document_id required",
+        });
+      }
+
+      if (expiry_date && new Date(expiry_date) < new Date()) {
+        return res.status(400).json({
+          success: false,
+          message: "expiry_date cannot be in past",
         });
       }
 
@@ -737,15 +744,18 @@ class ServiceOrderController {
       // validate document belongs to this service
       const [[validDoc]] = await db.execute(
         `
-      SELECT sd.id
-      FROM service_documents sd
+          SELECT
+            sd.id,
+            sd.is_expirable
 
-      JOIN service_orders so
-        ON so.service_id = sd.service_id
+          FROM service_documents sd
 
-      WHERE sd.id = ?
-      AND so.id = ?
-      `,
+          JOIN service_orders so
+            ON so.service_id = sd.service_id
+
+          WHERE sd.id = ?
+          AND so.id = ?
+          `,
         [document_id, serviceOrderId],
       );
 
@@ -754,6 +764,23 @@ class ServiceOrderController {
           success: false,
           message: "Invalid document for this service",
         });
+      }
+
+      // expirable docs validation
+      if (validDoc.is_expirable) {
+        if (!expiry_date) {
+          return res.status(400).json({
+            success: false,
+            message: "expiry_date required for this document",
+          });
+        }
+
+        if (!document_number) {
+          return res.status(400).json({
+            success: false,
+            message: "document_number required for this document",
+          });
+        }
       }
 
       // read file buffer
@@ -783,6 +810,8 @@ class ServiceOrderController {
         order_id: serviceOrderId,
         document_id,
         file_path: r2Path,
+        expiry_date: expiry_date || null,
+        document_number: document_number || null,
       });
 
       res.json({
