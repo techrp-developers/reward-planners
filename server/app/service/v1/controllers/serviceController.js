@@ -363,7 +363,7 @@ class ServiceController {
   }
 
   // advertisement pov
-  async getHomeServices(req, res) {
+  async getHomeSections(req, res) {
     try {
       const sections = await ServiceModel.getHomeSections();
 
@@ -381,16 +381,16 @@ class ServiceController {
 
   async getRelatedServices(req, res) {
     try {
-      const { id } = req.params;
+      const { serviceId } = req.params;
 
-      if (!id) {
+      if (!serviceId) {
         return res.status(400).json({
           success: false,
           message: "Service ID required",
         });
       }
 
-      const services = await ServiceModel.getRelatedServices(id);
+      const services = await ServiceModel.getRelatedServices(serviceId);
 
       res.json({
         success: true,

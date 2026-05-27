@@ -183,162 +183,354 @@ class ServiceModel {
 
   // Get home sections
   async getHomeSections() {
-    const [rows] = await db.execute(`
-    SELECT 
-      s.id,
-      s.name,
-      s.service_image,
-      s.description,
-      s.show_enquiry,
-      s.price,
-      s.is_featured,
-      s.is_popular,
-      s.is_recommended,
-      s.value_addition,
-      sv.id AS variant_id,
-      sv.price,
-      sv.image_url
+    // =========================================
+    // GET ACTIVE SECTIONS
+    // =========================================
 
-    FROM services s
-    LEFT JOIN service_variants sv ON sv.service_id = s.id
-    WHERE s.status = 1
-  `);
+    const [sections] = await db.execute(
+      `
+    SELECT
+      id,
+      title,
+      section_key,
+      section_type,
+      layout_type,
+      sort_order
 
-    // group into sections
-    const sections = {
-      quick_services: [],
-      popular: [],
-      recommended: [],
-      value_added: [],
-    };
+    FROM service_home_sections
 
-    rows.forEach((item) => {
-      const service = {
-        service_id: item.id,
-        variant_id: item.variant_id,
-        name: item.name,
-        description: item.description,
-        enquiry: item.show_enquiry,
-        price: Number(item.price),
-        service_image: item.service_image ? getPublicUrl(item.service_image) : null,
-        variant_image: item.image_url ? getPublicUrl(item.image_url) : null,
-      };
+    WHERE is_active = 1
 
-      if (item.is_featured) {
-        sections.quick_services.push(service);
+    ORDER BY sort_order ASC
+    `,
+    );
+
+    const finalSections = [];
+
+    // =========================================
+    // PROCESS EACH SECTION
+    // =========================================
+
+    for (const section of sections) {
+      // =====================================
+      // SERVICE ITEMS
+      // =====================================
+
+      if (section.section_type === "services") {
+        const [items] = await db.execute(
+          `
+        SELECT
+
+          shsi.id AS section_item_id,
+
+          s.id AS service_id,
+          s.name,
+          s.description,
+          s.rating,
+          s.total_orders,
+          s.show_enquiry,
+          s.service_image,
+
+          sv.id AS variant_id,
+          sv.price,
+          sv.original_price,
+          sv.title,
+          sv.image_url
+
+        FROM service_home_section_items shsi
+
+        JOIN services s
+          ON s.id = shsi.service_id
+
+        JOIN (
+          SELECT
+            service_id,
+            MIN(price) AS min_price
+          FROM service_variants
+          GROUP BY service_id
+        ) mv
+          ON mv.service_id = s.id
+
+        JOIN service_variants sv
+          ON sv.service_id = s.id
+          AND sv.price = mv.min_price
+
+        WHERE shsi.section_id = ?
+        AND s.status = 1
+
+        ORDER BY shsi.sort_order ASC
+        `,
+          [section.id],
+        );
+
+        finalSections.push({
+          section_id: section.id,
+
+          title: section.title,
+
+          section_key: section.section_key,
+
+          layout_type: section.layout_type,
+
+          section_type: section.section_type,
+
+          items: items.map((item) => ({
+            service_id: item.service_id,
+
+            variant_id: item.variant_id,
+
+            name: item.name,
+
+            title: item.title,
+
+            description: item.description,
+
+            enquiry: Boolean(item.show_enquiry),
+
+            rating: Number(item.rating || 0),
+
+            total_orders: Number(item.total_orders || 0),
+
+            price: Number(item.price),
+
+            mrp: Number(item.original_price || 0),
+
+            discount_percent: item.original_price
+              ? Math.round(
+                  ((item.original_price - item.price) / item.original_price) *
+                    100,
+                )
+              : 0,
+
+            coins: Math.floor(Number(item.price) * 0.1),
+
+            service_image: item.service_image
+              ? getPublicUrl(item.service_image)
+              : null,
+
+            variant_image: item.image_url ? getPublicUrl(item.image_url) : null,
+          })),
+        });
       }
 
-      if (item.is_popular) {
-        sections.popular.push(service);
-      }
+      // =====================================
+      // BANNER SECTION
+      // =====================================
 
-      if (item.is_recommended) {
-        sections.recommended.push(service);
-      }
+      if (section.section_type === "banners") {
+        const [items] = await db.execute(
+          `
+        SELECT
 
-      if (item.value_addition) {
-        sections.value_added.push(service);
-      }
-    });
+          shsi.id AS section_item_id,
 
-    return sections;
+          sb.id AS banner_id,
+          sb.title,
+          sb.image_url,
+          sb.redirect_type,
+          sb.redirect_id,
+          sb.redirect_url
+
+        FROM service_home_section_items shsi
+
+        JOIN service_banners sb
+          ON sb.id = shsi.banner_id
+
+        WHERE shsi.section_id = ?
+
+        ORDER BY shsi.sort_order ASC
+        `,
+          [section.id],
+        );
+
+        finalSections.push({
+          section_id: section.id,
+
+          title: section.title,
+
+          section_key: section.section_key,
+
+          layout_type: section.layout_type,
+
+          section_type: section.section_type,
+
+          items: items.map((item) => ({
+            banner_id: item.banner_id,
+
+            title: item.title,
+
+            image_url: item.image_url ? getPublicUrl(item.image_url) : null,
+
+            redirect_type: item.redirect_type,
+
+            redirect_id: item.redirect_id,
+
+            redirect_url: item.redirect_url,
+          })),
+        });
+      }
+    }
+
+    return finalSections;
   }
 
   // Related services
   async getRelatedServices(serviceId) {
-    // 1 Get category of current service
-    const [[service]] = await db.execute(
-      `SELECT category_id FROM services WHERE id = ?`,
+    // =========================================
+    // STEP 1
+    // GET MANUALLY MAPPED RELATED SERVICES
+    // =========================================
+
+    let [rows] = await db.execute(
+      `
+    SELECT
+
+      s.id AS service_id,
+      s.name,
+      s.description,
+      s.rating,
+      s.total_orders,
+      s.show_enquiry,
+      s.service_image,
+
+      sv.id AS variant_id,
+      sv.title,
+      sv.price,
+      sv.original_price,
+      sv.image_url
+
+    FROM service_related_services srs
+
+    JOIN services s
+      ON s.id = srs.related_service_id
+
+    JOIN (
+      SELECT
+        service_id,
+        MIN(price) AS min_price
+      FROM service_variants
+      GROUP BY service_id
+    ) mv
+      ON mv.service_id = s.id
+
+    JOIN service_variants sv
+      ON sv.service_id = s.id
+      AND sv.price = mv.min_price
+
+    WHERE srs.service_id = ?
+    AND s.status = 1
+
+    ORDER BY srs.sort_order ASC
+
+    LIMIT 10
+    `,
       [serviceId],
     );
 
-    if (!service) return [];
+    // =========================================
+    // STEP 2
+    // FALLBACK TO SAME CATEGORY SERVICES
+    // =========================================
 
-    const categoryId = service.category_id;
+    if (!rows.length) {
+      const [[service]] = await db.execute(
+        `
+      SELECT category_id
+      FROM services
+      WHERE id = ?
+      `,
+        [serviceId],
+      );
 
-    // 2 Fetch related services
-    const [rows] = await db.execute(
-      `
-      SELECT 
-        s.id,
+      if (!service) {
+        return [];
+      }
+
+      [rows] = await db.execute(
+        `
+      SELECT
+
+        s.id AS service_id,
         s.name,
-        s.show_enquiry,
+        s.description,
+        s.rating,
         s.total_orders,
+        s.show_enquiry,
         s.service_image,
 
         sv.id AS variant_id,
-        sv.price,
-        sv.original_price AS mrp,
         sv.title,
+        sv.price,
+        sv.original_price,
         sv.image_url
 
       FROM services s
 
       JOIN (
-        SELECT service_id, MIN(price) AS min_price
+        SELECT
+          service_id,
+          MIN(price) AS min_price
         FROM service_variants
         GROUP BY service_id
-      ) vmin ON vmin.service_id = s.id
+      ) mv
+        ON mv.service_id = s.id
 
-      JOIN service_variants sv 
-        ON sv.service_id = s.id 
-        AND sv.price = vmin.min_price
+      JOIN service_variants sv
+        ON sv.service_id = s.id
+        AND sv.price = mv.min_price
 
-      WHERE 
-        s.category_id = ?
-        AND s.id != ?
-        AND s.status = 1
+      WHERE s.category_id = ?
+      AND s.id != ?
+      AND s.status = 1
 
-      ORDER BY s.total_orders DESC, sv.price ASC
+      ORDER BY
+        s.total_orders DESC,
+        s.rating DESC
+
       LIMIT 10
-  `,
-      [categoryId, serviceId],
-    );
-
-    if (rows.length < 5) {
-      const [fallback] = await db.execute(
-        `
-      SELECT 
-        s.id,
-        s.name,
-        s.show_enquiry,
-        s.service_image,
-        sv.id AS variant_id,
-        sv.price,
-        sv.original_price AS mrp,
-        sv.title,
-        sv.image_url
-
-      FROM services s
-      JOIN service_variants sv ON sv.service_id = s.id
-
-      WHERE s.status = 1 AND s.id != ?
-      ORDER BY s.total_orders DESC
-      LIMIT ?
-    `,
-        [serviceId, 10 - rows.length],
+      `,
+        [service.category_id, serviceId],
       );
-
-      rows.push(...fallback);
     }
 
-    return rows.map((r) => ({
-      service_id: r.id,
-      variant_id: r.variant_id,
-      name: r.name,
-      enquiry: r.show_enquiry,
-      title: r.title,
-      price: Number(r.price),
-      mrp: Number(r.mrp),
-      service_image: r.service_image ? getPublicUrl(r.service_image) : null,
-      variant_image: r.image_url ? getPublicUrl(r.image_url) : null,
+    // =========================================
+    // FINAL RESPONSE
+    // =========================================
 
-      // extra UI helpers
-      discount_percent: r.mrp
-        ? Math.round(((r.mrp - r.price) / r.mrp) * 100)
+    return rows.map((item) => ({
+      service_id: item.service_id,
+
+      variant_id: item.variant_id,
+
+      name: item.name,
+
+      title: item.title,
+
+      description: item.description,
+
+      enquiry: Boolean(item.show_enquiry),
+
+      rating: Number(item.rating || 0),
+
+      total_orders: Number(item.total_orders || 0),
+
+      price: Number(item.price),
+
+      mrp: Number(item.original_price || 0),
+
+      discount_percent: item.original_price
+        ? Math.round(
+            ((item.original_price - item.price) / item.original_price) * 100,
+          )
         : 0,
 
-      coins: Math.floor(Number(r.price) * 0.1), 
+      coins: Math.floor(Number(item.price) * 0.1),
+
+      service_image: item.service_image
+        ? getPublicUrl(item.service_image)
+        : null,
+
+      variant_image: item.image_url ? getPublicUrl(item.image_url) : null,
     }));
   }
 }

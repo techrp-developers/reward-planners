@@ -21,10 +21,10 @@ router.get("/by-category/:categoryId", ServiceController.getServicesByCategory);
 router.get("/details/:id", ServiceController.getServiceDetails);
 
 // Api for advertisement
-router.get("/home", ServiceController.getHomeServices);
+router.get("/home", ServiceController.getHomeSections);
 
 // Related
-router.get("/related/:id", ServiceController.getRelatedServices);
+router.get("/related/:serviceId", ServiceController.getRelatedServices);
 
 // ======================Admin Routes===================================
 // Create a services
