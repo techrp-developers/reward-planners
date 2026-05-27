@@ -11,12 +11,18 @@ const options = {
 
     servers: [
       {
-        url: process.env.CLIENT_URL || "http://localhost:5000",
+        url:
+          process.env.SWAGGER_SERVER_URL ||
+          process.env.BACKEND_URL ||
+          "http://localhost:5000",
       },
     ],
 
     tags: [
-      { name: "Auth", description: "Authentication, token, and user endpoints" },
+      {
+        name: "Auth",
+        description: "Authentication, token, and user endpoints",
+      },
       { name: "Addresses", description: "User address management" },
       { name: "User", description: "User profile and optional auth endpoints" },
       { name: "Settings", description: "Application and company settings" },
