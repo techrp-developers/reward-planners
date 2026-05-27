@@ -4,9 +4,12 @@ const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
 const path = require("path");
+const swaggerUi = require("swagger-ui-express");
+const swaggerSpec = require("./swagger");
+
 require("dotenv").config();
-require('./services/ExpressBees/cron/shipmentCron');
-require('./services/Bbps/retryCron');
+require("./services/ExpressBees/cron/shipmentCron");
+require("./services/Bbps/retryCron");
 
 // dashboard Route
 const dashboardRoute = require("./routes/indexRoute");
@@ -18,12 +21,12 @@ const webhook = require("./common/utils/orchestratorWebhook");
 const ecommerceRoute = require("./app/ecommerce/v1/routes/indexRoute");
 const commonRoute = require("./app/common/routes/indexRoute");
 const serviceRoute = require("./app/service/v1/routes/indexRoute");
-const stepCounterRoute= require("./app/step-counter/v1/routes/indexRoute");
-const bbpsRoute= require("./app/bbps/v1/routes/indexRoute");
-const gamesRoute= require("./app/games/v1/routes/indexRoute");
+const stepCounterRoute = require("./app/step-counter/v1/routes/indexRoute");
+const bbpsRoute = require("./app/bbps/v1/routes/indexRoute");
+const gamesRoute = require("./app/games/v1/routes/indexRoute");
 
 //External Routes
-const mpsRoute= require("./mps-connect/common/routes/indexRoute");
+const mpsRoute = require("./mps-connect/common/routes/indexRoute");
 
 const app = express();
 
@@ -56,6 +59,8 @@ app.post(
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
 if (process.env.NODE_ENV !== "production") {
   app.use("/api/wa", require("./routes/waTestRoute"));
 }
@@ -83,7 +88,7 @@ app.use("/v1", bbpsRoute);
 app.use("/v1", gamesRoute);
 
 // External App Routes
-app.use('/mps',mpsRoute)
+app.use("/mps", mpsRoute);
 
 // 404 Handler
 app.use((req, res) => {
@@ -111,6 +116,7 @@ app.listen(PORT, () => {
   console.log("\n=================================");
   console.log("Reward Planners Backend Started!");
   console.log(`🔗 Server URL: http://localhost:${PORT}`);
+  console.log(`Swagger docs at http://localhost:${PORT}/api-docs`);
   console.log("=================================\n");
 
   // ✅ Start worker inside same process (only when enabled)
