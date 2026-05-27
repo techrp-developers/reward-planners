@@ -1,0 +1,2047 @@
+openapi: 3.0.0
+info:
+  title: Reward Planners App API
+  version: 1.0.0
+  description: |
+    Swagger documentation for the remaining application modules in Reward Planners.
+    Includes common auth and user-management endpoints, ecommerce cart and order APIs,
+    BBPS bill payment workflows, games, and step-counter APIs.
+servers:
+  - url: http://localhost:5000
+tags:
+  - name: Auth
+    description: Authentication, token management, and user account endpoints
+  - name: Addresses
+    description: User shipping address management
+  - name: User
+    description: User profile and optional authentication endpoints
+  - name: Settings
+    description: Application and company settings
+  - name: Support
+    description: Support ticket and issue reporting endpoints
+  - name: Terms
+    description: Terms, privacy, and acceptance status
+  - name: Todo
+    description: User todo list management
+  - name: Notification
+    description: Notification retrieval and read status
+  - name: Wallet
+    description: User wallet and transaction endpoints
+  - name: Checkout
+    description: Ecommerce checkout and order receipt flows
+  - name: Cart
+    description: Ecommerce cart operations
+  - name: Orders
+    description: Ecommerce order history and cancellation flows
+  - name: Products
+    description: Product browsing, search, and recommendations
+  - name: Wishlist
+    description: Wishlist management endpoints
+  - name: Reviews
+    description: Product review submission and retrieval
+  - name: BBPS Payments
+    description: Bill payment order, verification, and retry endpoints
+  - name: BBPS Bills
+    description: Bill fetch and operator lookup endpoints
+  - name: Games
+    description: Game session and leaderboard APIs
+  - name: Step Counter
+    description: User fitness, progress, and profile endpoints
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+    SuccessMessage:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+    AuthLoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+    AuthRefreshRequest:
+      type: object
+      required:
+        - refreshToken
+      properties:
+        refreshToken:
+          type: string
+    AuthLogoutRequest:
+      type: object
+      required:
+        - refreshToken
+      properties:
+        refreshToken:
+          type: string
+    AuthChangePasswordRequest:
+      type: object
+      required:
+        - currentPassword
+        - newPassword
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+    AuthForgotPasswordRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+    AuthResetPasswordRequest:
+      type: object
+      required:
+        - token
+        - newPassword
+      properties:
+        token:
+          type: string
+        newPassword:
+          type: string
+    AuthAddressRequest:
+      type: object
+      required:
+        - address_line1
+        - city
+        - state
+        - postal_code
+        - country
+      properties:
+        address_line1:
+          type: string
+        address_line2:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        postal_code:
+          type: string
+        country:
+          type: string
+        phone:
+          type: string
+        is_default:
+          type: boolean
+    SupportTicketRequest:
+      type: object
+      required:
+        - subject
+        - description
+        - category_id
+      properties:
+        subject:
+          type: string
+        description:
+          type: string
+        category_id:
+          type: integer
+    TodoCreateRequest:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        due_date:
+          type: string
+          format: date
+        priority:
+          type: string
+          enum: [low, medium, high]
+    TodoUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        due_date:
+          type: string
+          format: date
+        priority:
+          type: string
+          enum: [low, medium, high]
+    TodoCompleteRequest:
+      type: object
+      required:
+        - completed
+      properties:
+        completed:
+          type: boolean
+    TodoMultipleCompleteRequest:
+      type: object
+      required:
+        - ids
+      properties:
+        ids:
+          type: array
+          items:
+            type: integer
+    TodoReminderRequest:
+      type: object
+      required:
+        - reminder_date
+      properties:
+        reminder_date:
+          type: string
+          format: date-time
+    BBPSCreateOrderRequest:
+      type: object
+      required:
+        - amount
+        - operator_id
+        - utility_acc_no
+      properties:
+        amount:
+          type: number
+          format: double
+        operator_id:
+          type: integer
+        utility_acc_no:
+          type: string
+        cycle_number:
+          type: string
+    BBPSVerifyPaymentRequest:
+      type: object
+      required:
+        - razorpay_order_id
+        - razorpay_payment_id
+        - razorpay_signature
+      properties:
+        razorpay_order_id:
+          type: string
+        razorpay_payment_id:
+          type: string
+        razorpay_signature:
+          type: string
+    BBPSRetryRequest:
+      type: object
+      required:
+        - transaction_id
+      properties:
+        transaction_id:
+          type: integer
+    BBPSCheckCustomerRequest:
+      type: object
+      required:
+        - operator_id
+      properties:
+        operator_id:
+          type: integer
+    BBPSFetchBillRequest:
+      type: object
+      required:
+        - operator_id
+      properties:
+        operator_id:
+          type: integer
+        consumer_number:
+          type: string
+        bill_unit:
+          type: string
+        account_number:
+          type: string
+    SBCheckoutCartRequest:
+      type: object
+      required:
+        - address_id
+      properties:
+        address_id:
+          type: integer
+        expected_total:
+          type: number
+          format: double
+        expected_redeemable:
+          type: number
+          format: double
+        use_rewards:
+          type: boolean
+    SBBuyNowRequest:
+      type: object
+      required:
+        - product_id
+        - address_id
+      properties:
+        product_id:
+          type: integer
+        variant_id:
+          type: integer
+        quantity:
+          type: integer
+        address_id:
+          type: integer
+        expected_total:
+          type: number
+          format: double
+        expected_redeemable:
+          type: number
+          format: double
+        use_rewards:
+          type: boolean
+    CartAddRequest:
+      type: object
+      required:
+        - product_id
+        - variant_id
+      properties:
+        product_id:
+          type: integer
+        variant_id:
+          type: integer
+        quantity:
+          type: integer
+    CartUpdateRequest:
+      type: object
+      required:
+        - quantity
+      properties:
+        quantity:
+          type: integer
+    OrderCancellationRequest:
+      type: object
+      required:
+        - reason_id
+      properties:
+        reason_id:
+          type: integer
+        comment:
+          type: string
+    ReviewCreateRequest:
+      type: object
+      required:
+        - product_id
+        - variant_id
+        - order_id
+        - rating
+      properties:
+        product_id:
+          type: integer
+        variant_id:
+          type: integer
+        order_id:
+          type: integer
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        value_for_money:
+          type: integer
+          minimum: 1
+          maximum: 5
+        good_quality:
+          type: integer
+          minimum: 1
+          maximum: 5
+        smooth_experience:
+          type: integer
+          minimum: 1
+          maximum: 5
+        review_text:
+          type: string
+security:
+  - bearerAuth: []
+paths:
+  /v1/auth/login:
+    post:
+      tags:
+        - Auth
+      summary: User login with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthLoginRequest'
+      responses:
+        '200':
+          description: Login successful
+        '401':
+          $ref: '#/components/schemas/ErrorResponse'
+      security: []
+  /v1/auth/refresh:
+    post:
+      tags:
+        - Auth
+      summary: Refresh access token using refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRefreshRequest'
+      responses:
+        '200':
+          description: New access token created
+        '401':
+          $ref: '#/components/schemas/ErrorResponse'
+      security: []
+  /v1/auth/logout:
+    post:
+      tags:
+        - Auth
+      summary: Logout from single device and invalidate refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthLogoutRequest'
+      responses:
+        '200':
+          description: Logged out successfully
+      security:
+        - bearerAuth: []
+  /v1/auth/logout-all:
+    post:
+      tags:
+        - Auth
+      summary: Logout from all devices and invalidate all refresh tokens
+      responses:
+        '200':
+          description: Logged out on all devices
+      security:
+        - bearerAuth: []
+  /v1/auth/forgot-password:
+    post:
+      tags:
+        - Auth
+      summary: Send forgot password email token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthForgotPasswordRequest'
+      responses:
+        '200':
+          description: Forgot password request accepted
+      security: []
+  /v1/auth/reset-password:
+    post:
+      tags:
+        - Auth
+      summary: Reset password using reset token
+        # note: token is stored as hashed value on server, raw token is sent via email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthResetPasswordRequest'
+      responses:
+        '200':
+          description: Password reset successful
+      security: []
+  /v1/auth/change-password:
+    put:
+      tags:
+        - Auth
+      summary: Change password for authenticated users
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthChangePasswordRequest'
+      responses:
+        '200':
+          description: Password changed successfully
+      security:
+        - bearerAuth: []
+  /v1/auth/address:
+    post:
+      tags:
+        - Addresses
+      summary: Create a new user address
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthAddressRequest'
+      responses:
+        '201':
+          description: Address added successfully
+      security:
+        - bearerAuth: []
+    get:
+      tags:
+        - Addresses
+      summary: Get all addresses for authenticated user
+      responses:
+        '200':
+          description: List of user addresses
+      security:
+        - bearerAuth: []
+  /v1/auth/address/{address_id}:
+    parameters:
+      - name: address_id
+        in: path
+        required: true
+        schema:
+          type: integer
+    put:
+      tags:
+        - Addresses
+      summary: Update address by ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthAddressRequest'
+      responses:
+        '200':
+          description: Address updated successfully
+      security:
+        - bearerAuth: []
+    delete:
+      tags:
+        - Addresses
+      summary: Delete an address by ID
+      responses:
+        '200':
+          description: Address deleted successfully
+      security:
+        - bearerAuth: []
+  /v1/auth/addresses:
+    get:
+      tags:
+        - Addresses
+      summary: Fetch all addresses for authenticated user
+      responses:
+        '200':
+          description: Addresses returned
+      security:
+        - bearerAuth: []
+  /v1/auth/user-info:
+    get:
+      tags:
+        - User
+      summary: Get current user profile if token is present
+      responses:
+        '200':
+          description: User profile returned
+      security: []
+  /v1/auth/activate-account:
+    post:
+      tags:
+        - Auth
+      summary: Activate a user account with code and phone
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                phone:
+                  type: string
+                activation_code:
+                  type: string
+      responses:
+        '200':
+          description: Account activated
+      security: []
+  /v1/auth/verify-activation-otp:
+    post:
+      tags:
+        - Auth
+      summary: Verify activation OTP code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                phone:
+                  type: string
+                otp:
+                  type: string
+      responses:
+        '200':
+          description: OTP verified
+      security: []
+  /v1/auth/set-password:
+    post:
+      tags:
+        - Auth
+      summary: Set password after account activation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                phone:
+                  type: string
+                password:
+                  type: string
+                confirm_password:
+                  type: string
+      responses:
+        '200':
+          description: Password set successfully
+      security: []
+  /v1/auth/update-fcm-token:
+    post:
+      tags:
+        - Auth
+      summary: Update device FCM token for push notifications
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - fcm_token
+              properties:
+                fcm_token:
+                  type: string
+      responses:
+        '200':
+          description: FCM token updated
+      security:
+        - bearerAuth: []
+  /v1/auth/delete-customer:
+    delete:
+      tags:
+        - Auth
+      summary: Delete authenticated customer account
+      responses:
+        '200':
+          description: Customer deleted successfully
+      security:
+        - bearerAuth: []
+  /v1/settings/app-settings:
+    get:
+      tags:
+        - Settings
+      summary: Get application settings
+      responses:
+        '200':
+          description: Settings returned
+      security: []
+  /v1/settings/company-details:
+    get:
+      tags:
+        - Settings
+      summary: Get company details
+      responses:
+        '200':
+          description: Company details returned
+      security: []
+  /v1/support:
+    get:
+      tags:
+        - Support
+      summary: Get available support categories
+      responses:
+        '200':
+          description: Support categories returned
+      security: []
+  /v1/support/ticket:
+    post:
+      tags:
+        - Support
+      summary: Create a new support ticket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupportTicketRequest'
+      responses:
+        '201':
+          description: Ticket created successfully
+      security:
+        - bearerAuth: []
+  /v1/terms:
+    get:
+      tags:
+        - Terms
+      summary: Get terms and conditions
+      responses:
+        '200':
+          description: Terms content returned
+      security: []
+  /v1/terms/privacy-policy:
+    get:
+      tags:
+        - Terms
+      summary: Get privacy policy content
+      responses:
+        '200':
+          description: Privacy policy returned
+      security: []
+  /v1/terms/current-status:
+    get:
+      tags:
+        - Terms
+      summary: Get current terms acceptance status for authenticated user
+      responses:
+        '200':
+          description: Terms status returned
+      security:
+        - bearerAuth: []
+  /v1/terms/accept-terms:
+    post:
+      tags:
+        - Terms
+      summary: Accept terms for authenticated user
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Terms accepted successfully
+      security:
+        - bearerAuth: []
+  /v1/todo:
+    post:
+      tags:
+        - Todo
+      summary: Create a new todo item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TodoCreateRequest'
+      responses:
+        '201':
+          description: Todo created successfully
+      security:
+        - bearerAuth: []
+    get:
+      tags:
+        - Todo
+      summary: Get logged in user's todos
+      responses:
+        '200':
+          description: Todo list returned
+      security:
+        - bearerAuth: []
+  /v1/todo/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    put:
+      tags:
+        - Todo
+      summary: Update an existing todo item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TodoUpdateRequest'
+      responses:
+        '200':
+          description: Todo updated successfully
+      security:
+        - bearerAuth: []
+    delete:
+      tags:
+        - Todo
+      summary: Delete a todo item
+      responses:
+        '200':
+          description: Todo deleted successfully
+      security:
+        - bearerAuth: []
+  /v1/todo/{id}/complete:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    patch:
+      tags:
+        - Todo
+      summary: Mark a todo item complete or incomplete
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TodoCompleteRequest'
+      responses:
+        '200':
+          description: Todo status updated
+      security:
+        - bearerAuth: []
+  /v1/todo/complete/multiple:
+    patch:
+      tags:
+        - Todo
+      summary: Mark multiple todos complete
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TodoMultipleCompleteRequest'
+      responses:
+        '200':
+          description: Multiple todos updated
+      security:
+        - bearerAuth: []
+  /v1/todo/{id}/reminder:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    patch:
+      tags:
+        - Todo
+      summary: Update reminder date for a todo item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TodoReminderRequest'
+      responses:
+        '200':
+          description: Todo reminder updated
+      security:
+        - bearerAuth: []
+  /v1/notification/my-notification:
+    get:
+      tags:
+        - Notification
+      summary: Get notifications for authenticated user
+      responses:
+        '200':
+          description: Notification list returned
+      security:
+        - bearerAuth: []
+  /v1/notification/notification-badge:
+    get:
+      tags:
+        - Notification
+      summary: Get unread notification badge count
+      responses:
+        '200':
+          description: Badge count returned
+      security:
+        - bearerAuth: []
+  /v1/notification/read/{notification_id}:
+    parameters:
+      - name: notification_id
+        in: path
+        required: true
+        schema:
+          type: integer
+    put:
+      tags:
+        - Notification
+      summary: Mark a notification as read
+      responses:
+        '200':
+          description: Notification marked as read
+      security:
+        - bearerAuth: []
+  /v1/wallet/balance:
+    get:
+      tags:
+        - Wallet
+      summary: Get user wallet balance
+      responses:
+        '200':
+          description: Wallet balance returned
+      security:
+        - bearerAuth: []
+  /v1/wallet/transactions:
+    get:
+      tags:
+        - Wallet
+      summary: Get wallet transaction history
+      responses:
+        '200':
+          description: Wallet transactions returned
+      security:
+        - bearerAuth: []
+  /v1/checkout/get-cart:
+    get:
+      tags:
+        - Checkout
+      summary: Get checkout view for cart items
+      parameters:
+        - name: use_rewards
+          in: query
+          schema:
+            type: string
+            enum: [true, false]
+      responses:
+        '200':
+          description: Checkout cart returned
+      security:
+        - bearerAuth: []
+  /v1/checkout/get-buy-now:
+    get:
+      tags:
+        - Checkout
+      summary: Get checkout view for a buy now item
+      parameters:
+        - name: product_id
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: variant_id
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: qty
+          in: query
+          schema:
+            type: integer
+        - name: use_rewards
+          in: query
+          schema:
+            type: string
+            enum: [true, false]
+      responses:
+        '200':
+          description: Buy now checkout returned
+      security:
+        - bearerAuth: []
+  /v1/checkout/cart:
+    post:
+      tags:
+        - Checkout
+      summary: Place order for items in cart
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SBCheckoutCartRequest'
+      responses:
+        '200':
+          description: Cart checkout created
+      security:
+        - bearerAuth: []
+  /v1/checkout/buy-now:
+    post:
+      tags:
+        - Checkout
+      summary: Place order for buy-now item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SBBuyNowRequest'
+      responses:
+        '200':
+          description: Buy now order created
+      security:
+        - bearerAuth: []
+  /v1/checkout/order-receipt/{orderId}:
+    parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      tags:
+        - Checkout
+      summary: Get order receipt details
+      responses:
+        '200':
+          description: Receipt returned
+      security:
+        - bearerAuth: []
+  /v1/cart/cart-items:
+    get:
+      tags:
+        - Cart
+      summary: Get cart items for authenticated user
+      responses:
+        '200':
+          description: Cart items returned
+      security:
+        - bearerAuth: []
+    delete:
+      tags:
+        - Cart
+      summary: Remove all cart items
+      responses:
+        '200':
+          description: Cart cleared
+      security:
+        - bearerAuth: []
+  /v1/cart/cart-summary:
+    get:
+      tags:
+        - Cart
+      summary: Get cart pricing summary
+      parameters:
+        - name: use_rewards
+          in: query
+          schema:
+            type: string
+            enum: [true, false]
+      responses:
+        '200':
+          description: Cart summary returned
+      security:
+        - bearerAuth: []
+  /v1/cart/cart-item:
+    post:
+      tags:
+        - Cart
+      summary: Add item to cart
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CartAddRequest'
+      responses:
+        '200':
+          description: Item added to cart
+      security:
+        - bearerAuth: []
+  /v1/cart/cart-items/check-stock/{variantId}:
+    parameters:
+      - name: variantId
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      tags:
+        - Cart
+      summary: Check stock for a variant
+      responses:
+        '200':
+          description: Stock status returned
+      security: []
+  /v1/cart/cart-items/{cart_item_id}:
+    parameters:
+      - name: cart_item_id
+        in: path
+        required: true
+        schema:
+          type: integer
+    put:
+      tags:
+        - Cart
+      summary: Update cart item quantity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CartUpdateRequest'
+      responses:
+        '200':
+          description: Cart item updated
+      security:
+        - bearerAuth: []
+    delete:
+      tags:
+        - Cart
+      summary: Delete cart item
+      responses:
+        '200':
+          description: Cart item deleted
+      security:
+        - bearerAuth: []
+  /v1/orders/orders-history:
+    get:
+      tags:
+        - Orders
+      summary: Get order history for authenticated user
+      responses:
+        '200':
+          description: Order history returned
+      security:
+        - bearerAuth: []
+  /v1/orders/order-details/{orderId}:
+    parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      tags:
+        - Orders
+      summary: Get order details
+      responses:
+        '200':
+          description: Order details returned
+      security:
+        - bearerAuth: []
+  /v1/orders/buy-again:
+    get:
+      tags:
+        - Orders
+      summary: Get buy again products
+      responses:
+        '200':
+          description: Buy again product list returned
+      security:
+        - bearerAuth: []
+  /v1/orders/cancellation-reasons:
+    get:
+      tags:
+        - Orders
+      summary: Get cancellation reasons
+      responses:
+        '200':
+          description: Cancellation reasons returned
+      security: []
+  /v1/orders/cancel/{orderId}:
+    parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          type: integer
+    post:
+      tags:
+        - Orders
+      summary: Request order cancellation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderCancellationRequest'
+      responses:
+        '200':
+          description: Cancellation request submitted
+      security:
+        - bearerAuth: []
+  /v1/orders/cancellation-details/{orderId}:
+    parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      tags:
+        - Orders
+      summary: Get order cancellation details
+      responses:
+        '200':
+          description: Cancellation details returned
+      security: []
+  /v1/orders/invoice/{orderId}:
+    parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      tags:
+        - Orders
+      summary: Get order invoice
+      responses:
+        '200':
+          description: Invoice data returned
+      security:
+        - bearerAuth: []
+  /v1/products/all-products:
+    get:
+      tags:
+        - Products
+      summary: List all products
+      responses:
+        '200':
+          description: Product list returned
+      security: []
+  /v1/products/by-category/{categoryId}:
+    parameters:
+      - name: categoryId
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      tags:
+        - Products
+      summary: Get products by category
+      responses:
+        '200':
+          description: Products returned
+      security: []
+  /v1/products/product-details/{productId}:
+    parameters:
+      - name: productId
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      tags:
+        - Products
+      summary: Get product details
+      responses:
+        '200':
+          description: Product details returned
+      security: []
+  /v1/products/by-subcategory/{subcategoryId}:
+    parameters:
+      - name: subcategoryId
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      tags:
+        - Products
+      summary: Get products by subcategory
+      responses:
+        '200':
+          description: Products returned
+      security: []
+  /v1/products/categories:
+    get:
+      tags:
+        - Products
+      summary: Get product categories
+      responses:
+        '200':
+          description: Categories returned
+      security: []
+  /v1/products/subcategories/{categoryId}:
+    parameters:
+      - name: categoryId
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      tags:
+        - Products
+      summary: Get subcategories for a category
+      responses:
+        '200':
+          description: Subcategories returned
+      security: []
+  /v1/products/categories-with-subcategories:
+    get:
+      tags:
+        - Products
+      summary: Get categories along with nested subcategories
+      responses:
+        '200':
+          description: Categories and subcategories returned
+      security: []
+  /v1/products/similar/{productId}:
+    parameters:
+      - name: productId
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      tags:
+        - Products
+      summary: Get similar products
+      responses:
+        '200':
+          description: Similar products returned
+      security: []
+  /v1/products/recent-products:
+    get:
+      tags:
+        - Products
+      summary: Get recent products
+      responses:
+        '200':
+          description: Recent products returned
+      security: []
+  /v1/products/recommendations:
+    get:
+      tags:
+        - Products
+      summary: Get personalized product recommendations
+      responses:
+        '200':
+          description: Recommendations returned
+      security: []
+  /v1/products/new-arrivals:
+    get:
+      tags:
+        - Products
+      summary: Get new arrival products
+      responses:
+        '200':
+          description: New arrivals returned
+      security: []
+  /v1/products/{productId}/customers-also-bought:
+    parameters:
+      - name: productId
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      tags:
+        - Products
+      summary: Get products frequently bought with the specified product
+      responses:
+        '200':
+          description: Related products returned
+      security: []
+  /v1/products/trending:
+    get:
+      tags:
+        - Products
+      summary: Get trending products
+      responses:
+        '200':
+          description: Trending products returned
+      security: []
+  /v1/products/best-sellers:
+    get:
+      tags:
+        - Products
+      summary: Get best-selling products
+      responses:
+        '200':
+          description: Best sellers returned
+      security: []
+  /v1/products/most-viewed:
+    get:
+      tags:
+        - Products
+      summary: Get most viewed products
+      responses:
+        '200':
+          description: Most viewed products returned
+      security: []
+  /v1/products/top-rated:
+    get:
+      tags:
+        - Products
+      summary: Get top-rated products
+      responses:
+        '200':
+          description: Top rated products returned
+      security: []
+  /v1/products/search/suggestions:
+    get:
+      tags:
+        - Products
+      summary: Get search suggestions
+      responses:
+        '200':
+          description: Suggestions returned
+      security: []
+  /v1/products/search/products:
+    get:
+      tags:
+        - Products
+      summary: Search products with filters
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Search results returned
+      security: []
+  /v1/products/search/history:
+    get:
+      tags:
+        - Products
+      summary: Get user's product search history
+      responses:
+        '200':
+          description: Search history returned
+      security: []
+    post:
+      tags:
+        - Products
+      summary: Save user search history
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                query:
+                  type: string
+      responses:
+        '200':
+          description: Search history saved
+      security: []
+    delete:
+      tags:
+        - Products
+      summary: Clear user search history
+      responses:
+        '200':
+          description: Search history cleared
+      security: []
+  /v1/wishlist/add-wishlist:
+    post:
+      tags:
+        - Wishlist
+      summary: Add item to wishlist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - product_id
+                - variant_id
+              properties:
+                product_id:
+                  type: integer
+                variant_id:
+                  type: integer
+      responses:
+        '200':
+          description: Item added to wishlist
+      security:
+        - bearerAuth: []
+  /v1/wishlist/remove/{product_id}/{variant_id}:
+    parameters:
+      - name: product_id
+        in: path
+        required: true
+        schema:
+          type: integer
+      - name: variant_id
+        in: path
+        required: true
+        schema:
+          type: integer
+    delete:
+      tags:
+        - Wishlist
+      summary: Remove item from wishlist
+      responses:
+        '200':
+          description: Item removed from wishlist
+      security:
+        - bearerAuth: []
+  /v1/wishlist/get-wishlist:
+    get:
+      tags:
+        - Wishlist
+      summary: Get user wishlist items
+      responses:
+        '200':
+          description: Wishlist returned
+      security:
+        - bearerAuth: []
+  /v1/wishlist/check/{product_id}/{variant_id}:
+    parameters:
+      - name: product_id
+        in: path
+        required: true
+        schema:
+          type: integer
+      - name: variant_id
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      tags:
+        - Wishlist
+      summary: Check if item is in wishlist
+      responses:
+        '200':
+          description: Wishlist check returned
+      security:
+        - bearerAuth: []
+  /v1/wishlist/move-to-cart:
+    post:
+      tags:
+        - Wishlist
+      summary: Move wishlist item to cart
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - product_id
+                - variant_id
+              properties:
+                product_id:
+                  type: integer
+                variant_id:
+                  type: integer
+      responses:
+        '200':
+          description: Wishlist item moved to cart
+      security:
+        - bearerAuth: []
+  /v1/wishlist/badge:
+    get:
+      tags:
+        - Wishlist
+      summary: Get wishlist count badge
+      responses:
+        '200':
+          description: Badge count returned
+      security:
+        - bearerAuth: []
+  /v1/reviews/reviewable-order/{variant_id}:
+    parameters:
+      - name: variant_id
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      tags:
+        - Reviews
+      summary: Check if user can review a variant
+      responses:
+        '200':
+          description: Review eligibility returned
+      security: []
+  /v1/reviews/create-review:
+    post:
+      tags:
+        - Reviews
+      summary: Create a product review with optional media
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                product_id:
+                  type: integer
+                variant_id:
+                  type: integer
+                order_id:
+                  type: integer
+                rating:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                value_for_money:
+                  type: integer
+                good_quality:
+                  type: integer
+                smooth_experience:
+                  type: integer
+                review_text:
+                  type: string
+                media:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        '201':
+          description: Review created successfully
+      security:
+        - bearerAuth: []
+  /v1/reviews/all-reviews/{product_id}:
+    parameters:
+      - name: product_id
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      tags:
+        - Reviews
+      summary: Get reviews for a product
+      parameters:
+        - name: sort
+          in: query
+          schema:
+            type: string
+        - name: rating
+          in: query
+          schema:
+            type: integer
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Product reviews returned
+      security: []
+  /v1/reviews/{reviewId}/helpful:
+    parameters:
+      - name: reviewId
+        in: path
+        required: true
+        schema:
+          type: integer
+    post:
+      tags:
+        - Reviews
+      summary: Mark review helpful
+      responses:
+        '200':
+          description: Review marked helpful
+      security:
+        - bearerAuth: []
+    delete:
+      tags:
+        - Reviews
+      summary: Remove helpful vote from review
+      responses:
+        '200':
+          description: Helpful vote removed
+      security:
+        - bearerAuth: []
+  /v1/bill-pay/create-order:
+    post:
+      tags:
+        - BBPS Payments
+      summary: Create a payment order for BBPS bill or recharge
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BBPSCreateOrderRequest'
+      responses:
+        '200':
+          description: Razorpay order created
+      security:
+        - bearerAuth: []
+  /v1/bill-pay/verify-payment:
+    post:
+      tags:
+        - BBPS Payments
+      summary: Verify razorpay payment and complete BBPS/recharge flow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BBPSVerifyPaymentRequest'
+      responses:
+        '200':
+          description: Payment verified and bill payment processed
+      security:
+        - bearerAuth: []
+  /v1/bill-pay/retry:
+    post:
+      tags:
+        - BBPS Payments
+      summary: Retry a failed BBPS transaction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BBPSRetryRequest'
+      responses:
+        '200':
+          description: Retry executed
+      security:
+        - bearerAuth: []
+  /v1/bills/categories:
+    get:
+      tags:
+        - BBPS Bills
+      summary: Get available bill categories
+      responses:
+        '200':
+          description: Categories returned
+      security: []
+  /v1/bills/operators:
+    get:
+      tags:
+        - BBPS Bills
+      summary: Get operators optionally filtered by category
+      parameters:
+        - name: category_id
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Operators returned
+      security: []
+  /v1/bills/operators-grouped:
+    get:
+      tags:
+        - BBPS Bills
+      summary: Get operators grouped by category
+      parameters:
+        - name: category_id
+          in: query
+          schema:
+            type: integer
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Grouped operators returned
+      security: []
+  /v1/bills/operator/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      tags:
+        - BBPS Bills
+      summary: Get operator details by id
+      responses:
+        '200':
+          description: Operator details returned
+      security: []
+  /v1/bills/check-customer-number:
+    post:
+      tags:
+        - BBPS Bills
+      summary: Validate operator and customer account for fetch bill support
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BBPSCheckCustomerRequest'
+      responses:
+        '200':
+          description: Customer validation returned
+      security: []
+  /v1/bills/fetch-bill:
+    post:
+      tags:
+        - BBPS Bills
+      summary: Fetch bill details from operator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BBPSFetchBillRequest'
+      responses:
+        '200':
+          description: Bill details returned
+      security: []
+  /v1/bills/status/{transaction_id}:
+    parameters:
+      - name: transaction_id
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      tags:
+        - BBPS Bills
+      summary: Get status for a BBPS transaction
+      responses:
+        '200':
+          description: Transaction status returned
+      security: []
+  /v1/sudoku/start:
+    post:
+      tags:
+        - Games
+      summary: Start a new sudoku game session
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Game session created
+      security: []
+  /v1/sudoku/complete:
+    post:
+      tags:
+        - Games
+      summary: Complete sudoku game session
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Game completion result returned
+      security: []
+  /v1/sudoku/leaderboard:
+    get:
+      tags:
+        - Games
+      summary: Get sudoku leaderboard
+      responses:
+        '200':
+          description: Leaderboard returned
+      security: []
+  /v1/profile/status:
+    get:
+      tags:
+        - Step Counter
+      summary: Get onboarding status for authenticated user
+      responses:
+        '200':
+          description: Onboarding status returned
+      security:
+        - bearerAuth: []
+  /v1/profile/select-goals:
+    post:
+      tags:
+        - Step Counter
+      summary: Select fitness goals
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                daily_steps:
+                  type: integer
+      responses:
+        '200':
+          description: Goal selected successfully
+      security:
+        - bearerAuth: []
+  /v1/profile/basic:
+    post:
+      tags:
+        - Step Counter
+      summary: Save basic profile fields
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - gender
+                - age
+                - goal_type
+              properties:
+                gender:
+                  type: string
+                age:
+                  type: integer
+                goal_type:
+                  type: string
+                  enum: [weight_loss, weight_gain, stay_healthy]
+      responses:
+        '200':
+          description: Basic profile saved
+      security:
+        - bearerAuth: []
+  /v1/profile/body:
+    post:
+      tags:
+        - Step Counter
+      summary: Save body profile fields
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                height_cm:
+                  type: number
+                weight_kg:
+                  type: number
+      responses:
+        '200':
+          description: Body profile saved
+      security:
+        - bearerAuth: []
+  /v1/profile/plan:
+    get:
+      tags:
+        - Step Counter
+      summary: Get user's fitness plan
+      responses:
+        '200':
+          description: Fitness plan returned
+      security:
+        - bearerAuth: []
+  /v1/profile/goal:
+    get:
+      tags:
+        - Step Counter
+      summary: Get user's active goal
+      responses:
+        '200':
+          description: Goal details returned
+      security:
+        - bearerAuth: []
+  /v1/achievement:
+    get:
+      tags:
+        - Step Counter
+      summary: Get user achievements
+      responses:
+        '200':
+          description: Achievements returned
+      security:
+        - bearerAuth: []
+  /v1/dashboard:
+    get:
+      tags:
+        - Step Counter
+      summary: Get dashboard summary
+      responses:
+        '200':
+          description: Dashboard returned
+      security:
+        - bearerAuth: []
+  /v1/dashboard/today-summary:
+    get:
+      tags:
+        - Step Counter
+      summary: Get today's dashboard summary
+      responses:
+        '200':
+          description: Today summary returned
+      security:
+        - bearerAuth: []
+  /v1/dashboard/weekly-progress:
+    get:
+      tags:
+        - Step Counter
+      summary: Get weekly fitness progress
+      responses:
+        '200':
+          description: Weekly progress returned
+      security:
+        - bearerAuth: []
+  /v1/dashboard/fitness-streak:
+    get:
+      tags:
+        - Step Counter
+      summary: Get current fitness streak
+      responses:
+        '200':
+          description: Fitness streak returned
+      security:
+        - bearerAuth: []
+  /v1/progress/calendar:
+    get:
+      tags:
+        - Step Counter
+      summary: Get progress calendar view
+      responses:
+        '200':
+          description: Progress calendar returned
+      security:
+        - bearerAuth: []
+  /v1/stats:
+    get:
+      tags:
+        - Step Counter
+      summary: Get fitness stats
+      responses:
+        '200':
+          description: Stats returned
+      security:
+        - bearerAuth: []
+  /v1/stats/today-hourly-stats:
+    get:
+      tags:
+        - Step Counter
+      summary: Get hourly fitness stats for today
+      responses:
+        '200':
+          description: Hourly stats returned
+      security:
+        - bearerAuth: []
+  /v1/steps/history:
+    get:
+      tags:
+        - Step Counter
+      summary: Get wallet steps history
+      responses:
+        '200':
+          description: Steps history returned
+      security:
+        - bearerAuth: []
+  /v1/wallet/steps-summary:
+    get:
+      tags:
+        - Step Counter
+      summary: Get wallet steps summary
+      responses:
+        '200':
+          description: Steps summary returned
+      security:
+        - bearerAuth: []
