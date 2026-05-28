@@ -66,6 +66,9 @@ router.post(
   ServiceController.verifyPayment,
 );
 
+// ========================================Document =======================================
+
+
 // ================================================Order information===========================================
 // Get all orders
 router.get("/my-orders", authenticateClient, ServiceController.getMyOrders);

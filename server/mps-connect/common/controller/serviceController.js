@@ -803,6 +803,8 @@ class ServiceController {
 
   // verify payment
   async verifyPayment(req, res) {
+    let connection;
+
     try {
       const apiClientId = req.client.api_client_id;
       const userId = req.body?.user_id;
@@ -859,58 +861,59 @@ class ServiceController {
       }
 
       //  TRANSACTION
-      await db.beginTransaction();
+      connection = await db.getConnection();
 
-      try {
-        // update service orders
-        await db.execute(
-          `UPDATE external_service_orders 
+      // START TRANSACTION
+      await connection.beginTransaction();
+
+      // update service orders
+      await connection.execute(
+        `UPDATE external_service_orders 
          SET status = 'documents_pending',
              payment_id = ?,
              payment_status = 'paid'
          WHERE parent_order_id = ?
          AND payment_status != 'paid'`,
-          [razorpay_payment_id, parent_order_id],
-        );
+        [razorpay_payment_id, parent_order_id],
+      );
 
-        // update razorpay_orders
-        await db.execute(
-          `UPDATE razorpay_orders
+      // update razorpay_orders
+      await connection.execute(
+        `UPDATE razorpay_orders
          SET razorpay_payment_id = ?,
              status = 'success',
              raw_response = ?
          WHERE razorpay_order_id = ?`,
-          [razorpay_payment_id, JSON.stringify(req.body), razorpay_order_id],
-        );
-
-        // await InvoiceService.generateInvoice(parent_order_id);
-
-        await db.commit();
-      } catch (err) {
-        await db.rollback();
-        throw err;
-      }
-
-      // redirect
-      const [[firstOrder]] = await db.execute(
-        `SELECT id FROM external_service_orders 
-       WHERE parent_order_id = ? 
-       ORDER BY id ASC LIMIT 1`,
-        [parent_order_id],
+        [razorpay_payment_id, JSON.stringify(req.body), razorpay_order_id],
       );
+
+      // await InvoiceService.generateInvoice(parent_order_id);
+
+      // COMMIT
+      await connection.commit();
 
       res.json({
         success: true,
         message: "Payment successful",
         data: {
-          redirect_to: `/service-order-documents/documents/${firstOrder.id}`,
+          redirect_to: `/parent-documents/${parent_order_id}`,
         },
       });
     } catch (err) {
+      // ROLLBACK
+      if (connection) {
+        await connection.rollback();
+      }
+
       res.status(500).json({
         success: false,
         message: err.message,
       });
+    } finally {
+      // RELEASE CONNECTION
+      if (connection) {
+        connection.release();
+      }
     }
   }
 
