@@ -404,127 +404,255 @@ class ServiceModel {
   }
 
   // order detail by Id
-  // async getOrderByParentId(orderId, userId) {
-  //   const parentId = orderId;
+  async getOrderByParentId(orderId, userId) {
+    const parentId = orderId;
 
-  //   // fetch all items of this order
-  //   const [rows] = await db.execute(
-  //     `
-  //   SELECT 
-  //     so.id,
-  //     so.order_ref,
-  //     so.price,
-  //     so.status,
-  //     so.bundle_id,
-  //     so.created_at,
+    // fetch all items of this order
+    const [rows] = await db.execute(
+      `
+    SELECT 
+      so.id,
+      so.order_ref,
+      so.price,
+      so.status,
+      so.bundle_id,
+      so.created_at,
 
-  //     ca.address_type,
-  //     ca.address1,
-  //     ca.address2,
-  //     ca.city,
-  //     ca.zipcode,
-  //     ca.landmark,
-  //     ca.contact_name,
-  //     ca.contact_phone,
+      s.name AS service_name,
+      sv.variant_name,
+      sv.title,
+      sv.image_url
 
-  //     st.state_name,
-  //     c.country_name,
+    FROM service_orders so
+    JOIN services s ON s.id = so.service_id
+    LEFT JOIN service_variants sv ON sv.id = so.variant_id
 
-  //     s.name AS service_name,
-  //     sv.variant_name,
-  //     sv.title,
-  //     sv.image_url
+    WHERE so.parent_order_id = ? AND so.user_id = ?
+    `,
+      [parentId, userId],
+    );
 
-  //   FROM service_orders so
-  //   JOIN services s ON s.id = so.service_id
-  //   LEFT JOIN service_variants sv ON sv.id = so.variant_id
-    
-  //   LEFT JOIN customer_addresses ca
-  //     ON so.address_id = ca.address_id
+    if (!rows.length) return null;
 
-  //   LEFT JOIN states st
-  //     ON ca.state_id = st.state_id
+    // Aggregate status
+    const statuses = rows.map((r) => r.status);
 
-  //   LEFT JOIN countries c
-  //     ON ca.country_id = c.country_id
+    let finalStatus = "pending_payment";
 
-  //   WHERE so.parent_order_id = ? AND so.user_id = ?
-  //   `,
-  //     [parentId, userId],
-  //   );
+    if (statuses.every((s) => s === "completed")) {
+      finalStatus = "completed";
+    } else if (statuses.some((s) => s === "in_progress")) {
+      finalStatus = "in_progress";
+    } else if (statuses.some((s) => s === "documents_pending")) {
+      finalStatus = "documents_pending";
+    }
 
-  //   if (!rows.length) return null;
+    const response = {
+      parent_order_id: parentId,
+      status: finalStatus,
+      created_at: rows[0].created_at,
+      items: [],
+      bundles: {},
+      total_amount: 0,
+    };
 
-  //   // Aggregate status
-  //   const statuses = rows.map((r) => r.status);
+    rows.forEach((row) => {
+      const item = {
+        id: row.id,
+        order_ref: row.order_ref,
+        service_name: row.service_name,
+        variant_name: row.variant_name,
+        title: row.title,
+        image_url: row.image_url ? getPublicUrl(row.image_url) : null,
+        price: Number(row.price),
+        status: row.status,
+      };
 
-  //   let finalStatus = "pending_payment";
+      if (row.bundle_id) {
+        if (!response.bundles[row.bundle_id]) {
+          response.bundles[row.bundle_id] = {
+            bundle_id: row.bundle_id,
+            items: [],
+            bundle_total: 0,
+          };
+        }
 
-  //   if (statuses.every((s) => s === "completed")) {
-  //     finalStatus = "completed";
-  //   } else if (statuses.some((s) => s === "in_progress")) {
-  //     finalStatus = "in_progress";
-  //   } else if (statuses.some((s) => s === "documents_pending")) {
-  //     finalStatus = "documents_pending";
-  //   }
+        response.bundles[row.bundle_id].items.push(item);
+        response.bundles[row.bundle_id].bundle_total += Number(row.price);
+      } else {
+        response.items.push(item);
+      }
 
-  //   const response = {
-  //     parent_order_id: parentId,
-  //     status: finalStatus,
-  //     created_at: rows[0].created_at,
-  //     address: rows[0].address1
-  //       ? {
-  //           address_type: rows[0].address_type,
-  //           address1: rows[0].address1,
-  //           address2: rows[0].address2,
-  //           city: rows[0].city,
-  //           zipcode: rows[0].zipcode,
-  //           landmark: rows[0].landmark,
-  //           contact_name: rows[0].contact_name,
-  //           contact_phone: rows[0].contact_phone,
-  //           state: rows[0].state_name,
-  //           country: rows[0].country_name,
-  //         }
-  //       : null,
-  //     items: [],
-  //     bundles: {},
-  //     total_amount: 0,
-  //   };
+      response.total_amount += Number(row.price);
+    });
 
-  //   rows.forEach((row) => {
-  //     const item = {
-  //       id: row.id,
-  //       order_ref: row.order_ref,
-  //       service_name: row.service_name,
-  //       variant_name: row.variant_name,
-  //       title: row.title,
-  //       image_url: row.image_url ? getPublicUrl(row.image_url) : null,
-  //       price: Number(row.price),
-  //       status: row.status,
-  //     };
+    response.bundles = Object.values(response.bundles);
 
-  //     if (row.bundle_id) {
-  //       if (!response.bundles[row.bundle_id]) {
-  //         response.bundles[row.bundle_id] = {
-  //           bundle_id: row.bundle_id,
-  //           items: [],
-  //           bundle_total: 0,
-  //         };
-  //       }
+    return response;
+  }
 
-  //       response.bundles[row.bundle_id].items.push(item);
-  //       response.bundles[row.bundle_id].bundle_total += Number(row.price);
-  //     } else {
-  //       response.items.push(item);
-  //     }
+  // Get required Docs
+  async getRequiredDocs(orderId) {
+    const [rows] = await db.execute(
+      `
+    SELECT
+      sd.id AS service_document_id,
+      sd.document_name,
+      sd.document_key,
+      sd.is_mandatory,
+      sd.is_expirable,
 
-  //     response.total_amount += Number(row.price);
-  //   });
+      od.id AS order_document_id,
+      od.file_path,
+      od.uploaded,
+      od.expiry_date,
+      od.document_number
 
-  //   response.bundles = Object.values(response.bundles);
+    FROM external_service_orders so
 
-  //   return response;
-  // }
+    LEFT JOIN service_documents sd 
+      ON sd.service_id = so.service_id
+
+    LEFT JOIN external_order_documents od 
+      ON od.service_document_id = sd.id
+      AND od.order_id = so.id
+
+    WHERE so.id = ?
+    ORDER BY sd.id
+    `,
+      [orderId],
+    );
+
+    return await Promise.all(
+      rows
+        .filter((r) => r.service_document_id)
+        .map(async (r) => ({
+          service_document_id: r.service_document_id,
+
+          order_document_id: r.order_document_id,
+
+          document_name: r.document_name,
+
+          document_key: r.document_key,
+
+          is_mandatory: Boolean(r.is_mandatory),
+
+          is_expirable: Boolean(r.is_expirable),
+
+          uploaded: Boolean(r.uploaded),
+
+          expiry_date: r.expiry_date,
+
+          document_number: r.document_number,
+
+          file_url: r.file_path ? await getPrivateFileUrl(r.file_path) : null,
+        })),
+    );
+  }
+
+  // Get required Docs by parent order id
+  async getRequiredDocsByParentOrder(parentOrderId, userId) {
+    const [rows] = await db.execute(
+      `
+    SELECT
+      so.id AS service_order_id,
+      so.status,
+
+      s.id AS service_id,
+      s.name AS service_name,
+
+      sv.variant_name,
+
+      sd.id AS service_document_id,
+      sd.document_name,
+      sd.document_key,
+      sd.is_mandatory,
+      sd.is_expirable,
+
+      od.id AS order_document_id,
+      od.file_path,
+      od.uploaded,
+      od.expiry_date,
+      od.document_number
+
+    FROM external_service_orders so
+
+    JOIN services s
+      ON s.id = so.service_id
+
+    LEFT JOIN service_variants sv
+      ON sv.id = so.variant_id
+
+    LEFT JOIN service_documents sd
+      ON sd.service_id = so.service_id
+
+    LEFT JOIN external_order_documents od
+      ON od.service_document_id = sd.id
+      AND od.order_id = so.id
+
+    WHERE so.parent_order_id = ?
+    AND so.user_id = ?
+
+    ORDER BY so.id ASC, sd.id ASC
+    `,
+      [parentOrderId, userId],
+    );
+
+    const orderMap = {};
+
+    for (const row of rows) {
+      // create service item
+      if (!orderMap[row.service_order_id]) {
+        orderMap[row.service_order_id] = {
+          service_order_id: row.service_order_id,
+
+          service_id: row.service_id,
+
+          service_name: row.service_name,
+
+          variant_name: row.variant_name,
+
+          status: row.status,
+
+          documents: [],
+        };
+      }
+
+      if (row.service_document_id) {
+        orderMap[row.service_order_id].documents.push({
+          service_document_id: row.service_document_id,
+          order_document_id: row.order_document_id,
+          document_name: row.document_name,
+          document_key: row.document_key,
+          is_mandatory: Boolean(row.is_mandatory),
+          is_expirable: Boolean(row.is_expirable),
+          expiry_date: row.expiry_date,
+          document_number: row.document_number,
+          uploaded: Boolean(row.uploaded),
+          file_url: row.file_path
+            ? await getPrivateFileUrl(row.file_path)
+            : null,
+        });
+      }
+    }
+
+    // =========================================
+    // ADD can_submit
+    // =========================================
+
+    Object.values(orderMap).forEach((item) => {
+      const mandatoryDocs = item.documents.filter((d) => d.is_mandatory);
+
+      item.can_submit =
+        mandatoryDocs.length === 0 || mandatoryDocs.every((d) => d.uploaded);
+    });
+
+    return {
+      parent_order_id: parentOrderId,
+
+      items: Object.values(orderMap),
+    };
+  }
 }
 
 module.exports = new ServiceModel();

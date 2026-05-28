@@ -70,10 +70,10 @@ router.post(
 // Get all orders
 router.get("/my-orders", authenticateClient, ServiceController.getMyOrders);
 
-// router.get(
-//   "/order-details/:parentOrderId",
-//   authenticateClient,
-//   ServiceController.getOrderDetails,
-// );
+router.get(
+  "/order-details/:parentOrderId",
+  authenticateClient,
+  ServiceController.getOrderDetails,
+);
 
 module.exports = router;
