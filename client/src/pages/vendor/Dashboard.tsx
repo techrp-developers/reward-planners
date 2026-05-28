@@ -163,7 +163,7 @@ export default function VendorDashboard() {
             {getGreeting()}
           </p>
           <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
-            Vendor <span className="gradient-text-brand">Dashboard</span>
+            User <span className="gradient-text-brand">Dashboard</span>
           </h1>
           <p className="text-gray-500 mt-1 font-medium text-sm">
             Welcome back,{" "}
