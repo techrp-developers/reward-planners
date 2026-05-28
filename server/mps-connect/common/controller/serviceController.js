@@ -961,6 +961,7 @@ class ServiceController {
       const { parentOrderId } = req.params;
 
       const order = await ServiceModel.getOrderByParentId(
+        apiClientId,
         parentOrderId,
         userId,
       );

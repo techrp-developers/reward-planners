@@ -404,7 +404,7 @@ class ServiceModel {
   }
 
   // order detail by Id
-  async getOrderByParentId(orderId, userId) {
+  async getOrderByParentId(apiClientId, orderId, userId) {
     const parentId = orderId;
 
     // fetch all items of this order
@@ -427,9 +427,9 @@ class ServiceModel {
     JOIN services s ON s.id = so.service_id
     LEFT JOIN service_variants sv ON sv.id = so.variant_id
 
-    WHERE so.parent_order_id = ? AND so.user_id = ?
+    WHERE so.parent_order_id = ? AND so.user_id = ? AND so.client_id = ?
     `,
-      [parentId, userId],
+      [parentId, userId, apiClientId],
     );
 
     if (!rows.length) return null;
