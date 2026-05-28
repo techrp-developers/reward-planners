@@ -59,7 +59,15 @@ app.post(
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.use(
+  "/api-docs",
+  swaggerUi.serve,
+  swaggerUi.setup(swaggerSpec, {
+    explorer: true,
+    docExpansion: "full",
+    defaultModelsExpandDepth: -1,
+  }),
+);
 
 if (process.env.NODE_ENV !== "production") {
   app.use("/api/wa", require("./routes/waTestRoute"));
