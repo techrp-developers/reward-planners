@@ -957,6 +957,149 @@ class ServiceController {
     }
   }
 
+  // Upload document
+  async uploadDocument(req, res) {
+    try {
+      const apiClientId = req.client.api_client_id;
+      const userId = req.body?.user_id;
+
+      if (!userId) {
+        return res.status(403).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      const { serviceOrderId } = req.params;
+
+      const { document_id, expiry_date, document_number } = req.body;
+
+      if (!document_id) {
+        return res.status(400).json({
+          success: false,
+          message: "document_id required",
+        });
+      }
+
+      if (expiry_date && new Date(expiry_date) < new Date()) {
+        return res.status(400).json({
+          success: false,
+          message: "expiry_date cannot be in past",
+        });
+      }
+
+      // validate service order ownership
+      const [[order]] = await db.execute(
+        `SELECT id
+       FROM external_service_orders
+       WHERE id = ?
+       AND user_id = ? and client_id = ?`,
+        [serviceOrderId, userId, apiClientId],
+      );
+
+      if (!order) {
+        return res.status(404).json({
+          success: false,
+          message: "Service order not found",
+        });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          message: "File required",
+        });
+      }
+
+      // validate document belongs to this service
+      const [[validDoc]] = await db.execute(
+        `
+          SELECT
+            sd.id,
+            sd.is_expirable
+
+          FROM service_documents sd
+
+          JOIN external_service_orders so
+            ON so.service_id = sd.service_id
+
+          WHERE sd.id = ?
+          AND so.id = ?
+          `,
+        [document_id, serviceOrderId],
+      );
+
+      if (!validDoc) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid document for this service",
+        });
+      }
+
+      // expirable docs validation
+      if (validDoc.is_expirable) {
+        if (!expiry_date) {
+          return res.status(400).json({
+            success: false,
+            message: "expiry_date required for this document",
+          });
+        }
+
+        if (!document_number) {
+          return res.status(400).json({
+            success: false,
+            message: "document_number required for this document",
+          });
+        }
+      }
+
+      // read file buffer
+      const fileBuffer = fs.readFileSync(req.file.path);
+
+      // extension
+      const originalName = req.file.originalname;
+
+      const extension = originalName.includes(".")
+        ? originalName.split(".").pop()
+        : "bin";
+
+      // R2 path
+      const r2Path =
+        `private/external_service-order-documents/` +
+        `${serviceOrderId}/` +
+        `${document_id}_${Date.now()}.${extension}`;
+
+      // upload to R2
+      await uploadToR2(fileBuffer, r2Path, req.file.mimetype);
+
+      // remove temp
+      fs.unlinkSync(req.file.path);
+
+      // save in DB
+      await ServiceModel.uploadOrUpdate({
+        order_id: serviceOrderId,
+        document_id,
+        file_path: r2Path,
+        expiry_date: expiry_date || null,
+        document_number: document_number || null,
+      });
+
+      res.json({
+        success: true,
+        message: "Document uploaded successfully",
+      });
+    } catch (err) {
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
   // ======================================Order============================
   // get all orders of a user
   async getMyOrders(req, res) {

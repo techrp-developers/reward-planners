@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const ServiceController = require("../controller/serviceController");
 const authenticateClient = require("../middlewares/authenticateClient");
+const upload = require("../../../middleware/mediaUpload/serviceDocumentUpload");
 
 // Feedback
 router.post("/feedback", authenticateClient, ServiceController.submitFeedback);
@@ -73,6 +74,21 @@ router.get(
   authenticateClient,
   ServiceController.getServiceParentOrderDocumentPage,
 );
+
+// upload order document
+router.post(
+  "/upload-document/:serviceOrderId",
+  authenticateClient,
+  upload.single("file"),
+  ServiceController.uploadDocument,
+);
+
+// submit document
+// router.post(
+//   "/submit-documents/:serviceOrderId",
+//   authenticateClient,
+//   ServiceController.submitDocuments,
+// );
 
 // ================================================Order information===========================================
 // Get all orders

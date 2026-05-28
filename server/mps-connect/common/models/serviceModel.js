@@ -653,6 +653,54 @@ class ServiceModel {
       items: Object.values(orderMap),
     };
   }
+
+  // upload or update document
+  async uploadOrUpdate(data) {
+    // check if already exists
+    const [existing] = await db.execute(
+      `SELECT id FROM external_order_documents 
+     WHERE order_id = ? AND service_document_id = ?`,
+      [data.order_id, data.document_id],
+    );
+
+    if (existing.length) {
+      await db.execute(
+        `UPDATE order_documents 
+       SET
+        file_path = ?,
+        uploaded = 1,
+        expiry_date = ?,
+        document_number = ?
+       WHERE id = ?`,
+        [
+          data.file_path,
+          data.expiry_date,
+          data.document_number,
+          existing[0].id,
+        ],
+      );
+    } else {
+      await db.execute(
+        `INSERT INTO order_documents 
+        (
+          order_id,
+          service_document_id,
+          file_path,
+          uploaded,
+          expiry_date,
+          document_number
+        )
+        VALUES (?, ?, ?, 1, ?, ?)`,
+        [
+          data.order_id,
+          data.document_id,
+          data.file_path,
+          data.expiry_date,
+          data.document_number,
+        ],
+      );
+    }
+  }
 }
 
 module.exports = new ServiceModel();
