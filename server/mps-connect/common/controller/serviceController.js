@@ -917,6 +917,46 @@ class ServiceController {
     }
   }
 
+  // ===============================Document========================================
+  async getServiceParentOrderDocumentPage(req, res) {
+    try {
+      const apiClientId = req.client.api_client_id;
+      const userId = req.query?.user_id;
+      // const userId = 1;
+
+      if (!userId) {
+        return res.status(403).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      const { parentOrderId } = req.params;
+
+      if (!parentOrderId) {
+        return res.status(400).json({
+          success: false,
+          message: "parentOrderId required",
+        });
+      }
+
+      const data = await ServiceModel.getRequiredDocsByParentOrder(
+        parentOrderId,
+        userId,
+      );
+
+      res.json({
+        success: true,
+        data,
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
   // ======================================Order============================
   // get all orders of a user
   async getMyOrders(req, res) {

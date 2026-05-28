@@ -66,8 +66,13 @@ router.post(
   ServiceController.verifyPayment,
 );
 
-// ========================================Document =======================================
-
+// ========================================Document =============================================
+// parent based document page
+router.get(
+  "/parent-documents/:parentOrderId",
+  authenticateClient,
+  ServiceController.getServiceParentOrderDocumentPage,
+);
 
 // ================================================Order information===========================================
 // Get all orders
