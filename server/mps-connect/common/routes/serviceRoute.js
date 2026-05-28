@@ -66,4 +66,14 @@ router.post(
   ServiceController.verifyPayment,
 );
 
+// ================================================Order information===========================================
+// Get all orders
+router.get("/my-orders", authenticateClient, ServiceController.getMyOrders);
+
+// router.get(
+//   "/order-details/:parentOrderId",
+//   authenticateClient,
+//   ServiceController.getOrderDetails,
+// );
+
 module.exports = router;

@@ -913,6 +913,291 @@ class ServiceController {
       });
     }
   }
+
+  // ======================================Order============================
+  // get all orders of a user
+  async getMyOrders(req, res) {
+    try {
+      const apiClientId = req.client.api_client_id;
+      // const userId = req.query?.user_id;
+      const userId=1;
+
+      if (!userId) {
+        return res.status(403).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      const { status } = req.query;
+
+      const orders = await ServiceModel.getUserOrders(userId, status);
+
+      res.json({
+        success: true,
+        data: orders,
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  // order details
+  // async getOrderDetails(req, res) {
+  //   try {
+  //     const apiClientId = req.client.api_client_id;
+  //     const userId = req.query?.user_id;
+
+  //     if (!userId) {
+  //       return res.status(403).json({
+  //         success: false,
+  //         message: "Unauthorized user",
+  //       });
+  //     }
+
+  //     const { parentOrderId } = req.params;
+
+  //     const order = await ServiceModel.getOrderByParentId(
+  //       parentOrderId,
+  //       userId,
+  //     );
+
+  //     if (!order) {
+  //       return res.status(404).json({
+  //         success: false,
+  //         message: "Order not found",
+  //       });
+  //     }
+
+  //     // =========================================
+  //     // PROCESS INDIVIDUAL ITEMS
+  //     // =========================================
+
+  //     const processItem = async (item) => {
+  //       // documents
+  //       const documents = await ServiceOrderDocumentModel.getRequiredDocs(
+  //         item.id,
+  //       );
+
+  //       // feedback
+  //       const [[feedback]] = await db.execute(
+  //         `SELECT * FROM service_feedback
+  //          WHERE service_order_id = ?
+  //          AND user_id = ?`,
+  //         [item.id, userId],
+  //       );
+
+  //       const canGiveFeedback = item.status === "completed" && !feedback;
+
+  //       // cancellation
+  //       const [[cancellation]] = await db.execute(
+  //         `SELECT * FROM service_order_cancellations
+  //          WHERE service_order_id = ?`,
+  //         [item.id],
+  //       );
+
+  //       // refund
+  //       const [[refund]] = await db.execute(
+  //         `SELECT * FROM service_order_refunds
+  //          WHERE service_order_id = ?`,
+  //         [item.id],
+  //       );
+
+  //       // can cancel
+  //       const canCancel = [
+  //         "pending_payment",
+  //         "documents_pending",
+  //         "in_progress",
+  //       ].includes(item.status);
+
+  //       // timeline
+  //       let timeline = [];
+
+  //       // cancelled flow
+  //       if (item.status === "cancelled") {
+  //         timeline = [
+  //           {
+  //             status: "Cancellation Requested",
+  //             completed: true,
+  //           },
+  //           {
+  //             status: "Cancellation Confirmed",
+  //             completed: cancellation?.status === "approved",
+  //           },
+  //           {
+  //             status: "Refund Initiated",
+  //             completed: ["initiated", "completed"].includes(
+  //               cancellation?.refund_status,
+  //             ),
+  //           },
+  //           {
+  //             status: "Refund Completed",
+  //             completed: cancellation?.refund_status === "completed",
+  //           },
+  //         ];
+  //       } else {
+  //         timeline = [
+  //           {
+  //             status: "Order Confirmed",
+  //             completed: true,
+  //           },
+  //           {
+  //             status: "Documents Submitted",
+  //             completed: [
+  //               "documents_uploaded",
+  //               "in_progress",
+  //               "completed",
+  //             ].includes(item.status),
+  //           },
+  //           {
+  //             status: "In Progress",
+  //             completed: ["in_progress", "completed"].includes(item.status),
+  //           },
+  //           {
+  //             status: "Completed",
+  //             completed: item.status === "completed",
+  //           },
+  //         ];
+  //       }
+
+  //       return {
+  //         ...item,
+
+  //         documents,
+
+  //         timeline,
+
+  //         feedback: {
+  //           can_submit: canGiveFeedback,
+  //           submitted: !!feedback,
+  //           data: feedback || null,
+  //         },
+
+  //         cancellation: cancellation
+  //           ? {
+  //               can_cancel: canCancel,
+  //               status: cancellation.status,
+  //               reason: cancellation.reason,
+  //               refund_status: cancellation.refund_status,
+  //             }
+  //           : {
+  //               can_cancel: canCancel,
+  //             },
+
+  //         refund: refund
+  //           ? {
+  //               amount: Number(refund.refund_amount),
+  //               method: refund.refund_method,
+  //               status: refund.status,
+  //             }
+  //           : null,
+  //       };
+  //     };
+
+  //     // =========================================
+  //     // PROCESS INDIVIDUAL ITEMS
+  //     // =========================================
+
+  //     const processedItems = [];
+
+  //     for (const item of order.items) {
+  //       processedItems.push(await processItem(item));
+  //     }
+
+  //     // =========================================
+  //     // PROCESS BUNDLES
+  //     // =========================================
+
+  //     const processedBundles = [];
+
+  //     for (const bundle of order.bundles) {
+  //       const processedBundleItems = [];
+
+  //       for (const item of bundle.items) {
+  //         processedBundleItems.push(await processItem(item));
+  //       }
+
+  //       processedBundles.push({
+  //         ...bundle,
+  //         items: processedBundleItems,
+  //       });
+  //     }
+
+  //     // =========================================
+  //     // SUMMARY
+  //     // =========================================
+
+  //     const allItems = [
+  //       ...processedItems,
+  //       ...processedBundles.flatMap((b) => b.items),
+  //     ];
+
+  //     const completedServices = allItems.filter(
+  //       (i) => i.status === "completed",
+  //     ).length;
+
+  //     // =========================================
+  //     // PARENT TIMELINE (AGGREGATE)
+  //     // =========================================
+
+  //     const parentTimeline = [
+  //       {
+  //         status: "Order Confirmed",
+  //         completed: true,
+  //       },
+  //       {
+  //         status: "Services In Progress",
+  //         completed: allItems.some((i) =>
+  //           ["in_progress", "completed"].includes(i.status),
+  //         ),
+  //       },
+  //       {
+  //         status: "Order Completed",
+  //         completed: allItems.every((i) => i.status === "completed"),
+  //       },
+  //       {
+  //         status: "Order Cancelled",
+  //         completed: allItems.every((i) => i.status === "cancelled"),
+  //       },
+  //     ];
+
+  //     res.json({
+  //       success: true,
+
+  //       data: {
+  //         parent_order_id: order.parent_order_id,
+
+  //         created_at: order.created_at,
+
+  //         status: order.status,
+
+  //         address: order.address,
+
+  //         total_amount: order.total_amount,
+
+  //         summary: {
+  //           total_services: allItems.length,
+  //           completed_services: completedServices,
+  //           total_bundles: processedBundles.length,
+  //         },
+
+  //         timeline: parentTimeline,
+
+  //         items: processedItems,
+
+  //         bundles: processedBundles,
+  //       },
+  //     });
+  //   } catch (err) {
+  //     res.status(500).json({
+  //       success: false,
+  //       message: err.message,
+  //     });
+  //   }
+  // }
 }
 
 module.exports = new ServiceController();
