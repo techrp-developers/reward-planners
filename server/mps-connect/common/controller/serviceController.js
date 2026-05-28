@@ -979,16 +979,14 @@ class ServiceController {
 
       const processItem = async (item) => {
         // documents
-        const documents = await ServiceModel.getRequiredDocs(
-          item.id,
-        );
+        const documents = await ServiceModel.getRequiredDocs(item.id);
 
         // feedback
         const [[feedback]] = await db.execute(
           `SELECT * FROM external_service_feedback
            WHERE service_order_id = ?
-           AND user_id = ?`,
-          [item.id, userId],
+           AND user_id = ? and client_id = ?`,
+          [item.id, userId, apiClientId],
         );
 
         const canGiveFeedback = item.status === "completed" && !feedback;
@@ -996,15 +994,15 @@ class ServiceController {
         // cancellation
         const [[cancellation]] = await db.execute(
           `SELECT * FROM external_service_order_cancellations
-           WHERE service_order_id = ?`,
-          [item.id],
+           WHERE service_order_id = ? and client_id = ?`,
+          [item.id, apiClientId],
         );
 
         // refund
         const [[refund]] = await db.execute(
           `SELECT * FROM external_service_order_refunds
-           WHERE service_order_id = ?`,
-          [item.id],
+           WHERE service_order_id = ? and client_id = ?`,
+          [item.id, apiClientId],
         );
 
         // can cancel
