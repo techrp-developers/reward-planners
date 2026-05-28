@@ -29,16 +29,16 @@ export default function VendorDashboard() {
   const navigate = useNavigate();
 
   const dashboardStats = [
-    {
-      title: "Total Revenue",
-      value: "₹0",
-      icon: FaWallet,
-      color: "text-emerald-600",
-      bg: "bg-emerald-50",
-      border: "rgba(16,185,129,0.15)",
-      trend: "—",
-      trendColor: "bg-gray-50 text-gray-500",
-    },
+    // {
+    //   title: "Total Revenue",
+    //   value: "₹0",
+    //   icon: FaWallet,
+    //   color: "text-emerald-600",
+    //   bg: "bg-emerald-50",
+    //   border: "rgba(16,185,129,0.15)",
+    //   trend: "—",
+    //   trendColor: "bg-gray-50 text-gray-500",
+    // },
     {
       title: "Total Orders",
       value: "0",
@@ -49,16 +49,16 @@ export default function VendorDashboard() {
       trend: "—",
       trendColor: "bg-gray-50 text-gray-500",
     },
-    {
-      title: "Active Products",
-      value: productStats.totalProducts.toString(),
-      icon: FaBox,
-      color: "text-purple-600",
-      bg: "bg-purple-50",
-      border: "rgba(133,43,175,0.15)",
-      trend: productStats.totalProducts > 0 ? `+${productStats.totalProducts}` : "—",
-      trendColor: productStats.totalProducts > 0 ? "bg-purple-50 text-purple-700" : "bg-gray-50 text-gray-500",
-    },
+    // {
+    //   title: "Active Products",
+    //   value: productStats.totalProducts.toString(),
+    //   icon: FaBox,
+    //   color: "text-purple-600",
+    //   bg: "bg-purple-50",
+    //   border: "rgba(133,43,175,0.15)",
+    //   trend: productStats.totalProducts > 0 ? `+${productStats.totalProducts}` : "—",
+    //   trendColor: productStats.totalProducts > 0 ? "bg-purple-50 text-purple-700" : "bg-gray-50 text-gray-500",
+    // },
     {
       title: "Customer Rating",
       value: "—",
@@ -139,9 +139,9 @@ export default function VendorDashboard() {
               <FiAlertCircle size={20} />
             </div>
             <div>
-              <p className="text-sm font-bold text-gray-800">Complete your vendor onboarding</p>
+              <p className="text-sm font-bold text-gray-800">Complete your onboarding</p>
               <p className="text-xs text-gray-500 mt-0.5">
-                Your account is pending approval. Submit your business details to start selling.
+               Your account is pending approval. Submit your details to complete the approval process
               </p>
             </div>
           </div>
@@ -265,9 +265,9 @@ export default function VendorDashboard() {
                         <FaShoppingCart className="text-[#852BAF] opacity-60" size={22} />
                       </div>
                       <p className="text-sm font-semibold text-gray-700">No orders yet</p>
-                      <p className="text-xs text-gray-400">
+                      {/* <p className="text-xs text-gray-400">
                         Orders will appear here once customers start purchasing.
-                      </p>
+                      </p> */}
                       {isApproved && (
                         <button
                           onClick={() => navigate("/vendor/products/add")}
@@ -298,7 +298,7 @@ export default function VendorDashboard() {
             <div className="flex justify-between items-start mb-6">
               <div>
                 <p className="text-xs font-bold uppercase tracking-widest opacity-70 mb-1">Performance</p>
-                <h3 className="text-lg font-bold">Store Rating</h3>
+                {/* <h3 className="text-lg font-bold">Store Rating</h3> */}
               </div>
               <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center cursor-pointer hover:bg-white/20 transition-colors">
                 <FaEllipsisH className="opacity-60" size={13} />

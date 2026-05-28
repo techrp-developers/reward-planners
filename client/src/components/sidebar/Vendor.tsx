@@ -120,7 +120,7 @@ export default function VendorNavbar() {
               Reward Planners
             </h1>
             <p className="text-[9px] uppercase tracking-[0.18em] font-bold mt-1.5 gradient-text-brand">
-              Vendor Portal
+              User Portal
             </p>
           </div>
         </div>
@@ -317,9 +317,9 @@ export default function VendorNavbar() {
             <p className="text-[13px] font-semibold text-gray-900 truncate leading-tight">
               {user?.name || user?.email}
             </p>
-            <p className="text-[10px] text-[#852BAF] font-bold uppercase tracking-wider mt-0.5">
+            {/* <p className="text-[10px] text-[#852BAF] font-bold uppercase tracking-wider mt-0.5">
               {user?.role}
-            </p>
+            </p> */}
           </div>
 
           <FiChevronDown
