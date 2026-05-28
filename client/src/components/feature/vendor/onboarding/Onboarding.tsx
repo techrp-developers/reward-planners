@@ -506,7 +506,7 @@ export default function Onboarding() {
         return "";
 
       case "vendorType":
-        return value ? "" : "Select user type";
+        return value ? "" : "Select vendor type";
 
       case "gstin":
         return value.trim() ? "" : "GSTIN is required";
@@ -668,7 +668,7 @@ export default function Onboarding() {
         Swal.fire({
           icon: "warning",
           title: "Agreement not accepted",
-          text: "Please accept the user Agreement before uploading the signed document.",
+          text: "Please accept the Vendor Agreement before uploading the signed document.",
           confirmButtonText: "OK",
         });
         return;
@@ -958,9 +958,9 @@ export default function Onboarding() {
           Complete Your{" "}
           <span className="gradient-text-brand">Onboarding</span>
         </h1>
-        {/* <p className="text-gray-500 mt-2 font-medium">
+        <p className="text-gray-500 mt-2 font-medium">
           Verify your business details to start selling.
-        </p> */}
+        </p>
       </div>
 
       {/* alerts */}
@@ -984,7 +984,7 @@ export default function Onboarding() {
         <div className="p-6 mb-6 text-green-800 bg-green-100 border border-green-300 rounded-xl">
           <h3 className="text-lg font-semibold">Onboarding Completed</h3>
           <p className="mt-2">
-            Your onboarding details  has already been approved successfully.
+            Your vendor onboarding details has already been approved successfully.
           </p>
         </div>
       )}
@@ -1041,7 +1041,7 @@ export default function Onboarding() {
                 error={errors.fullName}
               />
               {/* Vendor Type Dropdown */}
-              {/* <div className="flex flex-col space-y-1">
+              <div className="flex flex-col space-y-1">
                 <label
                   htmlFor="vendorType"
                   className="text-sm font-medium text-gray-700 cursor-pointer"
@@ -1062,7 +1062,7 @@ export default function Onboarding() {
                   <option value="Distributor">Distributor</option>
                   <option value="Service Provider">Service Provider</option>
                 </select>
-              </div> */}
+              </div>
               <FormInput
                 id="gstin"
                 label="GSTIN"
@@ -1165,7 +1165,7 @@ export default function Onboarding() {
                   />
                   {/* Vendor agreement - checkbox + optional upload */}
                   <div className="col-span-1 md:col-span-2 lg:col-span-3">
-                    {/* <div className="flex items-start gap-2">
+                    <div className="flex items-start gap-2">
                       <input
                         type="checkbox"
                         checked={formData.agreementAccepted}
@@ -1179,7 +1179,7 @@ export default function Onboarding() {
                       <label className="text-sm mb-4">
                         I have read and agree to the Vendor Agreement
                       </label>
-                    </div> */}
+                    </div>
 
                     {errors.agreementAccepted && (
                       <p className="text-xs text-red-500 mt-1">
@@ -1383,7 +1383,7 @@ export default function Onboarding() {
           </section>
 
           {/* Shipping Address */}
-          {/* <section className="space-y-4 bg-white/95 backdrop-blur-xl rounded-2xl p-6 sm:p-8 shadow-lg hover:shadow-2xl transition-shadow duration-300">
+          <section className="space-y-4 bg-white/95 backdrop-blur-xl rounded-2xl p-6 sm:p-8 shadow-lg hover:shadow-2xl transition-shadow duration-300">
             <SectionHeader
               icon={FaShippingFast}
               title="Shipping Address"
@@ -1462,7 +1462,7 @@ export default function Onboarding() {
                 error={errors.shippingPincode}
               />
             </div>
-          </section> */}
+          </section>
 
           {/* Bank Details */}
           <section className="space-y-4 bg-white/95 backdrop-blur-xl rounded-2xl p-6 sm:p-8 shadow-lg hover:shadow-2xl transition-shadow duration-300">
@@ -1542,7 +1542,7 @@ export default function Onboarding() {
           </section>
 
           {/* Payment Terms */}
-          {/* <section className="space-y-4 bg-white/95 backdrop-blur-xl rounded-2xl p-6 sm:p-8 shadow-lg hover:shadow-2xl transition-shadow duration-300">
+          <section className="space-y-4 bg-white/95 backdrop-blur-xl rounded-2xl p-6 sm:p-8 shadow-lg hover:shadow-2xl transition-shadow duration-300">
             <SectionHeader
               icon={FaFileContract}
               title="Payment & Comments"
@@ -1590,7 +1590,7 @@ export default function Onboarding() {
                 className="w-full px-4 py-3 bg-gray-50/50 border border-gray-200 rounded-xl focus:ring-4 focus:ring-[#852BAF]/20 focus:border-[#852BAF] focus:bg-white transition-all outline-none text-sm text-gray-800 resize-none"
               />
             </div>
-          </section> */}
+          </section>
 
           {/* Submit Button */}
           {!isReadOnly && (
