@@ -701,6 +701,34 @@ class ServiceModel {
       );
     }
   }
+
+  // Update document status
+  async updateStatus(orderId, status) {
+    let sql = `
+    UPDATE external_service_orders
+    SET status = ?
+  `;
+
+    const params = [status];
+
+    // completed
+    if (status === "completed") {
+      sql += `, completed_at = NOW()`;
+    }
+
+    // cancelled
+    if (status === "cancelled") {
+      sql += `, cancelled_at = NOW()`;
+    }
+
+    sql += ` WHERE id = ?`;
+
+    params.push(orderId);
+
+    const [result] = await db.execute(sql, params);
+
+    return result.affectedRows;
+  }
 }
 
 module.exports = new ServiceModel();

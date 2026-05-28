@@ -84,11 +84,11 @@ router.post(
 );
 
 // submit document
-// router.post(
-//   "/submit-documents/:serviceOrderId",
-//   authenticateClient,
-//   ServiceController.submitDocuments,
-// );
+router.post(
+  "/submit-documents/:serviceOrderId",
+  authenticateClient,
+  ServiceController.submitDocuments,
+);
 
 // ================================================Order information===========================================
 // Get all orders

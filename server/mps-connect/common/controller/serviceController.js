@@ -1100,6 +1100,104 @@ class ServiceController {
     }
   }
 
+  // submit documents
+  async submitDocuments(req, res) {
+    try {
+      const apiClientId = req.client.api_client_id;
+      const userId = req.body?.user_id;
+
+      if (!userId) {
+        return res.status(403).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      const { serviceOrderId } = req.params;
+
+      // validate service order
+      const [[order]] = await db.execute(
+        `
+      SELECT id, order_ref, status
+      FROM external_service_orders
+      WHERE id = ?
+      AND user_id = ? 
+      AND client_id = ?
+      `,
+        [serviceOrderId, userId, apiClientId],
+      );
+
+      if (!order) {
+        return res.status(404).json({
+          success: false,
+          message: "Service order not found",
+        });
+      }
+
+      // already submitted
+      if (
+        ["documents_uploaded", "in_progress", "completed"].includes(
+          order.status,
+        )
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Documents already submitted",
+        });
+      }
+
+      // required docs
+      const docs = await ServiceModel.getRequiredDocs(serviceOrderId);
+
+      // mandatory docs check
+      const missingDocs = docs.filter((d) => d.is_mandatory && !d.uploaded);
+
+      if (missingDocs.length) {
+        return res.status(400).json({
+          success: false,
+          message: "Please upload all required documents",
+          missing: missingDocs,
+        });
+      }
+
+      // expirable docs validation
+      const invalidExpirableDocs = docs.filter(
+        (d) =>
+          d.uploaded &&
+          d.is_expirable &&
+          (!d.expiry_date || !d.document_number),
+      );
+
+      if (invalidExpirableDocs.length) {
+        return res.status(400).json({
+          success: false,
+
+          message: "Expiry details missing for some documents",
+
+          invalid_documents: invalidExpirableDocs,
+        });
+      }
+
+      // update status
+      await ServiceModel.updateStatus(serviceOrderId, "documents_uploaded");
+
+      res.json({
+        success: true,
+        message: "Documents submitted successfully",
+
+        data: {
+          service_order_id: serviceOrderId,
+          order_ref: order.order_ref,
+        },
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
   // ======================================Order============================
   // get all orders of a user
   async getMyOrders(req, res) {
