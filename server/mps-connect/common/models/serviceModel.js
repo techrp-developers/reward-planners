@@ -423,7 +423,7 @@ class ServiceModel {
       sv.title,
       sv.image_url
 
-    FROM service_orders so
+    FROM external_service_orders so
     JOIN services s ON s.id = so.service_id
     LEFT JOIN service_variants sv ON sv.id = so.variant_id
 
