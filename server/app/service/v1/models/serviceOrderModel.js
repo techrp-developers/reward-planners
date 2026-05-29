@@ -8,6 +8,24 @@ function getPublicUrl(path) {
   return `${CDN_BASE_URL}/${path}`;
 }
 
+function mapServiceCancelEvent(event) {
+  const eventMap = {
+    cancellation_requested: "Cancellation Requested",
+
+    cancellation_approved: "Cancellation Approved",
+
+    cancellation_rejected: "Cancellation Rejected",
+
+    refund_initiated: "Refund Initiated",
+
+    refund_completed: "Refund Completed",
+
+    refund_failed: "Refund Failed",
+  };
+
+  return eventMap[event] || event;
+}
+
 class ServiceOrderModel {
   // create order
   async create(data) {
