@@ -1723,8 +1723,8 @@ class ServiceController {
   async cancellationDetails(req, res) {
     try {
       const apiClientId = req.client.api_client_id;
-      // const userId = req.query?.user_id;
-      const userId = 1;
+      const userId = req.query?.user_id;
+      // const userId = 1;
 
       if (!userId) {
         return res.status(403).json({
