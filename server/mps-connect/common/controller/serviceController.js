@@ -1718,6 +1718,41 @@ class ServiceController {
       }
     }
   }
+
+  // get service cancellation details
+  async cancellationDetails(req, res) {
+    try {
+      const apiClientId = req.client.api_client_id;
+      // const userId = req.query?.user_id;
+      const userId = 1;
+
+      if (!userId) {
+        return res.status(403).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      const serviceOrderId = Number(req.params.serviceOrderId);
+
+      const data = await ServiceModel.getCancellationDetails({
+        userId,
+        serviceOrderId,
+      });
+
+      return res.json({
+        success: true,
+        data,
+      });
+    } catch (error) {
+      console.error("Service cancellation details error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Unable to fetch cancellation details",
+      });
+    }
+  }
 }
 
 module.exports = new ServiceController();

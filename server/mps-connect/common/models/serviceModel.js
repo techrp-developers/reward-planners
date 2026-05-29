@@ -729,6 +729,181 @@ class ServiceModel {
 
     return result.affectedRows;
   }
+
+  // Cancellation Details
+  async getCancellationDetails({ userId, serviceOrderId }) {
+    // =====================================
+    // Order details
+    // =====================================
+
+    const [[order]] = await db.execute(
+      `
+    SELECT
+      so.id,
+      so.order_ref,
+      so.status,
+      so.price,
+      so.reward_coins_used,
+      so.refund_amount,
+      so.address_id,
+      s.name AS service_name,
+
+      sv.variant_name,
+      sv.title,
+      sv.image_url
+
+    FROM external_service_orders so
+
+    JOIN services s
+      ON s.id = so.service_id
+
+    LEFT JOIN service_variants sv
+      ON sv.id = so.variant_id
+
+    WHERE so.id = ?
+    AND so.user_id = ?
+    `,
+      [serviceOrderId, userId],
+    );
+
+    if (!order) {
+      throw new Error("SERVICE_ORDER_NOT_FOUND");
+    }
+
+    // =====================================
+    // Cancellation details
+    // =====================================
+
+    const [[cancellation]] = await db.execute(
+      `
+      SELECT
+        status,
+        refund_amount,
+        refund_status,
+        refund_method,
+        created_at
+
+      FROM external_service_order_cancellations
+
+      WHERE service_order_id = ?
+      `,
+      [serviceOrderId],
+    );
+
+    // =====================================
+    // Timeline
+    // =====================================
+
+    const [timeline] = await db.execute(
+      `
+    SELECT
+      event,
+      created_at
+
+    FROM external_service_order_cancellation_timeline
+
+    WHERE service_order_id = ?
+
+    ORDER BY created_at ASC
+    `,
+      [serviceOrderId],
+    );
+
+    // =====================================
+    // Refunds
+    // =====================================
+
+    const [refunds] = await db.execute(
+      `
+    SELECT
+      refund_amount,
+      refund_method,
+      status
+
+    FROM external_service_order_refunds
+
+    WHERE service_order_id = ?
+    `,
+      [serviceOrderId],
+    );
+
+    let moneyRefund = 0;
+    let coinRefund = 0;
+
+    refunds.forEach((r) => {
+      if (r.refund_method === "original") {
+        moneyRefund += Number(r.refund_amount);
+      }
+
+      if (r.refund_method === "wallet") {
+        coinRefund += Number(r.refund_amount);
+      }
+    });
+
+    // =====================================
+    // Final response
+    // =====================================
+
+    return {
+      service_order_id: order.id,
+
+      order_ref: order.order_ref,
+
+      status: order.status,
+
+      service: {
+        service_name: order.service_name,
+
+        variant_name: order.variant_name,
+
+        title: order.title,
+
+        image_url: order.image_url ? getPublicUrl(order.image_url) : null,
+      },
+
+      cancellation: cancellation
+        ? {
+            status: cancellation.status,
+
+            refund_status: cancellation.refund_status,
+
+            refund_method: cancellation.refund_method,
+
+            refund_amount: Number(cancellation.refund_amount),
+
+            created_at: cancellation.created_at,
+          }
+        : null,
+
+      timeline: timeline.map((t) => ({
+        label: mapServiceCancelEvent(t.event),
+
+        event: t.event,
+
+        date: t.created_at,
+      })),
+
+      refund: {
+        total: moneyRefund + coinRefund,
+
+        money_refund: moneyRefund,
+
+        coin_refund: coinRefund,
+      },
+
+      rewards: {
+        used: Number(order.reward_coins_used || 0),
+
+        reversed: coinRefund,
+      },
+
+      summary: {
+        service_total: Number(order.price),
+
+        order_total: Number(order.price),
+      },
+    };
+  }
 }
 
 module.exports = new ServiceModel();

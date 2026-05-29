@@ -110,10 +110,10 @@ router.post(
   ServiceController.cancelOrderRequest,
 );
 
-// router.get(
-//   "/cancellation-details/:serviceOrderId",
-//   authenticateClient,
-//   ServiceController.cancellationDetails,
-// );
+router.get(
+  "/cancellation-details/:serviceOrderId",
+  authenticateClient,
+  ServiceController.cancellationDetails,
+);
 
 module.exports = router;
