@@ -50,16 +50,9 @@ router.get(
 
 // upload order document
 router.post(
-  "/upload-document/:serviceOrderId",
+  "/submit-documents/:parentOrderId",
   auth,
-  upload.single("file"),
-  ServiceOrderController.uploadDocument,
-);
-
-// submit document
-router.post(
-  "/submit-documents/:serviceOrderId",
-  auth,
+  upload.any(),
   ServiceOrderController.submitDocuments,
 );
 
@@ -92,10 +85,7 @@ router.get(
 
 // ========================================Help section========================================================
 // Get Issue Type
-router.get(
-  "/issue-types",
-  ServiceOrderController.getIssueTypes,
-);
+router.get("/issue-types", ServiceOrderController.getIssueTypes);
 
 router.post(
   "/order-help",
