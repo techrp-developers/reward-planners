@@ -58,143 +58,6 @@ function calculateSummary({ bundles = [], individual_items = [] }) {
 }
 
 class ServiceController {
-  async submitFeedback(req, res) {
-    try {
-      const userId = req.body?.user_id;
-
-      if (!userId) {
-        return res.status(403).json({
-          success: false,
-          message: "Unauthorized user",
-        });
-      }
-
-      const {
-        parent_order_id,
-        rating,
-        ease_rating,
-        expert_rating,
-        completion_time,
-        confidence,
-        reuse_intent,
-        comment,
-      } = req.body;
-
-      if (!parent_order_id || !rating) {
-        return res.status(400).json({
-          success: false,
-          message: "parent_order_id and rating required",
-        });
-      }
-
-      if (rating < 1 || rating > 5) {
-        return res.status(400).json({
-          success: false,
-          message: "Rating must be between 1 and 5",
-        });
-      }
-
-      await db.beginTransaction();
-
-      //  Check order belongs to user & is delivered
-      const [[order]] = await db.execute(
-        `SELECT status FROM external_service_orders 
-       WHERE parent_order_id = ? AND user_id = ?
-       LIMIT 1`,
-        [parent_order_id, userId],
-      );
-
-      if (!order) {
-        await db.rollback();
-        return res.status(404).json({
-          success: false,
-          message: "Order not found",
-        });
-      }
-
-      if (order.status !== "completed") {
-        await db.rollback();
-        return res.status(400).json({
-          success: false,
-          message: "Feedback allowed only after completion",
-        });
-      }
-
-      //  Prevent duplicate feedback
-      const [[existing]] = await db.execute(
-        `SELECT id FROM external_service_feedback 
-       WHERE parent_order_id = ? AND user_id = ?`,
-        [parent_order_id, userId],
-      );
-
-      if (existing) {
-        await db.rollback();
-        return res.status(400).json({
-          success: false,
-          message: "Feedback already submitted",
-        });
-      }
-
-      //  Insert feedback
-      await db.execute(
-        `INSERT INTO external_service_feedback
-      (parent_order_id, user_id, rating, ease_rating, expert_rating,
-       completion_time, confidence, reuse_intent, comment)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          parent_order_id,
-          userId,
-          rating,
-          ease_rating,
-          expert_rating,
-          completion_time,
-          confidence,
-          reuse_intent,
-          comment || null,
-        ],
-      );
-
-      // Get services
-      const [services] = await db.execute(
-        `SELECT DISTINCT service_id 
-              FROM external_service_orders 
-              WHERE parent_order_id = ?`,
-        [parent_order_id],
-      );
-
-      // update rating for each service
-      for (let s of services) {
-        await db.execute(
-          `UPDATE services 
-         SET rating = (
-           SELECT ROUND(AVG(sf.rating), 1)
-           FROM external_service_feedback sf
-           WHERE sf.parent_order_id IN (
-             SELECT parent_order_id 
-             FROM external_service_orders 
-             WHERE service_id = ?
-           )
-         )
-         WHERE id = ?`,
-          [s.service_id, s.service_id],
-        );
-      }
-
-      await db.commit();
-
-      res.json({
-        success: true,
-        message: "Feedback submitted successfully",
-      });
-    } catch (err) {
-      await db.rollback();
-      res.status(500).json({
-        success: false,
-        message: err.message,
-      });
-    }
-  }
-
   // create Enquiry
   async createEnquiry(req, res) {
     try {
@@ -1480,6 +1343,210 @@ class ServiceController {
         success: false,
         message: err.message,
       });
+    }
+  }
+
+  // submit feedback
+  async submitFeedback(req, res) {
+    let connection;
+
+    try {
+      const apiClientId = req.client.api_client_id;
+      const userId = req.body?.user_id;
+      // const userId = 1;
+
+      if (!userId) {
+        return res.status(403).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      const {
+        service_order_id,
+        rating,
+        ease_rating,
+        expert_rating,
+        completion_time,
+        confidence,
+        reuse_intent,
+        comment,
+      } = req.body;
+
+      // =====================================
+      // Validation
+      // =====================================
+
+      if (!service_order_id || !rating) {
+        return res.status(400).json({
+          success: false,
+          message: "service_order_id and rating required",
+        });
+      }
+
+      if (rating < 1 || rating > 5) {
+        return res.status(400).json({
+          success: false,
+          message: "Rating must be between 1 and 5",
+        });
+      }
+
+      connection = await db.getConnection();
+
+      await connection.beginTransaction();
+
+      // =====================================
+      // Validate order ownership
+      // =====================================
+
+      const [[order]] = await connection.execute(
+        `
+      SELECT
+        id,
+        service_id,
+        status
+
+      FROM external_service_orders
+
+      WHERE id = ?
+      AND user_id = ?
+      AND client_id = ?
+      `,
+        [service_order_id, userId, apiClientId],
+      );
+
+      if (!order) {
+        await connection.rollback();
+
+        return res.status(404).json({
+          success: false,
+          message: "Service order not found",
+        });
+      }
+
+      // =====================================
+      // Only completed orders
+      // =====================================
+
+      if (order.status !== "completed") {
+        await connection.rollback();
+
+        return res.status(400).json({
+          success: false,
+          message: "Feedback allowed only after completion",
+        });
+      }
+
+      // =====================================
+      // Prevent duplicate feedback
+      // =====================================
+
+      const [[existing]] = await connection.execute(
+        `
+        SELECT id
+
+        FROM external_service_feedback
+
+        WHERE service_order_id = ?
+        AND user_id = ?
+        AND client_id = ?
+        `,
+        [service_order_id, userId, apiClientId],
+      );
+
+      if (existing) {
+        await connection.rollback();
+
+        return res.status(400).json({
+          success: false,
+          message: "Feedback already submitted",
+        });
+      }
+
+      // =====================================
+      // Insert feedback
+      // =====================================
+
+      await connection.execute(
+        `
+      INSERT INTO external_service_feedback
+      (
+        service_order_id,
+        user_id,
+        client_id,
+        rating,
+        ease_rating,
+        expert_rating,
+        completion_time,
+        confidence,
+        reuse_intent,
+        comment
+      )
+      VALUES
+      (
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      )
+      `,
+        [
+          service_order_id,
+          userId,
+          apiClientId,
+          rating,
+          ease_rating,
+          expert_rating,
+          completion_time,
+          confidence,
+          reuse_intent,
+          comment || null,
+        ],
+      );
+
+      // =====================================
+      // Update service average rating
+      // =====================================
+
+      await connection.execute(
+        `
+      UPDATE services
+
+      SET rating = (
+        SELECT ROUND(
+          AVG(sf.rating),
+          1
+        )
+
+        FROM external_service_feedback sf
+
+        JOIN external_service_orders so
+          ON so.id = sf.service_order_id
+
+        WHERE so.service_id = ?
+      )
+
+      WHERE id = ?
+      `,
+        [order.service_id, order.service_id],
+      );
+
+      await connection.commit();
+
+      res.json({
+        success: true,
+        message: "Feedback submitted successfully",
+      });
+    } catch (err) {
+      if (connection) {
+        await connection.rollback();
+      }
+
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    } finally {
+      if (connection) {
+        connection.release();
+      }
     }
   }
 }

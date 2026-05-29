@@ -100,4 +100,7 @@ router.get(
   ServiceController.getOrderDetails,
 );
 
+// ======================================Feedback from user====================================================
+router.post("/feedback", authenticateClient, ServiceController.submitFeedback);
+
 module.exports = router;
