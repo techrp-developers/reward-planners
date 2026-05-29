@@ -103,4 +103,17 @@ router.get(
 // ======================================Feedback from user====================================================
 router.post("/feedback", authenticateClient, ServiceController.submitFeedback);
 
+// =========================================Order cancellation===========================================
+router.post(
+  "/cancel-order-request",
+  authenticateClient,
+  ServiceController.cancelOrderRequest,
+);
+
+// router.get(
+//   "/cancellation-details/:serviceOrderId",
+//   authenticateClient,
+//   ServiceController.cancellationDetails,
+// );
+
 module.exports = router;

@@ -1381,6 +1381,7 @@ class ServiceOrderController {
 
       const allowedStatuses = [
         "pending_payment",
+        "payment_done",
         "documents_pending",
         "documents_uploaded",
         "in_progress",

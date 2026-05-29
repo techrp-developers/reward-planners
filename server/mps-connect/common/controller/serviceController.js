@@ -1549,6 +1549,175 @@ class ServiceController {
       }
     }
   }
+
+  // ==================================Order cancellation===========================================
+  async cancelOrderRequest(req, res) {
+    let connection;
+
+    try {
+      const apiClientId = req.client.api_client_id;
+      const userId = req.body?.user_id;
+      // const userId = 1;
+
+      if (!userId) {
+        return res.status(403).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      const { service_order_id, reason_id, comment } = req.body;
+
+      if (!service_order_id || !reason_id) {
+        return res.status(400).json({
+          success: false,
+          message: "service_order_id and reason_id required",
+        });
+      }
+
+      connection = await db.getConnection();
+
+      await connection.beginTransaction();
+
+      // =====================================
+      // Validate order ownership
+      // =====================================
+
+      const [[order]] = await connection.execute(
+        `
+      SELECT
+        id,
+        status,
+        payment_status
+
+      FROM external_service_orders
+
+      WHERE id = ?
+      AND user_id = ?
+      AND client_id = ?
+      `,
+        [service_order_id, userId, apiClientId],
+      );
+
+      if (!order) {
+        await connection.rollback();
+
+        return res.status(404).json({
+          success: false,
+          message: "Service order not found",
+        });
+      }
+
+      // =====================================
+      // Allowed statuses
+      // =====================================
+
+      const allowedStatuses = [
+        "pending_payment",
+        "payment_done",
+        "documents_pending",
+        "documents_uploaded",
+        "in_progress",
+      ];
+
+      if (!allowedStatuses.includes(order.status)) {
+        await connection.rollback();
+
+        return res.status(400).json({
+          success: false,
+          message: "Cancellation not allowed at this stage",
+        });
+      }
+
+      // =====================================
+      // Prevent duplicate requests
+      // =====================================
+      const [[existing]] = await connection.execute(
+        `
+      SELECT id
+
+      FROM external_service_order_cancellations
+
+      WHERE service_order_id = ?
+      `,
+        [service_order_id],
+      );
+
+      if (existing) {
+        await connection.rollback();
+
+        return res.status(400).json({
+          success: false,
+          message: "Cancellation already requested",
+        });
+      }
+
+      // =====================================
+      // Create cancellation request
+      // =====================================
+
+      await connection.execute(
+        `
+      INSERT INTO external_service_order_cancellations
+      (
+        service_order_id,
+        user_id,
+        client_id,
+        reason_id,
+        comment,
+        status,
+        refund_status
+      )
+      VALUES
+      (
+        ?, ?, ?, ?, ?, 'requested', 'pending'
+      )
+      `,
+        [service_order_id, userId, apiClientId, reason_id, comment || null],
+      );
+
+      // =====================================
+      // Timeline entry
+      // =====================================
+
+      await connection.execute(
+        `
+        INSERT INTO
+        external_service_order_cancellation_timeline
+        (
+          service_order_id,
+          event
+        )
+        VALUES
+        (
+          ?,
+          'cancellation_requested'
+        )
+      `,
+        [service_order_id],
+      );
+
+      await connection.commit();
+
+      res.json({
+        success: true,
+        message: "Cancellation request submitted successfully",
+      });
+    } catch (err) {
+      if (connection) {
+        await connection.rollback();
+      }
+
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    } finally {
+      if (connection) {
+        connection.release();
+      }
+    }
+  }
 }
 
 module.exports = new ServiceController();
