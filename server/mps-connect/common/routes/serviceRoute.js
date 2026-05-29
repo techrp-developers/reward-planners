@@ -75,18 +75,11 @@ router.get(
   ServiceController.getServiceParentOrderDocumentPage,
 );
 
-// upload order document
-router.post(
-  "/upload-document/:serviceOrderId",
-  authenticateClient,
-  upload.single("file"),
-  ServiceController.uploadDocument,
-);
-
 // submit document
 router.post(
-  "/submit-documents/:serviceOrderId",
+  "/submit-documents/:parentOrderId",
   authenticateClient,
+  upload.any(),
   ServiceController.submitDocuments,
 );
 

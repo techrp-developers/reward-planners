@@ -520,22 +520,23 @@ class ServiceModel {
       sd.is_mandatory,
       sd.is_expirable,
 
-      od.id AS order_document_id,
-      od.file_path,
-      od.uploaded,
-      od.expiry_date,
-      od.document_number
+      pod.id AS parent_document_id,
+      pod.file_path,
+      pod.uploaded,
+      pod.expiry_date,
+      pod.document_number
 
     FROM external_service_orders so
 
-    LEFT JOIN service_documents sd 
+    LEFT JOIN service_documents sd
       ON sd.service_id = so.service_id
 
-    LEFT JOIN external_order_documents od 
-      ON od.service_document_id = sd.id
-      AND od.order_id = so.id
+    LEFT JOIN external_parent_order_documents pod
+      ON pod.parent_order_id = so.parent_order_id
+      AND pod.document_key = sd.document_key
 
     WHERE so.id = ?
+
     ORDER BY sd.id
     `,
       [orderId],
@@ -547,7 +548,7 @@ class ServiceModel {
         .map(async (r) => ({
           service_document_id: r.service_document_id,
 
-          order_document_id: r.order_document_id,
+          uploaded_document_id: r.parent_document_id,
 
           document_name: r.document_name,
 
@@ -572,124 +573,92 @@ class ServiceModel {
   async getRequiredDocsByParentOrder(parentOrderId, userId) {
     const [rows] = await db.execute(
       `
-    SELECT
-      so.id AS service_order_id,
-      so.status,
+    SELECT DISTINCT
 
-      s.id AS service_id,
-      s.name AS service_name,
-
-      sv.variant_name,
-
-      sd.id AS service_document_id,
-      sd.document_name,
       sd.document_key,
+      sd.document_name,
       sd.is_mandatory,
       sd.is_expirable,
 
-      od.id AS order_document_id,
-      od.file_path,
-      od.uploaded,
-      od.expiry_date,
-      od.document_number
+      pod.id AS parent_document_id,
+      pod.file_path,
+      pod.uploaded,
+      pod.expiry_date,
+      pod.document_number
 
     FROM external_service_orders so
 
-    JOIN services s
-      ON s.id = so.service_id
-
-    LEFT JOIN service_variants sv
-      ON sv.id = so.variant_id
-
-    LEFT JOIN service_documents sd
+    JOIN service_documents sd
       ON sd.service_id = so.service_id
 
-    LEFT JOIN external_order_documents od
-      ON od.service_document_id = sd.id
-      AND od.order_id = so.id
+    LEFT JOIN external_parent_order_documents pod
+      ON pod.parent_order_id = so.parent_order_id
+      AND pod.document_key = sd.document_key
 
     WHERE so.parent_order_id = ?
     AND so.user_id = ?
 
-    ORDER BY so.id ASC, sd.id ASC
+    ORDER BY sd.document_name
     `,
       [parentOrderId, userId],
     );
 
-    const orderMap = {};
+    const documents = await Promise.all(
+      rows.map(async (row) => ({
+        document_key: row.document_key,
 
-    for (const row of rows) {
-      // create service item
-      if (!orderMap[row.service_order_id]) {
-        orderMap[row.service_order_id] = {
-          service_order_id: row.service_order_id,
+        document_name: row.document_name,
 
-          service_id: row.service_id,
+        is_mandatory: Boolean(row.is_mandatory),
 
-          service_name: row.service_name,
+        is_expirable: Boolean(row.is_expirable),
 
-          variant_name: row.variant_name,
+        uploaded: Boolean(row.uploaded),
 
-          status: row.status,
+        expiry_date: row.expiry_date,
 
-          documents: [],
-        };
-      }
+        document_number: row.document_number,
 
-      if (row.service_document_id) {
-        orderMap[row.service_order_id].documents.push({
-          service_document_id: row.service_document_id,
-          order_document_id: row.order_document_id,
-          document_name: row.document_name,
-          document_key: row.document_key,
-          is_mandatory: Boolean(row.is_mandatory),
-          is_expirable: Boolean(row.is_expirable),
-          expiry_date: row.expiry_date,
-          document_number: row.document_number,
-          uploaded: Boolean(row.uploaded),
-          file_url: row.file_path
-            ? await getPrivateFileUrl(row.file_path)
-            : null,
-        });
-      }
-    }
+        file_url: row.file_path ? await getPrivateFileUrl(row.file_path) : null,
+      })),
+    );
 
-    // =========================================
-    // ADD can_submit
-    // =========================================
-
-    Object.values(orderMap).forEach((item) => {
-      const mandatoryDocs = item.documents.filter((d) => d.is_mandatory);
-
-      item.can_submit =
-        mandatoryDocs.length === 0 || mandatoryDocs.every((d) => d.uploaded);
-    });
+    const mandatoryDocs = documents.filter((d) => d.is_mandatory);
 
     return {
       parent_order_id: parentOrderId,
 
-      items: Object.values(orderMap),
+      can_submit:
+        mandatoryDocs.length === 0 || mandatoryDocs.every((d) => d.uploaded),
+
+      documents,
     };
   }
 
-  // upload or update document
-  async uploadOrUpdate(data) {
-    // check if already exists
+  // upload or update parent order document
+  async uploadOrUpdateParentDocument(data) {
     const [existing] = await db.execute(
-      `SELECT id FROM external_order_documents 
-     WHERE order_id = ? AND service_document_id = ?`,
-      [data.order_id, data.document_id],
+      `
+    SELECT id
+    FROM external_parent_order_documents
+    WHERE parent_order_id = ?
+    AND document_key = ?
+    `,
+      [data.parent_order_id, data.document_key],
     );
 
     if (existing.length) {
       await db.execute(
-        `UPDATE order_documents 
-       SET
+        `
+      UPDATE external_parent_order_documents
+      SET
         file_path = ?,
         uploaded = 1,
         expiry_date = ?,
-        document_number = ?
-       WHERE id = ?`,
+        document_number = ?,
+        uploaded_at = NOW()
+      WHERE id = ?
+      `,
         [
           data.file_path,
           data.expiry_date,
@@ -697,27 +666,36 @@ class ServiceModel {
           existing[0].id,
         ],
       );
-    } else {
-      await db.execute(
-        `INSERT INTO order_documents 
-        (
-          order_id,
-          service_document_id,
-          file_path,
-          uploaded,
-          expiry_date,
-          document_number
-        )
-        VALUES (?, ?, ?, 1, ?, ?)`,
-        [
-          data.order_id,
-          data.document_id,
-          data.file_path,
-          data.expiry_date,
-          data.document_number,
-        ],
-      );
+
+      return existing[0].id;
     }
+
+    const [result] = await db.execute(
+      `
+    INSERT INTO external_parent_order_documents
+    (
+      parent_order_id,
+      document_key,
+      file_path,
+      uploaded,
+      expiry_date,
+      document_number
+    )
+    VALUES
+    (
+      ?, ?, ?, 1, ?, ?
+    )
+    `,
+      [
+        data.parent_order_id,
+        data.document_key,
+        data.file_path,
+        data.expiry_date,
+        data.document_number,
+      ],
+    );
+
+    return result.insertId;
   }
 
   // Update document status

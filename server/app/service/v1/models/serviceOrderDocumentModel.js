@@ -99,7 +99,7 @@ class ServiceOrderDocumentModel {
 
     FROM service_orders so
 
-    JOIN service_documents sd
+    LEFT JOIN service_documents sd
       ON sd.service_id = so.service_id
 
     LEFT JOIN parent_order_documents pod
@@ -114,27 +114,29 @@ class ServiceOrderDocumentModel {
     );
 
     return await Promise.all(
-      rows.map(async (r) => ({
-        service_document_id: r.service_document_id,
+      rows
+        .filter((r) => r.service_document_id)
+        .map(async (r) => ({
+          service_document_id: r.service_document_id,
 
-        parent_document_id: r.parent_document_id,
+          uploaded_document_id: r.parent_document_id,
 
-        document_name: r.document_name,
+          document_name: r.document_name,
 
-        document_key: r.document_key,
+          document_key: r.document_key,
 
-        is_mandatory: Boolean(r.is_mandatory),
+          is_mandatory: Boolean(r.is_mandatory),
 
-        is_expirable: Boolean(r.is_expirable),
+          is_expirable: Boolean(r.is_expirable),
 
-        uploaded: Boolean(r.uploaded),
+          uploaded: Boolean(r.uploaded),
 
-        expiry_date: r.expiry_date,
+          expiry_date: r.expiry_date,
 
-        document_number: r.document_number,
+          document_number: r.document_number,
 
-        file_url: r.file_path ? await getPrivateFileUrl(r.file_path) : null,
-      })),
+          file_url: r.file_path ? await getPrivateFileUrl(r.file_path) : null,
+        })),
     );
   }
 

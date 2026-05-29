@@ -820,149 +820,6 @@ class ServiceController {
     }
   }
 
-  // Upload document
-  async uploadDocument(req, res) {
-    try {
-      const apiClientId = req.client.api_client_id;
-      const userId = req.body?.user_id;
-
-      if (!userId) {
-        return res.status(403).json({
-          success: false,
-          message: "Unauthorized user",
-        });
-      }
-
-      const { serviceOrderId } = req.params;
-
-      const { document_id, expiry_date, document_number } = req.body;
-
-      if (!document_id) {
-        return res.status(400).json({
-          success: false,
-          message: "document_id required",
-        });
-      }
-
-      if (expiry_date && new Date(expiry_date) < new Date()) {
-        return res.status(400).json({
-          success: false,
-          message: "expiry_date cannot be in past",
-        });
-      }
-
-      // validate service order ownership
-      const [[order]] = await db.execute(
-        `SELECT id
-       FROM external_service_orders
-       WHERE id = ?
-       AND user_id = ? and client_id = ?`,
-        [serviceOrderId, userId, apiClientId],
-      );
-
-      if (!order) {
-        return res.status(404).json({
-          success: false,
-          message: "Service order not found",
-        });
-      }
-
-      if (!req.file) {
-        return res.status(400).json({
-          success: false,
-          message: "File required",
-        });
-      }
-
-      // validate document belongs to this service
-      const [[validDoc]] = await db.execute(
-        `
-          SELECT
-            sd.id,
-            sd.is_expirable
-
-          FROM service_documents sd
-
-          JOIN external_service_orders so
-            ON so.service_id = sd.service_id
-
-          WHERE sd.id = ?
-          AND so.id = ?
-          `,
-        [document_id, serviceOrderId],
-      );
-
-      if (!validDoc) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid document for this service",
-        });
-      }
-
-      // expirable docs validation
-      if (validDoc.is_expirable) {
-        if (!expiry_date) {
-          return res.status(400).json({
-            success: false,
-            message: "expiry_date required for this document",
-          });
-        }
-
-        if (!document_number) {
-          return res.status(400).json({
-            success: false,
-            message: "document_number required for this document",
-          });
-        }
-      }
-
-      // read file buffer
-      const fileBuffer = fs.readFileSync(req.file.path);
-
-      // extension
-      const originalName = req.file.originalname;
-
-      const extension = originalName.includes(".")
-        ? originalName.split(".").pop()
-        : "bin";
-
-      // R2 path
-      const r2Path =
-        `private/external_service-order-documents/` +
-        `${serviceOrderId}/` +
-        `${document_id}_${Date.now()}.${extension}`;
-
-      // upload to R2
-      await uploadToR2(fileBuffer, r2Path, req.file.mimetype);
-
-      // remove temp
-      fs.unlinkSync(req.file.path);
-
-      // save in DB
-      await ServiceModel.uploadOrUpdate({
-        order_id: serviceOrderId,
-        document_id,
-        file_path: r2Path,
-        expiry_date: expiry_date || null,
-        document_number: document_number || null,
-      });
-
-      res.json({
-        success: true,
-        message: "Document uploaded successfully",
-      });
-    } catch (err) {
-      if (req.file && fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-      }
-
-      res.status(500).json({
-        success: false,
-        message: err.message,
-      });
-    }
-  }
-
   // submit documents
   async submitDocuments(req, res) {
     try {
@@ -976,82 +833,130 @@ class ServiceController {
         });
       }
 
-      const { serviceOrderId } = req.params;
+      const { parentOrderId } = req.params;
 
-      // validate service order
-      const [[order]] = await db.execute(
+      const documents = JSON.parse(req.body.documents || "[]");
+
+      const [orders] = await db.execute(
         `
-      SELECT id, order_ref, status
+      SELECT
+        id,
+        service_id
       FROM external_service_orders
-      WHERE id = ?
-      AND user_id = ? 
-      AND client_id = ?
+      WHERE parent_order_id = ?
+      AND user_id = ?
       `,
-        [serviceOrderId, userId, apiClientId],
+        [parentOrderId, userId],
       );
 
-      if (!order) {
+      if (!orders.length) {
         return res.status(404).json({
           success: false,
-          message: "Service order not found",
+          message: "Order not found",
         });
       }
 
-      // already submitted
-      if (
-        ["documents_uploaded", "in_progress", "completed"].includes(
-          order.status,
-        )
-      ) {
-        return res.status(400).json({
-          success: false,
-          message: "Documents already submitted",
-        });
-      }
+      // ===================================
+      // Get Required Docs
+      // ===================================
 
-      // required docs
-      const docs = await ServiceModel.getRequiredDocs(serviceOrderId);
-
-      // mandatory docs check
-      const missingDocs = docs.filter((d) => d.is_mandatory && !d.uploaded);
-
-      if (missingDocs.length) {
-        return res.status(400).json({
-          success: false,
-          message: "Please upload all required documents",
-          missing: missingDocs,
-        });
-      }
-
-      // expirable docs validation
-      const invalidExpirableDocs = docs.filter(
-        (d) =>
-          d.uploaded &&
-          d.is_expirable &&
-          (!d.expiry_date || !d.document_number),
+      const [requiredDocs] = await db.execute(
+        `
+      SELECT DISTINCT
+        document_key,
+        document_name,
+        is_mandatory,
+        is_expirable
+      FROM service_documents sd
+      JOIN external_service_orders so
+        ON so.service_id = sd.service_id
+      WHERE so.parent_order_id = ?
+      `,
+        [parentOrderId],
       );
 
-      if (invalidExpirableDocs.length) {
-        return res.status(400).json({
-          success: false,
+      // ===================================
+      // Upload Each File
+      // ===================================
 
-          message: "Expiry details missing for some documents",
+      for (const requiredDoc of requiredDocs) {
+        const docMeta = documents.find(
+          (d) => d.document_key === requiredDoc.document_key,
+        );
 
-          invalid_documents: invalidExpirableDocs,
+        const file = req.files.find(
+          (f) => f.fieldname === requiredDoc.document_key,
+        );
+
+        if (requiredDoc.is_mandatory && !file) {
+          return res.status(400).json({
+            success: false,
+            message: `${requiredDoc.document_name} is required`,
+          });
+        }
+
+        if (!file) {
+          continue;
+        }
+
+        if (requiredDoc.is_expirable) {
+          if (!docMeta?.expiry_date) {
+            return res.status(400).json({
+              success: false,
+              message: `${requiredDoc.document_name} expiry_date required`,
+            });
+          }
+
+          if (!docMeta?.document_number) {
+            return res.status(400).json({
+              success: false,
+              message: `${requiredDoc.document_name} document_number required`,
+            });
+          }
+        }
+
+        const fileBuffer = fs.readFileSync(file.path);
+
+        const extension = path.extname(file.originalname);
+
+        const r2Path =
+          `private/external-service-order-documents/` +
+          `${parentOrderId}/` +
+          `${requiredDoc.document_key}_${Date.now()}${extension}`;
+
+        await uploadToR2(fileBuffer, r2Path, file.mimetype);
+
+        fs.unlinkSync(file.path);
+
+        await ServiceModel.uploadOrUpdateParentDocument({
+          parent_order_id: parentOrderId,
+
+          document_key: requiredDoc.document_key,
+
+          file_path: r2Path,
+
+          expiry_date: docMeta?.expiry_date || null,
+
+          document_number: docMeta?.document_number || null,
         });
       }
 
-      // update status
-      await ServiceModel.updateStatus(serviceOrderId, "documents_uploaded");
+      // ===================================
+      // Mark All Services Submitted
+      // ===================================
 
-      res.json({
+      await db.execute(
+        `
+      UPDATE external_service_orders
+      SET status = 'documents_uploaded'
+      WHERE parent_order_id = ?
+      `,
+        [parentOrderId],
+      );
+
+      return res.json({
         success: true,
         message: "Documents submitted successfully",
-
-        data: {
-          service_order_id: serviceOrderId,
-          order_ref: order.order_ref,
-        },
       });
     } catch (err) {
       res.status(500).json({
