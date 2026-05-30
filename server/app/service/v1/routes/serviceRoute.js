@@ -20,12 +20,6 @@ router.get("/by-category/:categoryId", ServiceController.getServicesByCategory);
 // Aggregated api call for service details
 router.get("/details/:id", ServiceController.getServiceDetails);
 
-// Api for advertisement
-router.get("/home", ServiceController.getHomeSections);
-
-// Related
-router.get("/related/:serviceId", ServiceController.getRelatedServices);
-
 // ======================Admin Routes===================================
 // Create a services
 router.post(
@@ -55,5 +49,41 @@ router.delete(
 
 // ======================================Feedback from user====================================================
 router.post("/feedback", auth, ServiceController.submitFeedback);
+
+// ============================================Home sections=======================================================
+
+// Api for advertisement
+router.get("/home", ServiceController.getHomeSections);
+
+// Related
+router.get("/related/:serviceId", ServiceController.getRelatedServices);
+
+router.post(
+  "/home-sections",
+  // authenticateToken,
+  // authorizeRoles("admin"),
+  ServiceController.createHomeSection,
+);
+
+router.get(
+  "/home-sections",
+  // authenticateToken,
+  // authorizeRoles("admin"),
+  ServiceController.getAdminHomeSections,
+);
+
+router.put(
+  "/home-sections/:id",
+  // authenticateToken,
+  // authorizeRoles("admin"),
+  ServiceController.updateHomeSection,
+);
+
+router.delete(
+  "/home-sections/:id",
+  // authenticateToken,
+  // authorizeRoles("admin"),
+  ServiceController.deleteHomeSection,
+);
 
 module.exports = router;

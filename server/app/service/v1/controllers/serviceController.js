@@ -362,49 +362,6 @@ class ServiceController {
     }
   }
 
-  // advertisement pov
-  async getHomeSections(req, res) {
-    try {
-      const sections = await ServiceModel.getHomeSections();
-
-      res.json({
-        success: true,
-        data: sections,
-      });
-    } catch (err) {
-      res.status(500).json({
-        success: false,
-        message: err.message,
-      });
-    }
-  }
-
-  async getRelatedServices(req, res) {
-    try {
-      const { serviceId } = req.params;
-
-      if (!serviceId) {
-        return res.status(400).json({
-          success: false,
-          message: "Service ID required",
-        });
-      }
-
-      const services = await ServiceModel.getRelatedServices(serviceId);
-
-      res.json({
-        success: true,
-        data: services,
-      });
-    } catch (err) {
-      console.log(err);
-      res.status(500).json({
-        success: false,
-        message: err.message,
-      });
-    }
-  }
-
   // Update services
   async updateService(req, res) {
     try {
@@ -721,6 +678,176 @@ class ServiceController {
         connection.release();
       }
     }
+  }
+
+  // ========================================================Home sections===========================================================
+
+  // advertisement pov
+  async getHomeSections(req, res) {
+    try {
+      const sections = await ServiceModel.getHomeSections();
+
+      res.json({
+        success: true,
+        data: sections,
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  async getRelatedServices(req, res) {
+    try {
+      const { serviceId } = req.params;
+
+      if (!serviceId) {
+        return res.status(400).json({
+          success: false,
+          message: "Service ID required",
+        });
+      }
+
+      const services = await ServiceModel.getRelatedServices(serviceId);
+
+      res.json({
+        success: true,
+        data: services,
+      });
+    } catch (err) {
+      console.log(err);
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  // advertisement pov
+  async getHomeSections(req, res) {
+    try {
+      const sections = await ServiceModel.getHomeSections();
+
+      res.json({
+        success: true,
+        data: sections,
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  async getRelatedServices(req, res) {
+    try {
+      const { serviceId } = req.params;
+
+      if (!serviceId) {
+        return res.status(400).json({
+          success: false,
+          message: "Service ID required",
+        });
+      }
+
+      const services = await ServiceModel.getRelatedServices(serviceId);
+
+      res.json({
+        success: true,
+        data: services,
+      });
+    } catch (err) {
+      console.log(err);
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  async createHomeSection(req, res) {
+    try {
+      const { title, section_key, section_type, layout_type, sort_order } =
+        req.body;
+
+      const id = await ServiceModel.createHomeSection({
+        title,
+        section_key,
+        section_type,
+        layout_type,
+        sort_order,
+      });
+
+      res.json({
+        success: true,
+        message: "Section created successfully",
+        data: { id },
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  // show home sections to admin
+  async getAdminHomeSections() {
+    const [rows] = await db.execute(
+      `
+    SELECT *
+    FROM service_home_sections
+    ORDER BY sort_order ASC
+    `,
+    );
+
+    return rows;
+  }
+
+  async updateHomeSection(id, data) {
+    await db.execute(
+      `
+    UPDATE service_home_sections
+    SET
+      title = ?,
+      section_key = ?,
+      section_type = ?,
+      layout_type = ?,
+      sort_order = ?,
+      is_active = ?
+    WHERE id = ?
+    `,
+      [
+        data.title,
+        data.section_key,
+        data.section_type,
+        data.layout_type,
+        data.sort_order,
+        data.is_active,
+        id,
+      ],
+    );
+  }
+
+  async deleteHomeSection(id) {
+    await db.execute(
+      `
+    DELETE FROM service_home_section_items
+    WHERE section_id = ?
+    `,
+      [id],
+    );
+
+    await db.execute(
+      `
+    DELETE FROM service_home_sections
+    WHERE id = ?
+    `,
+      [id],
+    );
   }
 }
 

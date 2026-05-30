@@ -533,6 +533,35 @@ class ServiceModel {
       variant_image: item.image_url ? getPublicUrl(item.image_url) : null,
     }));
   }
+
+  // create home section
+  async createHomeSection(data) {
+    const [result] = await db.execute(
+      `
+    INSERT INTO service_home_sections
+    (
+      title,
+      section_key,
+      section_type,
+      layout_type,
+      sort_order
+    )
+    VALUES
+    (
+      ?, ?, ?, ?, ?
+    )
+    `,
+      [
+        data.title,
+        data.section_key,
+        data.section_type,
+        data.layout_type,
+        data.sort_order || 0,
+      ],
+    );
+
+    return result.insertId;
+  }
 }
 
 module.exports = new ServiceModel();
