@@ -825,6 +825,7 @@ class ServiceController {
     try {
       const apiClientId = req.client.api_client_id;
       const userId = req.body?.user_id;
+      // const userId = 1;
 
       if (!userId) {
         return res.status(403).json({
@@ -832,16 +833,20 @@ class ServiceController {
           message: "Unauthorized user",
         });
       }
-
       const { parentOrderId } = req.params;
 
       const documents = JSON.parse(req.body.documents || "[]");
+
+      // ===================================
+      // Validate Order Ownership
+      // ===================================
 
       const [orders] = await db.execute(
         `
       SELECT
         id,
-        service_id
+        service_id,
+        status
       FROM external_service_orders
       WHERE parent_order_id = ?
       AND user_id = ?
@@ -857,7 +862,7 @@ class ServiceController {
       }
 
       // ===================================
-      // Get Required Docs
+      // Get Required Documents
       // ===================================
 
       const [requiredDocs] = await db.execute(
@@ -867,16 +872,41 @@ class ServiceController {
         document_name,
         is_mandatory,
         is_expirable
-      FROM service_documents sd
+      FROM external_service_documents sd
+
       JOIN external_service_orders so
         ON so.service_id = sd.service_id
+
       WHERE so.parent_order_id = ?
       `,
         [parentOrderId],
       );
 
       // ===================================
-      // Upload Each File
+      // Existing Uploaded Documents
+      // ===================================
+
+      const [uploadedDocs] = await db.execute(
+        `
+      SELECT
+        document_key,
+        uploaded,
+        expiry_date,
+        document_number
+      FROM external_parent_order_documents
+      WHERE parent_order_id = ?
+      `,
+        [parentOrderId],
+      );
+
+      const uploadedMap = {};
+
+      uploadedDocs.forEach((doc) => {
+        uploadedMap[doc.document_key] = doc;
+      });
+
+      // ===================================
+      // Validate & Upload
       // ===================================
 
       for (const requiredDoc of requiredDocs) {
@@ -884,20 +914,36 @@ class ServiceController {
           (d) => d.document_key === requiredDoc.document_key,
         );
 
-        const file = req.files.find(
+        const file = req.files?.find(
           (f) => f.fieldname === requiredDoc.document_key,
         );
 
-        if (requiredDoc.is_mandatory && !file) {
+        const existingDoc = uploadedMap[requiredDoc.document_key];
+
+        // ===================================
+        // Mandatory document check
+        // ===================================
+
+        if (requiredDoc.is_mandatory && !file && !existingDoc) {
           return res.status(400).json({
             success: false,
             message: `${requiredDoc.document_name} is required`,
           });
         }
 
+        // no new upload and already exists
+        if (!file && existingDoc) {
+          continue;
+        }
+
+        // optional doc not uploaded
         if (!file) {
           continue;
         }
+
+        // ===================================
+        // Expirable document validation
+        // ===================================
 
         if (requiredDoc.is_expirable) {
           if (!docMeta?.expiry_date) {
@@ -915,6 +961,10 @@ class ServiceController {
           }
         }
 
+        // ===================================
+        // Upload File
+        // ===================================
+
         const fileBuffer = fs.readFileSync(file.path);
 
         const extension = path.extname(file.originalname);
@@ -926,7 +976,14 @@ class ServiceController {
 
         await uploadToR2(fileBuffer, r2Path, file.mimetype);
 
-        fs.unlinkSync(file.path);
+        // cleanup temp file
+        if (fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
+
+        // ===================================
+        // Save Document
+        // ===================================
 
         await ServiceModel.uploadOrUpdateParentDocument({
           parent_order_id: parentOrderId,
@@ -942,7 +999,69 @@ class ServiceController {
       }
 
       // ===================================
-      // Mark All Services Submitted
+      // Final Validation
+      // ===================================
+
+      const [finalDocs] = await db.execute(
+        `
+      SELECT
+        document_key,
+        uploaded,
+        expiry_date,
+        document_number
+      FROM external_parent_order_documents
+      WHERE parent_order_id = ?
+      `,
+        [parentOrderId],
+      );
+
+      const finalMap = {};
+
+      finalDocs.forEach((doc) => {
+        finalMap[doc.document_key] = doc;
+      });
+
+      const missingDocs = [];
+
+      for (const requiredDoc of requiredDocs) {
+        const uploaded = finalMap[requiredDoc.document_key];
+
+        if (requiredDoc.is_mandatory && !uploaded) {
+          missingDocs.push({
+            document_key: requiredDoc.document_key,
+
+            document_name: requiredDoc.document_name,
+          });
+
+          continue;
+        }
+
+        if (
+          requiredDoc.is_expirable &&
+          uploaded &&
+          (!uploaded.expiry_date || !uploaded.document_number)
+        ) {
+          missingDocs.push({
+            document_key: requiredDoc.document_key,
+
+            document_name: requiredDoc.document_name,
+
+            reason: "Missing expiry metadata",
+          });
+        }
+      }
+
+      if (missingDocs.length) {
+        return res.status(400).json({
+          success: false,
+          message: "Please upload all required documents",
+
+          missing_documents: missingDocs,
+        });
+      }
+
+      // ===================================
+      // Update Status
       // ===================================
 
       await db.execute(
@@ -950,6 +1069,7 @@ class ServiceController {
       UPDATE external_service_orders
       SET status = 'documents_uploaded'
       WHERE parent_order_id = ?
+      AND status = 'documents_pending'
       `,
         [parentOrderId],
       );
@@ -959,7 +1079,15 @@ class ServiceController {
         message: "Documents submitted successfully",
       });
     } catch (err) {
-      res.status(500).json({
+      if (req.files?.length) {
+        for (const file of req.files) {
+          if (file.path && fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path);
+          }
+        }
+      }
+
+      return res.status(500).json({
         success: false,
         message: err.message,
       });
