@@ -86,4 +86,28 @@ router.delete(
   ServiceController.deleteHomeSection,
 );
 
+// ===========================Add items to sectons======================================================
+router.post(
+  "/home-sections/:sectionId/items",
+  // authenticateToken,
+  // authorizeRoles("admin"),
+  ServiceController.addSectionItem,
+);
+
+// Get section items
+router.get(
+  "/home-sections/:sectionId/items",
+  // authenticateToken,
+  // authorizeRoles("admin"),
+  ServiceController.getSectionItems,
+);
+
+// remove item from section
+router.delete(
+  "/home-section-items/:id",
+  // authenticateToken,
+  // authorizeRoles("admin"),
+  ServiceController.deleteSectionItem,
+);
+
 module.exports = router;

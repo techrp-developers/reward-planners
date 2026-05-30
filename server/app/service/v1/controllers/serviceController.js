@@ -681,50 +681,6 @@ class ServiceController {
   }
 
   // ========================================================Home sections===========================================================
-
-  // advertisement pov
-  async getHomeSections(req, res) {
-    try {
-      const sections = await ServiceModel.getHomeSections();
-
-      res.json({
-        success: true,
-        data: sections,
-      });
-    } catch (err) {
-      res.status(500).json({
-        success: false,
-        message: err.message,
-      });
-    }
-  }
-
-  async getRelatedServices(req, res) {
-    try {
-      const { serviceId } = req.params;
-
-      if (!serviceId) {
-        return res.status(400).json({
-          success: false,
-          message: "Service ID required",
-        });
-      }
-
-      const services = await ServiceModel.getRelatedServices(serviceId);
-
-      res.json({
-        success: true,
-        data: services,
-      });
-    } catch (err) {
-      console.log(err);
-      res.status(500).json({
-        success: false,
-        message: err.message,
-      });
-    }
-  }
-
   // advertisement pov
   async getHomeSections(req, res) {
     try {
@@ -844,6 +800,45 @@ class ServiceController {
     await db.execute(
       `
     DELETE FROM service_home_sections
+    WHERE id = ?
+    `,
+      [id],
+    );
+  }
+
+  // =============================================Add items to home sections===========================================
+  // body to be sent
+  // 1. For service item
+  //   {
+  //   "service_id": 12,
+  //   "sort_order": 1
+  // }
+  // 2. For banner item
+  //   {
+  //   "banner_id": 4,
+  //   "sort_order": 1
+  // }
+
+  // Get section items
+  async getSectionItems(sectionId) {
+    const [rows] = await db.execute(
+      `
+    SELECT *
+    FROM service_home_section_items
+    WHERE section_id = ?
+    ORDER BY sort_order ASC
+    `,
+      [sectionId],
+    );
+
+    return rows;
+  }
+
+  //Delete section item
+  async deleteSectionItem(id) {
+    await db.execute(
+      `
+    DELETE FROM service_home_section_items
     WHERE id = ?
     `,
       [id],

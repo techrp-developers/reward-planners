@@ -562,6 +562,33 @@ class ServiceModel {
 
     return result.insertId;
   }
+
+  // create section items
+  async addSectionItem(sectionId, data) {
+    const [result] = await db.execute(
+      `
+    INSERT INTO service_home_section_items
+    (
+      section_id,
+      service_id,
+      banner_id,
+      sort_order
+    )
+    VALUES
+    (
+      ?, ?, ?, ?
+    )
+    `,
+      [
+        sectionId,
+        data.service_id || null,
+        data.banner_id || null,
+        data.sort_order || 0,
+      ],
+    );
+
+    return result.insertId;
+  }
 }
 
 module.exports = new ServiceModel();
