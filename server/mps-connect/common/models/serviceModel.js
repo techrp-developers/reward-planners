@@ -1,6 +1,7 @@
 const db = require("../../../config/database");
 const fs = require("fs");
 const path = require("path");
+const { getPrivateFileUrl } = require("../../../utils/r2SignedUrl");
 
 // helper function
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
