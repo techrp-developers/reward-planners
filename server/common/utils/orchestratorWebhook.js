@@ -2,6 +2,7 @@ const crypto = require("crypto");
 
 const ecommerceWebhook = require("./paymentWebHook");
 const serviceWebhook = require("../../app/service/v1/utils/webhook");
+const mpsServiceWebhook = require("../../mps-connect/common/utils/webhook");
 const bbpsWebhook = require("../../app/bbps/v1/utils/webhook");
 
 async function handleWebhook(req, res) {
@@ -43,11 +44,13 @@ async function handleWebhook(req, res) {
     const handler =
       moduleType === "service"
         ? serviceWebhook
-        : moduleType === "ecommerce"
-          ? ecommerceWebhook
-          : moduleType === "bbps"
-            ? bbpsWebhook
-            : null;
+        : moduleType === "mps"
+          ? mpsServiceWebhook
+          : moduleType === "ecommerce"
+            ? ecommerceWebhook
+            : moduleType === "bbps"
+              ? bbpsWebhook
+              : null;
 
     if (!handler) {
       console.warn("Unknown module in webhook", {

@@ -627,7 +627,7 @@ class ServiceController {
         currency: "INR",
         receipt: parent_order_id,
         notes: {
-          module: "service",
+          module: "mps",
           parent_order_id,
         },
       });
