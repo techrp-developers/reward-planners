@@ -833,9 +833,8 @@ class ServiceController {
           message: "Unauthorized user",
         });
       }
-      const { parentOrderId } = req.params;
 
-      const documents = JSON.parse(req.body.documents || "[]");
+      const { parentOrderId } = req.params;
 
       // ===================================
       // Validate Order Ownership
@@ -849,9 +848,9 @@ class ServiceController {
         status
       FROM external_service_orders
       WHERE parent_order_id = ?
-      AND user_id = ?
+      AND user_id = ? AND client_id = ?
       `,
-        [parentOrderId, userId],
+        [parentOrderId, userId, apiClientId],
       );
 
       if (!orders.length) {
@@ -870,9 +869,8 @@ class ServiceController {
       SELECT DISTINCT
         document_key,
         document_name,
-        is_mandatory,
-        is_expirable
-      FROM external_service_documents sd
+        is_mandatory
+      FROM service_documents sd
 
       JOIN external_service_orders so
         ON so.service_id = sd.service_id
@@ -890,9 +888,7 @@ class ServiceController {
         `
       SELECT
         document_key,
-        uploaded,
-        expiry_date,
-        document_number
+        uploaded
       FROM external_parent_order_documents
       WHERE parent_order_id = ?
       `,
@@ -910,10 +906,6 @@ class ServiceController {
       // ===================================
 
       for (const requiredDoc of requiredDocs) {
-        const docMeta = documents.find(
-          (d) => d.document_key === requiredDoc.document_key,
-        );
-
         const file = req.files?.find(
           (f) => f.fieldname === requiredDoc.document_key,
         );
@@ -931,34 +923,14 @@ class ServiceController {
           });
         }
 
-        // no new upload and already exists
+        // Already uploaded earlier
         if (!file && existingDoc) {
           continue;
         }
 
-        // optional doc not uploaded
+        // Optional doc skipped
         if (!file) {
           continue;
-        }
-
-        // ===================================
-        // Expirable document validation
-        // ===================================
-
-        if (requiredDoc.is_expirable) {
-          if (!docMeta?.expiry_date) {
-            return res.status(400).json({
-              success: false,
-              message: `${requiredDoc.document_name} expiry_date required`,
-            });
-          }
-
-          if (!docMeta?.document_number) {
-            return res.status(400).json({
-              success: false,
-              message: `${requiredDoc.document_name} document_number required`,
-            });
-          }
         }
 
         // ===================================
@@ -987,14 +959,8 @@ class ServiceController {
 
         await ServiceModel.uploadOrUpdateParentDocument({
           parent_order_id: parentOrderId,
-
           document_key: requiredDoc.document_key,
-
           file_path: r2Path,
-
-          expiry_date: docMeta?.expiry_date || null,
-
-          document_number: docMeta?.document_number || null,
         });
       }
 
@@ -1006,9 +972,7 @@ class ServiceController {
         `
       SELECT
         document_key,
-        uploaded,
-        expiry_date,
-        document_number
+        uploaded
       FROM external_parent_order_documents
       WHERE parent_order_id = ?
       `,
@@ -1032,22 +996,6 @@ class ServiceController {
 
             document_name: requiredDoc.document_name,
           });
-
-          continue;
-        }
-
-        if (
-          requiredDoc.is_expirable &&
-          uploaded &&
-          (!uploaded.expiry_date || !uploaded.document_number)
-        ) {
-          missingDocs.push({
-            document_key: requiredDoc.document_key,
-
-            document_name: requiredDoc.document_name,
-
-            reason: "Missing expiry metadata",
-          });
         }
       }
 
@@ -1055,7 +1003,6 @@ class ServiceController {
         return res.status(400).json({
           success: false,
           message: "Please upload all required documents",
-
           missing_documents: missingDocs,
         });
       }
