@@ -28,7 +28,7 @@ async function processEvent(req) {
       //  Update ALL service orders
       await db.execute(
         `UPDATE service_orders
-         SET status = 'documents_pending',
+         SET status = 'payment_done',
              payment_id = ?,
              payment_status = 'paid'
          WHERE parent_order_id = ?
