@@ -87,12 +87,12 @@ router.delete(
 );
 
 // ===========================Add items to sectons======================================================
-// router.post(
-//   "/home-sections/:sectionId/items",
-//   // authenticateToken,
-//   // authorizeRoles("admin"),
-//   ServiceController.addSectionItem,
-// );
+router.post(
+  "/home-sections/:sectionId/items",
+  // authenticateToken,
+  // authorizeRoles("admin"),
+  ServiceController.addSectionItem,
+);
 
 // Get section items
 router.get(
@@ -108,6 +108,35 @@ router.delete(
   // authenticateToken,
   // authorizeRoles("admin"),
   ServiceController.deleteSectionItem,
+);
+
+// ===============================Admin related api's====================================================================
+router.post(
+  "/related-services",
+  // authenticateToken,
+  // authorizeRoles("admin"),
+  ServiceController.addRelatedService,
+);
+
+router.get(
+  "/related-services/:serviceId",
+  // authenticateToken,
+  // authorizeRoles("admin"),
+  ServiceController.getAdminRelatedServices,
+);
+
+router.put(
+  "/related-services/:id",
+  // authenticateToken,
+  // authorizeRoles("admin"),
+  ServiceController.updateRelatedService,
+);
+
+router.delete(
+  "/related-services/:id",
+  // authenticateToken,
+  // authorizeRoles("admin"),
+  ServiceController.deleteRelatedService,
 );
 
 module.exports = router;

@@ -724,6 +724,8 @@ class ServiceController {
     }
   }
 
+  // ======================================Admin create home sections=======================
+
   async createHomeSection(req, res) {
     try {
       const { title, section_key, section_type, layout_type, sort_order } =
@@ -750,63 +752,59 @@ class ServiceController {
     }
   }
 
-  // show home sections to admin
-  async getAdminHomeSections() {
-    const [rows] = await db.execute(
-      `
-    SELECT *
-    FROM service_home_sections
-    ORDER BY sort_order ASC
-    `,
-    );
+  async getAdminHomeSections(req, res) {
+    try {
+      const sections = await ServiceModel.getAdminHomeSections();
 
-    return rows;
+      res.json({
+        success: true,
+        data: sections,
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
   }
 
-  async updateHomeSection(id, data) {
-    await db.execute(
-      `
-    UPDATE service_home_sections
-    SET
-      title = ?,
-      section_key = ?,
-      section_type = ?,
-      layout_type = ?,
-      sort_order = ?,
-      is_active = ?
-    WHERE id = ?
-    `,
-      [
-        data.title,
-        data.section_key,
-        data.section_type,
-        data.layout_type,
-        data.sort_order,
-        data.is_active,
-        id,
-      ],
-    );
+  async updateHomeSection(req, res) {
+    try {
+      const { id } = req.params;
+
+      await ServiceModel.updateHomeSection(id, req.body);
+
+      res.json({
+        success: true,
+        message: "Section updated successfully",
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
   }
 
-  async deleteHomeSection(id) {
-    await db.execute(
-      `
-    DELETE FROM service_home_section_items
-    WHERE section_id = ?
-    `,
-      [id],
-    );
+  async deleteHomeSection(req, res) {
+    try {
+      const { id } = req.params;
 
-    await db.execute(
-      `
-    DELETE FROM service_home_sections
-    WHERE id = ?
-    `,
-      [id],
-    );
+      await ServiceModel.deleteHomeSection(id);
+
+      res.json({
+        success: true,
+        message: "Section deleted successfully",
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
   }
 
-  // =============================================Add items to home sections===========================================
+  // =============================================Admin add items to home sections===========================================
   // body to be sent
   // 1. For service item
   //   {
@@ -819,30 +817,157 @@ class ServiceController {
   //   "sort_order": 1
   // }
 
-  // Get section items
-  async getSectionItems(sectionId) {
-    const [rows] = await db.execute(
-      `
-    SELECT *
-    FROM service_home_section_items
-    WHERE section_id = ?
-    ORDER BY sort_order ASC
-    `,
-      [sectionId],
-    );
+  async addSectionItem(req, res) {
+    try {
+      const { sectionId } = req.params;
 
-    return rows;
+      const { service_id, banner_id, sort_order } = req.body;
+
+      if (!service_id && !banner_id) {
+        return res.status(400).json({
+          success: false,
+          message: "service_id or banner_id required",
+        });
+      }
+
+      const id = await ServiceModel.addSectionItem(sectionId, {
+        service_id,
+        banner_id,
+        sort_order,
+      });
+
+      res.json({
+        success: true,
+        message: "Item added successfully",
+        data: { id },
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
   }
 
-  //Delete section item
-  async deleteSectionItem(id) {
-    await db.execute(
-      `
-    DELETE FROM service_home_section_items
-    WHERE id = ?
-    `,
-      [id],
-    );
+  async getSectionItems(req, res) {
+    try {
+      const { sectionId } = req.params;
+
+      const items = await ServiceModel.getSectionItems(sectionId);
+
+      res.json({
+        success: true,
+        data: items,
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  async deleteSectionItem(req, res) {
+    try {
+      const { id } = req.params;
+
+      await ServiceModel.deleteSectionItem(id);
+
+      res.json({
+        success: true,
+        message: "Section item deleted",
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  // ===============================Admin related apis======================================================================
+  async addRelatedService(req, res) {
+    try {
+      const { service_id, related_service_id, sort_order } = req.body;
+
+      const id = await ServiceModel.addRelatedService({
+        service_id,
+        related_service_id,
+        sort_order,
+      });
+
+      res.json({
+        success: true,
+        message: "Related service added",
+        data: { id },
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  async getAdminRelatedServices(req, res) {
+    try {
+      const { serviceId } = req.params;
+
+      const rows = await ServiceModel.getAdminRelatedServices(serviceId);
+
+      res.json({
+        success: true,
+        data: rows,
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  // sort order
+  //   {
+  //   "sort_order": 3
+  // }
+
+  async updateRelatedService(req, res) {
+    try {
+      const { id } = req.params;
+
+      const { sort_order } = req.body;
+
+      await ServiceModel.updateRelatedService(id, sort_order);
+
+      res.json({
+        success: true,
+        message: "Related service updated successfully",
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  async deleteRelatedService(req, res) {
+    try {
+      const { id } = req.params;
+
+      await ServiceModel.deleteRelatedService(id);
+
+      res.json({
+        success: true,
+        message: "Related service removed successfully",
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
   }
 }
 

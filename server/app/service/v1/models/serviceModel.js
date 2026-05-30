@@ -563,6 +563,49 @@ class ServiceModel {
     return result.insertId;
   }
 
+  async updateHomeSection(id, data) {
+    await db.execute(
+      `
+    UPDATE service_home_sections
+    SET
+      title = ?,
+      section_key = ?,
+      section_type = ?,
+      layout_type = ?,
+      sort_order = ?,
+      is_active = ?
+    WHERE id = ?
+    `,
+      [
+        data.title,
+        data.section_key,
+        data.section_type,
+        data.layout_type,
+        data.sort_order,
+        data.is_active,
+        id,
+      ],
+    );
+  }
+
+  async deleteHomeSection(id) {
+    await db.execute(
+      `
+    DELETE FROM service_home_section_items
+    WHERE section_id = ?
+    `,
+      [id],
+    );
+
+    await db.execute(
+      `
+    DELETE FROM service_home_sections
+    WHERE id = ?
+    `,
+      [id],
+    );
+  }
+
   // create section items
   async addSectionItem(sectionId, data) {
     const [result] = await db.execute(
@@ -588,6 +631,128 @@ class ServiceModel {
     );
 
     return result.insertId;
+  }
+
+  // Get section items
+  async getSectionItems(sectionId) {
+    const [rows] = await db.execute(
+      `
+    SELECT *
+    FROM service_home_section_items
+    WHERE section_id = ?
+    ORDER BY sort_order ASC
+    `,
+      [sectionId],
+    );
+
+    return rows;
+  }
+
+  //Delete section item
+  async deleteSectionItem(id) {
+    await db.execute(
+      `
+    DELETE FROM service_home_section_items
+    WHERE id = ?
+    `,
+      [id],
+    );
+  }
+
+  // show home sections to admin
+  async getAdminHomeSections() {
+    const [rows] = await db.execute(
+      `
+    SELECT *
+    FROM service_home_sections
+    ORDER BY sort_order ASC
+    `,
+    );
+
+    return rows;
+  }
+
+  // Related Apis
+  async addRelatedService(data) {
+    const [existing] = await db.execute(
+      `
+    SELECT id
+    FROM service_related_services
+    WHERE service_id = ?
+    AND related_service_id = ?
+    `,
+      [data.service_id, data.related_service_id],
+    );
+
+    if (existing.length) {
+      throw new Error("Related service already exists");
+    }
+
+    const [result] = await db.execute(
+      `
+    INSERT INTO service_related_services
+    (
+      service_id,
+      related_service_id,
+      sort_order
+    )
+    VALUES (?, ?, ?)
+    `,
+      [data.service_id, data.related_service_id, data.sort_order || 0],
+    );
+
+    return result.insertId;
+  }
+
+  async getAdminRelatedServices(serviceId) {
+    const [rows] = await db.execute(
+      `
+    SELECT
+
+      srs.id,
+
+      s.id AS related_service_id,
+
+      s.name,
+
+      s.service_image,
+
+      srs.sort_order
+
+    FROM service_related_services srs
+
+    JOIN services s
+      ON s.id = srs.related_service_id
+
+    WHERE srs.service_id = ?
+
+    ORDER BY srs.sort_order ASC
+    `,
+      [serviceId],
+    );
+
+    return rows;
+  }
+
+  async updateRelatedService(id, sortOrder) {
+    await db.execute(
+      `
+    UPDATE service_related_services
+    SET sort_order = ?
+    WHERE id = ?
+    `,
+      [sortOrder, id],
+    );
+  }
+
+  async deleteRelatedService(id) {
+    await db.execute(
+      `
+    DELETE FROM service_related_services
+    WHERE id = ?
+    `,
+      [id],
+    );
   }
 }
 
