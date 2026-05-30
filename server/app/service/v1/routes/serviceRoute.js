@@ -87,12 +87,12 @@ router.delete(
 );
 
 // ===========================Add items to sectons======================================================
-router.post(
-  "/home-sections/:sectionId/items",
-  // authenticateToken,
-  // authorizeRoles("admin"),
-  ServiceController.addSectionItem,
-);
+// router.post(
+//   "/home-sections/:sectionId/items",
+//   // authenticateToken,
+//   // authorizeRoles("admin"),
+//   ServiceController.addSectionItem,
+// );
 
 // Get section items
 router.get(

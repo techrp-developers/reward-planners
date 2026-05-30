@@ -37,17 +37,10 @@ class ServiceOrderDocumentModel {
       SET
         file_path = ?,
         uploaded = 1,
-        expiry_date = ?,
-        document_number = ?,
         uploaded_at = NOW()
       WHERE id = ?
       `,
-        [
-          data.file_path,
-          data.expiry_date,
-          data.document_number,
-          existing[0].id,
-        ],
+        [data.file_path, existing[0].id],
       );
 
       return existing[0].id;
@@ -60,22 +53,14 @@ class ServiceOrderDocumentModel {
       parent_order_id,
       document_key,
       file_path,
-      uploaded,
-      expiry_date,
-      document_number
+      uploaded
     )
     VALUES
     (
-      ?, ?, ?, 1, ?, ?
+      ?, ?, ?, 1
     )
     `,
-      [
-        data.parent_order_id,
-        data.document_key,
-        data.file_path,
-        data.expiry_date,
-        data.document_number,
-      ],
+      [data.parent_order_id, data.document_key, data.file_path],
     );
 
     return result.insertId;

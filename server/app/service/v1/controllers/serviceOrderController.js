@@ -702,8 +702,6 @@ class ServiceOrderController {
 
       const { parentOrderId } = req.params;
 
-      const documents = JSON.parse(req.body.documents || "[]");
-
       // ===================================
       // Validate Order Ownership
       // ===================================
@@ -737,8 +735,7 @@ class ServiceOrderController {
       SELECT DISTINCT
         document_key,
         document_name,
-        is_mandatory,
-        is_expirable
+        is_mandatory
       FROM service_documents sd
 
       JOIN service_orders so
@@ -757,9 +754,7 @@ class ServiceOrderController {
         `
       SELECT
         document_key,
-        uploaded,
-        expiry_date,
-        document_number
+        uploaded
       FROM parent_order_documents
       WHERE parent_order_id = ?
       `,
@@ -777,10 +772,6 @@ class ServiceOrderController {
       // ===================================
 
       for (const requiredDoc of requiredDocs) {
-        const docMeta = documents.find(
-          (d) => d.document_key === requiredDoc.document_key,
-        );
-
         const file = req.files?.find(
           (f) => f.fieldname === requiredDoc.document_key,
         );
@@ -798,34 +789,14 @@ class ServiceOrderController {
           });
         }
 
-        // no new upload and already exists
+        // Already uploaded earlier
         if (!file && existingDoc) {
           continue;
         }
 
-        // optional doc not uploaded
+        // Optional doc skipped
         if (!file) {
           continue;
-        }
-
-        // ===================================
-        // Expirable document validation
-        // ===================================
-
-        if (requiredDoc.is_expirable) {
-          if (!docMeta?.expiry_date) {
-            return res.status(400).json({
-              success: false,
-              message: `${requiredDoc.document_name} expiry_date required`,
-            });
-          }
-
-          if (!docMeta?.document_number) {
-            return res.status(400).json({
-              success: false,
-              message: `${requiredDoc.document_name} document_number required`,
-            });
-          }
         }
 
         // ===================================
@@ -854,14 +825,8 @@ class ServiceOrderController {
 
         await ServiceOrderDocumentModel.uploadOrUpdateParentDocument({
           parent_order_id: parentOrderId,
-
           document_key: requiredDoc.document_key,
-
           file_path: r2Path,
-
-          expiry_date: docMeta?.expiry_date || null,
-
-          document_number: docMeta?.document_number || null,
         });
       }
 
@@ -873,9 +838,7 @@ class ServiceOrderController {
         `
       SELECT
         document_key,
-        uploaded,
-        expiry_date,
-        document_number
+        uploaded
       FROM parent_order_documents
       WHERE parent_order_id = ?
       `,
@@ -899,22 +862,6 @@ class ServiceOrderController {
 
             document_name: requiredDoc.document_name,
           });
-
-          continue;
-        }
-
-        if (
-          requiredDoc.is_expirable &&
-          uploaded &&
-          (!uploaded.expiry_date || !uploaded.document_number)
-        ) {
-          missingDocs.push({
-            document_key: requiredDoc.document_key,
-
-            document_name: requiredDoc.document_name,
-
-            reason: "Missing expiry metadata",
-          });
         }
       }
 
@@ -922,7 +869,6 @@ class ServiceOrderController {
         return res.status(400).json({
           success: false,
           message: "Please upload all required documents",
-
           missing_documents: missingDocs,
         });
       }
