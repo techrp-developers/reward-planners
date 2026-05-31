@@ -129,13 +129,15 @@ class ServiceBannerController {
       // Upload Image
       // =====================================
 
+      const fileBuffer = fs.readFileSync(req.file.path);
+
       const fileName = `${Date.now()}-${Math.random()
         .toString(36)
         .substring(2, 8)}-${req.file.originalname}`;
 
       const imageKey = `public/service-banners/${fileName}`;
 
-      await uploadToR2(req.file.path, imageKey, req.file.mimetype);
+      await uploadToR2(fileBuffer, imageKey, req.file.mimetype);
 
       if (fs.existsSync(req.file.path)) {
         fs.unlinkSync(req.file.path);
@@ -237,7 +239,6 @@ class ServiceBannerController {
       }
 
       // service / bundle banner
-
       if (["service", "bundle"].includes(finalRedirectType)) {
         if (!finalRedirectId) {
           return res.status(400).json({
@@ -307,15 +308,17 @@ class ServiceBannerController {
           });
         }
 
+        const fileBuffer = fs.readFileSync(req.file.path);
+
         const extension = path.extname(req.file.originalname);
 
-        const filename = `banner-${Date.now()}-${Math.random()
+        const filename = `${Date.now()}-${Math.random()
           .toString(36)
           .substring(2, 8)}${extension}`;
 
         imageKey = `public/service-banners/${id}/${filename}`;
 
-        await uploadToR2(req.file.path, imageKey, req.file.mimetype);
+        await uploadToR2(fileBuffer, imageKey, req.file.mimetype);
 
         if (existing.image_url) {
           try {
@@ -372,7 +375,7 @@ class ServiceBannerController {
       });
     }
   }
-  
+
   //   Get Banners
   async getBanners(req, res) {
     try {
