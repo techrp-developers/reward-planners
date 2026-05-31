@@ -127,7 +127,10 @@ class ServiceBannerModel {
     `,
     );
 
-    return rows;
+    return rows.map((b) => ({
+      ...b,
+      image_url: getPublicUrl(b.image_url),
+    }));
   }
 }
 
