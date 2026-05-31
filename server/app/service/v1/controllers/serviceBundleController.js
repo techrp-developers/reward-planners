@@ -169,6 +169,8 @@ class ServiceBundleController {
         });
       }
 
+      const fileBuffer = fs.readFileSync(req.file.path);
+
       // generate unique filename
       const fileName = `${Date.now()}-${Math.random()
         .toString(36)
@@ -178,7 +180,7 @@ class ServiceBundleController {
       const imageKey = `public/service-bundles/${fileName}`;
 
       // upload to R2
-      await uploadToR2(req.file.path, imageKey, req.file.mimetype);
+      await uploadToR2(fileBuffer, imageKey, req.file.mimetype);
 
       // cleanup local temp file
       if (fs.existsSync(req.file.path)) {
@@ -266,9 +268,11 @@ class ServiceBundleController {
           });
         }
 
+        const fileBuffer = fs.readFileSync(req.file.path);
+
         const extension = path.extname(req.file.originalname);
 
-        const filename = `bundle-${Date.now()}-${Math.random()
+        const filename = `${Date.now()}-${Math.random()
           .toString(36)
           .substring(2, 8)}${extension}`;
 
@@ -276,7 +280,7 @@ class ServiceBundleController {
         bannerImage = `public/service-bundles/${id}/${filename}`;
 
         // upload to R2
-        await uploadToR2(req.file.path, bannerImage, req.file.mimetype);
+        await uploadToR2(fileBuffer, bannerImage, req.file.mimetype);
 
         // delete old image from R2
         if (existing.banner_image) {
