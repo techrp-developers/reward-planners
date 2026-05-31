@@ -2,8 +2,6 @@ const db = require("../../../../config/database");
 const fs = require("fs");
 const path = require("path");
 const ServiceBannerModel = require("../models/serviceBannerModel");
-const { UPLOAD_BASE } = require("../../../../config/path");
-const sharp = require("sharp");
 const { uploadToR2 } = require("../../../../utils/r2upload");
 const { deleteFromR2 } = require("../../../../utils/r2delete");
 
@@ -11,7 +9,7 @@ class ServiceBannerController {
   // Create banner
   async createBanner(req, res) {
     try {
-      const {
+      let {
         title,
         subtitle,
         redirect_type,
@@ -36,44 +34,138 @@ class ServiceBannerController {
         });
       }
 
-      // generate R2 key
+      // =====================================
+      // Validate redirect type
+      // =====================================
+
+      const allowedRedirectTypes = ["service", "bundle", "external"];
+
+      if (redirect_type && !allowedRedirectTypes.includes(redirect_type)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid redirect_type",
+        });
+      }
+
+      // =====================================
+      // Validate redirect fields
+      // =====================================
+
+      if (redirect_type === "external" && !redirect_url) {
+        return res.status(400).json({
+          success: false,
+          message: "redirect_url required for external banners",
+        });
+      }
+
+      if (["service", "bundle"].includes(redirect_type) && !redirect_id) {
+        return res.status(400).json({
+          success: false,
+          message: "redirect_id required",
+        });
+      }
+
+      // =====================================
+      // Validate Service
+      // =====================================
+
+      if (redirect_type === "service") {
+        const [[service]] = await db.execute(
+          `
+        SELECT id
+        FROM services
+        WHERE id = ?
+        `,
+          [redirect_id],
+        );
+
+        if (!service) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid service",
+          });
+        }
+      }
+
+      // =====================================
+      // Validate Bundle
+      // =====================================
+
+      if (redirect_type === "bundle") {
+        const [[bundle]] = await db.execute(
+          `
+        SELECT id
+        FROM service_bundles
+        WHERE id = ?
+        `,
+          [redirect_id],
+        );
+
+        if (!bundle) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid bundle",
+          });
+        }
+      }
+
+      // =====================================
+      // Cleanup Redirect Data
+      // =====================================
+
+      let finalRedirectId = redirect_id || null;
+
+      let finalRedirectUrl = redirect_url || null;
+
+      if (redirect_type === "external") {
+        finalRedirectId = null;
+      }
+
+      if (["service", "bundle"].includes(redirect_type)) {
+        finalRedirectUrl = null;
+      }
+
+      // =====================================
+      // Upload Image
+      // =====================================
+
       const fileName = `${Date.now()}-${Math.random()
         .toString(36)
         .substring(2, 8)}-${req.file.originalname}`;
 
       const imageKey = `public/service-banners/${fileName}`;
 
-      // upload to R2
       await uploadToR2(req.file.path, imageKey, req.file.mimetype);
 
-      // cleanup temp file
       if (fs.existsSync(req.file.path)) {
         fs.unlinkSync(req.file.path);
       }
 
-      // create banner
+      // =====================================
+      // Create Banner
+      // =====================================
+
       const banner = await ServiceBannerModel.create({
         title,
         subtitle,
         image_url: imageKey,
         redirect_type,
-        redirect_id,
-        redirect_url,
+        redirect_id: finalRedirectId,
+        redirect_url: finalRedirectUrl,
         sort_order,
       });
 
-      res.json({
+      return res.json({
         success: true,
         message: "Banner created successfully",
         data: banner,
       });
     } catch (err) {
-      // cleanup temp file on error
       if (req.file && fs.existsSync(req.file.path)) {
         fs.unlinkSync(req.file.path);
       }
 
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         message: err.message,
       });
@@ -85,7 +177,7 @@ class ServiceBannerController {
     try {
       const { id } = req.params;
 
-      const {
+      let {
         title,
         subtitle,
         redirect_type,
@@ -95,7 +187,10 @@ class ServiceBannerController {
         is_active,
       } = req.body;
 
-      // existing banner
+      // =====================================
+      // Existing Banner
+      // =====================================
+
       const existing = await ServiceBannerModel.findById(id);
 
       if (!existing) {
@@ -105,11 +200,106 @@ class ServiceBannerController {
         });
       }
 
+      // =====================================
+      // Validate redirect type
+      // =====================================
+
+      const allowedRedirectTypes = ["service", "bundle", "external"];
+
+      if (redirect_type && !allowedRedirectTypes.includes(redirect_type)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid redirect_type",
+        });
+      }
+
+      // =====================================
+      // Final Redirect Values
+      // =====================================
+
+      let finalRedirectType = redirect_type ?? existing.redirect_type;
+
+      let finalRedirectId = redirect_id ?? existing.redirect_id;
+
+      let finalRedirectUrl = redirect_url ?? existing.redirect_url;
+
+      // external banner
+
+      if (finalRedirectType === "external") {
+        if (!finalRedirectUrl) {
+          return res.status(400).json({
+            success: false,
+            message: "redirect_url required for external banners",
+          });
+        }
+
+        finalRedirectId = null;
+      }
+
+      // service / bundle banner
+
+      if (["service", "bundle"].includes(finalRedirectType)) {
+        if (!finalRedirectId) {
+          return res.status(400).json({
+            success: false,
+            message: "redirect_id required",
+          });
+        }
+
+        finalRedirectUrl = null;
+      }
+
+      // =====================================
+      // Validate Service
+      // =====================================
+
+      if (finalRedirectType === "service") {
+        const [[service]] = await db.execute(
+          `
+          SELECT id
+          FROM services
+          WHERE id = ?
+          `,
+          [finalRedirectId],
+        );
+
+        if (!service) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid service",
+          });
+        }
+      }
+
+      // =====================================
+      // Validate Bundle
+      // =====================================
+
+      if (finalRedirectType === "bundle") {
+        const [[bundle]] = await db.execute(
+          `
+          SELECT id
+          FROM service_bundles
+          WHERE id = ?
+          `,
+          [finalRedirectId],
+        );
+
+        if (!bundle) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid bundle",
+          });
+        }
+      }
+
+      // =====================================
+      // Image Upload
+      // =====================================
+
       let imageKey = existing.image_url;
 
-      // new image uploaded
       if (req.file) {
-        // validate image
         if (!req.file.mimetype.startsWith("image/")) {
           return res.status(400).json({
             success: false,
@@ -123,13 +313,10 @@ class ServiceBannerController {
           .toString(36)
           .substring(2, 8)}${extension}`;
 
-        // new R2 path
         imageKey = `public/service-banners/${id}/${filename}`;
 
-        // upload to R2
         await uploadToR2(req.file.path, imageKey, req.file.mimetype);
 
-        // delete old image from R2
         if (existing.image_url) {
           try {
             await deleteFromR2(existing.image_url);
@@ -138,25 +325,34 @@ class ServiceBannerController {
           }
         }
 
-        // cleanup temp file
         if (fs.existsSync(req.file.path)) {
           fs.unlinkSync(req.file.path);
         }
       }
 
-      // update banner
+      // =====================================
+      // Update Banner
+      // =====================================
+
       await ServiceBannerModel.update(id, {
         title: title ?? existing.title,
+
         subtitle: subtitle ?? existing.subtitle,
+
         image_url: imageKey,
-        redirect_type: redirect_type ?? existing.redirect_type,
-        redirect_id: redirect_id ?? existing.redirect_id,
-        redirect_url: redirect_url ?? existing.redirect_url,
+
+        redirect_type: finalRedirectType,
+
+        redirect_id: finalRedirectId,
+
+        redirect_url: finalRedirectUrl,
+
         sort_order: sort_order ?? existing.sort_order,
+
         is_active: is_active ?? existing.is_active,
       });
 
-      res.json({
+      return res.json({
         success: true,
         message: "Banner updated successfully",
         data: {
@@ -166,11 +362,27 @@ class ServiceBannerController {
     } catch (err) {
       console.error("UPDATE BANNER ERROR:", err);
 
-      // cleanup temp file on error
       if (req.file && fs.existsSync(req.file.path)) {
         fs.unlinkSync(req.file.path);
       }
 
+      return res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+  
+  //   Get Banners
+  async getBanners(req, res) {
+    try {
+      const banners = await ServiceBannerModel.getActiveBanners();
+
+      res.json({
+        success: true,
+        data: banners,
+      });
+    } catch (err) {
       res.status(500).json({
         success: false,
         message: err.message,
@@ -178,10 +390,46 @@ class ServiceBannerController {
     }
   }
 
-  //   Get Banners
-  async getBanners(req, res) {
+  // Delete banner
+  async deleteBanner(req, res) {
     try {
-      const banners = await ServiceBannerModel.getActiveBanners();
+      const { id } = req.params;
+
+      const banner = await ServiceBannerModel.findById(id);
+
+      if (!banner) {
+        return res.status(404).json({
+          success: false,
+          message: "Banner not found",
+        });
+      }
+
+      if (banner.image_url) {
+        try {
+          await deleteFromR2(banner.image_url);
+        } catch (err) {
+          console.error(err);
+        }
+      }
+
+      await ServiceBannerModel.delete(id);
+
+      res.json({
+        success: true,
+        message: "Banner deleted successfully",
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  // Get admin banners
+  async getAllBanners(req, res) {
+    try {
+      const banners = await ServiceBannerModel.getAllBanners();
 
       res.json({
         success: true,

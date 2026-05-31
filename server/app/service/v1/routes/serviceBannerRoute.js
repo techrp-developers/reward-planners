@@ -28,4 +28,20 @@ router.put(
 // get Banners
 router.get("/", ServiceBannerController.getBanners);
 
+// Delete banner
+router.delete(
+  "/:id",
+  //  authenticateToken,
+  // authorizeRoles("vendor_manager", "admin"),
+  ServiceBannerController.deleteBanner,
+);
+
+// get all banners for admin
+router.get(
+  "/admin-banners",
+  //  authenticateToken,
+  // authorizeRoles("vendor_manager", "admin"),
+  ServiceBannerController.getAllBanners,
+);
+
 module.exports = router;
