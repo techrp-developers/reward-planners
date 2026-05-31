@@ -47,6 +47,8 @@ class ServiceVariantController {
           });
         }
 
+        const fileBuffer = fs.readFileSync(req.file.path);
+
         const fileName = `${Date.now()}-${Math.random()
           .toString(36)
           .substring(2, 8)}-${req.file.originalname}`;
@@ -54,7 +56,7 @@ class ServiceVariantController {
         const key = `public/service_variants/${id}/${fileName}`;
 
         //upload
-        imageUrl = await uploadToR2(req.file.path, key, req.file.mimetype);
+        imageUrl = await uploadToR2(fileBuffer, key, req.file.mimetype);
 
         if (fs.existsSync(req.file.path)) {
           fs.unlinkSync(req.file.path);
@@ -113,17 +115,15 @@ class ServiceVariantController {
           });
         }
 
+        const fileBuffer = fs.readFileSync(req.file.path);
+
         const fileName = `${Date.now()}-${Math.random()
           .toString(36)
           .substring(2, 8)}-${req.file.originalname}`;
 
         newImageKey = `public/service_variants/${id}/${fileName}`;
 
-        imageUrl = await uploadToR2(
-          req.file.path,
-          newImageKey,
-          req.file.mimetype,
-        );
+        imageUrl = await uploadToR2(fileBuffer, newImageKey, req.file.mimetype);
 
         // cleanup Temp file
         if (fs.existsSync(req.file.path)) {
