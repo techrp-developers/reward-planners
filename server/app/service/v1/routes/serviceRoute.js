@@ -139,4 +139,10 @@ router.delete(
   ServiceController.deleteRelatedService,
 );
 
+
+// ===============================================Top picks=====================================
+router.get(
+  "/top-picks",
+  ServiceController.getTopPicks,
+);
 module.exports = router;

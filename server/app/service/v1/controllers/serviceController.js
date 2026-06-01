@@ -969,6 +969,27 @@ class ServiceController {
       });
     }
   }
+
+  // =====================================Top picks===============================================================
+  async getTopPicks(req, res) {
+    try {
+      const limit = Number(req.query.limit) || 10;
+
+      const services = await ServiceModel.getTopPicks(limit);
+
+      res.json({
+        success: true,
+        data: services,
+      });
+    } catch (err) {
+      console.error(err);
+
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
 }
 
 module.exports = new ServiceController();

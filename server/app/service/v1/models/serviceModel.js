@@ -754,6 +754,89 @@ class ServiceModel {
       [id],
     );
   }
+
+  // Top picks
+  async getTopPicks(limit = 10) {
+    const [rows] = await db.execute(
+      `
+    SELECT
+
+      s.id AS service_id,
+      s.name,
+      s.description,
+      s.rating,
+      s.total_orders,
+      s.show_enquiry,
+      s.service_image,
+
+      sv.id AS variant_id,
+      sv.title,
+      sv.price,
+      sv.original_price,
+      sv.image_url
+
+    FROM services s
+
+    JOIN (
+      SELECT
+        service_id,
+        MIN(price) AS min_price
+      FROM service_variants
+      GROUP BY service_id
+    ) mv
+      ON mv.service_id = s.id
+
+    JOIN service_variants sv
+      ON sv.service_id = s.id
+      AND sv.price = mv.min_price
+
+    WHERE s.status = 1
+
+    ORDER BY
+      s.total_orders DESC,
+      s.rating DESC
+
+    LIMIT ?
+    `,
+      [limit],
+    );
+
+    return rows.map((item) => ({
+      service_id: item.service_id,
+
+      variant_id: item.variant_id,
+
+      name: item.name,
+
+      title: item.title,
+
+      description: item.description,
+
+      enquiry: Boolean(item.show_enquiry),
+
+      rating: Number(item.rating || 0),
+
+      total_orders: Number(item.total_orders || 0),
+
+      price: Number(item.price),
+
+      mrp: Number(item.original_price || 0),
+
+      discount_percent: item.original_price
+        ? Math.round(
+            ((item.original_price - item.price) / item.original_price) * 100,
+          )
+        : 0,
+
+      coins: Math.floor(Number(item.price) * 0.1),
+
+      service_image: item.service_image
+        ? getPublicUrl(item.service_image)
+        : null,
+
+      variant_image: item.image_url ? getPublicUrl(item.image_url) : null,
+    }));
+  }
 }
 
 module.exports = new ServiceModel();
