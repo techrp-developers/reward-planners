@@ -837,6 +837,94 @@ class ServiceModel {
       variant_image: item.image_url ? getPublicUrl(item.image_url) : null,
     }));
   }
+
+  // ==================================value added services===============================
+  // Value Added Services
+  async getValueAddedServices(serviceId) {
+    const [rows] = await db.execute(
+      `
+    SELECT
+      s.id AS service_id,
+      s.name,
+      s.description,
+      s.rating,
+      s.total_orders,
+      s.show_enquiry,
+      s.service_image,
+
+      sv.id AS variant_id,
+      sv.title,
+      sv.price,
+      sv.original_price,
+      sv.image_url,
+
+      srs.sort_order
+
+    FROM service_related_services srs
+
+    JOIN services s
+      ON s.id = srs.related_service_id
+
+    JOIN (
+      SELECT
+        service_id,
+        MIN(price) AS min_price
+      FROM service_variants
+      GROUP BY service_id
+    ) mv
+      ON mv.service_id = s.id
+
+    JOIN service_variants sv
+      ON sv.service_id = s.id
+      AND sv.price = mv.min_price
+
+    WHERE srs.service_id = ?
+    AND srs.relation_type = 'value_added'
+    AND s.status = 1
+
+    ORDER BY srs.sort_order ASC
+
+    LIMIT 10
+    `,
+      [serviceId],
+    );
+
+    return rows.map((item) => ({
+      service_id: item.service_id,
+
+      variant_id: item.variant_id,
+
+      name: item.name,
+
+      title: item.title,
+
+      description: item.description,
+
+      enquiry: Boolean(item.show_enquiry),
+
+      rating: Number(item.rating || 0),
+
+      total_orders: Number(item.total_orders || 0),
+
+      price: Number(item.price),
+
+      mrp: Number(item.original_price || 0),
+
+      discount_percent: item.original_price
+        ? Math.round(
+            ((item.original_price - item.price) / item.original_price) * 100,
+          )
+        : 0,
+
+      coins: Math.floor(Number(item.price) * 0.1),
+
+      service_image: item.service_image
+        ? getPublicUrl(item.service_image)
+        : null,
+
+      variant_image: item.image_url ? getPublicUrl(item.image_url) : null,
+    }));
+  }
 }
 
 module.exports = new ServiceModel();

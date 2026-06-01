@@ -990,6 +990,34 @@ class ServiceController {
       });
     }
   }
+
+  // ============================================Value added===================================================
+  async getValueAddedServices(req, res) {
+    try {
+      const { serviceId } = req.params;
+
+      if (!serviceId) {
+        return res.status(400).json({
+          success: false,
+          message: "Service ID required",
+        });
+      }
+
+      const services = await ServiceModel.getValueAddedServices(serviceId);
+
+      res.json({
+        success: true,
+        data: services,
+      });
+    } catch (err) {
+      console.error(err);
+
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
 }
 
 module.exports = new ServiceController();
