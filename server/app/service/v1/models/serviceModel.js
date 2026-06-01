@@ -677,12 +677,17 @@ class ServiceModel {
   async addRelatedService(data) {
     const [existing] = await db.execute(
       `
-    SELECT id
-    FROM service_related_services
-    WHERE service_id = ?
-    AND related_service_id = ?
-    `,
-      [data.service_id, data.related_service_id],
+  SELECT id
+  FROM service_related_services
+  WHERE service_id = ?
+  AND related_service_id = ?
+  AND relation_type = ?
+  `,
+      [
+        data.service_id,
+        data.related_service_id,
+        data.relation_type || "related",
+      ],
     );
 
     if (existing.length) {
@@ -691,15 +696,21 @@ class ServiceModel {
 
     const [result] = await db.execute(
       `
-    INSERT INTO service_related_services
+   INSERT INTO service_related_services
     (
       service_id,
       related_service_id,
+      relation_type,
       sort_order
     )
-    VALUES (?, ?, ?)
+    VALUES (?, ?, ?, ?)
     `,
-      [data.service_id, data.related_service_id, data.sort_order || 0],
+      [
+        data.service_id,
+        data.related_service_id,
+        data.relation_type || "related",
+        data.sort_order || 0,
+      ],
     );
 
     return result.insertId;
@@ -711,13 +722,10 @@ class ServiceModel {
     SELECT
 
       srs.id,
-
       s.id AS related_service_id,
-
       s.name,
-
       s.service_image,
-
+      srs.relation_type,
       srs.sort_order
 
     FROM service_related_services srs
@@ -735,14 +743,16 @@ class ServiceModel {
     return rows;
   }
 
-  async updateRelatedService(id, sortOrder) {
+  async updateRelatedService(id, data) {
     await db.execute(
       `
     UPDATE service_related_services
-    SET sort_order = ?
+    SET
+      sort_order = ?,
+      relation_type = ?
     WHERE id = ?
     `,
-      [sortOrder, id],
+      [data.sort_order, data.relation_type, id],
     );
   }
 

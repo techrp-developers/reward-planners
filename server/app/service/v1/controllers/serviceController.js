@@ -888,11 +888,13 @@ class ServiceController {
   // ===============================Admin related apis======================================================================
   async addRelatedService(req, res) {
     try {
-      const { service_id, related_service_id, sort_order } = req.body;
+      const { service_id, related_service_id, relation_type, sort_order } =
+        req.body;
 
       const id = await ServiceModel.addRelatedService({
         service_id,
         related_service_id,
+        relation_type,
         sort_order,
       });
 
@@ -936,9 +938,9 @@ class ServiceController {
     try {
       const { id } = req.params;
 
-      const { sort_order } = req.body;
+      const { sort_order, relation_type } = req.body;
 
-      await ServiceModel.updateRelatedService(id, sort_order);
+      await ServiceModel.updateRelatedService(id, sort_order, relation_type);
 
       res.json({
         success: true,
