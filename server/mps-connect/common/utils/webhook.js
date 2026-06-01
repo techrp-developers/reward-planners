@@ -25,10 +25,23 @@ async function processEvent(req) {
 
       const parentOrderId = rpOrder[0].ref_id;
 
+      const [[alreadyPaid]] = await db.execute(
+        `SELECT id FROM external_service_orders 
+     WHERE parent_order_id = ? AND payment_status = 'paid' LIMIT 1`,
+        [parentOrderId],
+      );
+
+      if (alreadyPaid) {
+        console.info(
+          `[webhook] Already processed: parent_order_id=${parentOrderId}`,
+        );
+        return;
+      }
+
       //  Update ALL service orders
       await db.execute(
         `UPDATE external_service_orders
-         SET status = 'payment_done',
+         SET status = 'documents_pending',
              payment_id = ?,
              payment_status = 'paid'
          WHERE parent_order_id = ?

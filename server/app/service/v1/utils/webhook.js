@@ -10,14 +10,11 @@ async function processEvent(req) {
     // =========================
     if (event === "payment.captured") {
       const payment = body.payload.payment.entity;
-
       const razorpayOrderId = payment.order_id;
       const paymentId = payment.id;
 
-      //  Fetch receipt (parent_order_id)
       const [rpOrder] = await db.execute(
-        `SELECT ref_id FROM razorpay_orders 
-         WHERE razorpay_order_id = ?`,
+        `SELECT ref_id FROM razorpay_orders WHERE razorpay_order_id = ?`,
         [razorpayOrderId],
       );
 
@@ -25,23 +22,34 @@ async function processEvent(req) {
 
       const parentOrderId = rpOrder[0].ref_id;
 
-      //  Update ALL service orders
+      const [[alreadyPaid]] = await db.execute(
+        `SELECT id FROM service_orders 
+     WHERE parent_order_id = ? AND payment_status = 'paid' LIMIT 1`,
+        [parentOrderId],
+      );
+
+      if (alreadyPaid) {
+        console.info(
+          `[webhook] Already processed: parent_order_id=${parentOrderId}`,
+        );
+        return;
+      }
+
       await db.execute(
         `UPDATE service_orders
-         SET status = 'payment_done',
-             payment_id = ?,
-             payment_status = 'paid'
-         WHERE parent_order_id = ?
-         AND payment_status != 'paid'`,
+     SET status = 'documents_pending',
+         payment_id = ?,
+         payment_status = 'paid'
+     WHERE parent_order_id = ? AND payment_status != 'paid'`,
         [paymentId, parentOrderId],
       );
 
       await db.execute(
         `UPDATE razorpay_orders
-         SET razorpay_payment_id = ?,
-             status = 'success',
-             raw_response = ?
-         WHERE razorpay_order_id = ?`,
+     SET razorpay_payment_id = ?,
+         status = 'success',
+         raw_response = ?
+     WHERE razorpay_order_id = ?`,
         [paymentId, JSON.stringify(body), razorpayOrderId],
       );
     }

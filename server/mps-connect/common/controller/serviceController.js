@@ -632,19 +632,32 @@ class ServiceController {
         },
       });
 
-      await db.execute(
-        `INSERT INTO razorpay_orders
+      console.info(
+        `[createPaymentOrder] Razorpay order created: ${razorpayOrder.id} for parent_order_id=${parent_order_id}`,
+      );
+
+      try {
+        await db.execute(
+          `INSERT INTO razorpay_orders
       (razorpay_order_id, client_id, order_source, receipt, amount, status, ref_id, module)
       VALUES (?, ?, ?, ?, ?, 'created', ?, 'service')`,
-        [
-          razorpayOrder.id,
-          apiClientId,
-          "external",
-          parent_order_id,
-          totalAmount,
-          parent_order_id,
-        ],
-      );
+          [
+            razorpayOrder.id,
+            apiClientId,
+            "external",
+            parent_order_id,
+            totalAmount,
+            parent_order_id,
+          ],
+        );
+      } catch (dbErr) {
+        // Razorpay order exists but DB record failed — log for manual reconciliation
+        console.error(
+          `[createPaymentOrder] DB insert failed for Razorpay order ${razorpayOrder.id}:`,
+          dbErr.message,
+        );
+        throw dbErr;
+      }
 
       res.json({
         success: true,
@@ -720,6 +733,9 @@ class ServiceController {
       );
 
       if (alreadyPaid) {
+        console.info(
+          `[verifyPayment] Already processed: parent_order_id=${parent_order_id}`,
+        );
         return res.json({ success: true, message: "Already processed" });
       }
 
@@ -761,6 +777,13 @@ class ServiceController {
         data: {
           redirect_to: `/parent-documents/${parent_order_id}`,
         },
+      });
+
+      InvoiceService.generateInvoice(parent_order_id).catch((err) => {
+        console.error(
+          `[verifyPayment] Invoice generation failed for parent_order_id=${parent_order_id}:`,
+          err.message,
+        );
       });
     } catch (err) {
       // ROLLBACK

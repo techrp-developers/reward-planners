@@ -210,18 +210,31 @@ class ServiceOrderController {
         },
       });
 
-      await db.execute(
-        `INSERT INTO razorpay_orders
-      (razorpay_order_id, order_source, receipt, amount, status, ref_id, module)
-      VALUES (?, ?, ?, ?, 'created', ?, 'service')`,
-        [
-          razorpayOrder.id,
-          "internal",
-          parent_order_id,
-          totalAmount,
-          parent_order_id,
-        ],
+      console.info(
+        `[createPaymentOrder] Razorpay order created: ${razorpayOrder.id} for parent_order_id=${parent_order_id}`,
       );
+
+      try {
+        await db.execute(
+          `INSERT INTO razorpay_orders
+         (razorpay_order_id, order_source, receipt, amount, status, ref_id, module)
+         VALUES (?, ?, ?, ?, 'created', ?, 'service')`,
+          [
+            razorpayOrder.id,
+            "internal",
+            parent_order_id,
+            totalAmount,
+            parent_order_id,
+          ],
+        );
+      } catch (dbErr) {
+        // Razorpay order exists but DB record failed — log for manual reconciliation
+        console.error(
+          `[createPaymentOrder] DB insert failed for Razorpay order ${razorpayOrder.id}:`,
+          dbErr.message,
+        );
+        throw dbErr;
+      }
 
       res.json({
         success: true,
@@ -299,10 +312,10 @@ class ServiceOrderController {
       );
 
       if (alreadyPaid) {
-        return res.json({
-          success: true,
-          message: "Already processed",
-        });
+        console.info(
+          `[verifyPayment] Already processed: parent_order_id=${parent_order_id}`,
+        );
+        return res.json({ success: true, message: "Already processed" });
       }
 
       // GET CONNECTION
@@ -332,10 +345,10 @@ class ServiceOrderController {
         [razorpay_payment_id, JSON.stringify(req.body), razorpay_order_id],
       );
 
-      await InvoiceService.generateInvoice(parent_order_id);
-
       // COMMIT
       await connection.commit();
+
+      // await InvoiceService.generateInvoice(parent_order_id);
 
       res.json({
         success: true,
@@ -343,6 +356,13 @@ class ServiceOrderController {
         data: {
           redirect_to: `/service-order-documents/parent-documents/${parent_order_id}`,
         },
+      });
+
+      InvoiceService.generateInvoice(parent_order_id).catch((err) => {
+        console.error(
+          `[verifyPayment] Invoice generation failed for parent_order_id=${parent_order_id}:`,
+          err.message,
+        );
       });
     } catch (err) {
       // ROLLBACK
