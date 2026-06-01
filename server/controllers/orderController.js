@@ -288,15 +288,19 @@ class OrderController {
 
       await conn.commit();
 
-      // refund AFTER commit
-      if (refundData?.payment_id) {
-        await ServiceOrderModel.processRefund(refundData);
-      }
-
       return res.json({
         success: true,
         message: "Cancellation approved successfully",
       });
+
+      if (refundData?.payment_id) {
+        ServiceOrderModel.processRefund(refundData).catch((err) => {
+          console.error(
+            `[approveServiceCancellation] Refund failed for service_order_id=${refundData.service_order_id}:`,
+            err.message,
+          );
+        });
+      }
     } catch (error) {
       await conn.rollback();
 

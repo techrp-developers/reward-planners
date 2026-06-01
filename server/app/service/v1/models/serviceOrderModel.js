@@ -416,7 +416,14 @@ class ServiceOrderModel {
       [serviceOrderId],
     );
 
-    if (existingRefund) {
+    // check wallet transactions for duplicate
+    const [[existingWalletRefund]] = await conn.execute(
+      `SELECT id FROM wallet_transactions
+   WHERE reference_id = ? AND reason_code = 'ADMIN_ADJUSTMENT' LIMIT 1`,
+      [serviceOrderId],
+    );
+
+    if (existingRefund || existingWalletRefund) {
       throw new Error("REFUND_ALREADY_DONE");
     }
 
@@ -430,7 +437,7 @@ class ServiceOrderModel {
 
     const refundToWallet = coinsUsed;
 
-    const refundToCard = refundAmount - coinsUsed;
+    const refundToCard = Math.max(0, refundAmount - coinsUsed);
 
     // =====================================
     // 4 Reverse wallet coins
