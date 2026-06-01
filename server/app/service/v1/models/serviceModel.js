@@ -418,6 +418,7 @@ class ServiceModel {
       AND sv.price = mv.min_price
 
     WHERE srs.service_id = ?
+    AND srs.relation_type = 'related'
     AND s.status = 1
 
     ORDER BY srs.sort_order ASC
