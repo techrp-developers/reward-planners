@@ -891,6 +891,22 @@ class ServiceController {
       const { service_id, related_service_id, relation_type, sort_order } =
         req.body;
 
+      if (service_id == related_service_id) {
+        return res.status(400).json({
+          success: false,
+          message: "Service cannot relate to itself",
+        });
+      }
+
+      const allowedTypes = ["related", "value_added", "upsell"];
+
+      if (relation_type && !allowedTypes.includes(relation_type)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid relation type",
+        });
+      }
+
       const id = await ServiceModel.addRelatedService({
         service_id,
         related_service_id,
@@ -929,18 +945,25 @@ class ServiceController {
     }
   }
 
-  // sort order
-  //   {
-  //   "sort_order": 3
-  // }
-
   async updateRelatedService(req, res) {
     try {
       const { id } = req.params;
 
       const { sort_order, relation_type } = req.body;
 
-      await ServiceModel.updateRelatedService(id, sort_order, relation_type);
+      const allowedTypes = ["related", "value_added", "upsell"];
+
+      if (relation_type && !allowedTypes.includes(relation_type)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid relation type",
+        });
+      }
+
+      await ServiceModel.updateRelatedService(id, {
+        sort_order,
+        relation_type,
+      });
 
       res.json({
         success: true,

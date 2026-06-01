@@ -724,6 +724,9 @@ class ServiceModel {
       srs.id,
       s.id AS related_service_id,
       s.name,
+      s.status,
+      s.rating,
+      s.total_orders,
       s.service_image,
       srs.relation_type,
       srs.sort_order
