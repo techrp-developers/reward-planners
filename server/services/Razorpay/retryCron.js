@@ -44,7 +44,7 @@ async function retryFailedRefunds() {
 }
 
 async function retryMpsFailedRefunds() {
-  console.log("[retryMpsFailedRefunds] Running...");
+  console.log("💰 [retryMpsFailedRefunds] Running...");
   try {
     const [rows] = await db.execute(
       `SELECT r.service_order_id, r.refund_amount, so.payment_id
