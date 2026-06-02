@@ -1,4 +1,9 @@
 const db = require("../config/database");
+const fs = require("fs");
+const path = require("path");
+const sharp = require("sharp");
+const { uploadToR2 } = require("../utils/r2upload");
+const { deleteFromR2 } = require("../utils/r2delete");
 
 class CompanyController {
   async createCompany(req, res) {
@@ -12,35 +17,71 @@ class CompanyController {
         });
       }
 
-      const company_logo = req.file
-        ? req.file.filename
-        : null;
-
-      const sql = `
-        INSERT INTO companies
-        (
-          company_name,
-          company_email,
-          company_phone,
-          company_logo
-        )
-        VALUES (?, ?, ?, ?)
-      `;
-
-      const [result] = await db.execute(sql, [
+      // Create company first
+      const [result] = await db.execute(
+        `
+      INSERT INTO companies
+      (
         company_name,
-        company_email || null,
-        company_phone || null,
-        company_logo,
-      ]);
+        company_email,
+        company_phone,
+        company_logo
+      )
+      VALUES (?, ?, ?, ?)
+      `,
+        [company_name, company_email || null, company_phone || null, null],
+      );
+
+      const companyId = result.insertId;
+
+      let logoPath = null;
+
+      if (req.file) {
+        if (!req.file.mimetype.startsWith("image/")) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid logo file",
+          });
+        }
+
+        const fileBuffer = fs.readFileSync(req.file.path);
+
+        const extension = path.extname(req.file.originalname);
+
+        const filename = `company-logo-${Date.now()}-${Math.random()
+          .toString(36)
+          .substring(2, 8)}${extension}`;
+
+        logoPath = `public/companies/${companyId}/${filename}`;
+
+        await uploadToR2(fileBuffer, logoPath, req.file.mimetype);
+
+        fs.unlinkSync(req.file.path);
+
+        await db.execute(
+          `
+        UPDATE companies
+        SET company_logo = ?
+        WHERE company_id = ?
+        `,
+          [logoPath, companyId],
+        );
+      }
 
       return res.status(201).json({
         success: true,
         message: "Company created successfully",
-        company_id: result.insertId,
+        data: {
+          company_id: companyId,
+          company_logo: logoPath,
+        },
       });
     } catch (error) {
-      console.error("Create Company Error:", error);
+      console.error(error);
+
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
 
       return res.status(500).json({
         success: false,
@@ -92,7 +133,7 @@ class CompanyController {
           WHERE company_id = ?
           AND status = 1
         `,
-        [id]
+        [id],
       );
 
       if (!company.length) {
@@ -119,72 +160,99 @@ class CompanyController {
   async updateCompany(req, res) {
     try {
       const { id } = req.params;
-      const { company_name, company_email, company_phone } = req.body;
 
-      const [existingCompany] = await db.execute(
+      const [companies] = await db.execute(
         `
-          SELECT *
-          FROM companies
-          WHERE company_id = ?
-          AND status = 1
-        `,
-        [id]
+      SELECT *
+      FROM companies
+      WHERE company_id = ?
+      AND status = 1
+      `,
+        [id],
       );
 
-      if (!existingCompany.length) {
+      if (!companies.length) {
         return res.status(404).json({
           success: false,
           message: "Company not found",
         });
       }
 
-      if (!company_name) {
-        return res.status(400).json({
-          success: false,
-          message: "Company name is required",
-        });
-      }
+      const existing = companies[0];
 
-      let sql = `
-        UPDATE companies
-        SET
-          company_name = ?,
-          company_email = ?,
-          company_phone = ?
-      `;
+      let logoPath = existing.company_logo;
 
-      const values = [
-        company_name,
-        company_email || null,
-        company_phone || null,
-      ];
-
+      // Upload new logo if provided
       if (req.file) {
-        sql += `,
-          company_logo = ?
-        `;
+        if (!req.file.mimetype.startsWith("image/")) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid image file",
+          });
+        }
 
-        values.push(req.file.filename);
+        const fileBuffer = fs.readFileSync(req.file.path);
+
+        const extension = path.extname(req.file.originalname);
+
+        const filename = `company-logo-${Date.now()}-${Math.random()
+          .toString(36)
+          .substring(2, 8)}${extension}`;
+
+        logoPath = `public/companies/${id}/${filename}`;
+
+        // Upload new image
+        await uploadToR2(fileBuffer, logoPath, req.file.mimetype);
+
+        // Delete old image
+        if (existing.company_logo) {
+          try {
+            await deleteFromR2(existing.company_logo);
+          } catch (deleteErr) {
+            console.error("OLD COMPANY LOGO DELETE ERROR:", deleteErr);
+          }
+        }
+
+        // Remove temp file
+        fs.unlinkSync(req.file.path);
       }
 
-      sql += `
-        WHERE company_id = ?
-      `;
-
-      values.push(id);
-
-      await db.execute(sql, values);
+      await db.execute(
+        `
+      UPDATE companies
+      SET
+        company_name = ?,
+        company_email = ?,
+        company_phone = ?,
+        company_logo = ?
+      WHERE company_id = ?
+      `,
+        [
+          req.body.company_name ?? existing.company_name,
+          req.body.company_email ?? existing.company_email,
+          req.body.company_phone ?? existing.company_phone,
+          logoPath,
+          id,
+        ],
+      );
 
       return res.status(200).json({
         success: true,
         message: "Company updated successfully",
+        data: {
+          company_logo: logoPath,
+        },
       });
-    } catch (error) {
-      console.error("Update Company Error:", error);
+    } catch (err) {
+      console.error("UPDATE COMPANY ERROR:", err);
+
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
 
       return res.status(500).json({
         success: false,
-        message: error.message,
+        message: err.message,
       });
     }
   }
@@ -200,7 +268,7 @@ class CompanyController {
           WHERE company_id = ?
           AND status = 1
         `,
-        [id]
+        [id],
       );
 
       if (!existingCompany.length) {
@@ -216,7 +284,7 @@ class CompanyController {
           SET status = 0
           WHERE company_id = ?
         `,
-        [id]
+        [id],
       );
 
       return res.status(200).json({

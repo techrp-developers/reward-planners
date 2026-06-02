@@ -1,17 +1,17 @@
 const express = require("express");
 const router = express.Router();
-const { uploadPoster } = require("../middleware/mediaUpload/offerUpload");
+const upload = require("../middleware/mediaUpload/serviceCategoryUpload");
 const companyController = require("../controllers/companyController");
 
 router.post(
   "/create-company",
-  uploadPoster.single("company_logo"),
+  upload.single("company_logo"),
   companyController.createCompany,
 );
 
 router.put(
   "/update-company/:id",
-  uploadPoster.single("company_logo"),
+  upload.single("company_logo"),
   companyController.updateCompany,
 );
 
