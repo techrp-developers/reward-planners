@@ -653,14 +653,12 @@ class ServiceOrderModel {
       await db.execute(
         `
       UPDATE service_order_refunds
-
       SET
         status = 'completed',
         razorpay_refund_id = ?
 
       WHERE service_order_id = ?
-      AND status = 'pending'
-      `,
+      AND status IN ('pending', 'failed')`,
         [refund.id, service_order_id],
       );
 
@@ -668,9 +666,7 @@ class ServiceOrderModel {
       await db.execute(
         `
       UPDATE service_order_cancellations
-
       SET refund_status = 'completed'
-
       WHERE service_order_id = ?
       `,
         [service_order_id],
@@ -701,11 +697,9 @@ class ServiceOrderModel {
       await db.execute(
         `
       UPDATE service_order_refunds
-
       SET status = 'failed'
-
       WHERE service_order_id = ?
-      AND status = 'pending'
+      AND status IN ('pending', 'failed')
       `,
         [data.service_order_id],
       );

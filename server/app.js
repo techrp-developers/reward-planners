@@ -10,6 +10,7 @@ const swaggerSpec = require("./config/swagger");
 require("dotenv").config();
 require("./services/ExpressBees/cron/shipmentCron");
 require("./services/Bbps/retryCron");
+require("./services/Razorpay/retryCron");
 
 // dashboard Route
 const dashboardRoute = require("./routes/indexRoute");
