@@ -5,12 +5,21 @@ const auth = require("../middlewares/auth");
 const optionalAuth = require("../middlewares/optionalAuth");
 
 /*============================================Profile=================================================*/
-
 router.post("/activate-account", authController.activateAccount);
+router.post("/resend-activation-otp", authController.resendActivationOTP);
 router.post("/verify-activation-otp", authController.verifyActivationOTP);
 router.post("/set-password", authController.setPassword);
 router.post("/login", authController.loginUser);
+
 router.post("/update-fcm-token", auth, authController.updateFcmToken);
+router.post("/logout", auth, authController.logoutUser);
+
+router.post("/forgot-password", authController.forgotPassword);
+router.post(
+  "/verify-forgot-password-otp",
+  authController.verifyForgotPasswordOTP,
+);
+router.post("/reset-password", authController.resetPassword);
 router.put("/change-password", auth, authController.changePassword);
 
 /*=============================================Address================================================*/

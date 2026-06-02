@@ -29,7 +29,9 @@ class AuthController {
   async activateAccount(req, res) {
     const { email } = req.body;
 
-    const employee = await AuthModel.findEmployeeByEmail(email);
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const employee = await AuthModel.findEmployeeByEmail(normalizedEmail);
 
     if (!employee) {
       return res.status(404).json({
@@ -47,12 +49,14 @@ class AuthController {
       });
     }
 
+    await AuthModel.deleteOTPByEmail(normalizedEmail);
+
     const otp = generateOTP();
 
-    await AuthModel.storeActivationOTP(email, otp);
+    await AuthModel.storeActivationOTP(normalizedEmail, otp);
 
     await sendOtpMail({
-      email,
+      email: normalizedEmail,
       name: employee.name,
       otp,
     });
@@ -61,6 +65,56 @@ class AuthController {
       success: true,
       message: "OTP sent to email",
     });
+  }
+
+  /* ======================================================
+     RESEND ACTIVATION OTP
+  ====================================================== */
+  async resendActivationOTP(req, res) {
+    try {
+      const { email } = req.body;
+
+      const normalizedEmail = email.trim().toLowerCase();
+
+      const employee = await AuthModel.findEmployeeByEmail(normalizedEmail);
+
+      if (!employee) {
+        return res.status(404).json({
+          success: false,
+          message: "Employee not found",
+        });
+      }
+
+      const existing = await AuthModel.findByCompanyUserId(employee.id);
+
+      if (existing) {
+        return res.status(400).json({
+          success: false,
+          message: "Account already activated",
+        });
+      }
+
+      await AuthModel.deleteOTPByEmail(normalizedEmail);
+
+      const otp = generateOTP();
+
+      await AuthModel.storeActivationOTP(normalizedEmail, otp);
+
+      await sendOtpMail({
+        email: normalizedEmail,
+        name: employee.name,
+        otp,
+      });
+
+      return res.json({
+        success: true,
+        message: "OTP resent successfully",
+      });
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+      });
+    }
   }
 
   /* ======================================================
@@ -404,6 +458,167 @@ class AuthController {
       });
     } finally {
       connection.release();
+    }
+  }
+
+  /* ======================================================
+     LOGOUT USER
+  ====================================================== */
+  async logoutUser(req, res) {
+    try {
+      const userId = req.user?.user_id;
+
+      await AuthModel.clearFcmToken(userId);
+
+      return res.json({
+        success: true,
+        message: "Logged out successfully",
+      });
+    } catch (error) {
+      console.error("Logout Error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Something went wrong",
+      });
+    }
+  }
+
+  /* ======================================================
+     FORGOT PASSWORD
+  ====================================================== */
+  async forgotPassword(req, res) {
+    try {
+      const { email } = req.body;
+
+      const normalizedEmail = email.trim().toLowerCase();
+
+      const user = await AuthModel.findByEmail(normalizedEmail);
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: "Account not found",
+        });
+      }
+
+      await AuthModel.deleteOTPByEmail(normalizedEmail);
+
+      const otp = generateOTP();
+
+      await AuthModel.storeActivationOTP(user.email, otp);
+
+      await sendOtpMail({
+        email: user.email,
+        name: user.name,
+        otp,
+      });
+
+      return res.json({
+        success: true,
+        message: "OTP sent successfully",
+      });
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+      });
+    }
+  }
+
+  async verifyForgotPasswordOTP(req, res) {
+    try {
+      const { email, otp } = req.body;
+
+      const normalizedEmail = email.trim().toLowerCase();
+
+      const attempt = await AuthModel.getOtpAttempts(normalizedEmail);
+
+      if (attempt && attempt.attempt_count >= 5) {
+        return res.status(429).json({
+          success: false,
+          message: "Too many OTP attempts. Try again later.",
+        });
+      }
+
+      const otpRecord = await AuthModel.verifyOTP(normalizedEmail, otp);
+
+      if (!otpRecord) {
+        await AuthModel.incrementOtpAttempts(normalizedEmail);
+
+        return res.status(400).json({
+          success: false,
+          message: "Invalid or expired OTP",
+        });
+      }
+
+      await AuthModel.markOTPVerified(normalizedEmail);
+
+      return res.json({
+        success: true,
+        message: "OTP verified successfully",
+      });
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+      });
+    }
+  }
+
+  async resetPassword(req, res) {
+    const conn = await db.getConnection();
+
+    try {
+      const { email, newPassword } = req.body;
+
+      const normalizedEmail = email.trim().toLowerCase();
+
+      const otpVerified = await AuthModel.checkOTPVerified(normalizedEmail);
+
+      if (!otpVerified) {
+        return res.status(403).json({
+          success: false,
+          message: "OTP verification required",
+        });
+      }
+
+      const user = await AuthModel.findByEmail(normalizedEmail);
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+      }
+
+      if (!newPassword || newPassword.length < 8) {
+        return res.status(400).json({
+          success: false,
+          message: "Password must be at least 8 characters",
+        });
+      }
+
+      const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+      await conn.beginTransaction();
+
+      await AuthModel.updatePassword(conn, user.user_id, hashedPassword);
+
+      await AuthModel.deleteOTP(normalizedEmail, conn);
+
+      await conn.commit();
+
+      return res.json({
+        success: true,
+        message: "Password reset successfully",
+      });
+    } catch (error) {
+      await conn.rollback();
+
+      return res.status(500).json({
+        success: false,
+      });
+    } finally {
+      conn.release();
     }
   }
 

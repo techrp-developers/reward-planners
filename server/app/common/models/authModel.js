@@ -83,6 +83,12 @@ class authModel {
     );
   }
 
+  async deleteOTPByEmail(email) {
+    await db.execute(`DELETE FROM email_otps WHERE email = ?`, [
+      email.toLowerCase(),
+    ]);
+  }
+
   async verifyOTP(email, otp) {
     const [rows] = await db.execute(
       `SELECT id, attempt_count
