@@ -5,8 +5,8 @@ const optionalAuth = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
 
-    if (!authHeader?.startsWith("Bearer ")) {
-      return next(); 
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return next();
     }
 
     const token = authHeader.split(" ")[1];
@@ -15,17 +15,16 @@ const optionalAuth = async (req, res, next) => {
 
     const user = await AuthModel.findById(decoded.user_id);
 
-    if (!user || user.token_version !== decoded.token_version) {
-      return next(); 
+    if (!user) {
+      return next();
     }
 
     if (Number(user.status) !== 1) {
-      return next(); 
+      return next();
     }
 
     req.user = user;
     next();
-
   } catch {
     next();
   }
