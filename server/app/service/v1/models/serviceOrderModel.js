@@ -1011,6 +1011,347 @@ class ServiceOrderModel {
       },
     };
   }
+
+  // ===================================================================MPS==========================================================
+  // Approve cancellation
+  async approveMpsCancellation(serviceOrderId, conn) {
+    // =====================================
+    // 1 Get cancellation request
+    // =====================================
+
+    const [[cancellation]] = await conn.execute(
+      `
+      SELECT
+        soc.id,
+        soc.status,
+
+        so.id AS service_order_id,
+        so.user_id,
+        so.client_id,
+        so.price,
+        so.payment_id,
+        so.reward_coins_used,
+        so.status AS order_status
+
+      FROM external_service_order_cancellations soc
+
+      JOIN external_service_orders so
+        ON so.id = soc.service_order_id
+
+      WHERE soc.service_order_id = ?
+
+      LIMIT 1
+      FOR UPDATE
+      `,
+      [serviceOrderId],
+    );
+
+    if (!cancellation) {
+      throw new Error("CANCELLATION_REQUEST_NOT_FOUND");
+    }
+
+    if (cancellation.status !== "requested") {
+      throw new Error("INVALID_CANCELLATION_STATE");
+    }
+
+    if (cancellation.order_status === "cancelled") {
+      throw new Error("ORDER_ALREADY_CANCELLED");
+    }
+
+    // =====================================
+    // 2 Prevent duplicate refund
+    // =====================================
+
+    const [[existingRefund]] = await conn.execute(
+      `
+      SELECT id
+
+      FROM external_service_order_refunds
+
+      WHERE service_order_id = ?
+      AND status = 'completed'
+
+      LIMIT 1
+      `,
+      [serviceOrderId],
+    );
+
+    // =====================================
+    // 3 Refund calculations
+    // =====================================
+
+    const refundAmount = Number(cancellation.price);
+
+    const coinsUsed = 0; // MPS orders do not use reward coins
+
+    const refundToCard = Math.max(0, refundAmount - coinsUsed);
+
+    // =====================================
+    // 5 Create refund record
+    // =====================================
+    if (refundToCard > 0) {
+      await conn.execute(
+        `
+      INSERT INTO external_service_order_refunds
+      (
+        service_order_id,
+        user_id,
+        client_id,
+        refund_amount,
+        refund_method,
+        status
+      )
+      VALUES
+      (
+        ?, ?, ?, ?, 'original', 'pending'
+      )
+      `,
+        [
+          serviceOrderId,
+          cancellation.user_id,
+          cancellation.client_id,
+          refundToCard,
+        ],
+      );
+    }
+
+    // =====================================
+    // 6 Update cancellation request
+    // =====================================
+
+    await conn.execute(
+      `
+    UPDATE external_service_order_cancellations
+    SET
+      status = 'approved',
+      refund_amount = ?,
+      refund_status = 'initiated'
+
+    WHERE service_order_id = ?
+    `,
+      [refundAmount, serviceOrderId],
+    );
+
+    // =====================================
+    // 7.Timeline: cancellation approved
+    // =====================================
+
+    await conn.execute(
+      `
+    INSERT INTO
+    external_service_order_cancellation_timeline
+    (
+      service_order_id,
+      event
+    )
+    VALUES
+    (
+      ?,
+      'cancellation_approved'
+    )
+  `,
+      [serviceOrderId],
+    );
+
+    // =====================================
+    // 8 Timeline: refund initiated
+    // ONLY if Razorpay refund exists
+    // =====================================
+    if (refundToCard > 0) {
+      await conn.execute(
+        `
+        INSERT INTO
+        external_service_order_cancellation_timeline
+        (
+          service_order_id,
+          event
+        )
+        VALUES
+        (
+          ?,
+          'refund_initiated'
+        )
+      `,
+        [serviceOrderId],
+      );
+    }
+
+    // =====================================
+    // 8. Cancel service order
+    // =====================================
+    await conn.execute(
+      `
+    UPDATE external_service_orders
+
+    SET
+      status = 'cancelled',
+      cancelled_at = NOW(),
+      refund_amount = ?
+
+    WHERE id = ?
+    `,
+      [refundAmount, serviceOrderId],
+    );
+
+    return refundToCard > 0
+      ? {
+          payment_id: cancellation.payment_id,
+
+          amount: refundToCard,
+
+          service_order_id: serviceOrderId,
+        }
+      : null;
+  }
+
+  async processMpsRefund(data) {
+    try {
+      const { payment_id, amount, service_order_id } = data;
+
+      // refund
+      const refund = await razorpay.payments.refund(payment_id, {
+        amount: Math.round(Number(amount) * 100),
+      });
+
+      // update refund
+      await db.execute(
+        `
+      UPDATE external_service_order_refunds
+      SET
+        status = 'completed',
+        razorpay_refund_id = ?
+
+      WHERE service_order_id = ?
+      AND status IN ('pending', 'failed')`,
+        [refund.id, service_order_id],
+      );
+
+      // update cancellation
+      await db.execute(
+        `
+      UPDATE external_service_order_cancellations
+      SET refund_status = 'completed'
+      WHERE service_order_id = ?
+      `,
+        [service_order_id],
+      );
+
+      // =====================================
+      // Timeline: refund completed
+      // =====================================
+      await db.execute(
+        `
+        INSERT INTO
+        external_service_order_cancellation_timeline
+        (
+          service_order_id,
+          event
+        )
+        VALUES
+        (
+          ?,
+          'refund_completed'
+        )
+        `,
+        [service_order_id],
+      );
+    } catch (error) {
+      console.error("Service refund failed:", error);
+
+      await db.execute(
+        `
+      UPDATE external_service_order_refunds
+      SET status = 'failed'
+      WHERE service_order_id = ?
+      AND status IN ('pending', 'failed')
+      `,
+        [data.service_order_id],
+      );
+
+      await db.execute(
+        `
+        INSERT INTO
+        external_service_order_cancellation_timeline
+        (
+          service_order_id,
+          event
+        )
+        VALUES
+        (
+          ?,
+          'refund_failed'
+        )
+        `,
+        [data.service_order_id],
+      );
+    }
+  }
+
+  // Reject cancellation
+  async rejectMpsCancellation(serviceOrderId, conn) {
+    // =====================================
+    // Validate cancellation exists
+    // =====================================
+
+    const [[cancellation]] = await conn.execute(
+      `
+      SELECT
+        id,
+        status
+
+      FROM external_service_order_cancellations
+
+      WHERE service_order_id = ?
+
+      LIMIT 1
+      `,
+      [serviceOrderId],
+    );
+
+    if (!cancellation) {
+      throw new Error("CANCELLATION_REQUEST_NOT_FOUND");
+    }
+
+    if (cancellation.status !== "requested") {
+      throw new Error("INVALID_CANCELLATION_STATE");
+    }
+
+    // =====================================
+    // Reject cancellation
+    // =====================================
+
+    await conn.execute(
+      `
+    UPDATE external_service_order_cancellations
+
+    SET status = 'rejected'
+
+    WHERE service_order_id = ?
+    `,
+      [serviceOrderId],
+    );
+
+    // =====================================
+    // Add timeline event
+    // =====================================
+
+    await conn.execute(
+      `
+    INSERT INTO
+    external_service_order_cancellation_timeline
+    (
+      service_order_id,
+      event
+    )
+    VALUES
+    (
+      ?,
+      'cancellation_rejected'
+    )
+    `,
+      [serviceOrderId],
+    );
+  }
 }
 
 module.exports = new ServiceOrderModel();

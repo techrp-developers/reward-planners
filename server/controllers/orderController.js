@@ -345,6 +345,81 @@ class OrderController {
       conn.release();
     }
   }
+
+    // ===========================================MPS Service============================================================
+  // approve service cancellation
+  async approveMpsServiceCancellation(req, res) {
+    const conn = await db.getConnection();
+
+    try {
+      await conn.beginTransaction();
+
+      const serviceOrderId = Number(req.params.serviceOrderId);
+
+      const refundData = await ServiceOrderModel.approveMpsCancellation(
+        serviceOrderId,
+        conn,
+      );
+
+      await conn.commit();
+
+      res.json({
+        success: true,
+        message: "Cancellation approved successfully",
+      });
+
+      if (refundData?.payment_id) {
+        ServiceOrderModel.processMpsRefund(refundData).catch((err) => {
+          console.error(
+            `[approveMpsServiceCancellation] Refund failed for service_order_id=${refundData.service_order_id}:`,
+            err.message,
+          );
+        });
+      }
+    } catch (error) {
+      await conn.rollback();
+
+      console.error("Approve cancellation error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Unable to approve cancellation",
+      });
+    } finally {
+      conn.release();
+    }
+  }
+
+  // reject service cancellation
+  async rejectMpsServiceCancellation(req, res) {
+    const conn = await db.getConnection();
+
+    try {
+      await conn.beginTransaction();
+
+      const serviceOrderId = Number(req.params.serviceOrderId);
+
+      await ServiceOrderModel.rejectMpsCancellation(serviceOrderId, conn);
+
+      await conn.commit();
+
+      return res.json({
+        success: true,
+        message: "Cancellation rejected",
+      });
+    } catch (error) {
+      await conn.rollback();
+
+      console.error("Reject cancellation error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Unable to reject cancellation",
+      });
+    } finally {
+      conn.release();
+    }
+  }
 }
 
 module.exports = new OrderController();
