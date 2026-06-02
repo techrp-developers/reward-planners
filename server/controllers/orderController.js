@@ -288,7 +288,7 @@ class OrderController {
 
       await conn.commit();
 
-      return res.json({
+      res.json({
         success: true,
         message: "Cancellation approved successfully",
       });
