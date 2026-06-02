@@ -9,12 +9,13 @@ const wareHouseRoutes = require("./warehouseRoutes");
 const categoryRoutes = require("./categoryRoutes");
 const subCategoryRoutes = require("./subCategoryRoutes");
 const subSubCategoryRoutes = require("./subSubCategoryRoutes");
-const paymentRoute=require('../common/Routes/indexRoute')
-const offerRoute=require('./offerRoute')
+const paymentRoutes=require('../common/Routes/indexRoute')
+const offerRoutes=require('./offerRoute')
 const flashRoutes=require('./flashSaleRoute')
 const orderRoutes=require('./orderRoutes')
 const rewardRoutes=require('./rewardRoutes')
 const logisticRoutes=require('./logisticsRoute')
+const companyRoutes=require('./companyRoute')
 
 // dashboard Routes
 router.use("/auth", authRoutes);
@@ -26,11 +27,12 @@ router.use("/category", categoryRoutes);
 router.use("/warehouse", wareHouseRoutes);
 router.use("/subcategory", subCategoryRoutes);
 router.use("/subsubcategory", subSubCategoryRoutes);
-router.use("/payment",paymentRoute)
-router.use("/offer",offerRoute)
+router.use("/payment",paymentRoutes)
+router.use("/offer",offerRoutes)
 router.use("/flash",flashRoutes)
 router.use("/order",orderRoutes)
 router.use("/reward",rewardRoutes)
 router.use("/logistics",logisticRoutes)
+router.use("/company",companyRoutes)
 
 module.exports = router;
