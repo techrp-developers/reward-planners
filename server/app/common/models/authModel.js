@@ -392,6 +392,28 @@ class authModel {
       connection.release();
     }
   }
+
+  // Get profile for update
+  async getProfile(conn, userId) {
+    const [rows] = await conn.execute(
+      `SELECT user_id, phone, user_image
+     FROM customer
+     WHERE user_id = ?`,
+      [userId],
+    );
+
+    return rows[0];
+  }
+
+  // update profile
+  async updateProfile(conn, userId, data) {
+    await conn.execute(
+      `UPDATE customer
+     SET phone = ?, user_image = ?
+     WHERE user_id = ?`,
+      [data.phone, data.user_image, userId],
+    );
+  }
 }
 
 module.exports = new authModel();

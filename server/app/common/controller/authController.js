@@ -1,5 +1,7 @@
 const AuthModel = require("../models/authModel");
 const db = require("../../../config/database");
+const fs = require("fs");
+const path = require("path");
 const AddressModel = require("../models/addressModel");
 const WalletModel = require("../../common/models/walletModel");
 const FitnessService = require("../../step-counter/v1/service/fitnessService");
@@ -15,12 +17,21 @@ const { sendOtpMail } = require("../../../services/mailBuilder/sendOtp");
 const {
   enqueueWhatsApp,
 } = require("../../../services/whatsapp/waEnqueueService");
+const { uploadToR2 } = require("../../../utils/r2upload");
+const { deleteFromR2 } = require("../../../utils/r2delete");
 
 const ACCESS_EXPIRES = "15m";
 const REFRESH_EXPIRES_DAYS = 7;
 
 function generateOTP() {
   return Math.floor(1000 + Math.random() * 9000).toString();
+}
+
+// helper function
+const CDN_BASE_URL = "https://cdn.rewardplanners.com";
+function getPublicUrl(path) {
+  if (!path) return null;
+  return `${CDN_BASE_URL}/${path}`;
 }
 
 const thoughts = [
@@ -1071,6 +1082,97 @@ class AuthController {
         success: false,
         message: "Failed to fetch user info",
       });
+    }
+  }
+
+  // Update profile
+  async updateProfile(req, res) {
+    const connection = await db.getConnection();
+
+    try {
+      await connection.beginTransaction();
+
+      const userId = req.user?.user_id;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      const existingUser = await AuthModel.getProfile(connection, userId);
+
+      if (!existingUser) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+      }
+
+      let imagePath = existingUser.user_image;
+
+      if (req.file) {
+        if (!req.file.mimetype.startsWith("image/")) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid image file",
+          });
+        }
+
+        const fileBuffer = fs.readFileSync(req.file.path);
+
+        const extension = path.extname(req.file.originalname);
+
+        const filename = `profile-${Date.now()}-${Math.random()
+          .toString(36)
+          .substring(2, 8)}${extension}`;
+
+        imagePath = `public/customers/${userId}/${filename}`;
+
+        await uploadToR2(fileBuffer, imagePath, req.file.mimetype);
+
+        // delete old image
+        if (existingUser.user_image) {
+          try {
+            await deleteFromR2(existingUser.user_image);
+          } catch (err) {
+            console.error("OLD PROFILE IMAGE DELETE ERROR:", err);
+          }
+        }
+
+        fs.unlinkSync(req.file.path);
+      }
+
+      const updatedData = {
+        phone: req.body.phone ?? existingUser.phone,
+        user_image: imagePath ? getPublicUrl(imagePath) : null,
+      };
+
+      await AuthModel.updateProfile(connection, userId, updatedData);
+
+      await connection.commit();
+
+      return res.status(200).json({
+        success: true,
+        message: "Profile updated successfully",
+        data: updatedData,
+      });
+    } catch (error) {
+      await connection.rollback();
+
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+
+      console.error("UPDATE PROFILE ERROR:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    } finally {
+      connection.release();
     }
   }
 

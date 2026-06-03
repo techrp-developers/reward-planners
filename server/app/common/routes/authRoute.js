@@ -3,6 +3,7 @@ const router = express.Router();
 const authController = require("../controller/authController");
 const auth = require("../middlewares/auth");
 const optionalAuth = require("../middlewares/optionalAuth");
+const upload = require("../../../middleware/mediaUpload/serviceCategoryUpload");
 
 /*============================================Profile=================================================*/
 router.post("/activate-account", authController.activateAccount);
@@ -50,6 +51,13 @@ router.get("/address/:address_id", auth, authController.getAddressById);
 
 /*===================================================User Information===========================================*/
 router.get("/user-info", auth, authController.getUserInfo);
+
+router.put(
+  "/profile",
+  auth,
+  upload.single("user_image"),
+  authController.updateProfile,
+);
 
 router.delete("/delete-customer", auth, authController.deleteCustomer);
 
