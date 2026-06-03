@@ -1,6 +1,6 @@
 const TodoModel = require("../models/todoModel");
 
-const formatTodoForFrontend = todo => {
+const formatTodoForFrontend = (todo) => {
   return {
     id: String(todo.id),
     createdBy: todo.created_by,
@@ -19,8 +19,17 @@ const formatTodoForFrontend = todo => {
 const TodoController = {
   async createTodo(req, res) {
     try {
+      const userId = req.user?.user_id;
+      // const userId = 1;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
       const {
-        created_by,
         task_date,
         start_time,
         end_time,
@@ -28,13 +37,6 @@ const TodoController = {
         subtitle,
         reminder_time,
       } = req.body;
-
-      if (!created_by) {
-        return res.status(400).json({
-          success: false,
-          message: "created_by is required",
-        });
-      }
 
       if (!task_date) {
         return res.status(400).json({
@@ -58,7 +60,7 @@ const TodoController = {
       }
 
       const todoId = await TodoModel.createTodo({
-        created_by,
+        created_by: userId,
         task_date,
         start_time,
         end_time,
@@ -83,25 +85,24 @@ const TodoController = {
 
   async getTodos(req, res) {
     try {
-      const { created_by, date, filter } = req.query;
+      const userId = req.user?.user_id;
+      // const userId = 1;
 
-      if (!created_by) {
-        return res.status(400).json({
+      if (!userId) {
+        return res.status(401).json({
           success: false,
-          message: "created_by is required",
+          message: "Unauthorized user",
         });
       }
+
+      const { date, filter } = req.query;
 
       let todos = [];
 
       if (date) {
-        todos = await TodoModel.getTodosByUserAndDate(
-          created_by,
-          date,
-          filter
-        );
+        todos = await TodoModel.getTodosByUserAndDate(userId, date, filter);
       } else {
-        todos = await TodoModel.getAllTodosByUser(created_by, filter);
+        todos = await TodoModel.getAllTodosByUser(userId, filter);
       }
 
       return res.status(200).json({
@@ -121,16 +122,18 @@ const TodoController = {
   async updateTodo(req, res) {
     try {
       const { id } = req.params;
-      const { created_by } = req.body;
 
-      if (!created_by) {
-        return res.status(400).json({
+      const userId = req.user?.user_id;
+      // const userId = 1;
+
+      if (!userId) {
+        return res.status(401).json({
           success: false,
-          message: "created_by is required",
+          message: "Unauthorized user",
         });
       }
 
-      const result = await TodoModel.updateTodo(id, created_by, req.body);
+      const result = await TodoModel.updateTodo(id, userId, req.body);
 
       if (result.affectedRows === 0) {
         return res.status(404).json({
@@ -155,16 +158,18 @@ const TodoController = {
   async completeTodo(req, res) {
     try {
       const { id } = req.params;
-      const { created_by } = req.body;
 
-      if (!created_by) {
-        return res.status(400).json({
+      const userId = req.user?.user_id;
+      // const userId = 1;
+
+      if (!userId) {
+        return res.status(401).json({
           success: false,
-          message: "created_by is required",
+          message: "Unauthorized user",
         });
       }
 
-      const result = await TodoModel.markTodoCompleted(id, created_by);
+      const result = await TodoModel.markTodoCompleted(id, userId);
 
       if (result.affectedRows === 0) {
         return res.status(404).json({
@@ -188,12 +193,15 @@ const TodoController = {
 
   async completeMultipleTodos(req, res) {
     try {
-      const { ids, created_by } = req.body;
+      const { ids } = req.body;
 
-      if (!created_by) {
-        return res.status(400).json({
+      const userId = req.user?.user_id;
+      // const userId = 1;
+
+      if (!userId) {
+        return res.status(401).json({
           success: false,
-          message: "created_by is required",
+          message: "Unauthorized user",
         });
       }
 
@@ -204,7 +212,7 @@ const TodoController = {
         });
       }
 
-      await TodoModel.markMultipleCompleted(ids, created_by);
+      await TodoModel.markMultipleCompleted(ids, userId);
 
       return res.status(200).json({
         success: true,
@@ -222,20 +230,19 @@ const TodoController = {
   async updateReminder(req, res) {
     try {
       const { id } = req.params;
-      const { created_by, reminder_time } = req.body;
+      const { reminder_time } = req.body;
 
-      if (!created_by) {
-        return res.status(400).json({
+      const userId = req.user?.user_id;
+      // const userId = 1;
+
+      if (!userId) {
+        return res.status(401).json({
           success: false,
-          message: "created_by is required",
+          message: "Unauthorized user",
         });
       }
 
-      const result = await TodoModel.updateReminder(
-        id,
-        created_by,
-        reminder_time
-      );
+      const result = await TodoModel.updateReminder(id, userId, reminder_time);
 
       if (result.affectedRows === 0) {
         return res.status(404).json({
@@ -260,16 +267,18 @@ const TodoController = {
   async deleteTodo(req, res) {
     try {
       const { id } = req.params;
-      const { created_by } = req.body;
 
-      if (!created_by) {
-        return res.status(400).json({
+      const userId = req.user?.user_id;
+      // const userId = 1;
+
+      if (!userId) {
+        return res.status(401).json({
           success: false,
-          message: "created_by is required",
+          message: "Unauthorized user",
         });
       }
 
-      const result = await TodoModel.deleteTodo(id, created_by);
+      const result = await TodoModel.deleteTodo(id, userId);
 
       if (result.affectedRows === 0) {
         return res.status(404).json({
@@ -293,12 +302,15 @@ const TodoController = {
 
   async deleteMultipleTodos(req, res) {
     try {
-      const { ids, created_by } = req.body;
+      const { ids } = req.body;
 
-      if (!created_by) {
-        return res.status(400).json({
+      const userId = req.user?.user_id;
+      // const userId = 1;
+
+      if (!userId) {
+        return res.status(401).json({
           success: false,
-          message: "created_by is required",
+          message: "Unauthorized user",
         });
       }
 
@@ -309,7 +321,7 @@ const TodoController = {
         });
       }
 
-      await TodoModel.deleteMultipleTodos(ids, created_by);
+      await TodoModel.deleteMultipleTodos(ids, userId);
 
       return res.status(200).json({
         success: true,
