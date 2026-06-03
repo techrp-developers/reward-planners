@@ -1146,7 +1146,7 @@ class AuthController {
 
       const updatedData = {
         phone: req.body.phone ?? existingUser.phone,
-        user_image: imagePath ? getPublicUrl(imagePath) : null,
+        user_image: imagePath,
       };
 
       await AuthModel.updateProfile(connection, userId, updatedData);
@@ -1156,7 +1156,12 @@ class AuthController {
       return res.status(200).json({
         success: true,
         message: "Profile updated successfully",
-        data: updatedData,
+        data: {
+          phone: updatedData.phone,
+          user_image: updatedData.user_image
+            ? getPublicUrl(updatedData.user_image)
+            : null,
+        },
       });
     } catch (error) {
       await connection.rollback();

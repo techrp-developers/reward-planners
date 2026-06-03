@@ -313,7 +313,7 @@ class authModel {
       name: user.name,
       email: user.email,
       phone: user.phone,
-      userImage: user.user_image,
+      userImage: user.user_image ? getPublicUrl(user.user_image) : null,
       rewardPoints: user.reward_points ?? 0,
 
       company: user.company_name
