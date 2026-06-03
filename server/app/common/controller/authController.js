@@ -17,6 +17,7 @@ const {
 } = require("../../../services/whatsapp/waEnqueueService");
 
 const ACCESS_EXPIRES = "15m";
+const REFRESH_EXPIRES_DAYS = 7;
 
 function generateOTP() {
   return Math.floor(1000 + Math.random() * 9000).toString();
@@ -320,6 +321,15 @@ class AuthController {
         { expiresIn: ACCESS_EXPIRES },
       );
 
+      const refreshToken = jwt.sign(
+        { user_id: user.user_id },
+        process.env.REFRESH_TOKEN_SECRET,
+        { expiresIn: `${REFRESH_EXPIRES_DAYS}d` },
+      );
+      const expiryDate = new Date(
+        Date.now() + REFRESH_EXPIRES_DAYS * 24 * 60 * 60 * 1000,
+      );
+
       await AuthModel.updateLoginMeta(user.user_id, req.ip);
 
       const firstLoginBonus = await WalletModel.createWalletOnFirstLogin(
@@ -349,6 +359,7 @@ class AuthController {
       return res.json({
         success: true,
         accessToken,
+        refreshToken,
         firstLoginReward: {
           awarded: firstLoginBonus,
           coins: firstLoginBonus ? 3000 : 0,
@@ -356,6 +367,35 @@ class AuthController {
       });
     } catch (err) {
       return res.status(500).json({ success: false });
+    }
+  }
+
+  // Refresh
+  async refreshAccessToken(req, res) {
+    try {
+      const { refreshToken } = req.body;
+
+      const payload = jwt.verify(
+        refreshToken,
+        process.env.REFRESH_TOKEN_SECRET,
+      );
+
+      const user = await AuthModel.findById(payload.user_id);
+
+      if (!user) return res.status(401).json({ success: false });
+
+      if (Number(user.status) !== 1)
+        return res.status(403).json({ success: false });
+
+      const newAccessToken = jwt.sign(
+        { user_id: user.user_id, token_version: user.token_version },
+        process.env.ACCESS_TOKEN_SECRET,
+        { expiresIn: ACCESS_EXPIRES },
+      );
+
+      return res.json({ success: true, accessToken: newAccessToken });
+    } catch {
+      return res.status(401).json({ success: false });
     }
   }
 
