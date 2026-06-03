@@ -253,6 +253,7 @@ class authModel {
       cu.email,
       cu.phone,
       cu.user_image,
+      cu.created_at,
 
       cw.balance AS reward_points,
 
@@ -314,6 +315,7 @@ class authModel {
       email: user.email,
       phone: user.phone,
       userImage: user.user_image ? getPublicUrl(user.user_image) : null,
+      created_at: user.created_at,
       rewardPoints: user.reward_points ?? 0,
 
       company: user.company_name
