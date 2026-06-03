@@ -23,6 +23,59 @@ function generateOTP() {
   return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
+const thoughts = [
+  "Small progress is still progress.",
+  "Consistency beats intensity.",
+  "Your future is shaped by today's habits.",
+  "Every step counts.",
+  "Focus on progress, not perfection.",
+  "Discipline creates freedom.",
+  "What you do daily matters most.",
+  "Energy grows with action.",
+  "Success is built one day at a time.",
+  "Healthy habits compound over time.",
+  "Start where you are.",
+  "Done is better than perfect.",
+  "Keep showing up.",
+  "Growth begins outside your comfort zone.",
+  "Patience is part of the process.",
+  "Your mindset shapes your reality.",
+  "Small wins lead to big results.",
+  "Believe in gradual improvement.",
+  "Action creates momentum.",
+  "You are stronger than your excuses.",
+  "Progress thrives on consistency.",
+  "Make today count.",
+  "Success follows persistence.",
+  "Good habits build great lives.",
+  "Every day is a fresh start.",
+  "Keep moving forward.",
+  "Challenges create strength.",
+  "Your effort is never wasted.",
+  "Stay committed to your goals.",
+  "One positive choice at a time.",
+  "The best investment is in yourself.",
+  "Results come from repetition.",
+  "Learning never stops.",
+  "Growth takes time.",
+  "Be better than yesterday.",
+  "Focus on what you can control.",
+  "Motivation starts action; discipline keeps it going.",
+  "Your habits define your future.",
+  "Dream big, act small.",
+  "Stay consistent even when it's hard.",
+  "Progress is progress, no matter the pace.",
+  "Take the next right step.",
+  "Success begins with self-belief.",
+  "Every effort adds up.",
+  "Keep your promises to yourself.",
+  "The journey matters as much as the destination.",
+  "Confidence grows through action.",
+  "Persistence beats talent when talent quits.",
+  "Your potential is limitless.",
+  "Today is another opportunity to improve.",
+];
+
 class AuthController {
   /* ======================================================
      ACTIVATE ACCOUNT
@@ -984,7 +1037,13 @@ class AuthController {
         });
       }
 
-      const userInfo = await AuthModel.getUserInfo(userId);
+      const randomThought =
+        thoughts[Math.floor(Math.random() * thoughts.length)];
+
+      const [userInfo, todaySummary] = await Promise.all([
+        AuthModel.getUserInfo(userId),
+        FitnessService.getTodaySummary(userId),
+      ]);
 
       if (!userInfo) {
         return res.status(404).json({
@@ -993,18 +1052,16 @@ class AuthController {
         });
       }
 
-      // Get today's steps summary
-      const todaySummary = await FitnessService.getTodaySummary(userId);
-
       return res.json({
         success: true,
         data: {
           ...userInfo,
           steps: {
-            steps: todaySummary.steps || 0,
-            goal_steps: todaySummary.goal_steps || 0,
-            progress_percent: todaySummary.progress_percent || 0,
+            steps: todaySummary?.steps || 0,
+            goal_steps: todaySummary?.goal_steps || 0,
+            progress_percent: todaySummary?.progress_percent || 0,
           },
+          thought: randomThought,
         },
       });
     } catch (error) {

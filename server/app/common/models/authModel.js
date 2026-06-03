@@ -2,6 +2,13 @@ const db = require("../../../config/database");
 const fs = require("fs");
 const path = require("path");
 
+// helper function
+const CDN_BASE_URL = "https://cdn.rewardplanners.com";
+function getPublicUrl(path) {
+  if (!path) return null;
+  return `${CDN_BASE_URL}/${path}`;
+}
+
 class authModel {
   /* ======================================================
      BASIC USER QUERIES
@@ -248,6 +255,15 @@ class authModel {
 
       cw.balance AS reward_points,
 
+      comp.company_name,
+      comp.company_logo,
+
+      cu_emp.date_of_joining,
+      cu.company_id,
+      cu_emp.role,
+      cu_emp.dob,
+      cu_emp.department,
+
       ca.address_id,
       ca.address_type,
       ca.address1,
@@ -263,6 +279,12 @@ class authModel {
 
     LEFT JOIN customer_wallet cw
     ON cu.user_id = cw.user_id
+
+    LEFT JOIN companies comp
+    ON cu.company_id = comp.company_id
+
+    LEFT JOIN company_users cu_emp
+    ON cu.company_user_id = cu_emp.id
 
     LEFT JOIN customer_addresses ca
       ON cu.user_id = ca.user_id
@@ -292,6 +314,22 @@ class authModel {
       phone: user.phone,
 
       rewardPoints: user.reward_points ?? 0,
+
+      company: user.company_name
+        ? {
+            name: user.company_name,
+            logo: user.company_logo ? getPublicUrl(user.company_logo) : null,
+          }
+        : null,
+
+      employeeInfo: user.company_id
+        ? {
+            dateOfJoining: user.date_of_joining,
+            role: user.role,
+            date_of_birth: user.dob,
+            department: user.department,
+          }
+        : null,
 
       defaultAddress: user.address_id
         ? {
