@@ -252,6 +252,7 @@ class authModel {
       cu.name,
       cu.email,
       cu.phone,
+      cu.user_image,
 
       cw.balance AS reward_points,
 
@@ -312,7 +313,7 @@ class authModel {
       name: user.name,
       email: user.email,
       phone: user.phone,
-
+      userImage: user.user_image,
       rewardPoints: user.reward_points ?? 0,
 
       company: user.company_name
