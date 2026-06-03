@@ -5,6 +5,13 @@ const sharp = require("sharp");
 const { uploadToR2 } = require("../utils/r2upload");
 const { deleteFromR2 } = require("../utils/r2delete");
 
+// helper function
+const CDN_BASE_URL = "https://cdn.rewardplanners.com";
+function getPublicUrl(path) {
+  if (!path) return null;
+  return `${CDN_BASE_URL}/${path}`;
+}
+
 class CompanyController {
   async createCompany(req, res) {
     try {
@@ -93,24 +100,29 @@ class CompanyController {
   async getCompanies(req, res) {
     try {
       const [companies] = await db.execute(`
-        SELECT
-          company_id,
-          company_name,
-          company_email,
-          company_phone,
-          company_logo,
-          status,
-          created_at,
-          updated_at
-        FROM companies
-        WHERE status = 1
-        ORDER BY company_id DESC
-      `);
+      SELECT
+        company_id,
+        company_name,
+        company_email,
+        company_phone,
+        company_logo,
+        status,
+        created_at,
+        updated_at
+      FROM companies
+      WHERE status = 1
+      ORDER BY company_id DESC
+    `);
+
+      const formattedCompanies = companies.map((company) => ({
+        ...company,
+        company_logo: getPublicUrl(company.company_logo),
+      }));
 
       return res.status(200).json({
         success: true,
-        count: companies.length,
-        data: companies,
+        count: formattedCompanies.length,
+        data: formattedCompanies,
       });
     } catch (error) {
       console.error("Get Companies Error:", error);
@@ -128,11 +140,11 @@ class CompanyController {
 
       const [company] = await db.execute(
         `
-          SELECT *
-          FROM companies
-          WHERE company_id = ?
-          AND status = 1
-        `,
+        SELECT *
+        FROM companies
+        WHERE company_id = ?
+        AND status = 1
+      `,
         [id],
       );
 
@@ -143,9 +155,14 @@ class CompanyController {
         });
       }
 
+      const companyData = {
+        ...company[0],
+        company_logo: getPublicUrl(company[0].company_logo),
+      };
+
       return res.status(200).json({
         success: true,
-        data: company[0],
+        data: companyData,
       });
     } catch (error) {
       console.error("Get Company Error:", error);
