@@ -64,7 +64,7 @@ class authModel {
         email,
         contact AS phone
      FROM company_users
-     WHERE email = ?
+     WHERE email = ? AND status = 1
      LIMIT 1`,
       [email.toLowerCase()],
     );

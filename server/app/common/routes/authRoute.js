@@ -12,7 +12,6 @@ router.post("/set-password", authController.setPassword);
 router.post("/login", authController.loginUser);
 router.post("/refresh", authController.refreshAccessToken);
 
-
 router.post("/update-fcm-token", auth, authController.updateFcmToken);
 router.post("/logout", auth, authController.logoutUser);
 
