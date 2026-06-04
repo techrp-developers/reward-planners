@@ -35,6 +35,32 @@ class MfModel {
 
     return rows;
   }
+
+  async findById(id) {
+    const [rows] = await db.execute(
+      `SELECT *
+     FROM content_sections
+     WHERE id = ?`,
+      [id],
+    );
+
+    return rows[0];
+  }
+
+  async update(id, data) {
+    const [result] = await db.execute(
+      `UPDATE content_sections
+     SET
+       title = ?,
+       icon = ?,
+       sort_order = ?,
+       status = ?
+     WHERE id = ?`,
+      [data.title, data.icon, data.sort_order, data.status, id],
+    );
+
+    return result.affectedRows;
+  }
 }
 
 module.exports = new MfModel();

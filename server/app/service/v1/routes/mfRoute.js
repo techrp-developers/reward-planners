@@ -9,4 +9,7 @@ router.post("/create-section", mfController.createSection);
 // Get section
 router.get("/by-category/:categoryId", mfController.getSectionsByCategory);
 
+// Update Section
+router.put("/update-section/:id", mfController.updateSection);
+
 module.exports = router;
