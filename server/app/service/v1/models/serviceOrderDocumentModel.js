@@ -9,15 +9,6 @@ function getPublicUrl(path) {
 }
 
 class ServiceOrderDocumentModel {
-  async upload(data) {
-    await db.execute(
-      `INSERT INTO order_documents
-    (order_id, service_document_id, file_path,uploaded)
-    VALUES (?, ?, ?, 1)`,
-      [data.order_id, data.document_id, data.file_path],
-    );
-  }
-
   // upload or update parent order document
   async uploadOrUpdateParentDocument(data) {
     const [existing] = await db.execute(

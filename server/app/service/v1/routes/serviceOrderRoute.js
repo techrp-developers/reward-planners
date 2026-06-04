@@ -9,16 +9,6 @@ const {
   authorizeRoles,
 } = require("../../../../middleware/auth");
 
-// Direct Order
-router.post("/direct", auth, ServiceOrderController.createDirectOrder);
-
-// Enquiry Order
-router.post(
-  "/from-enquiry/:enquiryId",
-  auth,
-  ServiceOrderController.createEnquiryOrder,
-);
-
 // create razorpay order
 router.post("/create-order", auth, ServiceOrderController.createPaymentOrder);
 
