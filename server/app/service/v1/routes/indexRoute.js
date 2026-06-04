@@ -14,7 +14,7 @@ const serviceCheckoutRoute = require("./serviceCheckoutRoute");
 const serviceBundleRoute = require("./serviceBundleRoute");
 const serviceBannerRoute = require("./serviceBannerRoute");
 const insuranceRoute = require("./insuranceRoute");
-const mfRoute = require("./insuranceRoute");
+const mfRoute = require("./mfRoute");
 
 router.use("/category", serviceCategoryRoute);
 router.use("/service", serviceRoute);

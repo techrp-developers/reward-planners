@@ -1,5 +1,5 @@
 const db = require("../../../../config/database");
-const MfModel = require("../models/contentSectionModel");
+const MfModel = require("../models/mfModel");
 
 class MfController {
   // Create Section
