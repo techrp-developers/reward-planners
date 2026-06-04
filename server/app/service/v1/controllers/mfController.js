@@ -87,6 +87,32 @@ class MfController {
       });
     }
   }
+
+  // Delete section
+  async deleteSection(req, res) {
+    try {
+      const { id } = req.params;
+
+      const affected = await MfModel.deleteSection(id);
+
+      if (!affected) {
+        return res.status(404).json({
+          success: false,
+          message: "Content section not found",
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: "Content section removed successfully",
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
 }
 
 module.exports = new MfController();

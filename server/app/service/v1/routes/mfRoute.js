@@ -12,4 +12,7 @@ router.get("/by-category/:categoryId", mfController.getSectionsByCategory);
 // Update Section
 router.put("/update-section/:id", mfController.updateSection);
 
+// delete section
+router.delete("/remove-section/:id", mfController.deleteSection);
+
 module.exports = router;

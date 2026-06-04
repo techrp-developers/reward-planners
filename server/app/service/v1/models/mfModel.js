@@ -61,6 +61,17 @@ class MfModel {
 
     return result.affectedRows;
   }
+
+  async deleteSection(id) {
+    const [result] = await db.execute(
+      `UPDATE content_sections
+     SET status = 0
+     WHERE id = ?`,
+      [id],
+    );
+
+    return result.affectedRows;
+  }
 }
 
 module.exports = new MfModel();
