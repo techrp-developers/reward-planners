@@ -14,6 +14,7 @@ const serviceCheckoutRoute = require("./serviceCheckoutRoute");
 const serviceBundleRoute = require("./serviceBundleRoute");
 const serviceBannerRoute = require("./serviceBannerRoute");
 const insuranceRoute = require("./insuranceRoute");
+const mfRoute = require("./insuranceRoute");
 
 router.use("/category", serviceCategoryRoute);
 router.use("/service", serviceRoute);
@@ -28,5 +29,6 @@ router.use("/service-orders",serviceOrderRoute)
 router.use('/service-bundle',serviceBundleRoute)
 router.use('/service-banner',serviceBannerRoute)
 router.use("/service-order-documents",serviceOrderDocumentRoute)
+router.use("/mutual-fund",mfRoute)
 
 module.exports = router;
