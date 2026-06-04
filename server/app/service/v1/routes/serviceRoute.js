@@ -11,6 +11,33 @@ const auth = require("../../../common/middlewares/auth");
 // Fetch Active Services
 router.get("/all-services", ServiceController.getServices);
 
+// Service Search Suggestions
+router.get(
+  "/search/suggestions",
+  ServiceController.getSearchSuggestions,
+);
+
+// Save Search History
+router.post(
+  "/search/history",
+  auth,
+  ServiceController.saveSearchHistory,
+);
+
+// Get Search History
+router.get(
+  "/search/history",
+  auth,
+  ServiceController.getSearchHistory,
+);
+
+// Clear Search History
+router.delete(
+  "/search/history",
+  auth,
+  ServiceController.clearSearchHistory,
+);
+
 // Get By Id
 router.get("/find/:id", ServiceController.getServiceById);
 
@@ -143,6 +170,5 @@ router.delete(
 router.get("/top-picks", ServiceController.getTopPicks);
 
 router.get("/value-added/:serviceId", ServiceController.getValueAddedServices);
-
 
 module.exports = router;

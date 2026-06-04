@@ -939,6 +939,39 @@ class ServiceModel {
       variant_image: item.image_url ? getPublicUrl(item.image_url) : null,
     }));
   }
+
+  // Get search suggestions
+  async getSearchSuggestions({ search, limit = 10 }) {
+    if (!search || search.length < 2) {
+      return [];
+    }
+
+    const keyword = `%${search}%`;
+
+    const [rows] = await db.execute(
+      `
+    SELECT
+      id,
+      name AS title,
+      service_image AS image,
+      'service' AS type
+    FROM services
+    WHERE status = 1
+      AND (
+        name LIKE ?
+        OR description LIKE ?
+      )
+    ORDER BY name ASC
+    LIMIT ?
+    `,
+      [keyword, keyword, limit],
+    );
+
+    return rows.map((service) => ({
+      ...service,
+      image: getPublicUrl(service.image),
+    }));
+  }
 }
 
 module.exports = new ServiceModel();

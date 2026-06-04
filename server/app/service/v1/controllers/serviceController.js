@@ -98,6 +98,138 @@ class ServiceController {
     }
   }
 
+  async getSearchSuggestions(req, res) {
+    try {
+      const q = (req.query.q || "").trim();
+
+      const suggestions = await ServiceModel.getSearchSuggestions({
+        search: q,
+        limit: 10,
+      });
+
+      return res.json({
+        success: true,
+        suggestions,
+      });
+    } catch (error) {
+      console.error("Service suggestion error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  }
+
+  async saveSearchHistory(req, res) {
+    try {
+      const userId = req.user?.user_id;
+      // const userId = 1;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      const keyword = (req.body.keyword || "").trim();
+
+      if (!keyword) {
+        return res.json({
+          success: true,
+        });
+      }
+
+      await db.execute(
+        `INSERT INTO service_search_history
+       (user_id, keyword)
+       VALUES (?, ?)
+       ON DUPLICATE KEY UPDATE
+       created_at = CURRENT_TIMESTAMP`,
+        [userId, keyword],
+      );
+
+      return res.json({
+        success: true,
+      });
+    } catch (error) {
+      console.error("Save service search history error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  }
+
+  async getSearchHistory(req, res) {
+    try {
+      const userId = req.user?.user_id;
+      // const userId = 1;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      const [rows] = await db.execute(
+        `SELECT keyword
+       FROM service_search_history
+       WHERE user_id = ?
+       ORDER BY created_at DESC
+       LIMIT 10`,
+        [userId],
+      );
+
+      return res.json({
+        success: true,
+        history: rows.map((row) => row.keyword),
+      });
+    } catch (error) {
+      console.error("Get service search history error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  }
+
+  async clearSearchHistory(req, res) {
+    try {
+      const userId = req.user?.user_id;
+      // const userId = 1;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      await db.execute(
+        `DELETE FROM service_search_history
+       WHERE user_id = ?`,
+        [userId],
+      );
+
+      return res.json({
+        success: true,
+        message: "Search history cleared",
+      });
+    } catch (error) {
+      console.error("Clear service search history error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  }
+
   // create services
   async createService(req, res) {
     try {
