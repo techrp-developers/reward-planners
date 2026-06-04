@@ -36,7 +36,7 @@ class MfModel {
     return rows;
   }
 
-  async findById(id) {
+  async findSectionById(id) {
     const [rows] = await db.execute(
       `SELECT *
      FROM content_sections
@@ -47,7 +47,7 @@ class MfModel {
     return rows[0];
   }
 
-  async update(id, data) {
+  async updateSection(id, data) {
     const [result] = await db.execute(
       `UPDATE content_sections
      SET

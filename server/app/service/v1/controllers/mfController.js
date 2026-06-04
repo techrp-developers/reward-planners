@@ -58,7 +58,7 @@ class MfController {
     try {
       const { id } = req.params;
 
-      const existing = await MfModel.findById(id);
+      const existing = await MfModel.findSectionById(id);
 
       if (!existing) {
         return res.status(404).json({
@@ -74,7 +74,7 @@ class MfController {
         status: req.body.status ?? existing.status,
       };
 
-      await MfModel.update(id, updatedData);
+      await MfModel.updateSection(id, updatedData);
 
       return res.json({
         success: true,
