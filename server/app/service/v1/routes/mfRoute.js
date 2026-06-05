@@ -18,12 +18,16 @@ router.put("/update-section/:id", mfController.updateSection);
 router.delete("/remove-section/:id", mfController.deleteSection);
 
 // ==============================================child sections=============================================
+// Get child sections
 router.get("/sections/children/:parentId", mfController.getChildSections);
 
+// section by id
 router.get("/section/:id", mfController.getSectionById);
 
+// category tree
 router.get("/category-tree/:categoryId", mfController.getCategoryTree);
 
+// get section content
 router.get("/section-content/:id", mfController.getSectionContent);
 
 // =============================================Articles===================================================
