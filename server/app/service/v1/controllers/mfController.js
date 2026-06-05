@@ -72,6 +72,8 @@ class MfController {
       const updatedData = {
         title: req.body.title ?? existing.title,
         icon: req.body.icon ?? existing.icon,
+        parent_section_id:
+          req.body.parent_section_id ?? existing.parent_section_id,
         sort_order: req.body.sort_order ?? existing.sort_order,
         status: req.body.status ?? existing.status,
       };

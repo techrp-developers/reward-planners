@@ -35,6 +35,7 @@ class MfModel {
           sort_order
        FROM content_sections
        WHERE category_id = ?
+       AND parent_section_id IS NULL
        AND status = 1
        ORDER BY sort_order ASC, id ASC`,
       [categoryId],
@@ -60,10 +61,18 @@ class MfModel {
      SET
        title = ?,
        icon = ?,
+       parent_section_id=?,
        sort_order = ?,
        status = ?
      WHERE id = ?`,
-      [data.title, data.icon, data.sort_order, data.status, id],
+      [
+        data.title,
+        data.icon,
+        data.parent_section_id,
+        data.sort_order,
+        data.status,
+        id,
+      ],
     );
 
     return result.affectedRows;
