@@ -337,6 +337,36 @@ class MfController {
       });
     }
   }
+
+  async getSectionContent(req, res) {
+    try {
+      const { id } = req.params;
+
+      const section = await MfModel.findSectionById(id);
+
+      if (!section) {
+        return res.status(404).json({
+          success: false,
+          message: "Section not found",
+        });
+      }
+
+      const articles = await MfModel.findBySectionId(id);
+
+      return res.json({
+        success: true,
+        data: {
+          section,
+          articles,
+        },
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
 }
 
 module.exports = new MfController();

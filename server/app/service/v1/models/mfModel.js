@@ -125,7 +125,9 @@ class MfModel {
           id,
           title,
           short_description,
-          thumbnail
+          article_Content,
+          thumbnail,
+          banner_image
        FROM content_articles
        WHERE section_id = ?
        AND status = 1

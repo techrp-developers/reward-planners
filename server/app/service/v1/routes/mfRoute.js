@@ -24,6 +24,8 @@ router.get("/section/:id", mfController.getSectionById);
 
 router.get("/category-tree/:categoryId", mfController.getCategoryTree);
 
+router.get("/section-content/:id", mfController.getSectionContent);
+
 // =============================================Articles===================================================
 
 // Create Article
