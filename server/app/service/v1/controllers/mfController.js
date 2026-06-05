@@ -5,7 +5,8 @@ class MfController {
   // Create Section
   async createSection(req, res) {
     try {
-      const { category_id, title, icon, sort_order } = req.body;
+      const { category_id, parent_section_id, title, icon, sort_order } =
+        req.body;
 
       if (!category_id || !title) {
         return res.status(400).json({
@@ -16,6 +17,7 @@ class MfController {
 
       const id = await MfModel.createSection({
         category_id,
+        parent_section_id: parent_section_id || null,
         title,
         icon,
         sort_order,
@@ -263,6 +265,68 @@ class MfController {
       return res.json({
         success: true,
         message: "Article removed successfully",
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  // ====================================child sections=====================================================
+  async getChildSections(req, res) {
+    try {
+      const { parentId } = req.params;
+
+      const sections = await MfModel.findChildSections(parentId);
+
+      return res.json({
+        success: true,
+        data: sections,
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  async getSectionById(req, res) {
+    try {
+      const { id } = req.params;
+
+      const section = await MfModel.findSectionById(id);
+
+      if (!section) {
+        return res.status(404).json({
+          success: false,
+          message: "Section not found",
+        });
+      }
+
+      return res.json({
+        success: true,
+        data: section,
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  async getCategoryTree(req, res) {
+    try {
+      const { categoryId } = req.params;
+
+      const tree = await MfModel.getCategoryTree(categoryId);
+
+      return res.json({
+        success: true,
+        data: tree,
       });
     } catch (err) {
       return res.status(500).json({

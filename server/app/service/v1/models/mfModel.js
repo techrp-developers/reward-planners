@@ -7,12 +7,19 @@ class MfModel {
       `INSERT INTO content_sections
       (
         category_id,
+        parent_section_id,
         title,
         icon,
         sort_order
       )
-      VALUES (?, ?, ?, ?)`,
-      [data.category_id, data.title, data.icon || null, data.sort_order || 0],
+      VALUES (?, ?, ?, ?, ?)`,
+      [
+        data.category_id,
+        data.parent_section_id,
+        data.title,
+        data.icon || null,
+        data.sort_order || 0,
+      ],
     );
 
     return result.insertId;
@@ -169,6 +176,53 @@ class MfModel {
     );
 
     return result.affectedRows;
+  }
+
+  // ================================================child section==================================
+  async findChildSections(parentId) {
+    const [rows] = await db.execute(
+      `
+    SELECT *
+    FROM content_sections
+    WHERE parent_section_id = ?
+      AND status = 1
+    ORDER BY sort_order
+    `,
+      [parentId],
+    );
+
+    return rows;
+  }
+
+  async getCategoryTree(categoryId) {
+    const [parents] = await db.execute(
+      `
+    SELECT *
+    FROM content_sections
+    WHERE category_id = ?
+      AND parent_section_id IS NULL
+      AND status = 1
+    ORDER BY sort_order
+    `,
+      [categoryId],
+    );
+
+    for (const parent of parents) {
+      const [children] = await db.execute(
+        `
+      SELECT *
+      FROM content_sections
+      WHERE parent_section_id = ?
+        AND status = 1
+      ORDER BY sort_order
+      `,
+        [parent.id],
+      );
+
+      parent.children = children;
+    }
+
+    return parents;
   }
 }
 
