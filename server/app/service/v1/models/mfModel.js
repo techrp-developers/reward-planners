@@ -1,5 +1,11 @@
 const db = require("../../../../config/database");
 
+const CDN_BASE_URL = "https://cdn.rewardplanners.com";
+function getPublicUrl(path) {
+  if (!path) return null;
+  return `${CDN_BASE_URL}/${path}`;
+}
+
 class MfModel {
   // Create Section
   async createSection(data) {
@@ -67,12 +73,23 @@ class MfModel {
      WHERE id = ?`,
       [
         data.title,
-        data.icon,
+        data.icon || null,
         data.parent_section_id,
         data.sort_order,
         data.status,
         id,
       ],
+    );
+
+    return result.affectedRows;
+  }
+
+  async updateSectionIcon(id, icon) {
+    const [result] = await db.execute(
+      `UPDATE content_sections
+     SET icon = ?
+     WHERE id = ?`,
+      [icon, id],
     );
 
     return result.affectedRows;

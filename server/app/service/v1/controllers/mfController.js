@@ -1,12 +1,22 @@
 const db = require("../../../../config/database");
 const MfModel = require("../models/mfModel");
+const fs = require("fs");
+const path = require("path");
+const sharp = require("sharp");
+const { uploadToR2 } = require("../../../../utils/r2upload");
+const { deleteFromR2 } = require("../../../../utils/r2delete");
+
+const CDN_BASE_URL = "https://cdn.rewardplanners.com";
+function getPublicUrl(path) {
+  if (!path) return null;
+  return `${CDN_BASE_URL}/${path}`;
+}
 
 class MfController {
   // Create Section
   async createSection(req, res) {
     try {
-      const { category_id, parent_section_id, title, icon, sort_order } =
-        req.body;
+      const { category_id, parent_section_id, title, sort_order } = req.body;
 
       if (!category_id || !title) {
         return res.status(400).json({
@@ -15,20 +25,54 @@ class MfController {
         });
       }
 
-      const id = await MfModel.createSection({
+      const sectionId = await MfModel.createSection({
         category_id,
         parent_section_id: parent_section_id || null,
         title,
-        icon,
+        icon: null,
         sort_order,
       });
+
+      let imagePath = null;
+
+      if (req.file) {
+        if (!req.file.mimetype.startsWith("image/")) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid image file",
+          });
+        }
+
+        const fileBuffer = fs.readFileSync(req.file.path);
+
+        const extension = path.extname(req.file.originalname);
+
+        const filename = `section-${Date.now()}-${Math.random()
+          .toString(36)
+          .substring(2, 8)}${extension}`;
+
+        imagePath = `public/sections/${sectionId}/${filename}`;
+
+        await uploadToR2(fileBuffer, imagePath, req.file.mimetype);
+
+        fs.unlinkSync(req.file.path);
+
+        await MfModel.updateSectionIcon(sectionId, imagePath);
+      }
 
       return res.status(201).json({
         success: true,
         message: "Content section created successfully",
-        data: { id },
+        data: {
+          id: sectionId,
+          icon: imagePath,
+        },
       });
     } catch (err) {
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+
       return res.status(500).json({
         success: false,
         message: err.message,
@@ -55,7 +99,6 @@ class MfController {
     }
   }
 
-  // update section
   async updateSection(req, res) {
     try {
       const { id } = req.params;
@@ -69,9 +112,42 @@ class MfController {
         });
       }
 
+      let imagePath = existing.icon;
+
+      if (req.file) {
+        if (!req.file.mimetype.startsWith("image/")) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid image file",
+          });
+        }
+
+        const fileBuffer = fs.readFileSync(req.file.path);
+
+        const extension = path.extname(req.file.originalname);
+
+        const filename = `section-${Date.now()}-${Math.random()
+          .toString(36)
+          .substring(2, 8)}${extension}`;
+
+        imagePath = `public/sections/${id}/${filename}`;
+
+        await uploadToR2(fileBuffer, imagePath, req.file.mimetype);
+
+        if (existing.icon) {
+          try {
+            await deleteFromR2(existing.icon);
+          } catch (err) {
+            console.error("OLD ICON DELETE ERROR:", err);
+          }
+        }
+
+        fs.unlinkSync(req.file.path);
+      }
+
       const updatedData = {
         title: req.body.title ?? existing.title,
-        icon: req.body.icon ?? existing.icon,
+        icon: imagePath,
         parent_section_id:
           req.body.parent_section_id ?? existing.parent_section_id,
         sort_order: req.body.sort_order ?? existing.sort_order,
@@ -83,8 +159,15 @@ class MfController {
       return res.json({
         success: true,
         message: "Content section updated successfully",
+        data: {
+          icon: imagePath,
+        },
       });
     } catch (err) {
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+
       return res.status(500).json({
         success: false,
         message: err.message,
