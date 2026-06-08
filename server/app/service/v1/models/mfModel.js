@@ -217,7 +217,11 @@ class MfModel {
   async getCategoryTree(categoryId) {
     const [parents] = await db.execute(
       `
-    SELECT *
+    SELECT
+      id,
+      title,
+      icon,
+      sort_order
     FROM content_sections
     WHERE category_id = ?
       AND parent_section_id IS NULL
@@ -230,7 +234,10 @@ class MfModel {
     for (const parent of parents) {
       const [children] = await db.execute(
         `
-      SELECT *
+      SELECT
+        id,
+        title,
+        sort_order
       FROM content_sections
       WHERE parent_section_id = ?
         AND status = 1
@@ -250,14 +257,22 @@ class MfModel {
         FROM content_articles
         WHERE section_id = ?
           AND status = 1
-        ORDER BY sort_order ASC
+        ORDER BY sort_order
         `,
           [child.id],
         );
 
-        child.articles = articles;
+        child.article_count = articles.length;
+
+        child.articles = articles.map((article) => ({
+          id: article.id,
+          title: article.title,
+          short_description: article.short_description,
+          thumbnail: getPublicUrl(article.thumbnail),
+        }));
       }
 
+      parent.has_children = children.length > 0;
       parent.children = children;
     }
 
