@@ -232,6 +232,7 @@ class MfModel {
     );
 
     for (const parent of parents) {
+      parent.icon = getPublicUrl(parent.icon);
       const [children] = await db.execute(
         `
       SELECT
