@@ -161,13 +161,23 @@ class MfModel {
 
   async findById(id) {
     const [rows] = await db.execute(
-      `SELECT *
-       FROM content_articles
-       WHERE id = ?`,
+      `
+    SELECT *
+    FROM content_articles
+    WHERE id = ?
+      AND status = 1
+    `,
       [id],
     );
 
-    return rows[0];
+    if (!rows.length) return null;
+
+    const article = rows[0];
+
+    article.thumbnail = getPublicUrl(article.thumbnail);
+    article.banner_image = getPublicUrl(article.banner_image);
+
+    return article;
   }
 
   async updateArticle(id, data) {
