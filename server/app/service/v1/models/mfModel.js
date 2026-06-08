@@ -195,6 +195,17 @@ class MfModel {
     return result.affectedRows;
   }
 
+  async updateArticleImages(articleId, thumbnail, bannerImage) {
+    const [result] = await db.execute(
+      `UPDATE content_articles
+     SET thumbnail = ?, banner_image = ?
+     WHERE id = ?`,
+      [thumbnail, bannerImage, articleId],
+    );
+
+    return result.affectedRows;
+  }
+
   async deleteArticle(id) {
     const [result] = await db.execute(
       `UPDATE content_articles

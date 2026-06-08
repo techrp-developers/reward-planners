@@ -208,8 +208,6 @@ class MfController {
         section_id,
         title,
         short_description,
-        thumbnail,
-        banner_image,
         article_content,
         cta_text,
         sort_order,
@@ -222,23 +220,68 @@ class MfController {
         });
       }
 
-      const id = await MfModel.createArticle({
+      const articleId = await MfModel.createArticle({
         section_id,
         title,
         short_description,
-        thumbnail,
-        banner_image,
+        thumbnail: null,
+        banner_image: null,
         article_content,
         cta_text,
         sort_order,
       });
 
+      let thumbnailPath = null;
+      let bannerPath = null;
+
+      // Thumbnail Upload
+      if (req.files?.thumbnail?.[0]) {
+        const file = req.files.thumbnail[0];
+
+        const extension = path.extname(file.originalname);
+
+        const filename = `thumbnail-${Date.now()}${extension}`;
+
+        thumbnailPath = `public/mf-articles/${articleId}/${filename}`;
+
+        await uploadToR2(
+          fs.readFileSync(file.path),
+          thumbnailPath,
+          file.mimetype,
+        );
+
+        fs.unlinkSync(file.path);
+      }
+
+      // Banner Upload
+      if (req.files?.banner_image?.[0]) {
+        const file = req.files.banner_image[0];
+
+        const extension = path.extname(file.originalname);
+
+        const filename = `banner-${Date.now()}${extension}`;
+
+        bannerPath = `public/mf-articles/${articleId}/${filename}`;
+
+        await uploadToR2(fs.readFileSync(file.path), bannerPath, file.mimetype);
+
+        fs.unlinkSync(file.path);
+      }
+
+      await MfModel.updateArticleImages(articleId, thumbnailPath, bannerPath);
+
       return res.status(201).json({
         success: true,
         message: "Article created successfully",
-        data: { id },
+        data: {
+          id: articleId,
+          thumbnail: thumbnailPath,
+          banner_image: bannerPath,
+        },
       });
     } catch (err) {
+      console.error(err);
+
       return res.status(500).json({
         success: false,
         message: err.message,
@@ -302,14 +345,60 @@ class MfController {
         });
       }
 
+      let thumbnailPath = existing.thumbnail;
+      let bannerPath = existing.banner_image;
+
+      // Thumbnail
+      if (req.files?.thumbnail?.[0]) {
+        const file = req.files.thumbnail[0];
+
+        const extension = path.extname(file.originalname);
+
+        const filename = `thumbnail-${Date.now()}${extension}`;
+
+        thumbnailPath = `public/mf-articles/${id}/${filename}`;
+
+        await uploadToR2(
+          fs.readFileSync(file.path),
+          thumbnailPath,
+          file.mimetype,
+        );
+
+        if (existing.thumbnail) {
+          await deleteFromR2(existing.thumbnail).catch(console.error);
+        }
+
+        fs.unlinkSync(file.path);
+      }
+
+      // Banner
+      if (req.files?.banner_image?.[0]) {
+        const file = req.files.banner_image[0];
+
+        const extension = path.extname(file.originalname);
+
+        const filename = `banner-${Date.now()}${extension}`;
+
+        bannerPath = `public/mf-articles/${id}/${filename}`;
+
+        await uploadToR2(fs.readFileSync(file.path), bannerPath, file.mimetype);
+
+        if (existing.banner_image) {
+          await deleteFromR2(existing.banner_image).catch(console.error);
+        }
+
+        fs.unlinkSync(file.path);
+      }
+
       const updatedData = {
         title: req.body.title ?? existing.title,
+
         short_description:
           req.body.short_description ?? existing.short_description,
 
-        thumbnail: req.body.thumbnail ?? existing.thumbnail,
+        thumbnail: thumbnailPath,
 
-        banner_image: req.body.banner_image ?? existing.banner_image,
+        banner_image: bannerPath,
 
         article_content: req.body.article_content ?? existing.article_content,
 
@@ -325,8 +414,14 @@ class MfController {
       return res.json({
         success: true,
         message: "Article updated successfully",
+        data: {
+          thumbnail: thumbnailPath,
+          banner_image: bannerPath,
+        },
       });
     } catch (err) {
+      console.error(err);
+
       return res.status(500).json({
         success: false,
         message: err.message,

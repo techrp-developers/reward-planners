@@ -50,7 +50,24 @@ router.get("/section-content/:id", mfController.getSectionContent);
 // =============================================Articles===================================================
 
 // Create Article
-router.post("/create-article", mfController.createArticle);
+// router.post("/create-article", mfController.createArticle);
+router.post(
+  "/create-article",
+  upload.fields([
+    { name: "thumbnail", maxCount: 1 },
+    { name: "banner_image", maxCount: 1 },
+  ]),
+  mfController.createArticle,
+);
+
+router.put(
+  "/update-article/:id",
+  upload.fields([
+    { name: "thumbnail", maxCount: 1 },
+    { name: "banner_image", maxCount: 1 },
+  ]),
+  mfController.updateArticle,
+);
 
 // List by Section
 router.get("/by-section/:sectionId", mfController.getArticlesBySection);
@@ -59,7 +76,15 @@ router.get("/by-section/:sectionId", mfController.getArticlesBySection);
 router.get("/find/:id", mfController.getArticleById);
 
 // Update
-router.put("/update-article/:id", mfController.updateArticle);
+// router.put("/update-article/:id", mfController.updateArticle);
+router.put(
+  "/update-article/:id",
+  upload.fields([
+    { name: "thumbnail", maxCount: 1 },
+    { name: "banner_image", maxCount: 1 },
+  ]),
+  mfController.updateArticle,
+);
 
 // Delete
 router.delete("/remove-article/:id", mfController.deleteArticle);
