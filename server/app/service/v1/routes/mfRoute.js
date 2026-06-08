@@ -19,9 +19,6 @@ router.post(
   mfController.createSection,
 );
 
-// Get section
-router.get("/by-category/:categoryId", mfController.getSectionsByCategory);
-
 // Update Section
 router.put(
   "/update-section/:id",
@@ -41,7 +38,7 @@ router.delete(
 
 // ==============================================child sections=============================================
 // Get child sections
-router.get("/sections/children/:parentId", mfController.getChildSections);
+// router.get("/sections/children/:parentId", mfController.getChildSections);
 
 // category tree
 router.get("/category-tree/:categoryId", mfController.getCategoryTree);

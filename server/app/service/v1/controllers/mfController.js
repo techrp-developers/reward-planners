@@ -80,25 +80,6 @@ class MfController {
     }
   }
 
-  // Get Sections By Category
-  async getSectionsByCategory(req, res) {
-    try {
-      const { categoryId } = req.params;
-
-      const sections = await MfModel.findByCategoryId(categoryId);
-
-      return res.json({
-        success: true,
-        data: sections,
-      });
-    } catch (err) {
-      return res.status(500).json({
-        success: false,
-        message: err.message,
-      });
-    }
-  }
-
   async updateSection(req, res) {
     try {
       const { id } = req.params;

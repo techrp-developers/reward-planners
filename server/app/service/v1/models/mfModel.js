@@ -31,25 +31,6 @@ class MfModel {
     return result.insertId;
   }
 
-  // Fetch Sections By Category
-  async findByCategoryId(categoryId) {
-    const [rows] = await db.execute(
-      `SELECT
-          id,
-          title,
-          icon,
-          sort_order
-       FROM content_sections
-       WHERE category_id = ?
-       AND parent_section_id IS NULL
-       AND status = 1
-       ORDER BY sort_order ASC, id ASC`,
-      [categoryId],
-    );
-
-    return rows;
-  }
-
   async findSectionById(id) {
     const [rows] = await db.execute(
       `SELECT *
