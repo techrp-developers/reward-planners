@@ -270,24 +270,6 @@ class MfController {
     }
   }
 
-  async getArticlesBySection(req, res) {
-    try {
-      const { sectionId } = req.params;
-
-      const articles = await MfModel.findBySectionId(sectionId);
-
-      return res.json({
-        success: true,
-        data: articles,
-      });
-    } catch (err) {
-      return res.status(500).json({
-        success: false,
-        message: err.message,
-      });
-    }
-  }
-
   async getArticleById(req, res) {
     try {
       const { id } = req.params;
@@ -436,24 +418,6 @@ class MfController {
   }
 
   // ====================================child sections=====================================================
-  async getChildSections(req, res) {
-    try {
-      const { parentId } = req.params;
-
-      const sections = await MfModel.findChildSections(parentId);
-
-      return res.json({
-        success: true,
-        data: sections,
-      });
-    } catch (err) {
-      return res.status(500).json({
-        success: false,
-        message: err.message,
-      });
-    }
-  }
-
     async getCategoryTree(req, res) {
     try {
       const { categoryId } = req.params;

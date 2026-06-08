@@ -37,9 +37,6 @@ router.delete(
 );
 
 // ==============================================child sections=============================================
-// Get child sections
-// router.get("/sections/children/:parentId", mfController.getChildSections);
-
 // category tree
 router.get("/category-tree/:categoryId", mfController.getCategoryTree);
 
@@ -59,9 +56,6 @@ router.post(
   ]),
   mfController.createArticle,
 );
-
-// List by Section
-router.get("/by-section/:sectionId", mfController.getArticlesBySection);
 
 // Detail
 router.get("/find/:id", mfController.getArticleById);
