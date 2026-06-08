@@ -43,9 +43,6 @@ router.delete(
 // Get child sections
 router.get("/sections/children/:parentId", mfController.getChildSections);
 
-// section by id
-router.get("/section/:id", mfController.getSectionById);
-
 // category tree
 router.get("/category-tree/:categoryId", mfController.getCategoryTree);
 
@@ -66,26 +63,16 @@ router.post(
   mfController.createArticle,
 );
 
-router.put(
-  "/update-article/:id",
-  authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
-  upload.fields([
-    { name: "thumbnail", maxCount: 1 },
-    { name: "banner_image", maxCount: 1 },
-  ]),
-  mfController.updateArticle,
-);
-
 // List by Section
 router.get("/by-section/:sectionId", mfController.getArticlesBySection);
 
 // Detail
 router.get("/find/:id", mfController.getArticleById);
 
-// Update
 router.put(
   "/update-article/:id",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
   upload.fields([
     { name: "thumbnail", maxCount: 1 },
     { name: "banner_image", maxCount: 1 },

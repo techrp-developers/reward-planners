@@ -473,32 +473,7 @@ class MfController {
     }
   }
 
-  async getSectionById(req, res) {
-    try {
-      const { id } = req.params;
-
-      const section = await MfModel.findSectionById(id);
-
-      if (!section) {
-        return res.status(404).json({
-          success: false,
-          message: "Section not found",
-        });
-      }
-
-      return res.json({
-        success: true,
-        data: section,
-      });
-    } catch (err) {
-      return res.status(500).json({
-        success: false,
-        message: err.message,
-      });
-    }
-  }
-
-  async getCategoryTree(req, res) {
+    async getCategoryTree(req, res) {
     try {
       const { categoryId } = req.params;
 
