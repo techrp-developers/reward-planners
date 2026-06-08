@@ -33,13 +33,28 @@ class MfModel {
 
   async findSectionById(id) {
     const [rows] = await db.execute(
-      `SELECT *
-     FROM content_sections
-     WHERE id = ?`,
+      `
+    SELECT
+      id,
+      category_id,
+      title,
+      icon,
+      sort_order,
+      parent_section_id
+    FROM content_sections
+    WHERE id = ?
+      AND status = 1
+    `,
       [id],
     );
 
-    return rows[0];
+    if (!rows.length) return null;
+
+    const section = rows[0];
+
+    section.icon = getPublicUrl(section.icon);
+
+    return section;
   }
 
   async updateSection(id, data) {
@@ -119,21 +134,29 @@ class MfModel {
 
   async findBySectionId(sectionId) {
     const [rows] = await db.execute(
-      `SELECT
-          id,
-          title,
-          short_description,
-          article_Content,
-          thumbnail,
-          banner_image
-       FROM content_articles
-       WHERE section_id = ?
-       AND status = 1
-       ORDER BY sort_order ASC`,
+      `
+    SELECT
+      id,
+      title,
+      short_description,
+      article_content,
+      thumbnail,
+      banner_image,
+      cta_text,
+      sort_order
+    FROM content_articles
+    WHERE section_id = ?
+      AND status = 1
+    ORDER BY sort_order ASC
+    `,
       [sectionId],
     );
 
-    return rows;
+    return rows.map((article) => ({
+      ...article,
+      thumbnail: getPublicUrl(article.thumbnail),
+      banner_image: getPublicUrl(article.banner_image),
+    }));
   }
 
   async findById(id) {
