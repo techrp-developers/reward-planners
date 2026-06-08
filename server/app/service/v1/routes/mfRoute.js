@@ -32,7 +32,12 @@ router.put(
 );
 
 // delete section
-router.delete("/remove-section/:id", mfController.deleteSection);
+router.delete(
+  "/remove-section/:id",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  mfController.deleteSection,
+);
 
 // ==============================================child sections=============================================
 // Get child sections
@@ -79,7 +84,6 @@ router.get("/by-section/:sectionId", mfController.getArticlesBySection);
 router.get("/find/:id", mfController.getArticleById);
 
 // Update
-// router.put("/update-article/:id", mfController.updateArticle);
 router.put(
   "/update-article/:id",
   upload.fields([
@@ -90,6 +94,11 @@ router.put(
 );
 
 // Delete
-router.delete("/remove-article/:id", mfController.deleteArticle);
+router.delete(
+  "/remove-article/:id",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  mfController.deleteArticle,
+);
 
 module.exports = router;
