@@ -13,8 +13,8 @@ const upload = require("../../../../middleware/mediaUpload/serviceCategoryUpload
 // Admin create section
 router.post(
   "/create-section",
-  //   authenticateToken,
-  //   authorizeRoles("vendor_manager", "admin"),
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
   upload.single("icon"),
   mfController.createSection,
 );
@@ -25,8 +25,8 @@ router.get("/by-category/:categoryId", mfController.getSectionsByCategory);
 // Update Section
 router.put(
   "/update-section/:id",
-  //   authenticateToken,
-  //   authorizeRoles("vendor_manager", "admin"),
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
   upload.single("icon"),
   mfController.updateSection,
 );
@@ -50,9 +50,10 @@ router.get("/section-content/:id", mfController.getSectionContent);
 // =============================================Articles===================================================
 
 // Create Article
-// router.post("/create-article", mfController.createArticle);
 router.post(
   "/create-article",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
   upload.fields([
     { name: "thumbnail", maxCount: 1 },
     { name: "banner_image", maxCount: 1 },
@@ -62,6 +63,8 @@ router.post(
 
 router.put(
   "/update-article/:id",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
   upload.fields([
     { name: "thumbnail", maxCount: 1 },
     { name: "banner_image", maxCount: 1 },
