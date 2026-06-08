@@ -239,6 +239,25 @@ class MfModel {
         [parent.id],
       );
 
+      for (const child of children) {
+        const [articles] = await db.execute(
+          `
+        SELECT
+          id,
+          title,
+          short_description,
+          thumbnail
+        FROM content_articles
+        WHERE section_id = ?
+          AND status = 1
+        ORDER BY sort_order ASC
+        `,
+          [child.id],
+        );
+
+        child.articles = articles;
+      }
+
       parent.children = children;
     }
 
