@@ -27,12 +27,14 @@ const fileFilter = (req, file, cb) => {
   const allowedMimeTypes = [
     "image/png",
     "image/jpeg",
+    "image/webp",
   ];
 
   const allowedExtensions = [
     ".png",
     ".jpg",
     ".jpeg",
+    ".webp"
   ];
 
   const ext = path.extname(file.originalname).toLowerCase();
