@@ -38,9 +38,13 @@ function SectionHeader({
         <Icon className="text-lg" />
       </div>
       <div>
-        <h3 className="text-base font-extrabold text-gray-800 tracking-tight">{title}</h3>
+        <h3 className="text-base font-extrabold text-gray-800 tracking-tight">
+          {title}
+        </h3>
         {description && (
-          <p className="mt-0.5 text-xs text-gray-500 font-medium">{description}</p>
+          <p className="mt-0.5 text-xs text-gray-500 font-medium">
+            {description}
+          </p>
         )}
       </div>
     </div>
@@ -154,6 +158,7 @@ interface ProductData {
   productImages: ImagePreview[];
   isDiscountEligible: 1 | 0;
   isReturnable: 1 | 0;
+  isReplaceable: 1 | 0;
   returnWindowDays: string;
   deliveryMinDays: string;
   deliveryMaxDays: string;
@@ -176,6 +181,7 @@ const initialProductData: ProductData = {
   productImages: [],
   isDiscountEligible: 1,
   isReturnable: 1,
+  isReplaceable: 1,
   returnWindowDays: "",
   deliveryMinDays: "1",
   deliveryMaxDays: "3",
@@ -188,7 +194,9 @@ export default function ProductListingDynamic() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
-  const [subSubCategories, setSubSubCategories] = useState<SubSubCategory[]>([]);
+  const [subSubCategories, setSubSubCategories] = useState<SubSubCategory[]>(
+    [],
+  );
   const [requiredDocs, setRequiredDocs] = useState<RequiredDocument[]>([]);
   const [docFiles, setDocFiles] = useState<Record<number, File | null>>({});
   const [loading, setLoading] = useState(false);
@@ -202,8 +210,12 @@ export default function ProductListingDynamic() {
   const [custom_category, setCustomCategory] = useState("");
   const [custom_subcategory, setCustomSubCategory] = useState("");
   const [custom_subsubcategory, setCustomSubSubCategory] = useState("");
-  const [categoryAttributes, setCategoryAttributes] = useState<CategoryAttribute[]>([]);
-  const [productAttributes, setProductAttributes] = useState<Record<string, string[]>>({});
+  const [categoryAttributes, setCategoryAttributes] = useState<
+    CategoryAttribute[]
+  >([]);
+  const [productAttributes, setProductAttributes] = useState<
+    Record<string, string[]>
+  >({});
 
   useEffect(() => {
     fetchCategories();
@@ -342,7 +354,10 @@ export default function ProductListingDynamic() {
       return;
     }
     if (name === "sub_subcategory_id") {
-      setProduct((prev) => ({ ...prev, subSubCategoryId: value ? Number(value) : null }));
+      setProduct((prev) => ({
+        ...prev,
+        subSubCategoryId: value ? Number(value) : null,
+      }));
       return;
     }
     setProduct((prev) => ({ ...prev, [name]: value }));
@@ -351,7 +366,9 @@ export default function ProductListingDynamic() {
   const CHAR_LIMIT = 150;
 
   const handleShortDescriptionChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >,
   ) => {
     const value = e.target.value;
     if (value.length <= CHAR_LIMIT) {
@@ -368,7 +385,10 @@ export default function ProductListingDynamic() {
     });
   };
 
-  const onDocInputChange = (e: ChangeEvent<HTMLInputElement>, documentId: number) => {
+  const onDocInputChange = (
+    e: ChangeEvent<HTMLInputElement>,
+    documentId: number,
+  ) => {
     const file = e.target.files?.[0] ?? null;
     setDocFiles((prev) => ({ ...prev, [documentId]: file }));
   };
@@ -379,11 +399,18 @@ export default function ProductListingDynamic() {
     const missingAttrs = categoryAttributes.filter((attr) => {
       if (attr.is_required !== 1) return false;
       const val = productAttributes[attr.attribute_key];
-      return !val || !Array.isArray(val) || val.length === 0 || val.every((v) => !v || v.trim() === "");
+      return (
+        !val ||
+        !Array.isArray(val) ||
+        val.length === 0 ||
+        val.every((v) => !v || v.trim() === "")
+      );
     });
 
     if (missingAttrs.length > 0) {
-      setError(`Please fill required attributes: ${missingAttrs.map((a) => a.attribute_label).join(", ")}`);
+      setError(
+        `Please fill required attributes: ${missingAttrs.map((a) => a.attribute_label).join(", ")}`,
+      );
       return;
     }
 
@@ -395,40 +422,64 @@ export default function ProductListingDynamic() {
       const token = localStorage.getItem("token");
       if (!token) throw new Error("Authentication required. Please login.");
 
-      if (!product.categoryId && !isCustomCategory) throw new Error("Please select a category");
-      if (isCustomCategory && !custom_category.trim()) throw new Error("Please enter custom category name");
-      if (isCustomSubcategory && !custom_subcategory.trim()) throw new Error("Please enter custom sub-category name");
-      if (isCustomSubSubcategory && !custom_subsubcategory.trim()) throw new Error("Please enter custom type / sub-type name");
+      if (!product.categoryId && !isCustomCategory)
+        throw new Error("Please select a category");
+      if (isCustomCategory && !custom_category.trim())
+        throw new Error("Please enter custom category name");
+      if (isCustomSubcategory && !custom_subcategory.trim())
+        throw new Error("Please enter custom sub-category name");
+      if (isCustomSubSubcategory && !custom_subsubcategory.trim())
+        throw new Error("Please enter custom type / sub-type name");
       if (!product.productName || !product.brandName || !product.manufacturer)
         throw new Error("Please fill in all required product information");
-      if (!product.description?.trim()) throw new Error("Detailed description is required");
-      if (!product.brandDescription?.trim()) throw new Error("Brand description is required");
-      if (!product.shortDescription?.trim()) throw new Error("Short description is required");
+      if (!product.description?.trim())
+        throw new Error("Detailed description is required");
+      if (!product.brandDescription?.trim())
+        throw new Error("Brand description is required");
+      if (!product.shortDescription?.trim())
+        throw new Error("Short description is required");
 
       const minDays = Number(product.deliveryMinDays);
       const maxDays = Number(product.deliveryMaxDays);
-      if (minDays <= 0 || maxDays <= 0) throw new Error("Delivery days must be greater than 0");
-      if (minDays > maxDays) throw new Error("Minimum delivery days cannot exceed maximum delivery days");
+      if (minDays <= 0 || maxDays <= 0)
+        throw new Error("Delivery days must be greater than 0");
+      if (minDays > maxDays)
+        throw new Error(
+          "Minimum delivery days cannot exceed maximum delivery days",
+        );
 
       if (product.isReturnable === 1) {
         const days = Number(product.returnWindowDays);
-        if (!days || days < 1 || days > 30) throw new Error("Return window must be between 1 and 30 days");
+        if (!days || days < 1 || days > 30)
+          throw new Error("Return window must be between 1 and 30 days");
       }
 
       for (const doc of requiredDocs) {
         if (doc.status === 1 && !docFiles[doc.document_id])
-          throw new Error(`Please upload required document: ${doc.document_name}`);
+          throw new Error(
+            `Please upload required document: ${doc.document_name}`,
+          );
       }
 
-      if (product.productImages.length === 0) throw new Error("Cover image is required");
+      if (product.productImages.length === 0)
+        throw new Error("Cover image is required");
 
       const formData = new FormData();
-      if (product.categoryId) formData.append("category_id", product.categoryId.toString());
-      if (product.subCategoryId) formData.append("subcategory_id", product.subCategoryId.toString());
-      if (product.subSubCategoryId) formData.append("sub_subcategory_id", product.subSubCategoryId.toString());
-      if (isCustomCategory && custom_category.trim()) formData.append("custom_category", custom_category.trim());
-      if (isCustomSubcategory) formData.append("custom_subcategory", custom_subcategory);
-      if (isCustomSubSubcategory) formData.append("custom_sub_subcategory", custom_subsubcategory);
+      if (product.categoryId)
+        formData.append("category_id", product.categoryId.toString());
+      if (product.subCategoryId)
+        formData.append("subcategory_id", product.subCategoryId.toString());
+      if (product.subSubCategoryId)
+        formData.append(
+          "sub_subcategory_id",
+          product.subSubCategoryId.toString(),
+        );
+      if (isCustomCategory && custom_category.trim())
+        formData.append("custom_category", custom_category.trim());
+      if (isCustomSubcategory)
+        formData.append("custom_subcategory", custom_subcategory);
+      if (isCustomSubSubcategory)
+        formData.append("custom_sub_subcategory", custom_subsubcategory);
 
       formData.append("brandName", product.brandName);
       formData.append("manufacturer", product.manufacturer);
@@ -438,15 +489,22 @@ export default function ProductListingDynamic() {
       formData.append("brandDescription", product.brandDescription);
       if (product.gstSlab) formData.append("gstSlab", product.gstSlab);
       if (product.hsnSacCode) formData.append("hsnSacCode", product.hsnSacCode);
-      formData.append("is_discount_eligible", String(product.isDiscountEligible));
+      formData.append(
+        "is_discount_eligible",
+        String(product.isDiscountEligible),
+      );
       formData.append("is_returnable", String(product.isReturnable));
+      formData.append("is_replaceable", String(product.isReplaceable));
       if (product.isReturnable === 1 && product.returnWindowDays)
         formData.append("return_window_days", product.returnWindowDays);
       formData.append("delivery_sla_min_days", product.deliveryMinDays);
       formData.append("delivery_sla_max_days", product.deliveryMaxDays);
       formData.append("shipping_class", product.shippingClass);
-      product.productImages.forEach(({ file }) => formData.append("images", file));
-      if (product.productVideo) formData.append("video", product.productVideo.file);
+      product.productImages.forEach(({ file }) =>
+        formData.append("images", file),
+      );
+      if (product.productVideo)
+        formData.append("video", product.productVideo.file);
       Object.entries(docFiles).forEach(([docId, file]) => {
         if (file) formData.append(docId, file);
       });
@@ -456,7 +514,8 @@ export default function ProductListingDynamic() {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
-      if (!res.data.success) throw new Error(res.data.message || "Failed to create product");
+      if (!res.data.success)
+        throw new Error(res.data.message || "Failed to create product");
 
       Swal.fire({
         icon: "success",
@@ -483,7 +542,10 @@ export default function ProductListingDynamic() {
     return (
       <section
         className="bg-white rounded-2xl p-6 sm:p-8 vendor-section-card"
-        style={{ border: "1px solid rgba(133,43,175,0.08)", boxShadow: "0 4px 24px rgba(133,43,175,0.06)" }}
+        style={{
+          border: "1px solid rgba(133,43,175,0.08)",
+          boxShadow: "0 4px 24px rgba(133,43,175,0.06)",
+        }}
       >
         <SectionHeader
           icon={FaFileUpload}
@@ -495,7 +557,10 @@ export default function ProductListingDynamic() {
             <div
               key={doc.document_id}
               className="p-4 rounded-xl border transition-colors"
-              style={{ background: "rgba(133,43,175,0.02)", borderColor: "rgba(133,43,175,0.1)" }}
+              style={{
+                background: "rgba(133,43,175,0.02)",
+                borderColor: "rgba(133,43,175,0.1)",
+              }}
             >
               <label className={labelCls}>
                 {doc.document_name}{" "}
@@ -510,7 +575,9 @@ export default function ProductListingDynamic() {
                 onChange={(e) => onDocInputChange(e, doc.document_id)}
                 className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:text-white file:cursor-pointer"
               />
-              <div className="mt-2 text-xs text-gray-400">Accepted: PDF, DOC, DOCX, JPG, PNG</div>
+              <div className="mt-2 text-xs text-gray-400">
+                Accepted: PDF, DOC, DOCX, JPG, PNG
+              </div>
               {docFiles[doc.document_id] && (
                 <div className="mt-1 flex items-center gap-1 text-xs text-emerald-600 font-medium">
                   <span>✓</span>
@@ -525,13 +592,17 @@ export default function ProductListingDynamic() {
   };
 
   const getSelectedCategoryName = () =>
-    categories.find((c) => c.category_id === product.categoryId)?.category_name || "Not selected";
+    categories.find((c) => c.category_id === product.categoryId)
+      ?.category_name || "Not selected";
 
   const getSelectedSubCategoryName = () =>
-    subCategories.find((s) => s.subcategory_id === product.subCategoryId)?.subcategory_name || "Not selected";
+    subCategories.find((s) => s.subcategory_id === product.subCategoryId)
+      ?.subcategory_name || "Not selected";
 
   const getSelectedSubSubCategoryName = () =>
-    subSubCategories.find((ss) => ss.sub_subcategory_id === product.subSubCategoryId)?.name || "Not selected";
+    subSubCategories.find(
+      (ss) => ss.sub_subcategory_id === product.subSubCategoryId,
+    )?.name || "Not selected";
 
   if (loading && categories.length === 0) {
     return (
@@ -544,12 +615,12 @@ export default function ProductListingDynamic() {
 
   return (
     <div className="max-w-7xl mx-auto">
-
       {/* ── PAGE HEADER ── */}
       <div
         className="flex items-center justify-between mb-6 p-5 rounded-2xl"
         style={{
-          background: "linear-gradient(135deg, rgba(133,43,175,0.06) 0%, rgba(252,63,120,0.04) 100%)",
+          background:
+            "linear-gradient(135deg, rgba(133,43,175,0.06) 0%, rgba(252,63,120,0.04) 100%)",
           border: "1px solid rgba(133,43,175,0.1)",
         }}
       >
@@ -563,7 +634,9 @@ export default function ProductListingDynamic() {
         </div>
         <div
           className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-white"
-          style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }}
+          style={{
+            background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
+          }}
         >
           <FaPlus size={10} /> New Product
         </div>
@@ -573,7 +646,10 @@ export default function ProductListingDynamic() {
       {error && (
         <div
           className="flex items-start gap-3 p-4 mb-6 rounded-xl border"
-          style={{ background: "rgba(239,68,68,0.04)", borderColor: "rgba(239,68,68,0.2)" }}
+          style={{
+            background: "rgba(239,68,68,0.04)",
+            borderColor: "rgba(239,68,68,0.2)",
+          }}
         >
           <p className="text-sm font-medium text-red-700">⚠ {error}</p>
         </div>
@@ -581,18 +657,23 @@ export default function ProductListingDynamic() {
       {success && (
         <div
           className="flex items-start gap-3 p-4 mb-6 rounded-xl border"
-          style={{ background: "rgba(16,185,129,0.04)", borderColor: "rgba(16,185,129,0.2)" }}
+          style={{
+            background: "rgba(16,185,129,0.04)",
+            borderColor: "rgba(16,185,129,0.2)",
+          }}
         >
           <p className="text-sm font-medium text-emerald-700">✓ {success}</p>
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
-
         {/* ── CATEGORY SELECTION ── */}
         <section
           className="bg-white rounded-2xl p-6 sm:p-8 vendor-section-card"
-          style={{ border: "1px solid rgba(133,43,175,0.08)", boxShadow: "0 4px 24px rgba(133,43,175,0.06)" }}
+          style={{
+            border: "1px solid rgba(133,43,175,0.08)",
+            boxShadow: "0 4px 24px rgba(133,43,175,0.06)",
+          }}
         >
           <SectionHeader
             icon={FaTag}
@@ -657,7 +738,9 @@ export default function ProductListingDynamic() {
               <label className={labelCls}>Sub Category</label>
               <select
                 name="subcategory_id"
-                value={isCustomSubcategory ? "other" : product.subCategoryId || ""}
+                value={
+                  isCustomSubcategory ? "other" : product.subCategoryId || ""
+                }
                 onChange={(e) => {
                   if (e.target.value === "other") {
                     setIsCustomSubcategory(true);
@@ -702,7 +785,11 @@ export default function ProductListingDynamic() {
               <label className={labelCls}>Type / Sub-type</label>
               <select
                 name="sub_subcategory_id"
-                value={isCustomSubSubcategory ? "other" : product.subSubCategoryId || ""}
+                value={
+                  isCustomSubSubcategory
+                    ? "other"
+                    : product.subSubCategoryId || ""
+                }
                 onChange={(e) => {
                   if (e.target.value === "other") {
                     setIsCustomSubSubcategory(true);
@@ -718,7 +805,10 @@ export default function ProductListingDynamic() {
               >
                 <option value="">Select Type</option>
                 {subSubCategories.map((t) => (
-                  <option key={t.sub_subcategory_id} value={t.sub_subcategory_id}>
+                  <option
+                    key={t.sub_subcategory_id}
+                    value={t.sub_subcategory_id}
+                  >
                     {t.name}
                   </option>
                 ))}
@@ -738,7 +828,9 @@ export default function ProductListingDynamic() {
           </div>
 
           {/* Selected Categories Display */}
-          {(product.categoryId || product.subCategoryId || product.subSubCategoryId) && (
+          {(product.categoryId ||
+            product.subCategoryId ||
+            product.subSubCategoryId) && (
             <div
               className="flex flex-wrap items-center gap-2 mt-5 p-3 rounded-xl"
               style={{
@@ -746,7 +838,9 @@ export default function ProductListingDynamic() {
                 border: "1px solid rgba(133,43,175,0.12)",
               }}
             >
-              <span className="text-xs font-semibold text-gray-500 mr-1">Selected:</span>
+              <span className="text-xs font-semibold text-gray-500 mr-1">
+                Selected:
+              </span>
               <span className="px-3 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-700">
                 {getSelectedCategoryName()}
               </span>
@@ -768,7 +862,8 @@ export default function ProductListingDynamic() {
               )}
               {requiredDocs.length > 0 && (
                 <span className="ml-auto text-xs text-gray-400">
-                  {requiredDocs.filter((doc) => doc.status === 1).length} required doc(s)
+                  {requiredDocs.filter((doc) => doc.status === 1).length}{" "}
+                  required doc(s)
                 </span>
               )}
             </div>
@@ -778,7 +873,10 @@ export default function ProductListingDynamic() {
         {/* ── PRODUCT IDENTIFICATION ── */}
         <section
           className="bg-white rounded-2xl p-6 sm:p-8 vendor-section-card"
-          style={{ border: "1px solid rgba(133,43,175,0.08)", boxShadow: "0 4px 24px rgba(133,43,175,0.06)" }}
+          style={{
+            border: "1px solid rgba(133,43,175,0.08)",
+            boxShadow: "0 4px 24px rgba(133,43,175,0.06)",
+          }}
         >
           <SectionHeader
             icon={FaTag}
@@ -832,7 +930,10 @@ export default function ProductListingDynamic() {
         {/* ── PRODUCT ATTRIBUTES ── */}
         <section
           className="bg-white rounded-2xl p-6 sm:p-8 vendor-section-card"
-          style={{ border: "1px solid rgba(133,43,175,0.08)", boxShadow: "0 4px 24px rgba(133,43,175,0.06)" }}
+          style={{
+            border: "1px solid rgba(133,43,175,0.08)",
+            boxShadow: "0 4px 24px rgba(133,43,175,0.06)",
+          }}
         >
           <SectionHeader
             icon={FaBox}
@@ -848,13 +949,18 @@ export default function ProductListingDynamic() {
                   <div key={attr.attribute_key}>
                     <label className={labelCls}>
                       {attr.attribute_label}
-                      {attr.is_required === 1 && <span className="text-red-500 ml-0.5">*</span>}
+                      {attr.is_required === 1 && (
+                        <span className="text-red-500 ml-0.5">*</span>
+                      )}
                     </label>
 
                     {inputType === "multiselect" && (
                       <div className="flex flex-wrap gap-2 mt-1">
                         {(attr.options || []).map((opt: string) => {
-                          const selected = productAttributes[attr.attribute_key]?.includes(opt);
+                          const selected =
+                            productAttributes[attr.attribute_key]?.includes(
+                              opt,
+                            );
                           return (
                             <label
                               key={opt}
@@ -869,7 +975,8 @@ export default function ProductListingDynamic() {
                                 checked={selected}
                                 className="sr-only"
                                 onChange={(e) => {
-                                  const prevVals = productAttributes[attr.attribute_key] || [];
+                                  const prevVals =
+                                    productAttributes[attr.attribute_key] || [];
                                   const newVals = e.target.checked
                                     ? [...prevVals, opt]
                                     : prevVals.filter((v: string) => v !== opt);
@@ -889,7 +996,9 @@ export default function ProductListingDynamic() {
                     {inputType === "select" && (
                       <select
                         required={attr.is_required === 1}
-                        value={(productAttributes[attr.attribute_key] || [])[0] || ""}
+                        value={
+                          (productAttributes[attr.attribute_key] || [])[0] || ""
+                        }
                         onChange={(e) =>
                           setProductAttributes((prev) => ({
                             ...prev,
@@ -900,7 +1009,9 @@ export default function ProductListingDynamic() {
                       >
                         <option value="">Select {attr.attribute_label}</option>
                         {(attr.options || []).map((opt: string) => (
-                          <option key={opt} value={opt}>{opt}</option>
+                          <option key={opt} value={opt}>
+                            {opt}
+                          </option>
                         ))}
                       </select>
                     )}
@@ -909,7 +1020,9 @@ export default function ProductListingDynamic() {
                       <input
                         type="number"
                         required={attr.is_required === 1}
-                        value={(productAttributes[attr.attribute_key] || [])[0] || ""}
+                        value={
+                          (productAttributes[attr.attribute_key] || [])[0] || ""
+                        }
                         onChange={(e) =>
                           setProductAttributes((prev) => ({
                             ...prev,
@@ -924,7 +1037,9 @@ export default function ProductListingDynamic() {
                       <input
                         type="text"
                         required={attr.is_required === 1}
-                        value={(productAttributes[attr.attribute_key] || []).join(",")}
+                        value={(
+                          productAttributes[attr.attribute_key] || []
+                        ).join(",")}
                         onChange={(e) =>
                           setProductAttributes((prev) => ({
                             ...prev,
@@ -938,7 +1053,9 @@ export default function ProductListingDynamic() {
                     {inputType === "textarea" && (
                       <textarea
                         required={attr.is_required === 1}
-                        value={(productAttributes[attr.attribute_key] || [])[0] || ""}
+                        value={
+                          (productAttributes[attr.attribute_key] || [])[0] || ""
+                        }
                         onChange={(e) =>
                           setProductAttributes((prev) => ({
                             ...prev,
@@ -966,7 +1083,10 @@ export default function ProductListingDynamic() {
         {/* ── PRODUCT DESCRIPTION ── */}
         <section
           className="bg-white rounded-2xl p-6 sm:p-8 vendor-section-card"
-          style={{ border: "1px solid rgba(133,43,175,0.08)", boxShadow: "0 4px 24px rgba(133,43,175,0.06)" }}
+          style={{
+            border: "1px solid rgba(133,43,175,0.08)",
+            boxShadow: "0 4px 24px rgba(133,43,175,0.06)",
+          }}
         >
           <SectionHeader
             icon={FaBox}
@@ -984,7 +1104,9 @@ export default function ProductListingDynamic() {
                   value={product.description}
                   placeholder="Describe your product, features, benefits, specifications, and usage instructions..."
                   minHeight={300}
-                  onChange={(val) => setProduct((prev) => ({ ...prev, description: val }))}
+                  onChange={(val) =>
+                    setProduct((prev) => ({ ...prev, description: val }))
+                  }
                 />
               </div>
             </div>
@@ -998,7 +1120,9 @@ export default function ProductListingDynamic() {
                   value={product.brandDescription}
                   placeholder="Describe the brand story, values, quality standards, and brand background..."
                   minHeight={200}
-                  onChange={(val) => setProduct((prev) => ({ ...prev, brandDescription: val }))}
+                  onChange={(val) =>
+                    setProduct((prev) => ({ ...prev, brandDescription: val }))
+                  }
                 />
               </div>
             </div>
@@ -1018,7 +1142,9 @@ export default function ProductListingDynamic() {
               />
               <p
                 className={`mt-1 text-xs font-medium ${
-                  product.shortDescription.length >= CHAR_LIMIT ? "text-red-500" : "text-gray-400"
+                  product.shortDescription.length >= CHAR_LIMIT
+                    ? "text-red-500"
+                    : "text-gray-400"
                 }`}
               >
                 {product.shortDescription.length} / {CHAR_LIMIT}
@@ -1030,7 +1156,10 @@ export default function ProductListingDynamic() {
         {/* ── PRICING & COMMERCIAL ── */}
         <section
           className="bg-white rounded-2xl p-6 sm:p-8 vendor-section-card"
-          style={{ border: "1px solid rgba(133,43,175,0.08)", boxShadow: "0 4px 24px rgba(133,43,175,0.06)" }}
+          style={{
+            border: "1px solid rgba(133,43,175,0.08)",
+            boxShadow: "0 4px 24px rgba(133,43,175,0.06)",
+          }}
         >
           <SectionHeader
             icon={FaTag}
@@ -1064,13 +1193,34 @@ export default function ProductListingDynamic() {
                 value={product.isReturnable}
                 onChange={(e) => {
                   const val = Number(e.target.value) as 1 | 0;
+
                   setProduct((prev) => ({
                     ...prev,
                     isReturnable: val,
+                    isReplaceable: val === 0 ? 0 : prev.isReplaceable,
                     returnWindowDays: val === 0 ? "" : prev.returnWindowDays,
                   }));
                 }}
                 className={inputCls}
+              >
+                <option value={1}>Yes</option>
+                <option value={0}>No</option>
+              </select>
+            </div>
+
+            <div>
+              <label className={labelCls}>Replaceable</label>
+              <select
+                name="isReplaceable"
+                value={product.isReplaceable}
+                disabled={product.isReturnable === 0}
+                onChange={(e) =>
+                  setProduct((prev) => ({
+                    ...prev,
+                    isReplaceable: Number(e.target.value) as 1 | 0,
+                  }))
+                }
+                className={`${inputCls} disabled:bg-gray-100 disabled:cursor-not-allowed`}
               >
                 <option value={1}>Yes</option>
                 <option value={0}>No</option>
@@ -1098,7 +1248,10 @@ export default function ProductListingDynamic() {
         {/* ── LOGISTICS ── */}
         <section
           className="bg-white rounded-2xl p-6 sm:p-8 vendor-section-card"
-          style={{ border: "1px solid rgba(133,43,175,0.08)", boxShadow: "0 4px 24px rgba(133,43,175,0.06)" }}
+          style={{
+            border: "1px solid rgba(133,43,175,0.08)",
+            boxShadow: "0 4px 24px rgba(133,43,175,0.06)",
+          }}
         >
           <SectionHeader
             icon={FaBox}
@@ -1149,14 +1302,18 @@ export default function ProductListingDynamic() {
           </div>
 
           <p className="mt-4 text-xs text-gray-400">
-            Delivery timeline shown to customers as an estimate. Actual delivery may vary by location.
+            Delivery timeline shown to customers as an estimate. Actual delivery
+            may vary by location.
           </p>
         </section>
 
         {/* ── COVER IMAGE ── */}
         <section
           className="bg-white rounded-2xl p-6 sm:p-8 vendor-section-card"
-          style={{ border: "1px solid rgba(133,43,175,0.08)", boxShadow: "0 4px 24px rgba(133,43,175,0.06)" }}
+          style={{
+            border: "1px solid rgba(133,43,175,0.08)",
+            boxShadow: "0 4px 24px rgba(133,43,175,0.06)",
+          }}
         >
           <SectionHeader
             icon={FaImages}
@@ -1166,13 +1323,20 @@ export default function ProductListingDynamic() {
 
           <div
             className="flex items-center gap-4 p-4 rounded-2xl border-2 border-dashed"
-            style={{ borderColor: "rgba(133,43,175,0.2)", background: "rgba(133,43,175,0.02)" }}
+            style={{
+              borderColor: "rgba(133,43,175,0.2)",
+              background: "rgba(133,43,175,0.02)",
+            }}
           >
             <div className="flex-1">
               <p className="text-sm font-medium text-gray-700">
-                {product.productImages.length === 0 ? "No cover image chosen" : "1 cover image selected"}
+                {product.productImages.length === 0
+                  ? "No cover image chosen"
+                  : "1 cover image selected"}
               </p>
-              <p className="text-xs text-gray-400 mt-0.5">JPG, PNG, WEBP · High quality recommended</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                JPG, PNG, WEBP · High quality recommended
+              </p>
             </div>
 
             <label
@@ -1181,7 +1345,9 @@ export default function ProductListingDynamic() {
                   ? "opacity-40 cursor-not-allowed"
                   : "hover:opacity-90"
               }`}
-              style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }}
+              style={{
+                background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
+              }}
             >
               Choose Image
               <input
@@ -1194,7 +1360,9 @@ export default function ProductListingDynamic() {
             </label>
           </div>
 
-          {imageError && <p className="mt-2 text-xs text-red-500">{imageError}</p>}
+          {imageError && (
+            <p className="mt-2 text-xs text-red-500">{imageError}</p>
+          )}
 
           {product.productImages.length > 0 && (
             <div className="mt-4 flex gap-3 flex-wrap">
@@ -1225,7 +1393,10 @@ export default function ProductListingDynamic() {
         {/* ── PRODUCT VIDEO ── */}
         <section
           className="bg-white rounded-2xl p-6 sm:p-8 vendor-section-card"
-          style={{ border: "1px solid rgba(133,43,175,0.08)", boxShadow: "0 4px 24px rgba(133,43,175,0.06)" }}
+          style={{
+            border: "1px solid rgba(133,43,175,0.08)",
+            boxShadow: "0 4px 24px rgba(133,43,175,0.06)",
+          }}
         >
           <SectionHeader
             icon={FaImages}
@@ -1235,18 +1406,27 @@ export default function ProductListingDynamic() {
 
           <div
             className="flex items-center gap-4 p-4 rounded-2xl border-2 border-dashed"
-            style={{ borderColor: "rgba(133,43,175,0.2)", background: "rgba(133,43,175,0.02)" }}
+            style={{
+              borderColor: "rgba(133,43,175,0.2)",
+              background: "rgba(133,43,175,0.02)",
+            }}
           >
             <div className="flex-1">
               <p className="text-sm font-medium text-gray-700">
-                {product.productVideo ? "1 video selected" : "No product video chosen"}
+                {product.productVideo
+                  ? "1 video selected"
+                  : "No product video chosen"}
               </p>
-              <p className="text-xs text-gray-400 mt-0.5">MP4, WEBM, MOV · Max 50 MB</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                MP4, WEBM, MOV · Max 50 MB
+              </p>
             </div>
 
             <label
               className="cursor-pointer px-4 py-2 text-xs font-semibold rounded-xl text-white transition-all hover:opacity-90 active:scale-95"
-              style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }}
+              style={{
+                background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
+              }}
             >
               Choose Video
               <input
@@ -1258,11 +1438,20 @@ export default function ProductListingDynamic() {
             </label>
           </div>
 
-          {videoError && <p className="mt-2 text-xs text-red-500">{videoError}</p>}
+          {videoError && (
+            <p className="mt-2 text-xs text-red-500">{videoError}</p>
+          )}
 
           {product.productVideo && (
-            <div className="mt-4 relative w-64 rounded-xl overflow-hidden border-2 group" style={{ borderColor: "rgba(133,43,175,0.2)" }}>
-              <video src={product.productVideo.url} controls className="w-full" />
+            <div
+              className="mt-4 relative w-64 rounded-xl overflow-hidden border-2 group"
+              style={{ borderColor: "rgba(133,43,175,0.2)" }}
+            >
+              <video
+                src={product.productVideo.url}
+                controls
+                className="w-full"
+              />
               <button
                 type="button"
                 onClick={removeVideo}
