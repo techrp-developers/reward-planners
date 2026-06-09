@@ -16,6 +16,7 @@ const orderRoutes=require('./orderRoutes')
 const rewardRoutes=require('./rewardRoutes')
 const logisticRoutes=require('./logisticsRoute')
 const companyRoutes=require('./companyRoute')
+const maintenanceRoutes=require('./maintenanceRoute')
 
 // dashboard Routes
 router.use("/auth", authRoutes);
@@ -34,5 +35,6 @@ router.use("/order",orderRoutes)
 router.use("/reward",rewardRoutes)
 router.use("/logistics",logisticRoutes)
 router.use("/company",companyRoutes)
+router.use("/maintenance",maintenanceRoutes)
 
 module.exports = router;
