@@ -31,5 +31,26 @@ class GlobalController {
       });
     }
   }
+
+  // Get app status
+  async getAppStatus(req, res) {
+    try {
+      const [rows] = await db.execute(`
+      SELECT
+        maintenance_mode,
+        drain_mode,
+        maintenance_start_at
+      FROM app_settings
+      LIMIT 1
+    `);
+
+      return res.json({
+        success: true,
+        data: rows[0],
+      });
+    } catch (error) {
+      throw error;
+    }
+  }
 }
 module.exports = new GlobalController();

@@ -5,4 +5,6 @@ const GlobalController = require("../controller/globalController");
 
 router.get("/search/suggestions", GlobalController.getGlobalSuggestions);
 
+router.get("/app-status", GlobalController.getAppStatus);
+
 module.exports = router;
