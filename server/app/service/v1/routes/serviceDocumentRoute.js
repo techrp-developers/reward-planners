@@ -6,7 +6,7 @@ const {
   authorizeRoles,
 } = require("../../../../middleware/auth");
 
-// Add document
+// Admin create document
 router.post(
   "/create-document",
   authenticateToken,
@@ -17,7 +17,7 @@ router.post(
 // Document By Id
 router.get("/find/:serviceId", ServiceDocumentController.getDocumentsByService);
 
-// Delete
+// Admin delete document
 router.delete(
   "/remove/:id",
   authenticateToken,

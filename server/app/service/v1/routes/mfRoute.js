@@ -9,7 +9,6 @@ const {
 const upload = require("../../../../middleware/mediaUpload/serviceCategoryUpload");
 
 // =======================================Sections========================================================
-
 // Admin create section
 router.post(
   "/create-section",
@@ -19,7 +18,7 @@ router.post(
   mfController.createSection,
 );
 
-// Update Section
+// Admin update section
 router.put(
   "/update-section/:id",
   authenticateToken,
@@ -28,7 +27,7 @@ router.put(
   mfController.updateSection,
 );
 
-// delete section
+// Admin delete section
 router.delete(
   "/remove-section/:id",
   authenticateToken,
@@ -45,7 +44,7 @@ router.get("/section-content/:id", mfController.getSectionContent);
 
 // =============================================Articles===================================================
 
-// Create Article
+// Admin create article
 router.post(
   "/create-article",
   authenticateToken,
@@ -57,9 +56,10 @@ router.post(
   mfController.createArticle,
 );
 
-// Detail
+// Article detail by Id
 router.get("/find/:id", mfController.getArticleById);
 
+// Admin update article
 router.put(
   "/update-article/:id",
   authenticateToken,
@@ -71,7 +71,7 @@ router.put(
   mfController.updateArticle,
 );
 
-// Delete
+// Admin delete article
 router.delete(
   "/remove-article/:id",
   authenticateToken,

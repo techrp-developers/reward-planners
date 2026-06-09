@@ -17,6 +17,7 @@ router.get(
   ServiceBundleController.getServiceBundleDetail,
 );
 
+// Admin create bundle
 router.post(
   "/create-bundle",
   authenticateToken,
@@ -25,6 +26,7 @@ router.post(
   ServiceBundleController.createServiceBundle,
 );
 
+// Admin update bundle
 router.put(
   "/update-bundle/:id",
   authenticateToken,
@@ -33,6 +35,7 @@ router.put(
   ServiceBundleController.updateServiceBundle,
 );
 
+// Admin delete bundle
 router.delete(
   "/delete-bundle/:id",
   authenticateToken,

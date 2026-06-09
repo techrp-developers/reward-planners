@@ -26,6 +26,7 @@ router.get(
   ServiceEnquiryController.getEnquiryById,
 );
 
+// extra-(not needed)
 router.post('/send-enquiry-notification', ServiceEnquiryController.sendEnquiryNotification);
 
 module.exports = router;

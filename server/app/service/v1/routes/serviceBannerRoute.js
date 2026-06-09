@@ -7,16 +7,16 @@ const {
   authorizeRoles,
 } = require("../../../../middleware/auth");
 
-// Create banner
+//Admin create banner
 router.post(
   "/create",
-    authenticateToken,
-    authorizeRoles("vendor_manager", "admin"),
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
   upload.single("banner_image"),
   ServiceBannerController.createBanner,
 );
 
-// update Banners
+// Admin update banners
 router.put(
   "/update/:id",
   authenticateToken,
@@ -28,10 +28,10 @@ router.put(
 // get Banners
 router.get("/", ServiceBannerController.getBanners);
 
-// Delete banner
+// Admin delete banner
 router.delete(
   "/:id",
-   authenticateToken,
+  authenticateToken,
   authorizeRoles("vendor_manager", "admin"),
   ServiceBannerController.deleteBanner,
 );
@@ -39,7 +39,7 @@ router.delete(
 // get all banners for admin
 router.get(
   "/admin-banners",
-   authenticateToken,
+  authenticateToken,
   authorizeRoles("vendor_manager", "admin"),
   ServiceBannerController.getAllBanners,
 );

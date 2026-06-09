@@ -18,6 +18,7 @@ router.post("/verify-payment", auth, ServiceOrderController.verifyPayment);
 // Get all orders
 router.get("/my-orders", auth, ServiceOrderController.getMyOrders);
 
+// get order details
 router.get(
   "/order-details/:parentOrderId",
   auth,
@@ -39,7 +40,7 @@ router.post(
   ServiceOrderController.submitDocuments,
 );
 
-// update order status from admin side
+// Admin update order status
 router.put(
   "/status/:id",
   authenticateToken,
@@ -54,12 +55,14 @@ router.get(
   ServiceOrderController.getCancellationReasons,
 );
 
+// request order cancellation
 router.post(
   "/cancel-order-request",
   auth,
   ServiceOrderController.cancelOrderRequest,
 );
 
+// get cancellation details
 router.get(
   "/cancellation-details/:serviceOrderId",
   auth,
@@ -70,6 +73,7 @@ router.get(
 // Get Issue Type
 router.get("/issue-types", ServiceOrderController.getIssueTypes);
 
+// order help
 router.post(
   "/order-help",
   auth,
@@ -77,7 +81,7 @@ router.post(
   ServiceOrderController.createSupportRequest,
 );
 
-// support request list for admin
+// Admin list for support request
 router.get(
   "/order-help/:serviceOrderId",
   auth,
