@@ -13,9 +13,6 @@ router.get(
 // add to checkout
 router.post("/cart", auth, ServiceCheckoutController.addToCheckout);
 
-// bundle checkout
-// router.post("/bundle", auth, ServiceCheckoutController.bundleCheckout);
-
 // Get buy now checkout Details
 router.get(
   "/buy-now-preview",
