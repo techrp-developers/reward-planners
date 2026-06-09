@@ -52,6 +52,7 @@ interface ProductView {
   product_status?: string;
   isDiscountEligible?: number;
   isReturnable?: number;
+  isReplaceable?: number;
   returnWindowDays?: number | null;
 
   deliverySlaMinDays?: number;
@@ -79,7 +80,10 @@ const FormInput = ({
   placeholder = "",
 }: any) => (
   <div className="flex flex-col space-y-1.5">
-    <label htmlFor={id} className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">
+    <label
+      htmlFor={id}
+      className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]"
+    >
       {label}
     </label>
     {type === "textarea" ? (
@@ -113,12 +117,16 @@ const SectionHeader = ({ icon: Icon, title, description }: any) => (
   >
     <div
       className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-      style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }}
+      style={{
+        background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
+      }}
     >
       <Icon className="text-white" style={{ fontSize: 15 }} />
     </div>
     <div>
-      <h2 className="text-base font-bold text-gray-900 leading-none">{title}</h2>
+      <h2 className="text-base font-bold text-gray-900 leading-none">
+        {title}
+      </h2>
       <p className="text-xs text-gray-400 mt-1">{description}</p>
     </div>
   </div>
@@ -189,6 +197,7 @@ export default function ReviewProductPage() {
         product_status: raw.status ?? "",
         isDiscountEligible: raw.is_discount_eligible ?? 1,
         isReturnable: raw.is_returnable ?? 1,
+        isReplaceable: raw.is_replaceable ?? 1,
         returnWindowDays: raw.return_window_days ?? null,
 
         deliverySlaMinDays: raw.delivery_sla_min_days ?? 1,
@@ -338,27 +347,42 @@ export default function ReviewProductPage() {
 
   const coverImage = product.productImages?.[0];
 
-  const sc = "bg-white border border-gray-100 rounded-2xl p-6 shadow-sm mb-5 vendor-section-card";
-  const fieldLabel = "text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] block mb-1.5";
-  const fieldInput = "w-full p-3 text-sm font-medium text-gray-800 border border-gray-200 rounded-xl bg-gray-50/60 focus:outline-none";
+  const sc =
+    "bg-white border border-gray-100 rounded-2xl p-6 shadow-sm mb-5 vendor-section-card";
+  const fieldLabel =
+    "text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] block mb-1.5";
+  const fieldInput =
+    "w-full p-3 text-sm font-medium text-gray-800 border border-gray-200 rounded-xl bg-gray-50/60 focus:outline-none";
 
   return (
-    <div className="min-h-screen p-6" style={{ background: "linear-gradient(160deg, #fdf8ff 0%, #fff5f8 50%, #f8f9ff 100%)" }}>
+    <div
+      className="min-h-screen p-6"
+      style={{
+        background:
+          "linear-gradient(160deg, #fdf8ff 0%, #fff5f8 50%, #f8f9ff 100%)",
+      }}
+    >
       <div className="mx-auto max-w-7xl">
-
         {/* PAGE HEADER */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-start gap-4">
             <div
               className="w-12 h-12 rounded-full flex items-center justify-center shrink-0 shadow-md"
-              style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }}
+              style={{
+                background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
+              }}
             >
               <FaBox className="text-white text-xl" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Product Review</h1>
+              <h1 className="text-3xl font-bold text-gray-900">
+                Product Review
+              </h1>
               <p className="mt-1 text-sm text-gray-400">
-                Product ID: <span className="font-bold text-[#852BAF]">#{product.productId}</span>
+                Product ID:{" "}
+                <span className="font-bold text-[#852BAF]">
+                  #{product.productId}
+                </span>
               </p>
             </div>
           </div>
@@ -381,51 +405,108 @@ export default function ReviewProductPage() {
           <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
             <div>
               <label className={fieldLabel}>Category</label>
-              <input readOnly value={String(product.categoryName ?? "Not selected")} className={fieldInput} />
+              <input
+                readOnly
+                value={String(product.categoryName ?? "Not selected")}
+                className={fieldInput}
+              />
             </div>
             <div>
               <label className={fieldLabel}>Sub Category</label>
-              <input readOnly value={String(product.subCategoryName ?? "Not selected")} className={fieldInput} />
+              <input
+                readOnly
+                value={String(product.subCategoryName ?? "Not selected")}
+                className={fieldInput}
+              />
             </div>
             <div>
               <label className={fieldLabel}>Type / Sub-type</label>
-              <input readOnly value={String(product.subSubCategoryName ?? "Not selected")} className={fieldInput} />
+              <input
+                readOnly
+                value={String(product.subSubCategoryName ?? "Not selected")}
+                className={fieldInput}
+              />
             </div>
           </div>
         </div>
 
         {/* Section: Product Identification */}
         <div className={sc}>
-          <SectionHeader icon={FaTag} title="Product Identification" description="Basic product information" />
+          <SectionHeader
+            icon={FaTag}
+            title="Product Identification"
+            description="Basic product information"
+          />
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
-            <FormInput id="productName"  label="Product Name"   value={product.productName} />
-            <FormInput id="brandName"    label="Brand Name"     value={product.brandName} />
-            <FormInput id="manufacturer" label="Manufacturer"   value={product.manufacturer} />
-            <FormInput id="gstSlab"      label="GST Slab (%)"   value={product.gstSlab} />
-            <FormInput id="hsnSacCode"   label="HSN / SAC Code" value={product.hsnSacCode} />
+            <FormInput
+              id="productName"
+              label="Product Name"
+              value={product.productName}
+            />
+            <FormInput
+              id="brandName"
+              label="Brand Name"
+              value={product.brandName}
+            />
+            <FormInput
+              id="manufacturer"
+              label="Manufacturer"
+              value={product.manufacturer}
+            />
+            <FormInput
+              id="gstSlab"
+              label="GST Slab (%)"
+              value={product.gstSlab}
+            />
+            <FormInput
+              id="hsnSacCode"
+              label="HSN / SAC Code"
+              value={product.hsnSacCode}
+            />
           </div>
         </div>
 
         {/* Product Attributes */}
         {attributeSchema.length > 0 && (
           <div className={sc}>
-            <SectionHeader icon={FaBox} title="Product Attributes" description="Applies to all variants" />
+            <SectionHeader
+              icon={FaBox}
+              title="Product Attributes"
+              description="Applies to all variants"
+            />
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
               {attributeSchema.map((attr) => {
                 const values = productAttributes[attr.attribute_key] || [];
                 return (
-                  <div key={attr.attribute_key} className="p-4 border border-purple-100 bg-purple-50/40 rounded-xl">
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] mb-1">{attr.attribute_label}</p>
-                    <p className="text-sm font-semibold text-gray-800">{values.length > 0 ? values.join(", ") : "—"}</p>
+                  <div
+                    key={attr.attribute_key}
+                    className="p-4 border border-purple-100 bg-purple-50/40 rounded-xl"
+                  >
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] mb-1">
+                      {attr.attribute_label}
+                    </p>
+                    <p className="text-sm font-semibold text-gray-800">
+                      {values.length > 0 ? values.join(", ") : "—"}
+                    </p>
                   </div>
                 );
               })}
               {Object.keys(productAttributes)
-                .filter((key) => !attributeSchema.some((a) => a.attribute_key === key))
+                .filter(
+                  (key) =>
+                    !attributeSchema.some((a) => a.attribute_key === key),
+                )
                 .map((key) => (
-                  <div key={key} className="p-4 border border-yellow-100 bg-yellow-50/60 rounded-xl">
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] mb-1">{key.replace(/_/g, " ")} (Legacy)</p>
-                    <p className="text-sm font-semibold text-gray-800">{productAttributes[key].join(", ")}</p>
+                  <div
+                    key={key}
+                    className="p-4 border border-yellow-100 bg-yellow-50/60 rounded-xl"
+                  >
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] mb-1">
+                      {key.replace(/_/g, " ")} (Legacy)
+                    </p>
+                    <p className="text-sm font-semibold text-gray-800">
+                      {productAttributes[key].join(", ")}
+                    </p>
                   </div>
                 ))}
             </div>
@@ -435,44 +516,84 @@ export default function ReviewProductPage() {
         {/* Product Variants */}
         {product.variants?.length > 0 && (
           <div className={sc}>
-            <SectionHeader icon={FaBox} title="Product Variants" description="SKU-wise pricing, attributes and stock details" />
+            <SectionHeader
+              icon={FaBox}
+              title="Product Variants"
+              description="SKU-wise pricing, attributes and stock details"
+            />
             <div className="overflow-x-auto rounded-xl border border-gray-100">
               <table className="min-w-full text-sm text-left">
-                <thead style={{ background: "linear-gradient(135deg, #fdf8ff 0%, #fff5f8 100%)" }}>
+                <thead
+                  style={{
+                    background:
+                      "linear-gradient(135deg, #fdf8ff 0%, #fff5f8 100%)",
+                  }}
+                >
                   <tr>
-                    {["SKU","Attributes","MRP","Sale Price","Stock","Visibility","Reward Limit (%)"].map((h) => (
-                      <th key={h} className="px-4 py-3 text-[10px] font-black text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                    {[
+                      "SKU",
+                      "Attributes",
+                      "MRP",
+                      "Sale Price",
+                      "Stock",
+                      "Visibility",
+                      "Reward Limit (%)",
+                    ].map((h) => (
+                      <th
+                        key={h}
+                        className="px-4 py-3 text-[10px] font-black text-gray-500 uppercase tracking-wider whitespace-nowrap"
+                      >
+                        {h}
+                      </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {product.variants.map((variant) => (
-                    <tr key={variant.variant_id} className="hover:bg-purple-50/30 transition-colors">
-                      <td className="px-4 py-3 font-bold text-gray-800 text-xs">{variant.sku}</td>
+                    <tr
+                      key={variant.variant_id}
+                      className="hover:bg-purple-50/30 transition-colors"
+                    >
+                      <td className="px-4 py-3 font-bold text-gray-800 text-xs">
+                        {variant.sku}
+                      </td>
 
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1.5">
                           {variant.variant_attributes &&
-                            Object.entries(variant.variant_attributes).map(([key, value]) => (
-                              <span key={key} className="px-2.5 py-0.5 text-[10px] font-bold text-[#852BAF] border border-purple-200 rounded-full bg-purple-50 uppercase">
-                                {key}: {value}
-                              </span>
-                            ))}
+                            Object.entries(variant.variant_attributes).map(
+                              ([key, value]) => (
+                                <span
+                                  key={key}
+                                  className="px-2.5 py-0.5 text-[10px] font-bold text-[#852BAF] border border-purple-200 rounded-full bg-purple-50 uppercase"
+                                >
+                                  {key}: {value}
+                                </span>
+                              ),
+                            )}
                         </div>
                       </td>
 
-                      <td className="px-4 py-3 text-gray-700">{variant.mrp ? `₹${variant.mrp}` : "—"}</td>
+                      <td className="px-4 py-3 text-gray-700">
+                        {variant.mrp ? `₹${variant.mrp}` : "—"}
+                      </td>
 
-                      <td className="px-4 py-3 font-semibold text-gray-800">{variant.sale_price ? `₹${variant.sale_price}` : "—"}</td>
+                      <td className="px-4 py-3 font-semibold text-gray-800">
+                        {variant.sale_price ? `₹${variant.sale_price}` : "—"}
+                      </td>
 
                       <td className="px-4 py-3">
-                        <span className={`px-2.5 py-0.5 text-xs font-bold rounded-full ${variant.stock === 0 ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+                        <span
+                          className={`px-2.5 py-0.5 text-xs font-bold rounded-full ${variant.stock === 0 ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}
+                        >
                           {variant.stock}
                         </span>
                       </td>
 
                       <td className="px-4 py-3">
-                        <span className={`px-2.5 py-0.5 text-xs font-bold rounded-full ${variant.is_visible ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                        <span
+                          className={`px-2.5 py-0.5 text-xs font-bold rounded-full ${variant.is_visible ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}
+                        >
                           {variant.is_visible ? "Visible" : "Hidden"}
                         </span>
                       </td>
@@ -483,18 +604,27 @@ export default function ReviewProductPage() {
                             type="number"
                             min={0}
                             value={rewardLimits[variant.variant_id] ?? 0}
-                            onChange={(e) => setRewardLimits((prev) => ({ ...prev, [variant.variant_id]: Number(e.target.value) }))}
+                            onChange={(e) =>
+                              setRewardLimits((prev) => ({
+                                ...prev,
+                                [variant.variant_id]: Number(e.target.value),
+                              }))
+                            }
                             className="w-20 p-2 text-sm border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-[#852BAF]"
                             placeholder="Limit"
                           />
                           <button
-                            onClick={() => updateRewardLimit(variant.variant_id)}
+                            onClick={() =>
+                              updateRewardLimit(variant.variant_id)
+                            }
                             disabled={savingLimit[variant.variant_id]}
                             className="w-8 h-8 flex items-center justify-center text-white bg-green-600 rounded-lg cursor-pointer hover:bg-green-700 disabled:opacity-50 transition-all"
                           >
-                            {savingLimit[variant.variant_id]
-                              ? <FaSpinner className="text-xs animate-spin" />
-                              : <FaCheck className="text-xs" />}
+                            {savingLimit[variant.variant_id] ? (
+                              <FaSpinner className="text-xs animate-spin" />
+                            ) : (
+                              <FaCheck className="text-xs" />
+                            )}
                           </button>
                         </div>
                       </td>
@@ -508,55 +638,121 @@ export default function ReviewProductPage() {
 
         {/* Product Description */}
         <div className={sc}>
-          <SectionHeader icon={FaBox} title="Product Description" description="Detailed and short description" />
+          <SectionHeader
+            icon={FaBox}
+            title="Product Description"
+            description="Detailed and short description"
+          />
           <div className="space-y-5">
             <div>
               <label className={fieldLabel}>Detailed Description</label>
               <div className="rounded-xl border border-gray-200 overflow-hidden">
-                <QuillEditor value={product.description || ""} readOnly minHeight={260} />
+                <QuillEditor
+                  value={product.description || ""}
+                  readOnly
+                  minHeight={260}
+                />
               </div>
             </div>
             <div>
               <label className={fieldLabel}>Brand Description</label>
               <div className="rounded-xl border border-gray-200 overflow-hidden">
-                <QuillEditor value={product.brandDescription || ""} readOnly minHeight={220} />
+                <QuillEditor
+                  value={product.brandDescription || ""}
+                  readOnly
+                  minHeight={220}
+                />
               </div>
             </div>
-            <FormInput id="shortDescription" label="Short Description" value={product.shortDescription} />
+            <FormInput
+              id="shortDescription"
+              label="Short Description"
+              value={product.shortDescription}
+            />
           </div>
         </div>
 
         {/* Pricing & Commercial Controls */}
         <div className={sc}>
-          <SectionHeader icon={FaTag} title="Pricing & Commercial Controls" description="Discount eligibility and return policy" />
+          <SectionHeader
+            icon={FaTag}
+            title="Pricing & Commercial Controls"
+            description="Discount eligibility and return policy"
+          />
           <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-            <FormInput id="isDiscountEligible" label="Discount Eligible"
-              value={product.isDiscountEligible === 1 ? "Yes" : "No"} />
-            <FormInput label="Return Policy" id="returnWindowDays"
-              value={product.isReturnable === 1 ? `Returnable (${product.returnWindowDays ?? "-"} days)` : "Not Returnable"} />
+            <FormInput
+              id="isDiscountEligible"
+              label="Discount Eligible"
+              value={product.isDiscountEligible === 1 ? "Yes" : "No"}
+            />
+
+            <FormInput
+              id="isReplaceable"
+              label="Replaceable"
+              value={product.isReplaceable === 1 ? "Yes" : "No"}
+              readOnly
+            />
+
+            <FormInput
+              label="Return Policy"
+              id="returnWindowDays"
+              value={
+                product.isReturnable === 1
+                  ? `Returnable (${product.returnWindowDays ?? "-"} days)`
+                  : "Not Returnable"
+              }
+            />
           </div>
         </div>
 
         {/* Logistics & Fulfilment */}
         <div className={sc}>
-          <SectionHeader icon={FaBox} title="Logistics & Fulfilment" description="Delivery timeline and shipping classification" />
+          <SectionHeader
+            icon={FaBox}
+            title="Logistics & Fulfilment"
+            description="Delivery timeline and shipping classification"
+          />
           <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-            <FormInput id="delivery_sla" label="Delivery SLA"
-              value={`${product.deliverySlaMinDays} – ${product.deliverySlaMaxDays} days`} />
-            <FormInput id="shippingClass" label="Shipping Class"
-              value={product.shippingClass ? product.shippingClass.charAt(0).toUpperCase() + product.shippingClass.slice(1) : "-"} />
+            <FormInput
+              id="delivery_sla"
+              label="Delivery SLA"
+              value={`${product.deliverySlaMinDays} – ${product.deliverySlaMaxDays} days`}
+            />
+            <FormInput
+              id="shippingClass"
+              label="Shipping Class"
+              value={
+                product.shippingClass
+                  ? product.shippingClass.charAt(0).toUpperCase() +
+                    product.shippingClass.slice(1)
+                  : "-"
+              }
+            />
           </div>
-          <p className="mt-3 text-xs text-gray-400">Delivery timeline shown to customers as an estimate. Actual delivery may vary by location.</p>
+          <p className="mt-3 text-xs text-gray-400">
+            Delivery timeline shown to customers as an estimate. Actual delivery
+            may vary by location.
+          </p>
         </div>
 
         {/* Cover Image */}
         <div className={sc}>
-          <SectionHeader icon={FaImages} title="Cover Image" description="Single cover image for product listing" />
+          <SectionHeader
+            icon={FaImages}
+            title="Cover Image"
+            description="Single cover image for product listing"
+          />
           {coverImage ? (
             <div className="relative w-36 h-36 overflow-hidden border border-gray-200 rounded-2xl group shadow-sm">
-              <img src={resolveImageUrl(coverImage)} alt="Cover Image" className="object-cover w-full h-full" />
+              <img
+                src={resolveImageUrl(coverImage)}
+                alt="Cover Image"
+                className="object-cover w-full h-full"
+              />
               <button
-                onClick={() => downloadFile(resolveImageUrl(coverImage), "cover-image.jpg")}
+                onClick={() =>
+                  downloadFile(resolveImageUrl(coverImage), "cover-image.jpg")
+                }
                 className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer rounded-2xl"
               >
                 <FaDownload className="text-white text-lg" />
@@ -569,10 +765,18 @@ export default function ReviewProductPage() {
 
         {/* Product Video */}
         <div className={sc}>
-          <SectionHeader icon={FaImages} title="Product Video" description="Vendor uploaded demo video" />
+          <SectionHeader
+            icon={FaImages}
+            title="Product Video"
+            description="Vendor uploaded demo video"
+          />
           {product.productVideo ? (
             <div className="overflow-hidden border border-gray-200 rounded-2xl w-80 shadow-sm">
-              <video src={resolveImageUrl(product.productVideo)} controls className="w-full" />
+              <video
+                src={resolveImageUrl(product.productVideo)}
+                controls
+                className="w-full"
+              />
             </div>
           ) : (
             <p className="text-sm text-gray-400">No product video available</p>
@@ -582,20 +786,39 @@ export default function ReviewProductPage() {
         {/* Documents */}
         {product.requiredDocs && product.requiredDocs.length > 0 && (
           <div className={sc}>
-            <SectionHeader icon={FaFileUpload} title="Documents" description="Uploaded / required documents" />
+            <SectionHeader
+              icon={FaFileUpload}
+              title="Documents"
+              description="Uploaded / required documents"
+            />
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               {product.requiredDocs.map((doc) => {
                 const fileUrl = resolveImageUrl(doc.file_path);
                 return (
-                  <div key={doc.id} className="flex items-center justify-between gap-4 p-4 bg-gray-50/60 border border-gray-100 rounded-2xl hover:border-purple-200 transition-all">
+                  <div
+                    key={doc.id}
+                    className="flex items-center justify-between gap-4 p-4 bg-gray-50/60 border border-gray-100 rounded-2xl hover:border-purple-200 transition-all"
+                  >
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm text-gray-800 truncate">{doc.document_name}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{doc.mime_type || "Unknown type"}</p>
+                      <p className="font-semibold text-sm text-gray-800 truncate">
+                        {doc.document_name}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {doc.mime_type || "Unknown type"}
+                      </p>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
                       {doc.mime_type?.startsWith("image/") && (
-                        <a href={fileUrl} target="_blank" rel="noopener noreferrer">
-                          <img src={fileUrl} alt={doc.document_name} className="w-14 h-14 object-cover rounded-xl border border-gray-200 hover:opacity-85 transition-opacity cursor-pointer" />
+                        <a
+                          href={fileUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <img
+                            src={fileUrl}
+                            alt={doc.document_name}
+                            className="w-14 h-14 object-cover rounded-xl border border-gray-200 hover:opacity-85 transition-opacity cursor-pointer"
+                          />
                         </a>
                       )}
                       <button
@@ -611,7 +834,6 @@ export default function ReviewProductPage() {
             </div>
           </div>
         )}
-
       </div>
     </div>
   );
