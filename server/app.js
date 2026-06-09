@@ -50,6 +50,9 @@ app.use(
 
 app.use(morgan("dev"));
 
+// Maintenance middleware
+app.use(require("./middleware/maintenance"));
+
 // webhook use
 app.post(
   "/payment/webhook",
