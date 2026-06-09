@@ -61,7 +61,16 @@ class ServiceOrderModel {
   }
 
   // get my orders
-  async getUserOrders(userId, status = null) {
+  async getUserOrders({
+    userId,
+    status = null,
+    search = null,
+    fromDate = null,
+    toDate = null,
+    timeFilter = null,
+    page = 1,
+    limit = 10,
+  }) {
     let sql = `
     SELECT 
       so.id,
@@ -85,9 +94,53 @@ class ServiceOrderModel {
 
     const params = [userId];
 
-    if (status && status !== "all") {
-      sql += ` AND so.status = ?`;
-      params.push(status);
+    if (search) {
+      sql += `
+    AND (
+      so.order_ref LIKE ?
+      OR s.name LIKE ?
+      OR sv.variant_name LIKE ?
+    )
+  `;
+
+      const searchValue = `%${search}%`;
+
+      params.push(searchValue, searchValue, searchValue);
+    }
+
+    if (fromDate) {
+      sql += ` AND DATE(so.created_at) >= ?`;
+      params.push(fromDate);
+    }
+
+    if (toDate) {
+      sql += ` AND DATE(so.created_at) <= ?`;
+      params.push(toDate);
+    }
+
+    if (!fromDate && !toDate && timeFilter) {
+      if (timeFilter === "30days") {
+        sql += `
+      AND so.created_at >=
+      DATE_SUB(NOW(), INTERVAL 30 DAY)
+    `;
+      } else if (timeFilter === "3months") {
+        sql += `
+      AND so.created_at >=
+      DATE_SUB(NOW(), INTERVAL 3 MONTH)
+    `;
+      } else if (timeFilter === "6months") {
+        sql += `
+      AND so.created_at >=
+      DATE_SUB(NOW(), INTERVAL 6 MONTH)
+    `;
+      } else if (/^\d{4}$/.test(timeFilter)) {
+        sql += `
+      AND YEAR(so.created_at) = ?
+    `;
+
+        params.push(Number(timeFilter));
+      }
     }
 
     sql += ` ORDER BY so.created_at DESC`;
@@ -175,12 +228,18 @@ class ServiceOrderModel {
       //  aggregate status
       let finalStatus = "pending_payment";
 
-      if (order.statuses.every((s) => s === "completed")) {
-        finalStatus = "completed";
-      } else if (order.statuses.some((s) => s === "in_progress")) {
+      if (
+        order.statuses.some(
+          (s) => s === "in_progress" || s === "documents_pending",
+        )
+      ) {
         finalStatus = "in_progress";
-      } else if (order.statuses.some((s) => s === "documents_pending")) {
-        finalStatus = "documents_pending";
+      } else if (order.statuses.every((s) => s === "completed")) {
+        finalStatus = "completed";
+      } else if (order.statuses.every((s) => s === "cancelled")) {
+        finalStatus = "cancelled";
+      } else if (order.statuses.some((s) => s === "completed")) {
+        finalStatus = "completed";
       }
 
       return {
@@ -197,10 +256,57 @@ class ServiceOrderModel {
       };
     });
 
-    //  SORT (latest first)
-    result.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    let filteredResult = result;
 
-    return result;
+    if (status && status !== "all") {
+      if (status === "in_progress") {
+        filteredResult = result.filter(
+          (order) => order.status === "in_progress",
+        );
+      } else {
+        filteredResult = result.filter((order) => order.status === status);
+      }
+    }
+
+    // summary
+    const summary = {
+      all: result.length,
+
+      in_progress: result.filter(
+        (x) => x.status === "in_progress" || x.status === "documents_pending",
+      ).length,
+
+      completed: result.filter((x) => x.status === "completed").length,
+
+      cancelled: result.filter((x) => x.status === "cancelled").length,
+
+      pending_payment: result.filter((x) => x.status === "pending_payment")
+        .length,
+    };
+
+    // Pagination
+
+    filteredResult.sort(
+      (a, b) => new Date(b.created_at) - new Date(a.created_at),
+    );
+
+    const total = filteredResult.length;
+
+    const offset = (page - 1) * limit;
+
+    const paginatedOrders = filteredResult.slice(offset, offset + limit);
+
+    return {
+      orders: paginatedOrders,
+
+      total,
+
+      totalPages: Math.ceil(total / limit),
+
+      currentPage: page,
+
+      summary,
+    };
   }
 
   // order detail by Id

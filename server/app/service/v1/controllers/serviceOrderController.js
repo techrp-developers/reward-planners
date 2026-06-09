@@ -306,13 +306,40 @@ class ServiceOrderController {
         });
       }
 
-      const { status } = req.query;
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
 
-      const orders = await ServiceOrderModel.getUserOrders(userId, status);
+      const search = req.query.search?.trim() || null;
+
+      const status = req.query.status || null;
+
+      const fromDate = req.query.from_date || null;
+      const toDate = req.query.to_date || null;
+      const timeFilter = req.query.time_filter || null;
+
+      const orders = await ServiceOrderModel.getUserOrders({
+        userId,
+        status,
+        search,
+        fromDate,
+        toDate,
+        timeFilter,
+        page,
+        limit,
+      });
 
       res.json({
         success: true,
-        data: orders,
+
+        orders: orders.orders,
+
+        total: orders.total,
+
+        totalPages: orders.totalPages,
+
+        currentPage: orders.currentPage,
+
+        summary: orders.summary,
       });
     } catch (err) {
       res.status(500).json({
