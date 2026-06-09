@@ -470,6 +470,8 @@ class ProductController {
         }),
       );
 
+      const hasMore = page < Math.ceil(totalItems / limit);
+
       return res.json({
         success: true,
         subcategory_name,
@@ -477,6 +479,7 @@ class ProductController {
         total: totalItems,
         totalPages: Math.ceil(totalItems / limit),
         currentPage: page,
+        hasMore,
       });
     } catch (error) {
       console.error("Get products by subcategory error:", error);
