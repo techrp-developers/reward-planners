@@ -6,14 +6,15 @@ class MaintenanceModel {
 
     await db.execute(
       `
-      UPDATE app_settings
-      SET
-        maintenance_mode = ?,
-        drain_mode = ?,
-        maintenance_start_at = ?
-      WHERE id = 1
-      `,
-      [maintenance_mode, drain_mode, maintenance_start_at],
+  UPDATE app_settings
+  SET
+    maintenance_mode = ?,
+    drain_mode = ?,
+    maintenance_start_at = ?,
+    maintenance_end_at = ?
+  WHERE id = 1
+  `,
+      [maintenance_mode, drain_mode, maintenance_start_at, maintenance_end_at],
     );
 
     return true;
