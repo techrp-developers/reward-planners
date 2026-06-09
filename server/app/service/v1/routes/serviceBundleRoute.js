@@ -3,6 +3,10 @@ const router = express.Router();
 const ServiceBundleController = require("../controllers/serviceBundleController");
 const auth = require("../../../common/middlewares/auth");
 const upload = require("../../../../middleware/mediaUpload/serviceCategoryUpload");
+const {
+  authenticateToken,
+  authorizeRoles,
+} = require("../../../../middleware/auth");
 
 // Get Bundles
 router.get("/", ServiceBundleController.getServiceBundles);
@@ -15,18 +19,24 @@ router.get(
 
 router.post(
   "/create-bundle",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
   upload.single("banner_image"),
   ServiceBundleController.createServiceBundle,
 );
 
 router.put(
   "/update-bundle/:id",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
   upload.single("banner_image"),
   ServiceBundleController.updateServiceBundle,
 );
 
 router.delete(
   "/delete-bundle/:id",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
   ServiceBundleController.deleteServiceBundle,
 );
 
