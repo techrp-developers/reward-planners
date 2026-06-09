@@ -8,9 +8,15 @@ const {
   authenticateToken,
   authorizeRoles,
 } = require("../../../../middleware/auth");
+const drainMode = require("../../../../middleware/drainMode");
 
 // create razorpay order
-router.post("/create-order", auth, ServiceOrderController.createPaymentOrder);
+router.post(
+  "/create-order",
+  auth,
+  drainMode,
+  ServiceOrderController.createPaymentOrder,
+);
 
 // verify payment
 router.post("/verify-payment", auth, ServiceOrderController.verifyPayment);
