@@ -18,13 +18,6 @@ router.post("/verify-payment", auth, ServiceOrderController.verifyPayment);
 // Get all orders
 router.get("/my-orders", auth, ServiceOrderController.getMyOrders);
 
-// get order details
-// router.get(
-//   "/order-details/:id",
-//   //  auth,
-//   ServiceOrderController.getOrderDetails,
-// );
-
 router.get(
   "/order-details/:parentOrderId",
   auth,
