@@ -11,7 +11,7 @@ require("dotenv").config();
 require("./services/ExpressBees/cron/shipmentCron");
 require("./services/Bbps/retryCron");
 require("./services/Razorpay/retryCron");
-require("./services/maintenance/maintenanceCron");
+require("./services/Maintenance/maintenanceCron");
 
 // dashboard Route
 const dashboardRoute = require("./routes/indexRoute");
