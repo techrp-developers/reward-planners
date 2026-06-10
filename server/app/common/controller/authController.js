@@ -629,6 +629,56 @@ class AuthController {
     }
   }
 
+  /* ======================================================
+     RESEND OTP
+  ====================================================== */
+  async resendOTP(req, res) {
+    try {
+      const { email } = req.body;
+
+      const normalizedEmail = email.trim().toLowerCase();
+
+      const employee = await AuthModel.findEmployeeByEmail(normalizedEmail);
+
+      if (!employee) {
+        return res.status(404).json({
+          success: false,
+          message: "Employee not found",
+        });
+      }
+
+      const existing = await AuthModel.findByCompanyUserId(employee.id);
+
+      if (!existing) {
+        return res.status(400).json({
+          success: false,
+          message: "User doesn't exist.Please activate the account",
+        });
+      }
+
+      await AuthModel.deleteOTPByEmail(normalizedEmail);
+
+      const otp = generateOTP();
+
+      await AuthModel.storeActivationOTP(normalizedEmail, otp);
+
+      await sendOtpMail({
+        email: normalizedEmail,
+        name: employee.name,
+        otp,
+      });
+
+      return res.json({
+        success: true,
+        message: "OTP resent successfully",
+      });
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+      });
+    }
+  }
+
   async verifyForgotPasswordOTP(req, res) {
     try {
       const { email, otp } = req.body;

@@ -9,7 +9,7 @@ const upload = require("../../../middleware/mediaUpload/serviceCategoryUpload");
 // Activate account
 router.post("/activate-account", authController.activateAccount);
 
-//resend otp
+//resend activation otp
 router.post("/resend-activation-otp", authController.resendActivationOTP);
 
 // verify OTP
@@ -18,7 +18,7 @@ router.post("/verify-activation-otp", authController.verifyActivationOTP);
 // set the password
 router.post("/set-password", authController.setPassword);
 
-//Login user 
+//Login user
 router.post("/login", authController.loginUser);
 
 // refresh(not updated)
@@ -32,6 +32,9 @@ router.post("/logout", auth, authController.logoutUser);
 
 // Forgot password
 router.post("/forgot-password", authController.forgotPassword);
+
+//resend  otp
+router.post("/resend-otp", authController.resendOTP);
 
 // verify forgot password OTP
 router.post(
