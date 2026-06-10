@@ -7,6 +7,7 @@ const v1OrderRoutes = require("./ordersRoute");
 const v1WishlistRoutes = require("./wishlistRoute");
 const v1LogisticRoute=require('./logisticsRoute')
 const v1ReviewRoute=require('./reviewRoute')
+const v1PaymentRoute=require('./paymentRoute')
 
 router.use("/product", v1ProductRoutes);
 router.use("/cart", v1CartRoutes);
@@ -15,6 +16,7 @@ router.use("/orders", v1OrderRoutes);
 router.use("/wishlist", v1WishlistRoutes);
 router.use("/logistics",v1LogisticRoute)
 router.use("/review",v1ReviewRoute)
+router.use("/payment",v1PaymentRoute)
 
 
 module.exports = router;

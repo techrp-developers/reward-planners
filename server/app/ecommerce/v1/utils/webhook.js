@@ -1,8 +1,7 @@
-const crypto = require("crypto");
-const db = require("../../config/database");
-const { enqueueWhatsApp } = require("../../services/whatsapp/waEnqueueService");
-const xpressService = require("../../services/ExpressBees/xpressbees_service");
-const { orderConfirmationMail } = require("../../services/orderConfirmation");
+const db = require("../../../../config/database");
+const { enqueueWhatsApp } = require("../../../../services/whatsapp/waEnqueueService");
+const xpressService = require("../../../../services/ExpressBees/xpressbees_service");
+const { orderConfirmationMail } = require("../../../../services/mailBuilder/orderConfirmation");
 
 // booking payload
 async function buildXpressBookingPayload(orderId, vendorId) {
@@ -432,30 +431,24 @@ async function sendOrderPlacedEmail(orderId) {
 }
 
 // webhook
-async function handleWebhook(req, res) {
+async function processEvent(req) {
   const conn = await db.getConnection();
+  let transactionStarted = false;
 
   try {
-    const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
-    const signature = req.headers["x-razorpay-signature"];
-
-    // 1 Verify signature
-    const expected = crypto
-      .createHmac("sha256", secret)
-      .update(req.body)
-      .digest("hex");
-
-    if (expected !== signature) {
-      return res.status(400).send("Invalid signature");
-    }
-
-    const body = JSON.parse(req.body.toString());
+    const body = req.parsedBody;
     const event = body.event;
 
     if (event === "payment.captured") {
       const payment = body.payload.payment.entity;
 
+      if (!payment?.order_id) {
+        console.error("Invalid webhook: missing order_id");
+        return;
+      }
+
       await conn.beginTransaction();
+      transactionStarted = true;
 
       // 2 Get payment row
       const [rows] = await conn.query(
@@ -468,7 +461,7 @@ async function handleWebhook(req, res) {
 
       if (!rows.length) {
         await conn.commit();
-        return res.sendStatus(200);
+        return;
       }
 
       const { order_id, status } = rows[0];
@@ -476,7 +469,7 @@ async function handleWebhook(req, res) {
       // 3 Idempotency check
       if (status === "success") {
         await conn.commit();
-        return res.sendStatus(200);
+        return;
       }
 
       // 4 Update payment row
@@ -486,7 +479,7 @@ async function handleWebhook(req, res) {
              status = 'success',
              payment_method = ?,
              raw_webhook = ?
-         WHERE razorpay_order_id = ?`,
+         WHERE razorpay_order_id = ? AND status != 'success'`,
         [payment.id, payment.method, JSON.stringify(body), payment.order_id],
       );
 
@@ -523,28 +516,45 @@ async function handleWebhook(req, res) {
       sendOrderPlacedEmail(order_id).catch((err) =>
         console.error("Email failed:", err),
       );
+
+      console.log("Ecommerce payment success", {
+        order_id,
+        razorpay_order_id: payment.order_id,
+        payment_id: payment.id,
+      });
     }
 
     if (event === "payment.failed") {
       const payment = body.payload.payment.entity;
 
+      if (!payment?.order_id) {
+        console.error("Invalid webhook: missing order_id");
+        return;
+      }
+
       await conn.query(
         `UPDATE order_payments 
          SET status = 'failed',
              raw_webhook = ?
-         WHERE razorpay_order_id = ?`,
+         WHERE razorpay_order_id = ? AND status != 'failed'`,
         [JSON.stringify(body), payment.order_id],
       );
+
+      console.log("Ecommerce payment failed", {
+        razorpay_order_id: payment.order_id,
+      });
+    }
+  } catch (err) {
+    if (transactionStarted) {
+      await conn.rollback();
     }
 
-    return res.sendStatus(200);
-  } catch (err) {
-    await conn.rollback();
-    console.error("Webhook error:", err);
-    return res.sendStatus(500);
+    console.error("Ecommerce Webhook error:", err);
+
+    throw err;
   } finally {
     conn.release();
   }
 }
 
-module.exports = { handleWebhook, processShipmentsAfterPayment };
+module.exports = { processEvent, processShipmentsAfterPayment };

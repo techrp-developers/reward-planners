@@ -17,7 +17,7 @@ require("./services/maintenance/maintenanceCron");
 const dashboardRoute = require("./routes/indexRoute");
 
 // web hook Route
-const webhook = require("./common/utils/orchestratorWebhook");
+const webhook = require("./utils/orchestratorWebhook");
 
 // App Route
 const ecommerceRoute = require("./app/ecommerce/v1/routes/indexRoute");

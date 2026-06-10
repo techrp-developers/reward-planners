@@ -4,8 +4,8 @@ const db = require("../../../config/database");
 const NotificationModel = require("../../../app/common/models/notificationModel");
 const {
   processShipmentsAfterPayment,
-} = require("../../../common/utils/paymentWebHook");
-const RefundService = require("../../../common/controllers/paymentController");
+} = require("../../../app/ecommerce/v1/utils/webhook");
+const RefundService = require("../../../app/ecommerce/v1/controllers/paymentController");
 
 // =====================
 // STATUS MAPPING

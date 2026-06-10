@@ -1,4 +1,4 @@
-const pool = require("../../config/database"); // use your db connection path
+const pool = require("../../config/database");
 
 function normalizePhone(phone) {
   if (!phone) return null;
@@ -38,10 +38,6 @@ function matchCondition(condition, ctx) {
   return true;
 }
 
-/**
- * Build buttonValues object from wa_templates.button_config
- * Example button_config: {"0":["otp"]}  -> buttonValues: {"0":["1234"]}
- */
 function buildButtonValuesFromConfig(buttonConfig, ctx) {
   if (!buttonConfig) return null;
 

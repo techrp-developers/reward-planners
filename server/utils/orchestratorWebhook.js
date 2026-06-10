@@ -1,9 +1,8 @@
 const crypto = require("crypto");
-
-const ecommerceWebhook = require("./paymentWebHook");
-const serviceWebhook = require("../../app/service/v1/utils/webhook");
-const mpsServiceWebhook = require("../../mps-connect/common/utils/webhook");
-const bbpsWebhook = require("../../app/bbps/v1/utils/webhook");
+const ecommerceWebhook = require("../app/ecommerce/v1/utils/webhook");
+const serviceWebhook = require("../app/service/v1/utils/webhook");
+const mpsServiceWebhook = require("../mps-connect/common/utils/webhook");
+const bbpsWebhook = require("../app/bbps/v1/utils/webhook");
 
 async function handleWebhook(req, res) {
   try {
