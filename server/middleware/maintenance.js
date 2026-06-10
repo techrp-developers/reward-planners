@@ -17,21 +17,31 @@ module.exports = async (req, res, next) => {
       maintenance_start_at: null,
     };
 
-    // Make app status available to drainMode middleware
+    // Make available to drainMode middleware
     req.appStatus = settings;
 
     // ==========================================
-    // Routes that should always work
+    // Dashboard/Admin Routes
+    // ==========================================
+    if (
+      !req.originalUrl.startsWith("/v1") &&
+      !req.originalUrl.startsWith("/mps")
+    ) {
+      return next();
+    }
+
+    // ==========================================
+    // Always Allowed Routes
     // ==========================================
     const exemptRoutes = [
       "/payment/webhook",
       "/api-docs",
       "/mps",
 
-      // App status
+      // Mobile App Status
       "/v1/global/app-status",
 
-      // Auth
+      // Authentication
       "/v1/auth/login",
       "/v1/auth/refresh",
       "/v1/auth/forgot-password",
@@ -48,9 +58,9 @@ module.exports = async (req, res, next) => {
     }
 
     // ==========================================
-    // Payment completion/recovery routes
-    // Allow even during maintenance
+    // Payment Completion Routes
     // ==========================================
+    // Allow existing transactions to complete
     const paymentRouteKeywords = [
       "/verify-payment",
       "/payment-status",
@@ -67,13 +77,13 @@ module.exports = async (req, res, next) => {
     }
 
     // ==========================================
-    // Maintenance Mode
+    // Maintenance Mode Check
     // ==========================================
     if (settings.maintenance_mode) {
       return res.status(503).json({
         success: false,
         maintenance: true,
-        message: "Application is under maintenance.",
+        message: "Application is currently under maintenance.",
       });
     }
 
