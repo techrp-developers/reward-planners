@@ -861,50 +861,6 @@ class FitnessService {
     };
   }
 
-  // Get employee birthday
-  async getTodayBirthdayEmployees(userId) {
-    const [rows] = await db.execute(
-      `
-    SELECT
-      cu_emp.id,
-      cu_emp.name,
-      cu_emp.email,
-      cu_emp.contact,
-      cu_emp.department,
-      cu_emp.role,
-      cu_emp.dob,
-      c.user_image
-    FROM customer c_logged
-
-    INNER JOIN company_users cu_logged
-      ON c_logged.company_user_id = cu_logged.id
-
-    INNER JOIN company_users cu_emp
-      ON cu_logged.company_id = cu_emp.company_id
-
-    LEFT JOIN customer c
-      ON c.company_user_id = cu_emp.id
-
-    WHERE c_logged.user_id = ?
-      AND MONTH(cu_emp.dob) = MONTH(CURDATE())
-      AND DAY(cu_emp.dob) = DAY(CURDATE())
-      AND cu_emp.status = 1
-    `,
-      [userId],
-    );
-
-    return rows.map((emp) => ({
-      employeeId: emp.id,
-      name: emp.name,
-      email: emp.email,
-      phone: emp.contact,
-      department: emp.department,
-      role: emp.role,
-      dob: emp.dob,
-      image: emp.user_image ? getPublicUrl(emp.user_image) : null,
-    }));
-  }
-
   // Weekly progress
   async getWeeklyProgress(customerId) {
     const formatDate = (date) => new Date(date).toLocaleDateString("en-CA"); // YYYY-MM-DD
