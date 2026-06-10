@@ -3,7 +3,7 @@ const router = express.Router();
 const TermController = require("../controller/termsController");
 const auth = require("../middlewares/auth");
 
-//terms
+//terms and conditions
 router.get("/", TermController.getTermsAndConditions);
 
 // privacy-policy

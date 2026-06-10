@@ -6,22 +6,43 @@ const optionalAuth = require("../middlewares/optionalAuth");
 const upload = require("../../../middleware/mediaUpload/serviceCategoryUpload");
 
 /*============================================Profile=================================================*/
+// Activate account
 router.post("/activate-account", authController.activateAccount);
+
+//resend otp
 router.post("/resend-activation-otp", authController.resendActivationOTP);
+
+// verify OTP
 router.post("/verify-activation-otp", authController.verifyActivationOTP);
+
+// set the password
 router.post("/set-password", authController.setPassword);
+
+//Login user 
 router.post("/login", authController.loginUser);
+
+// refresh(not updated)
 router.post("/refresh", authController.refreshAccessToken);
 
+// Fcm token(not updated)
 router.post("/update-fcm-token", auth, authController.updateFcmToken);
+
+// Logout user
 router.post("/logout", auth, authController.logoutUser);
 
+// Forgot password
 router.post("/forgot-password", authController.forgotPassword);
+
+// verify forgot password OTP
 router.post(
   "/verify-forgot-password-otp",
   authController.verifyForgotPasswordOTP,
 );
+
+// Reset password
 router.post("/reset-password", authController.resetPassword);
+
+// change password
 router.put("/change-password", auth, authController.changePassword);
 
 /*=============================================Address================================================*/
@@ -50,8 +71,10 @@ router.get("/addresses", auth, authController.getMyAddresses);
 router.get("/address/:address_id", auth, authController.getAddressById);
 
 /*===================================================User Information===========================================*/
+// user information overall
 router.get("/user-info", auth, authController.getUserInfo);
 
+// update profile information
 router.put(
   "/profile",
   auth,
@@ -59,6 +82,7 @@ router.put(
   authController.updateProfile,
 );
 
+// delete customer record
 router.delete("/delete-customer", auth, authController.deleteCustomer);
 
 module.exports = router;
