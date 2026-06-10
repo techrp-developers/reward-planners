@@ -114,7 +114,7 @@ function amountToWords(amount) {
   return words + " Only";
 }
 const template = fs.readFileSync(
-  path.join(__dirname, "../../../../templates/invoice2.html"),
+  path.join(__dirname, "../../../../templates/invoice.html"),
   "utf8",
 );
 
