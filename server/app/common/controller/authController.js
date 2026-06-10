@@ -1051,9 +1051,10 @@ class AuthController {
       const randomThought =
         thoughts[Math.floor(Math.random() * thoughts.length)];
 
-      const [userInfo, todaySummary] = await Promise.all([
+      const [userInfo, todaySummary, birthdayEmployees] = await Promise.all([
         AuthModel.getUserInfo(userId),
         FitnessService.getTodaySummary(userId),
+        AuthModel.getTodayBirthdayEmployees(userId),
       ]);
 
       if (!userInfo) {
