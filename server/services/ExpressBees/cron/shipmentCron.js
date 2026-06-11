@@ -339,100 +339,88 @@ async function updateShipmentTracking(shipment) {
     // RTO Logic
     // =====================
     if (newStatus === "rto" && shipment.shipping_status !== "rto") {
-      // ==========================
-      // PREVENT DUPLICATE REFUND
-      // ==========================
-      const [existingRefund] = await db.query(
-        `
-        SELECT refund_id FROM order_refunds
-        WHERE shipment_id = ?
-        AND status IN ('initiated','completed')
-        `,
-        [shipment.id],
-      );
+      const conn = await db.getConnection();
 
-      if (!existingRefund.length) {
-        // ==========================
-        // RESTORE STOCK
-        // ==========================
-        const [items] = await db.query(
-          `
-          SELECT variant_id, quantity
-          FROM eorder_items
-          WHERE vendor_order_id = ?
-        `,
-          [shipment.vendor_order_id],
+      try {
+        await conn.beginTransaction();
+
+        const [existingRefund] = await conn.query(
+          `SELECT refund_id FROM order_refunds
+       WHERE shipment_id = ?
+       AND status IN ('initiated', 'completed')
+       FOR UPDATE`,
+          [shipment.id],
         );
 
-        for (const item of items) {
-          await db.query(
-            `
-            UPDATE product_variants
-            SET stock = stock + ?
-            WHERE variant_id = ?
-          `,
-            [item.quantity, item.variant_id],
+        if (!existingRefund.length) {
+          // Restore all stock in one query — no loop needed
+          await conn.query(
+            `UPDATE product_variants pv
+         JOIN eorder_items oi ON pv.variant_id = oi.variant_id
+         SET pv.stock = pv.stock + oi.quantity
+         WHERE oi.vendor_order_id = ?`,
+            [shipment.vendor_order_id],
           );
-        }
 
-        // ==========================
-        // CALCULATE REFUND AMOUNT
-        // ==========================
+          await conn.query(
+            `INSERT INTO shipment_events (shipment_id, status, description)
+         VALUES (?, 'rto_processed', 'Stock restored + refund triggered')`,
+            [shipment.id],
+          );
 
-        const [[amountRow]] = await db.query(
-          `
-          SELECT SUM(final_price) AS amount
-          FROM eorder_items WHERE vendor_order_id = ?
-        `,
-          [shipment.vendor_order_id],
-        );
+          await conn.commit();
 
-        const refundAmount = amountRow.amount || 0;
+          // Refund and notification outside transaction (external calls)
+          const [[amountRow]] = await db.query(
+            `SELECT SUM(final_price) AS amount FROM eorder_items
+         WHERE vendor_order_id = ?`,
+            [shipment.vendor_order_id],
+          );
 
-        if (refundAmount > 0) {
-          await RefundService.processRefund({
-            orderId: shipment.order_id,
-            shipmentId: shipment.id,
-            vendorOrderId: shipment.vendor_order_id,
-            amount: refundAmount,
-          });
-        }
+          const refundAmount = amountRow.amount || 0;
 
-        // ==========================
-        // NOTIFY USER (ONCE)
-        // ==========================
-        const [existingNotif] = await db.query(
-          `
+          if (refundAmount > 0) {
+            await RefundService.processRefund({
+              orderId: shipment.order_id,
+              shipmentId: shipment.id,
+              vendorOrderId: shipment.vendor_order_id,
+              amount: refundAmount,
+            });
+          }
+
+          // ==========================
+          // NOTIFY USER (ONCE)
+          // ==========================
+          const [existingNotif] = await db.query(
+            `
           SELECT notification_id FROM notifications
           WHERE reference_type = 'order'
           AND reference_id = ?
           AND type = 'rto'
           LIMIT 1
         `,
-          [shipment.order_id],
-        );
+            [shipment.order_id],
+          );
 
-        if (!existingNotif.length && userId) {
-          await NotificationModel.create({
-            user_id: userId,
-            type: "rto",
-            title: "Order Returned 🚚",
-            message: "Your order could not be delivered and is being returned.",
-            reference_type: "order",
-            reference_id: shipment.order_id,
-          });
+          if (!existingNotif.length && userId) {
+            await NotificationModel.create({
+              user_id: userId,
+              type: "rto",
+              title: "Order Returned 🚚",
+              message:
+                "Your order could not be delivered and is being returned.",
+              reference_type: "order",
+              reference_id: shipment.order_id,
+            });
+          }
+        } else {
+          await conn.rollback();
         }
-
-        // ==========================
-        // EVENT LOG
-        // ==========================
-        await db.query(
-          `
-          INSERT INTO shipment_events (shipment_id, status, description)
-          VALUES (?, 'rto_processed', 'Stock restored + refund triggered')
-        `,
-          [shipment.id],
-        );
+      } catch (err) {
+        await conn.rollback();
+        throw err;
+      } finally {
+        conn.release();
       }
     }
 

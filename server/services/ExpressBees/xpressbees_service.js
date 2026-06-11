@@ -4,6 +4,7 @@ const AddressModel = require("../../app/common/models/addressModel");
 
 let cachedToken = null;
 let tokenExpiry = null;
+let tokenPromise = null;
 
 // ==========================
 // TOKEN HANDLER
@@ -13,32 +14,37 @@ async function getXpressToken() {
     return cachedToken;
   }
 
-  try {
-    const response = await axios.post(
-      "https://shipment.xpressbees.com/api/users/login",
-      {
-        email: process.env.XPRESS_EMAIL,
-        password: process.env.XPRESS_PASSWORD,
-      },
-    );
-
-    if (!response.data.status) {
-      throw new Error(response.data.message);
-    }
-
-    cachedToken = response.data.data;
-
-    tokenExpiry = Date.now() + 23 * 60 * 60 * 1000;
-
-    return cachedToken;
-  } catch (error) {
-    console.error(
-      "XpressBees Login Error:",
-      error.response?.data || error.message,
-    );
-    throw new Error("Failed to authenticate with XpressBees");
+  // If a login is already in flight, wait for it instead of firing another
+  if (tokenPromise) {
+    return tokenPromise;
   }
+
+  tokenPromise = (async () => {
+    try {
+      const response = await axios.post(
+        "https://shipment.xpressbees.com/api/users/login",
+        {
+          email: process.env.XPRESS_EMAIL,
+          password: process.env.XPRESS_PASSWORD,
+        },
+      );
+
+      if (!response.data.status) {
+        throw new Error(response.data.message);
+      }
+
+      cachedToken = response.data.data;
+      tokenExpiry = Date.now() + 23 * 60 * 60 * 1000;
+
+      return cachedToken;
+    } finally {
+      tokenPromise = null; // always release the lock
+    }
+  })();
+
+  return tokenPromise;
 }
+
 // ==========================
 // BOOK SHIPMENT
 // ==========================

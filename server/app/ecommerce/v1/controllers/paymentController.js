@@ -207,6 +207,16 @@ class PaymentController {
       const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
         req.body;
 
+      // ==========================
+      // 1. VALIDATE ALL FIELDS PRESENT
+      // ==========================
+      if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+        return res.status(400).json({ status: "missing required fields" });
+      }
+
+      // ==========================
+      // 2. VERIFY SIGNATURE
+      // ==========================
       const body = `${razorpay_order_id}|${razorpay_payment_id}`;
 
       const expectedSignature = crypto
@@ -218,49 +228,73 @@ class PaymentController {
         return res.status(400).json({ status: "invalid signature" });
       }
 
-      // check status
-      const [payments] = await db.query(
-        `SELECT status, order_id 
-          FROM order_payments 
-          WHERE razorpay_order_id = ?
-          LIMIT 1`,
+      // ==========================
+      // 3. FETCH PAYMENT ROW
+      // ==========================
+      const [[payment]] = await db.query(
+        `SELECT status, order_id
+       FROM order_payments
+       WHERE razorpay_order_id = ?
+       LIMIT 1`,
         [razorpay_order_id],
       );
 
-      if (!payments.length) {
+      if (!payment) {
         return res.status(404).json({ status: "payment not found" });
       }
 
-      const payment = payments[0];
-
-      const [order] = await db.query(
-        `SELECT status FROM eorders WHERE order_id = ?`,
+      // ==========================
+      // 4. FETCH ORDER ROW
+      // ==========================
+      const [[order]] = await db.query(
+        `SELECT status FROM eorders WHERE order_id = ? LIMIT 1`,
         [payment.order_id],
       );
 
-      if (!order.length) {
+      if (!order) {
         return res.status(404).json({ status: "order not found" });
       }
 
-      if (order[0]?.status !== "paid") {
-        return res.json({ status: "pending" });
-      }
-
-      // If webhook already updated
-      if (payment.status === "success") {
+      // ==========================
+      // 5. EVALUATE STATUS
+      //
+      // Case A: Both sides confirm success — webhook fully processed
+      // Case B: Order cancelled — expired before payment, refund already triggered
+      // Case C: Order paid but payment row not yet updated — webhook in flight
+      // Case D: Neither paid nor cancelled — still waiting
+      // ==========================
+      if (payment.status === "success" && order.status === "paid") {
         return res.json({
           status: "success",
           orderId: payment.order_id,
         });
       }
 
+      if (order.status === "cancelled") {
+        return res.json({
+          status: "cancelled",
+          message:
+            "Order was cancelled. Refund will be processed if payment was captured.",
+        });
+      }
+
+      if (order.status === "paid") {
+        // Order marked paid by webhook but payment row not updated yet
+        // Extremely short window — treat as success on next poll
+        return res.json({
+          status: "pending",
+          message: "Payment confirmed, finalising order",
+        });
+      }
+
+      // Default — webhook hasn't fired yet
       return res.json({
         status: "pending",
-        message: "Waiting for confirmation",
+        message: "Waiting for payment confirmation",
       });
     } catch (error) {
       console.error("Verify Payment Error:", error);
-      res.status(500).json({ message: "Payment verification failed" });
+      return res.status(500).json({ message: "Payment verification failed" });
     }
   }
 
