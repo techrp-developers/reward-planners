@@ -139,7 +139,7 @@ async function resolveNDR({ shipmentId, action, new_address_id, notes }) {
     // ==========================
     const [rows] = await conn.query(
       `SELECT * FROM order_shipments WHERE id = ? FOR UPDATE`,
-      [shipmentId]
+      [shipmentId],
     );
 
     const shipment = rows[0];
@@ -164,7 +164,7 @@ async function resolveNDR({ shipmentId, action, new_address_id, notes }) {
 
       const [addrRows] = await conn.query(
         `SELECT * FROM customer_addresses WHERE address_id = ?`,
-        [new_address_id]
+        [new_address_id],
       );
 
       address = addrRows[0];
@@ -218,13 +218,15 @@ async function resolveNDR({ shipmentId, action, new_address_id, notes }) {
 
     if (action === "cancel") {
       if (shipment.awb_number) {
-        const cancelResult = await cancelShipmentExpressBees(shipment.awb_number);
+        const cancelResult = await cancelShipmentExpressBees(
+          shipment.awb_number,
+        );
 
         // Log failure but don't hard-fail — courier may have already cancelled
         if (!cancelResult.status) {
           console.warn(
             `Courier cancel failed for shipment ${shipmentId}:`,
-            cancelResult.error
+            cancelResult.error,
           );
         }
       }
@@ -236,21 +238,25 @@ async function resolveNDR({ shipmentId, action, new_address_id, notes }) {
 
     // Determine new shipping_status
     const newShippingStatus =
-      action === "cancel"         ? "cancelled"  :
-      action === "rto"            ? "rto"        :
-      action === "retry"          ? "in_transit" :
-      action === "address_update" ? "in_transit" :
-      null;
+      action === "cancel"
+        ? "cancelled"
+        : action === "rto"
+          ? "rto"
+          : action === "retry"
+            ? "in_transit"
+            : action === "address_update"
+              ? "in_transit"
+              : null;
 
     if (newShippingStatus) {
       const timestampCol =
-        action === "cancel" ? "cancelled_at" :
-        action === "rto"    ? "rto_at"       :
-        null;
+        action === "cancel"
+          ? "cancelled_at"
+          : action === "rto"
+            ? "rto_at"
+            : null;
 
-      const tsFragment = timestampCol
-        ? `, ${timestampCol} = NOW()`
-        : "";
+      const tsFragment = timestampCol ? `, ${timestampCol} = NOW()` : "";
 
       await conn.query(
         `UPDATE order_shipments
@@ -258,13 +264,13 @@ async function resolveNDR({ shipmentId, action, new_address_id, notes }) {
              is_ndr_active = 0
              ${tsFragment}
          WHERE id = ?`,
-        [newShippingStatus, shipmentId]
+        [newShippingStatus, shipmentId],
       );
     } else {
       // Fallback: just clear the NDR flag
       await conn.query(
         `UPDATE order_shipments SET is_ndr_active = 0 WHERE id = ?`,
-        [shipmentId]
+        [shipmentId],
       );
     }
 
@@ -279,7 +285,7 @@ async function resolveNDR({ shipmentId, action, new_address_id, notes }) {
            resolved_at = NOW()
        WHERE shipment_id = ?
          AND resolved = 0`,
-      [action, notes || null, shipmentId]
+      [action, notes || null, shipmentId],
     );
 
     // ==========================
@@ -288,7 +294,7 @@ async function resolveNDR({ shipmentId, action, new_address_id, notes }) {
     await conn.query(
       `INSERT INTO shipment_events (shipment_id, status, description)
        VALUES (?, 'ndr_resolved', ?)`,
-      [shipmentId, action]
+      [shipmentId, action],
     );
 
     await conn.commit();
@@ -364,39 +370,75 @@ async function cancelShipmentExpressBees(awb) {
 }
 
 async function cancelShipment(shipmentId) {
-  // 1 Fetch shipment
-  const [rows] = await db.query(
-    `SELECT * FROM order_shipments WHERE id = ? LIMIT 1`,
-    [shipmentId],
-  );
+  const conn = await db.getConnection();
 
-  if (!rows.length) {
-    throw new Error("Shipment not found");
+  try {
+    await conn.beginTransaction();
+
+    // ==========================
+    // 1. FETCH + LOCK SHIPMENT ROW
+    // ==========================
+    const [rows] = await conn.query(
+      `SELECT * FROM order_shipments WHERE id = ? LIMIT 1 FOR UPDATE`,
+      [shipmentId],
+    );
+
+    if (!rows.length) {
+      throw new Error("Shipment not found");
+    }
+
+    const shipment = rows[0];
+
+    // ==========================
+    // 2. VALIDATE STATUS
+    // Re-checked under lock — prevents cancelling a shipment
+    // that moved to in_transit between the API call and the lock
+    // ==========================
+    if (
+      !["pending", "booked", "picked_up"].includes(shipment.shipping_status)
+    ) {
+      throw new Error("Cancellation not allowed at current shipment stage");
+    }
+
+    // ==========================
+    // 3. CALL COURIER API
+    // Done before DB write — if courier fails, transaction
+    // rolls back and shipment stays in its current status
+    // ==========================
+    if (shipment.awb_number) {
+      const cancelResponse = await cancelShipmentExpressBees(
+        shipment.awb_number,
+      );
+
+      if (!cancelResponse.status) {
+        throw new Error(
+          cancelResponse.error?.message || "Courier cancel failed",
+        );
+      }
+    }
+    // If no AWB yet (status = 'pending', not yet booked at courier),
+    // skip the courier call — nothing to cancel on their end
+
+    // ==========================
+    // 4. UPDATE DB
+    // ==========================
+    await conn.query(
+      `UPDATE order_shipments
+       SET shipping_status = 'cancelled',
+           cancelled_at = NOW()
+       WHERE id = ?`,
+      [shipmentId],
+    );
+
+    await conn.commit();
+
+    return shipment.order_id;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
   }
-
-  const shipment = rows[0];
-
-  // 2 Check cancellable statuses
-  if (!["pending", "booked", "picked_up"].includes(shipment.shipping_status)) {
-    throw new Error("Cancellation not allowed at current shipment stage");
-  }
-
-  // 3 Call courier cancel
-  const cancelResponse = await cancelShipmentExpressBees(shipment.awb_number);
-
-  if (!cancelResponse.status) {
-    throw new Error("Courier cancel failed");
-  }
-
-  // 4 Update DB
-  await db.query(
-    `UPDATE order_shipments
-     SET shipping_status = 'cancelled'
-     WHERE id = ?`,
-    [shipmentId],
-  );
-
-  return shipment.order_id;
 }
 
 module.exports = {

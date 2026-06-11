@@ -1,17 +1,24 @@
 const cron = require("node-cron");
 const db = require("../../config/database");
+const Razorpay = require("razorpay");
+
+const razorpay = new Razorpay({
+  key_id: process.env.RAZOR_API_KEY,
+  key_secret: process.env.RAZOR_SECRET_KEY,
+});
 
 async function cancelExpiredOrders() {
   try {
     // Find all expired unpaid orders
     const [orders] = await db.query(
-      `
-      SELECT order_id
-      FROM eorders
-      WHERE status = 'pending_payment'
-        AND expires_at IS NOT NULL
-        AND expires_at < NOW()
-      `,
+      `SELECT o.order_id, op.razorpay_order_id
+      FROM eorders o
+      LEFT JOIN order_payments op
+        ON o.order_id = op.order_id
+        AND op.status IN ('created', 'pending')
+      WHERE o.status = 'pending_payment'
+        AND o.expires_at IS NOT NULL
+        AND o.expires_at < NOW()`,
     );
 
     if (!orders.length) {
@@ -82,6 +89,14 @@ async function cancelExpiredOrders() {
         );
 
         await conn.commit();
+
+        if (order.razorpay_order_id) {
+          try {
+            await razorpay.orders.cancel(order.razorpay_order_id);
+          } catch (err) {
+            console.warn(`[ORDER_EXPIRY] Razorpay cancel failed:`, err.message);
+          }
+        }
 
         console.log(
           `[ORDER_EXPIRY] Order ${orderId} cancelled and stock restored`,

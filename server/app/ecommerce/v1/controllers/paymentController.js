@@ -17,91 +17,188 @@ class PaymentController {
       return res.status(400).json({ message: "orderId required" });
     }
 
-    // check if already paid
-    const [orders] = await db.query(
-      `SELECT total_amount, status, expires_at
-     FROM eorders 
-     WHERE order_id = ? 
-     LIMIT 1`,
-      [orderId],
-    );
+    const conn = await db.getConnection();
 
-    if (!orders.length) {
-      return res.status(404).json({ message: "Order not found" });
-    }
+    try {
+      await conn.beginTransaction();
 
-    const order = orders[0];
-
-    if (order.expires_at && new Date(order.expires_at) < new Date()) {
-      await db.query(
-        `
-          UPDATE eorders
-          SET status='cancelled'
-          WHERE order_id=?
-          `,
+      // ==========================
+      // FETCH + LOCK ORDER ROW
+      // Prevents two simultaneous requests from both
+      // passing the checks and creating two Razorpay orders
+      // ==========================
+      const [[order]] = await conn.query(
+        `SELECT total_amount, status, expires_at
+       FROM eorders
+       WHERE order_id = ?
+       LIMIT 1
+       FOR UPDATE`,
         [orderId],
       );
 
-      return res.status(400).json({
-        message: "Order expired",
-      });
-    }
+      if (!order) {
+        await conn.rollback();
+        return res.status(404).json({ message: "Order not found" });
+      }
 
-    if (order.status === "paid") {
-      return res.status(400).json({
-        message: "Order already paid",
-      });
-    }
+      // ==========================
+      // EXPIRY CHECK
+      // Handle both: expires_at passed, or status already cancelled
+      // by the expiry cron
+      // ==========================
+      if (order.status === "cancelled") {
+        await conn.rollback();
+        return res.status(400).json({ message: "Order expired" });
+      }
 
-    if (order.status === "cancelled") {
-      return res.status(400).json({
-        message: "Order expired",
-      });
-    }
-    const amount = Number(order.total_amount);
+      if (order.expires_at && new Date(order.expires_at) < new Date()) {
+        await conn.query(
+          `UPDATE eorders
+         SET status = 'cancelled', expires_at = NULL
+         WHERE order_id = ? AND status = 'pending_payment'`,
+          [orderId],
+        );
 
-    // Check if already created razorpay order
-    const [existing] = await db.query(
-      `SELECT razorpay_order_id 
-      FROM order_payments 
-      WHERE order_id = ? 
-      AND status IN ('created','pending')
-      LIMIT 1`,
-      [orderId],
-    );
+        await conn.query(
+          `UPDATE order_payments
+         SET status = 'expired'
+         WHERE order_id = ? AND status IN ('created', 'pending')`,
+          [orderId],
+        );
 
-    if (existing.length > 0) {
+        await conn.commit();
+        return res.status(400).json({ message: "Order expired" });
+      }
+
+      if (order.status === "paid") {
+        await conn.rollback();
+        return res.status(400).json({ message: "Order already paid" });
+      }
+
+      // Only pending_payment orders should reach here
+      if (order.status !== "pending_payment") {
+        await conn.rollback();
+        return res.status(400).json({ message: "Order is not payable" });
+      }
+
+      const amount = Number(order.total_amount);
+
+      // ==========================
+      // CHECK FOR EXISTING RAZORPAY ORDER
+      // Also locked via the eorders FOR UPDATE above —
+      // any concurrent request is blocked until we commit
+      // ==========================
+      const [[existing]] = await conn.query(
+        `SELECT razorpay_order_id
+       FROM order_payments
+       WHERE order_id = ?
+         AND status IN ('created', 'pending')
+       LIMIT 1`,
+        [orderId],
+      );
+
+      if (existing) {
+        await conn.rollback();
+        return res.status(200).json({
+          key: process.env.RAZOR_API_KEY,
+          orderId: existing.razorpay_order_id,
+          amount: amount * 100,
+          currency: "INR",
+        });
+      }
+
+      // ==========================
+      // CREATE RAZORPAY ORDER
+      // Done inside the transaction window so no second request
+      // can sneak past the existing check before we insert
+      // ==========================
+      let razorpayOrder;
+
+      try {
+        razorpayOrder = await razorpay.orders.create({
+          amount: amount * 100,
+          currency: "INR",
+          receipt: orderId.toString(),
+          payment_capture: 1,
+          notes: {
+            module: "ecommerce",
+            order_id: orderId.toString(),
+          },
+        });
+      } catch (razorpayErr) {
+        await conn.rollback();
+        console.error(
+          "[createOrder] Razorpay order creation failed:",
+          razorpayErr,
+        );
+        return res
+          .status(502)
+          .json({ message: "Payment gateway error. Please try again." });
+      }
+
+      // ==========================
+      // INSERT INTO order_payments
+      // ==========================
+      try {
+        await conn.query(
+          `INSERT INTO order_payments
+         (order_id, razorpay_order_id, amount, status)
+         VALUES (?, ?, ?, 'created')`,
+          [orderId, razorpayOrder.id, amount],
+        );
+      } catch (dbErr) {
+        // Duplicate key — another request inserted between our check and insert
+        // This should not happen due to FOR UPDATE, but handle defensively
+        if (dbErr.code === "ER_DUP_ENTRY") {
+          await conn.rollback();
+
+          const [[race]] = await db.query(
+            `SELECT razorpay_order_id
+           FROM order_payments
+           WHERE order_id = ?
+             AND status IN ('created', 'pending')
+           LIMIT 1`,
+            [orderId],
+          );
+
+          razorpay.orders
+            .cancel(razorpayOrder.id)
+            .catch((err) =>
+              console.warn(
+                "[createOrder] Orphaned Razorpay order cancel failed:",
+                err.message,
+              ),
+            );
+
+          return res.status(200).json({
+            key: process.env.RAZOR_API_KEY,
+            orderId: race?.razorpay_order_id,
+            amount: amount * 100,
+            currency: "INR",
+          });
+        }
+
+        await conn.rollback();
+        throw dbErr;
+      }
+
+      await conn.commit();
+
       return res.status(200).json({
         key: process.env.RAZOR_API_KEY,
-        orderId: existing[0].razorpay_order_id,
-        amount: amount * 100,
-        currency: "INR",
+        orderId: razorpayOrder.id,
+        amount: razorpayOrder.amount,
+        currency: razorpayOrder.currency,
       });
+    } catch (err) {
+      await conn.rollback();
+      console.error("[createOrder] Error:", err);
+      return res
+        .status(500)
+        .json({ message: "Failed to create payment order" });
+    } finally {
+      conn.release();
     }
-
-    const razorpayOrder = await razorpay.orders.create({
-      amount: amount * 100,
-      currency: "INR",
-      receipt: orderId.toString(),
-      payment_capture: 1,
-      notes: {
-        module: "ecommerce",
-        order_id: orderId.toString(),
-      },
-    });
-
-    await PaymentModel.createOrder({
-      orderId,
-      razorpayOrderId: razorpayOrder.id,
-      amount,
-    });
-
-    return res.status(200).json({
-      key: process.env.RAZOR_API_KEY,
-      orderId: razorpayOrder.id,
-      amount: razorpayOrder.amount,
-      currency: razorpayOrder.currency,
-    });
   }
 
   //   verify Payment

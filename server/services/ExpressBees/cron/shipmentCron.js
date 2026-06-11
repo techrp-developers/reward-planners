@@ -378,11 +378,11 @@ async function updateShipmentTracking(shipment) {
         // ==========================
         // CALCULATE REFUND AMOUNT
         // ==========================
+
         const [[amountRow]] = await db.query(
           `
-          SELECT SUM((price * quantity) - reward_discount) AS amount
-          FROM eorder_items
-          WHERE vendor_order_id = ?
+          SELECT SUM(final_price) AS amount
+          FROM eorder_items WHERE vendor_order_id = ?
         `,
           [shipment.vendor_order_id],
         );
@@ -455,9 +455,16 @@ cron.schedule("*/30 * * * *", async () => {
          AND shipping_status NOT IN ('delivered','cancelled','rto')`,
     );
 
-    await Promise.all(
-      shipments.map((shipment) => updateShipmentTracking(shipment)),
-    );
+    // await Promise.all(
+    //   shipments.map((shipment) => updateShipmentTracking(shipment)),
+    // );
+
+    const BATCH_SIZE = 20;
+
+    for (let i = 0; i < shipments.length; i += BATCH_SIZE) {
+      const batch = shipments.slice(i, i + BATCH_SIZE);
+      await Promise.all(batch.map((s) => updateShipmentTracking(s)));
+    }
   } catch (err) {
     console.error("Tracking cron error:", err);
   }
