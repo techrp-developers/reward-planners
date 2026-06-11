@@ -1,6 +1,7 @@
 const cron = require("node-cron");
 const db = require("../../config/database");
 const Razorpay = require("razorpay");
+const { cronPing, checkCronHealth } = require("../../services/cronMonitor");
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZOR_API_KEY,
@@ -119,6 +120,7 @@ cron.schedule("*/5 * * * *", async () => {
   try {
     console.log("[ORDER_EXPIRY] Running...");
     await cancelExpiredOrders();
+    await cronPing("order_expiry_cron");
   } catch (err) {
     console.error("Expired order cron error", err);
   }

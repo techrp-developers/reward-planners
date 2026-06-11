@@ -1,5 +1,6 @@
 const cron = require("node-cron");
 const db = require("../../config/database");
+const { cronPing, checkCronHealth } = require("../../services/cronMonitor");
 
 cron.schedule("* * * * *", async () => {
   try {
@@ -63,6 +64,7 @@ cron.schedule("* * * * *", async () => {
 
       console.log("✅ Maintenance mode disabled automatically");
     }
+    await cronPing("maintenance_cron");
   } catch (error) {
     console.error("Maintenance Cron Error:", error.message);
   }

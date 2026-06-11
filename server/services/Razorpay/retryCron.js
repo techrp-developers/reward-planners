@@ -1,6 +1,7 @@
 const cron = require("node-cron");
 const db = require("../../config/database");
 const ServiceOrderModel = require("../../app/service/v1/models/serviceOrderModel");
+const { cronPing, checkCronHealth } = require("../../services/cronMonitor");
 
 async function retryFailedRefunds() {
   console.log("💰 [retryFailedRefunds] Running...");
@@ -87,4 +88,5 @@ async function retryMpsFailedRefunds() {
 cron.schedule("*/10 * * * *", function () {
   retryFailedRefunds();
   retryMpsFailedRefunds();
+  await cronPing("service_order_retry_cron");
 });

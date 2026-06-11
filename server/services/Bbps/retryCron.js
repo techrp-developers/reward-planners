@@ -3,6 +3,7 @@ const TransactionModel = require("../../app/bbps/v1/models/transactionModel");
 const ekoService = require("../../app/bbps/v1/services/eko_service");
 const rechargeService = require("../../app/bbps/v1/services/recharge_service");
 const db = require("../../config/database");
+const { cronPing, checkCronHealth } = require("../../services/cronMonitor");
 
 cron.schedule("*/5 * * * *", async () => {
   console.log("🔁 BBPS retry cron running...");
@@ -66,4 +67,6 @@ cron.schedule("*/5 * * * *", async () => {
       conn.release();
     }
   }
+
+  await cronPing("bbps_payment_cron");
 });

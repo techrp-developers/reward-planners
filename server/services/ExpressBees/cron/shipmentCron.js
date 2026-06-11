@@ -6,6 +6,7 @@ const {
   processShipmentsAfterPayment,
 } = require("../../../app/ecommerce/v1/utils/webhook");
 const RefundService = require("../../../app/ecommerce/v1/controllers/paymentController");
+const { cronPing, checkCronHealth } = require("../../../services/cronMonitor");
 
 // =====================
 // STATUS MAPPING
@@ -445,16 +446,14 @@ cron.schedule("*/30 * * * *", async () => {
          AND shipping_status NOT IN ('delivered','cancelled','rto')`,
     );
 
-    // await Promise.all(
-    //   shipments.map((shipment) => updateShipmentTracking(shipment)),
-    // );
-
     const BATCH_SIZE = 20;
 
     for (let i = 0; i < shipments.length; i += BATCH_SIZE) {
       const batch = shipments.slice(i, i + BATCH_SIZE);
       await Promise.all(batch.map((s) => updateShipmentTracking(s)));
     }
+
+    await cronPing("tracking_cron");
   } catch (err) {
     console.error("Tracking cron error:", err);
   }
@@ -482,6 +481,8 @@ cron.schedule("*/10 * * * *", async () => {
         console.error("Retry failed for order:", row.order_id, err);
       }
     }
+
+    await cronPing("booking_retry_cron");
   } catch (err) {
     console.error("Booking retry cron error:", err);
   }
