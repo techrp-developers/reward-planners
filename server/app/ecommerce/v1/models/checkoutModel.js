@@ -508,13 +508,19 @@ class CheckoutModel {
         throw new Error("PRICE_MISMATCH");
       }
 
+      // ===============================
+      // ORDER EXPIRY
+      // ===============================
+      const expiresAt = new Date();
+      expiresAt.setMinutes(expiresAt.getMinutes() + 15);
+
       // 7 Create order
       const orderRef = generateOrderRef();
 
       const [orderRes] = await conn.execute(
         `
-        INSERT INTO eorders (user_id,company_id, total_amount,order_ref,address_id, product_total, reward_discount, reward_coins_used,reward_earned, reward_coins_earned, shipping_total)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO eorders (user_id,company_id, total_amount,order_ref,address_id, product_total, reward_discount, reward_coins_used,reward_earned, reward_coins_earned, shipping_total,status,expires_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
           userId,
@@ -528,6 +534,8 @@ class CheckoutModel {
           totalRewardEarn,
           totalRewardEarn,
           shippingTotal,
+          "pending_payment",
+          expiresAt,
         ],
       );
 
@@ -878,6 +886,12 @@ class CheckoutModel {
       }
 
       // ===============================
+      // ORDER EXPIRY
+      // ===============================
+      const expiresAt = new Date();
+      expiresAt.setMinutes(expiresAt.getMinutes() + 15);
+
+      // ===============================
       // 6. CREATE ORDER
       // ===============================
       const orderRef = generateOrderRef();
@@ -887,8 +901,8 @@ class CheckoutModel {
       INSERT INTO eorders
       (user_id, company_id, total_amount, order_ref, address_id,
        product_total, reward_discount, reward_coins_used,
-       reward_earned, reward_coins_earned, shipping_total)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       reward_earned, reward_coins_earned, shipping_total, status, expires_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
         [
           userId,
@@ -902,6 +916,8 @@ class CheckoutModel {
           rewardEarn,
           rewardEarn,
           shippingCharge,
+          "pending_payment",
+          expiresAt,
         ],
       );
 

@@ -19,7 +19,7 @@ class PaymentController {
 
     // check if already paid
     const [orders] = await db.query(
-      `SELECT total_amount, status 
+      `SELECT total_amount, status, expires_at
      FROM eorders 
      WHERE order_id = ? 
      LIMIT 1`,
@@ -32,10 +32,32 @@ class PaymentController {
 
     const order = orders[0];
 
-    if (order.status === "paid") {
-      return res.status(400).json({ message: "Order already paid" });
+    if (order.expires_at && new Date(order.expires_at) < new Date()) {
+      await db.query(
+        `
+          UPDATE eorders
+          SET status='cancelled'
+          WHERE order_id=?
+          `,
+        [orderId],
+      );
+
+      return res.status(400).json({
+        message: "Order expired",
+      });
     }
 
+    if (order.status === "paid") {
+      return res.status(400).json({
+        message: "Order already paid",
+      });
+    }
+
+    if (order.status === "cancelled") {
+      return res.status(400).json({
+        message: "Order expired",
+      });
+    }
     const amount = Number(order.total_amount);
 
     // Check if already created razorpay order
@@ -150,13 +172,22 @@ class PaymentController {
     res.set("Cache-Control", "no-store");
     const { orderId } = req.params;
 
-    const [order] = await db.query(
-      `SELECT status FROM eorders WHERE order_id = ?`,
+    const [rows] = await db.query(
+      `SELECT status, expires_at
+        FROM eorders
+        WHERE order_id = ?`,
       [orderId],
     );
 
+    if (!rows.length) {
+      return res.status(404).json({
+        message: "Order not found",
+      });
+    }
+
     return res.json({
-      paymentStatus: order.status,
+      paymentStatus: rows[0].status,
+      expiresAt: rows[0].expires_at,
     });
   }
 

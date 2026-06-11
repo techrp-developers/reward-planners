@@ -1,7 +1,11 @@
 const db = require("../../../../config/database");
-const { enqueueWhatsApp } = require("../../../../services/whatsapp/waEnqueueService");
+const {
+  enqueueWhatsApp,
+} = require("../../../../services/whatsapp/waEnqueueService");
 const xpressService = require("../../../../services/ExpressBees/xpressbees_service");
-const { orderConfirmationMail } = require("../../../../services/mailBuilder/orderConfirmation");
+const {
+  orderConfirmationMail,
+} = require("../../../../services/mailBuilder/orderConfirmation");
 
 // booking payload
 async function buildXpressBookingPayload(orderId, vendorId) {
@@ -486,7 +490,8 @@ async function processEvent(req) {
       // 5 Update order status
       await conn.query(
         `UPDATE eorders 
-         SET status = 'paid' 
+         SET status = 'paid',
+         paid_at = NOW() 
          WHERE order_id = ?`,
         [order_id],
       );
