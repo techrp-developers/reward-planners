@@ -10,36 +10,88 @@ const RefundService = require("../../../app/ecommerce/v1/controllers/paymentCont
 // =====================
 // STATUS MAPPING
 // =====================
+const XPRESS_STATUS_MAP = {
+  // Picked up
+  "shipment picked up": "picked_up",
+  "picked up": "picked_up",
+
+  // In transit
+  "in transit": "in_transit",
+  "out of delivery area": "in_transit",
+  "shipment in transit": "in_transit",
+  "reached at destination hub": "in_transit",
+  "reached at hub": "in_transit",
+  dispatched: "in_transit",
+
+  // Out for delivery
+  "out for delivery": "out_for_delivery",
+  "out for delivery - attempt": "out_for_delivery",
+
+  // Delivered
+  delivered: "delivered",
+  "shipment delivered": "delivered",
+
+  // NDR - exhaustive list of known XpressBees NDR strings
+  "delivery attempted - recipient not available": "ndr",
+  "delivery attempted - address not found": "ndr",
+  "delivery attempted - customer refused": "ndr",
+  "delivery attempted - incorrect address": "ndr",
+  "delivery attempted - door locked": "ndr",
+  "delivery attempted - requested to call before delivery": "ndr",
+  "delivery attempted - out of delivery area": "ndr",
+  ndr: "ndr",
+  undelivered: "ndr",
+  "delivery failed": "ndr",
+  "delivery exception": "ndr",
+
+  // RTO
+  "rto initiated": "rto",
+  "rto in transit": "rto",
+  "rto delivered": "rto",
+  "rto out for delivery": "rto",
+  "return to origin": "rto",
+  "returned to origin": "rto",
+  "return initiated": "rto",
+};
+
+// ==========================
+// SAFE FALLBACK PATTERNS
+// (only for strings too variable for exact match)
+// ==========================
+const XPRESS_FALLBACK_PATTERNS = [
+  // Order matters — most specific first
+  { test: (s) => s.startsWith("delivery attempted"), result: "ndr" },
+  { test: (s) => s.includes("out for delivery"), result: "out_for_delivery" },
+  { test: (s) => s.includes("in transit"), result: "in_transit" },
+  { test: (s) => s.includes("picked"), result: "picked_up" },
+  { test: (s) => s.includes("delivered"), result: "delivered" },
+  { test: (s) => s.startsWith("rto"), result: "rto" },
+  { test: (s) => s.includes("return to origin"), result: "rto" },
+  { test: (s) => s.includes("returned"), result: "rto" },
+  // NDR patterns — intentionally NO generic "failed" match here
+  { test: (s) => s.includes("ndr"), result: "ndr" },
+  { test: (s) => s.includes("not available"), result: "ndr" },
+  { test: (s) => s.includes("address issue"), result: "ndr" },
+];
+
 function mapXpressStatus(status) {
   if (!status || typeof status !== "string") return null;
 
-  const s = status.toLowerCase();
+  const s = status.toLowerCase().trim();
 
-  if (s.includes("picked")) return "picked_up";
-  if (s.includes("in transit")) return "in_transit";
-  if (s.includes("out for delivery")) return "out_for_delivery";
-  if (s.includes("delivered")) return "delivered";
-
-  //  NDR cases
-  if (
-    s.includes("ndr") ||
-    s.includes("failed") ||
-    s.includes("not available") ||
-    s.includes("address issue") ||
-    s.includes("delivery attempted")
-  ) {
-    return "ndr";
+  // 1. Exact match — fastest, most reliable
+  if (XPRESS_STATUS_MAP[s]) {
+    return XPRESS_STATUS_MAP[s];
   }
 
-  // RTO cases
-  if (
-    s.includes("rto") ||
-    s.includes("returned") ||
-    s.includes("return to origin")
-  ) {
-    return "rto";
+  // 2. Fallback patterns — for variable-suffix strings like
+  //    "delivery attempted - <courier-specific reason>"
+  for (const { test, result } of XPRESS_FALLBACK_PATTERNS) {
+    if (test(s)) return result;
   }
 
+  // 3. Unknown status — log it so you can add it to the map
+  console.warn(`[mapXpressStatus] Unrecognised XpressBees status: "${status}"`);
   return null;
 }
 
@@ -76,9 +128,10 @@ async function syncOrderStatus(orderId) {
   } else if (
     statuses.some((s) =>
       ["in_transit", "picked_up", "out_for_delivery"].includes(s),
-    )
+    ) &&
+    statuses.some((s) => s === "booked")
   ) {
-    finalStatus = "shipped";
+    finalStatus = "partially_shipped";
   } else if (statuses.some((s) => s === "booked")) {
     finalStatus = "processing";
   }

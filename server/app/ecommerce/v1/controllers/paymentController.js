@@ -195,7 +195,12 @@ class PaymentController {
   // REFUND LOGIC
   // =================
 
-  async processRefund({ orderId, shipmentId, vendorOrderId, amount }) {
+  async processRefund({
+    orderId,
+    shipmentId = null,
+    vendorOrderId = null,
+    amount,
+  }) {
     const conn = await db.getConnection();
 
     try {
@@ -205,13 +210,11 @@ class PaymentController {
       // 1. GET PAYMENT
       // ==========================
       const [[payment]] = await conn.query(
-        `
-      SELECT payment_id, razorpay_payment_id, amount, status
-      FROM order_payments
-      WHERE order_id = ?
-      AND status IN ('success','partially_refunded')
-      LIMIT 1
-    `,
+        `SELECT payment_id, razorpay_payment_id, amount, status
+       FROM order_payments
+       WHERE order_id = ?
+       AND status IN ('success', 'partially_refunded')
+       LIMIT 1`,
         [orderId],
       );
 
@@ -219,14 +222,19 @@ class PaymentController {
 
       // ==========================
       // 2. PREVENT DUPLICATE REFUND
+      // Scope duplicate check differently based on whether
+      // this is a shipment-level or order-level refund
       // ==========================
       const [existing] = await conn.query(
-        `
-      SELECT refund_id FROM order_refunds
-      WHERE shipment_id = ?
-      AND status IN ('initiated','completed')
-    `,
-        [shipmentId],
+        shipmentId
+          ? `SELECT refund_id FROM order_refunds
+           WHERE shipment_id = ?
+           AND status IN ('initiated', 'completed')`
+          : `SELECT refund_id FROM order_refunds
+           WHERE order_id = ?
+           AND shipment_id IS NULL
+           AND status IN ('initiated', 'completed')`,
+        [shipmentId ?? orderId],
       );
 
       if (existing.length) {
@@ -238,11 +246,9 @@ class PaymentController {
       // 3. CREATE REFUND ENTRY
       // ==========================
       const [refundRes] = await conn.query(
-        `
-      INSERT INTO order_refunds
-      (order_id, shipment_id, vendor_order_id, refund_amount, refund_method, status)
-      VALUES (?, ?, ?, ?, 'original', 'initiated')
-    `,
+        `INSERT INTO order_refunds
+       (order_id, shipment_id, vendor_order_id, refund_amount, refund_method, status)
+       VALUES (?, ?, ?, ?, 'original', 'initiated')`,
         [orderId, shipmentId, vendorOrderId, amount],
       );
 
@@ -251,24 +257,34 @@ class PaymentController {
       // ==========================
       // 4. CALL RAZORPAY
       // ==========================
-      const refund = await razorpay.payments.refund(
-        payment.razorpay_payment_id,
-        {
+      let refund;
+
+      try {
+        refund = await razorpay.payments.refund(payment.razorpay_payment_id, {
           amount: Math.round(amount * 100),
-        },
-      );
+        });
+      } catch (razorpayErr) {
+        // Mark this specific refund entry as failed before re-throwing
+        // so the finally block doesn't try to use shipmentId to find it
+        await conn.query(
+          `UPDATE order_refunds SET status = 'failed' WHERE refund_id = ?`,
+          [refundId],
+        );
+
+        await conn.commit(); // commit the failed status
+        console.error("Razorpay refund API failed:", razorpayErr);
+        return;
+      }
 
       // ==========================
       // 5. UPDATE REFUND TABLE
       // ==========================
       await conn.query(
-        `
-      UPDATE order_refunds
-      SET status = 'completed',
-          razorpay_refund_id = ?,
-          completed_at = NOW()
-      WHERE refund_id = ?
-    `,
+        `UPDATE order_refunds
+       SET status = 'completed',
+           razorpay_refund_id = ?,
+           completed_at = NOW()
+       WHERE refund_id = ?`,
         [refund.id, refundId],
       );
 
@@ -276,49 +292,45 @@ class PaymentController {
       // 6. UPDATE PAYMENT STATUS
       // ==========================
       const [[totalRefunded]] = await conn.query(
-        `
-      SELECT SUM(refund_amount) AS refunded
-      FROM order_refunds
-      WHERE order_id = ?
-      AND status = 'completed'
-    `,
+        `SELECT SUM(refund_amount) AS refunded
+       FROM order_refunds
+       WHERE order_id = ?
+       AND status = 'completed'`,
         [orderId],
       );
 
-      if (totalRefunded.refunded >= payment.amount) {
-        await conn.query(
-          `
-        UPDATE order_payments
-        SET status = 'refunded'
-        WHERE payment_id = ?
-      `,
-          [payment.payment_id],
-        );
-      } else {
-        await conn.query(
-          `
-        UPDATE order_payments
-        SET status = 'partially_refunded'
-        WHERE payment_id = ?
-      `,
-          [payment.payment_id],
-        );
-      }
+      const newPaymentStatus =
+        Number(totalRefunded.refunded) >= Number(payment.amount)
+          ? "refunded"
+          : "partially_refunded";
+
+      await conn.query(
+        `UPDATE order_payments SET status = ? WHERE payment_id = ?`,
+        [newPaymentStatus, payment.payment_id],
+      );
 
       await conn.commit();
     } catch (err) {
       await conn.rollback();
       console.error("Refund failed:", err);
 
-      // mark failed
-      await conn.query(
-        `
-      UPDATE order_refunds
-      SET status = 'failed'
-      WHERE shipment_id = ?
-    `,
-        [shipmentId],
-      );
+      // ==========================
+      // MARK FAILED — use refund_id scope, not shipment_id
+      // The original code used WHERE shipment_id = ? which breaks
+      // when shipmentId is null (SQL NULL != NULL)
+      // ==========================
+      try {
+        await db.query(
+          `UPDATE order_refunds
+         SET status = 'failed'
+         WHERE order_id = ?
+           AND status = 'initiated'
+           AND (shipment_id = ? OR (shipment_id IS NULL AND ? IS NULL))`,
+          [orderId, shipmentId, shipmentId],
+        );
+      } catch (markErr) {
+        console.error("Failed to mark refund as failed:", markErr);
+      }
     } finally {
       conn.release();
     }

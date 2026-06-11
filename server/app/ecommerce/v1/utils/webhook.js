@@ -6,6 +6,7 @@ const xpressService = require("../../../../services/ExpressBees/xpressbees_servi
 const {
   orderConfirmationMail,
 } = require("../../../../services/mailBuilder/orderConfirmation");
+const RefundService = require("../controllers/paymentController");
 
 // booking payload
 async function buildXpressBookingPayload(orderId, vendorId) {
@@ -621,7 +622,7 @@ async function processEvent(req) {
       await conn.beginTransaction();
       transactionStarted = true;
 
-      // 2 Get payment row
+      // 1 Get payment row
       const [rows] = await conn.query(
         `SELECT order_id, status
           FROM order_payments
@@ -637,9 +638,55 @@ async function processEvent(req) {
 
       const { order_id, status } = rows[0];
 
-      // 3 Idempotency check
+      // 2 Idempotency check
       if (status === "success") {
         await conn.commit();
+        return;
+      }
+
+      // ==========================
+      // 3. GUARD: CHECK EORDER STATUS
+      // ==========================
+      const [[eorder]] = await conn.query(
+        `SELECT status FROM eorders WHERE order_id = ? FOR UPDATE`,
+        [order_id],
+      );
+
+      if (!eorder) {
+        console.error(`[WEBHOOK] eorder not found for order_id ${order_id}`);
+        await conn.commit();
+        return;
+      }
+
+      if (eorder.status === "cancelled") {
+        console.warn(
+          `[WEBHOOK] Payment captured on cancelled order ${order_id} — triggering refund`,
+        );
+
+        // Mark payment row so we don't process again
+        await conn.query(
+          `UPDATE order_payments
+       SET razorpay_payment_id = ?,
+           status = 'success',
+           payment_method = ?,
+           raw_webhook = ?
+       WHERE razorpay_order_id = ? AND status != 'success'`,
+          [payment.id, payment.method, JSON.stringify(body), payment.order_id],
+        );
+
+        await conn.commit();
+
+        // Trigger refund async — order is cancelled so refund full amount
+        RefundService.processRefund({
+          orderId: order_id,
+          amount: payment.amount / 100,
+        }).catch((err) =>
+          console.error(
+            `[WEBHOOK] Auto-refund failed for cancelled order ${order_id}:`,
+            err,
+          ),
+        );
+
         return;
       }
 
