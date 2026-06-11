@@ -3,6 +3,10 @@ const router = express.Router();
 const CheckoutController = require("../controllers/checkoutController");
 const auth = require("../../../common/middlewares/auth");
 const drainMode = require("../../../../middleware/drainMode");
+const {
+  validateCheckoutCart,
+  validateBuyNow,
+} = require("../middlewares/validators");
 
 // get cart checkout Details
 router.get("/get-cart", auth, CheckoutController.getCheckoutCart);
@@ -11,10 +15,22 @@ router.get("/get-cart", auth, CheckoutController.getCheckoutCart);
 router.get("/get-buy-now", auth, CheckoutController.getBuyNowCheckout);
 
 // Place Order from Cart
-router.post("/cart", auth, drainMode, CheckoutController.checkoutCart);
+router.post(
+  "/cart",
+  auth,
+  drainMode,
+  validateCheckoutCart,
+  CheckoutController.checkoutCart,
+);
 
 // place Order from Buy Now
-router.post("/buy-now", auth, drainMode, CheckoutController.buyNow);
+router.post(
+  "/buy-now",
+  auth,
+  drainMode,
+  validateBuyNo,
+  CheckoutController.buyNow,
+);
 
 // order Receipt
 router.get("/order-receipt/:orderId", auth, CheckoutController.getOrderReceipt);
