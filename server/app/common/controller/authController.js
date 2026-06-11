@@ -1124,6 +1124,7 @@ class AuthController {
             progress_percent: todaySummary?.progress_percent || 0,
           },
           thought: randomThought,
+          birthday_employees: birthdayEmployees || [],
         },
       });
     } catch (error) {
