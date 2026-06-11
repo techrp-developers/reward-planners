@@ -133,6 +133,173 @@ async function buildXpressBookingPayload(orderId, vendorId) {
   };
 }
 
+async function generateInvoices(orderId, conn) {
+  try {
+    // 1 Fetch order items with vendor
+    const [items] = await conn.query(
+      `
+      SELECT 
+        oi.product_id,
+        oi.variant_id,
+        oi.quantity,
+        oi.price,
+        p.product_name,
+        p.vendor_id,
+        p.gst_slab,
+        p.hsn_sac_code,
+        v.sku
+      FROM eorder_items oi
+      JOIN eproducts p ON oi.product_id = p.product_id
+      JOIN product_variants v ON oi.variant_id = v.variant_id
+      WHERE oi.order_id = ?
+      `,
+      [orderId],
+    );
+
+    if (!items.length) {
+      return;
+    }
+
+    // 2 Group items by vendor
+    const vendorMap = {};
+
+    for (const item of items) {
+      if (!vendorMap[item.vendor_id]) {
+        vendorMap[item.vendor_id] = [];
+      }
+      vendorMap[item.vendor_id].push(item);
+    }
+
+    // 3 Create invoice per vendor
+    for (const vendorId of Object.keys(vendorMap)) {
+      // Prevent duplicates
+      const [[existing]] = await conn.query(
+        `SELECT invoice_id FROM invoices 
+         WHERE order_id = ? AND vendor_id = ? 
+         LIMIT 1`,
+        [orderId, vendorId],
+      );
+
+      if (existing) continue;
+
+      const vendorItems = vendorMap[vendorId];
+      const invoiceNumber = `INV-${orderId}-${vendorId}`;
+
+      let subtotal = 0;
+      let taxTotal = 0;
+
+      // Calculate totals
+      for (const item of vendorItems) {
+        const lineSubtotal = Number(item.price) * Number(item.quantity);
+        const gstRate = Number(item.gst_slab || 0);
+        const taxAmount = lineSubtotal * (gstRate / 100);
+
+        subtotal += lineSubtotal;
+        taxTotal += taxAmount;
+      }
+
+      // 4 Fetch shipping charges for vendor
+      const [[shipment]] = await conn.query(
+        `
+        SELECT shipping_charges
+        FROM order_shipments
+        WHERE order_id = ? AND vendor_id = ?
+        LIMIT 1
+        `,
+        [orderId, vendorId],
+      );
+
+      const shippingCharges = Number(shipment?.shipping_charges || 0);
+
+      const grandTotal = subtotal + taxTotal + shippingCharges;
+
+      // 5 Create invoice
+      const [invResult] = await conn.query(
+        `
+        INSERT INTO invoices
+        (
+          invoice_number,
+          order_id,
+          vendor_id,
+          user_id,
+          subtotal,
+          tax_total,
+          shipping_amount,
+          grand_total
+        )
+        SELECT ?, o.order_id, ?, o.user_id, ?, ?, ?, ?
+        FROM eorders o
+        WHERE o.order_id = ?
+        `,
+        [
+          invoiceNumber,
+          vendorId,
+          subtotal,
+          taxTotal,
+          shippingCharges,
+          grandTotal,
+          orderId,
+        ],
+      );
+
+      const invoiceId = invResult.insertId;
+
+      // 6 Insert invoice items
+      for (const item of vendorItems) {
+        const lineSubtotal = Number(item.price) * Number(item.quantity);
+        const gstRate = Number(item.gst_slab || 0);
+
+        const totalTax = lineSubtotal * (gstRate / 100);
+
+        const cgst = totalTax / 2;
+        const sgst = totalTax / 2;
+        const igst = 0;
+
+        const lineTotal = lineSubtotal + totalTax;
+
+        await conn.query(
+          `
+            INSERT INTO invoice_items
+            (
+              invoice_id,
+              product_id,
+              variant_id,
+              product_name,
+              sku,
+              quantity,
+              unit_price,
+              tax_rate,
+              hsn_code,
+              cgst_amount,
+              sgst_amount,
+              igst_amount,
+              line_total
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `,
+          [
+            invoiceId,
+            item.product_id,
+            item.variant_id,
+            item.product_name,
+            item.sku,
+            item.quantity,
+            item.price,
+            gstRate,
+            item.hsn_sac_code,
+            cgst,
+            sgst,
+            igst,
+            lineTotal,
+          ],
+        );
+      }
+    }
+  } catch (err) {
+    throw err;
+  }
+}
+
 // shipment updated
 async function processShipmentsAfterPayment(orderId) {
   const conn = await db.getConnection();
@@ -489,12 +656,163 @@ async function processEvent(req) {
 
       // 5 Update order status
       await conn.query(
-        `UPDATE eorders 
-         SET status = 'paid',
-         paid_at = NOW() 
-         WHERE order_id = ?`,
+        `UPDATE eorders
+        SET status = 'paid',
+          paid_at = NOW(),
+          expires_at = NULL
+        WHERE order_id = ?`,
         [order_id],
       );
+
+      // ==========================
+      // WALLET + REWARD PROCESSING
+      // ==========================
+
+      const [[orderInfo]] = await conn.query(
+        `
+        SELECT
+          user_id,
+          reward_coins_used,
+          reward_coins_earned
+        FROM eorders
+        WHERE order_id = ?
+        FOR UPDATE
+        `,
+        [order_id],
+      );
+
+      if (!orderInfo) {
+        throw new Error("ORDER_NOT_FOUND");
+      }
+
+      const userId = orderInfo.user_id;
+      const redeemedCoins = Number(orderInfo.reward_coins_used || 0);
+      const earnedCoins = Number(orderInfo.reward_coins_earned || 0);
+
+      // ensure wallet exists
+      await conn.query(
+        `
+        INSERT INTO customer_wallet (user_id, balance)
+        VALUES (?, 0)
+        ON DUPLICATE KEY UPDATE balance = balance
+        `,
+        [userId],
+      );
+
+      // ==========================
+      // DEBIT USED COINS
+      // ==========================
+
+      if (redeemedCoins > 0) {
+        const [debitTxn] = await conn.query(
+          `
+          INSERT IGNORE INTO wallet_transactions
+          (
+            user_id,
+            title,
+            transaction_type,
+            coins,
+            category,
+            reference_id,
+            description,
+            reason_code
+          )
+          VALUES
+          (?, ?, 'debit', ?, 'order', ?, ?, 'REDEEM')
+          `,
+          [
+            userId,
+            "Coins used for order",
+            redeemedCoins,
+            order_id,
+            `Used ${redeemedCoins} coins`,
+          ],
+        );
+
+        // Only process if transaction was actually inserted
+        if (debitTxn.affectedRows > 0) {
+          const [[wallet]] = await conn.query(
+            `
+            SELECT balance
+            FROM customer_wallet
+            WHERE user_id = ?
+            FOR UPDATE
+            `,
+            [userId],
+          );
+
+          const currentBalance = Number(wallet?.balance || 0);
+
+          if (redeemedCoins <= currentBalance) {
+            await conn.query(
+              `
+                UPDATE customer_wallet
+                SET balance = balance - ?
+                WHERE user_id = ?
+                `,
+              [redeemedCoins, userId],
+            );
+          } else {
+            console.error(`Wallet balance mismatch for paid order ${order_id}`);
+          }
+        }
+      }
+
+      // ==========================
+      // CREDIT EARNED COINS
+      // ==========================
+
+      if (earnedCoins > 0) {
+        const expiryDate = new Date();
+        expiryDate.setMonth(
+          expiryDate.getMonth() +
+            parseInt(process.env.WALLET_EXPIRY_MONTHS || "3", 10),
+        );
+
+        const [creditTxn] = await conn.query(
+          `
+          INSERT IGNORE INTO wallet_transactions
+          (
+            user_id,
+            title,
+            transaction_type,
+            coins,
+            category,
+            reference_id,
+            description,
+            expiry_date,
+            reason_code
+          )
+          VALUES
+          (?, ?, 'credit', ?, 'order', ?, ?, ?, 'ORDER_REWARD')
+          `,
+          [
+            userId,
+            "Coins earned from order",
+            earnedCoins,
+            order_id,
+            `Earned ${earnedCoins} coins`,
+            expiryDate,
+          ],
+        );
+
+        if (creditTxn.affectedRows > 0) {
+          await conn.query(
+            `
+            UPDATE customer_wallet
+            SET balance = balance + ?
+            WHERE user_id = ?
+            `,
+            [earnedCoins, userId],
+          );
+        }
+      }
+
+      // ==========================
+      // GENERATE INVOICE
+      // ==========================
+
+      await generateInvoices(order_id, conn);
 
       // 6 Shipment update
       await conn.query(
@@ -541,7 +859,7 @@ async function processEvent(req) {
         `UPDATE order_payments 
          SET status = 'failed',
              raw_webhook = ?
-         WHERE razorpay_order_id = ? AND status != 'failed'`,
+         WHERE razorpay_order_id = ? AND status NOT IN ('success')`,
         [JSON.stringify(body), payment.order_id],
       );
 
