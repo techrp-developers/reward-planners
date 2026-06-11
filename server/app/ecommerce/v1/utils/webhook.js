@@ -902,16 +902,85 @@ async function processEvent(req) {
         return;
       }
 
+      await conn.beginTransaction();
+      transactionStarted = true;
+
+      // ==========================
+      // FETCH + LOCK PAYMENT ROW
+      // Prevents duplicate failed webhooks from racing
+      // ==========================
+      const [[existingPayment]] = await conn.query(
+        `SELECT payment_id, status, order_id
+     FROM order_payments
+     WHERE razorpay_order_id = ?
+     FOR UPDATE`,
+        [payment.order_id],
+      );
+
+      if (!existingPayment) {
+        console.error("[WEBHOOK] payment.failed — payment row not found", {
+          razorpay_order_id: payment.order_id,
+        });
+        await conn.commit();
+        return;
+      }
+
+      // ==========================
+      // IDEMPOTENCY — don't overwrite success or already-failed
+      // ==========================
+      if (existingPayment.status === "success") {
+        console.warn(
+          "[WEBHOOK] payment.failed received but payment already succeeded — ignoring",
+          {
+            razorpay_order_id: payment.order_id,
+          },
+        );
+        await conn.commit();
+        return;
+      }
+
+      if (existingPayment.status === "failed") {
+        // Already processed — idempotent return
+        await conn.commit();
+        return;
+      }
+
+      // ==========================
+      // UPDATE PAYMENT ROW
+      // ==========================
       await conn.query(
-        `UPDATE order_payments 
-         SET status = 'failed',
-             raw_webhook = ?
-         WHERE razorpay_order_id = ? AND status NOT IN ('success')`,
+        `UPDATE order_payments
+     SET status = 'failed',
+         raw_webhook = ?
+     WHERE razorpay_order_id = ?
+       AND status NOT IN ('success', 'failed')`,
         [JSON.stringify(body), payment.order_id],
       );
 
-      console.log("Ecommerce payment failed", {
+      // ==========================
+      // RESTORE ORDER TO ALLOW RETRY
+      // Reset expires_at so the user gets a fresh 15-min window to retry
+      // without needing to place a new order
+      // ==========================
+      const expiresAt = new Date();
+      expiresAt.setMinutes(expiresAt.getMinutes() + 15);
+
+      await conn.query(
+        `UPDATE eorders
+     SET expires_at = ?
+     WHERE order_id = ?
+       AND status = 'pending_payment'`,
+        [expiresAt, existingPayment.order_id],
+      );
+
+      await conn.commit();
+
+      console.log("[WEBHOOK] Ecommerce payment failed", {
         razorpay_order_id: payment.order_id,
+        payment_id: payment.id,
+        order_id: existingPayment.order_id,
+        error_code: payment.error_code,
+        error_description: payment.error_description,
       });
     }
   } catch (err) {

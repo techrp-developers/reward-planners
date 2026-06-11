@@ -134,6 +134,8 @@ async function syncOrderStatus(orderId) {
     finalStatus = "partially_shipped";
   } else if (statuses.some((s) => s === "booked")) {
     finalStatus = "processing";
+  } else if (statuses.every((s) => s === "booking_failed")) {
+    finalStatus = "processing";
   }
 
   if (!finalStatus) return;
