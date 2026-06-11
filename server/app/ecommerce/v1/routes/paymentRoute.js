@@ -6,10 +6,16 @@ const {
   validateCreateOrder,
   validateVerifyPayment,
 } = require("../middlewares/validators");
+const {
+  paymentLimiter,
+  checkoutLimiter,
+  generalLimiter,
+} = require("../../../common/middlewares/rateLimiter");
 
 // create payment
 router.post(
   "/create-order",
+  paymentLimiter,
   drainMode,
   validateCreateOrder,
   PaymentController.createOrder,
@@ -18,6 +24,7 @@ router.post(
 // verify payment
 router.post(
   "/verify-payment",
+  paymentLimiter,
   validateVerifyPayment,
   PaymentController.verifyPayment,
 );

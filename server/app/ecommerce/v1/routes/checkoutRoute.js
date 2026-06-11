@@ -7,6 +7,11 @@ const {
   validateCheckoutCart,
   validateBuyNow,
 } = require("../middlewares/validators");
+const {
+  paymentLimiter,
+  checkoutLimiter,
+  generalLimiter,
+} = require("../../../common/middlewares/rateLimiter");
 
 // get cart checkout Details
 router.get("/get-cart", auth, CheckoutController.getCheckoutCart);
@@ -18,6 +23,7 @@ router.get("/get-buy-now", auth, CheckoutController.getBuyNowCheckout);
 router.post(
   "/cart",
   auth,
+  checkoutLimiter,
   drainMode,
   validateCheckoutCart,
   CheckoutController.checkoutCart,
@@ -27,6 +33,7 @@ router.post(
 router.post(
   "/buy-now",
   auth,
+  checkoutLimiter,
   drainMode,
   validateBuyNo,
   CheckoutController.buyNow,

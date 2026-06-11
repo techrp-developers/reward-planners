@@ -8,11 +8,17 @@ const {
   validateResolveNDR,
   validateGetTracking,
 } = require("../middlewares/validators");
+const {
+  paymentLimiter,
+  checkoutLimiter,
+  generalLimiter,
+} = require("../../../common/middlewares/rateLimiter");
 
 // check service Availability
 router.post(
   "/check-serviceability",
   auth,
+  generalLimiter,
   validateServiceability,
   logisticsController.checkServiceAbility,
 );
@@ -21,6 +27,7 @@ router.post(
 router.get(
   "/track-status/:orderId",
   auth,
+  generalLimiter,
   validateGetTracking,
   logisticsController.getTracking,
 );
@@ -29,6 +36,7 @@ router.get(
 router.post(
   "/shipment-cancel/:shipmentId",
   auth,
+  checkoutLimiter,
   validateCancelShipment,
   logisticsController.cancelShipmentHandler,
 );
