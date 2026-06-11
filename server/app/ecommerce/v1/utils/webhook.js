@@ -3,6 +3,7 @@ const {
   enqueueWhatsApp,
 } = require("../../../../services/whatsapp/waEnqueueService");
 const xpressService = require("../../../../services/ExpressBees/xpressbees_service");
+const { sendOpsAlert } = require("../../../../services/alertService");
 const {
   orderConfirmationMail,
 } = require("../../../../services/mailBuilder/orderConfirmation");
@@ -622,12 +623,11 @@ async function processEvent(req) {
       await conn.beginTransaction();
       transactionStarted = true;
 
-      // 1 Get payment row
       const [rows] = await conn.query(
         `SELECT order_id, status
-          FROM order_payments
-          WHERE razorpay_order_id = ?
-          FOR UPDATE`,
+         FROM order_payments
+         WHERE razorpay_order_id = ?
+         FOR UPDATE`,
         [payment.order_id],
       );
 
@@ -638,68 +638,99 @@ async function processEvent(req) {
 
       const { order_id, status } = rows[0];
 
-      // 2 Idempotency check
       if (status === "success") {
         await conn.commit();
         return;
       }
 
-      // ==========================
-      // 3. GUARD: CHECK EORDER STATUS
-      // ==========================
       const [[eorder]] = await conn.query(
         `SELECT status FROM eorders WHERE order_id = ? FOR UPDATE`,
         [order_id],
       );
 
       if (!eorder) {
+        // ==========================
+        // OPS ALERT — payment captured but no eorder row
+        // Should never happen — indicates DB inconsistency
+        // ==========================
+        sendOpsAlert({
+          level: "critical",
+          category: "webhook_payment",
+          message: `payment.captured received but eorder not found — money received with no order`,
+          meta: {
+            order_id,
+            razorpay_order_id: payment.order_id,
+            razorpay_payment_id: payment.id,
+            amount: payment.amount / 100,
+          },
+        }).catch(() => {});
+
         console.error(`[WEBHOOK] eorder not found for order_id ${order_id}`);
         await conn.commit();
         return;
       }
 
       if (eorder.status === "cancelled") {
+        // ==========================
+        // OPS ALERT — payment captured on cancelled order
+        // Money is in — auto-refund will trigger but ops should know
+        // ==========================
+        sendOpsAlert({
+          level: "warning",
+          category: "webhook_payment",
+          message: `Payment captured on cancelled order ${order_id} — auto-refund triggered`,
+          meta: {
+            order_id,
+            razorpay_order_id: payment.order_id,
+            razorpay_payment_id: payment.id,
+            amount: payment.amount / 100,
+          },
+        }).catch(() => {});
+
         console.warn(
           `[WEBHOOK] Payment captured on cancelled order ${order_id} — triggering refund`,
         );
 
-        // Mark payment row so we don't process again
         await conn.query(
           `UPDATE order_payments
-       SET razorpay_payment_id = ?,
-           status = 'success',
-           payment_method = ?,
-           raw_webhook = ?
-       WHERE razorpay_order_id = ? AND status != 'success'`,
+           SET razorpay_payment_id = ?,
+               status = 'success',
+               payment_method = ?,
+               raw_webhook = ?
+           WHERE razorpay_order_id = ? AND status != 'success'`,
           [payment.id, payment.method, JSON.stringify(body), payment.order_id],
         );
 
         await conn.commit();
 
-        // Trigger refund async — order is cancelled so refund full amount
         RefundService.processRefund({
           orderId: order_id,
           amount: payment.amount / 100,
-        }).catch((err) =>
+        }).catch((err) => {
+          // ==========================
+          // OPS ALERT — auto-refund failed
+          // Money is sitting unrefunded — needs manual action
+          // ==========================
+          sendOpsAlert({
+            level: "critical",
+            category: "refund",
+            message: `Auto-refund FAILED for cancelled order ${order_id} — MANUAL REFUND REQUIRED`,
+            meta: {
+              order_id,
+              razorpay_payment_id: payment.id,
+              amount: payment.amount / 100,
+              error: err.message,
+            },
+          }).catch(() => {});
+
           console.error(
             `[WEBHOOK] Auto-refund failed for cancelled order ${order_id}:`,
             err,
-          ),
-        );
+          );
+        });
 
         return;
       }
-
-      // 4 Update payment row
-      await conn.query(
-        `UPDATE order_payments 
-         SET razorpay_payment_id = ?, 
-             status = 'success',
-             payment_method = ?,
-             raw_webhook = ?
-         WHERE razorpay_order_id = ? AND status != 'success'`,
-        [payment.id, payment.method, JSON.stringify(body), payment.order_id],
-      );
 
       // 5 Update order status
       await conn.query(
@@ -872,17 +903,29 @@ async function processEvent(req) {
 
       await conn.commit();
 
-      // 6 Process shipments async
-      processShipmentsAfterPayment(order_id).catch((err) =>
-        console.error("Shipment processing failed:", err),
-      );
+      processShipmentsAfterPayment(order_id).catch((err) => {
+        // ==========================
+        // OPS ALERT — shipment processing failed after payment
+        // Order is paid but stuck — retry cron will attempt recovery
+        // but ops should be aware
+        // ==========================
+        sendOpsAlert({
+          level: "warning",
+          category: "shipment_booking",
+          message: `Shipment processing failed after payment for order ${order_id} — retry cron will handle`,
+          meta: {
+            order_id,
+            error: err.message,
+          },
+        }).catch(() => {});
 
-      // 7 Send WhatsApp
+        console.error("Shipment processing failed:", err);
+      });
+
       sendOrderPlacedWhatsApp(order_id).catch((err) =>
         console.error("WA failed:", err),
       );
 
-      // 8 Send Email
       sendOrderPlacedEmail(order_id).catch((err) =>
         console.error("Email failed:", err),
       );
@@ -905,19 +948,30 @@ async function processEvent(req) {
       await conn.beginTransaction();
       transactionStarted = true;
 
-      // ==========================
-      // FETCH + LOCK PAYMENT ROW
-      // Prevents duplicate failed webhooks from racing
-      // ==========================
       const [[existingPayment]] = await conn.query(
         `SELECT payment_id, status, order_id
-     FROM order_payments
-     WHERE razorpay_order_id = ?
-     FOR UPDATE`,
+         FROM order_payments
+         WHERE razorpay_order_id = ?
+         FOR UPDATE`,
         [payment.order_id],
       );
 
       if (!existingPayment) {
+        // ==========================
+        // OPS ALERT — failed payment with no matching row
+        // Could indicate webhook from a different environment
+        // hitting production, or a DB issue
+        // ==========================
+        sendOpsAlert({
+          level: "warning",
+          category: "webhook_payment",
+          message: `payment.failed received but no matching order_payments row found`,
+          meta: {
+            razorpay_order_id: payment.order_id,
+            razorpay_payment_id: payment.id,
+          },
+        }).catch(() => {});
+
         console.error("[WEBHOOK] payment.failed — payment row not found", {
           razorpay_order_id: payment.order_id,
         });
@@ -925,51 +979,52 @@ async function processEvent(req) {
         return;
       }
 
-      // ==========================
-      // IDEMPOTENCY — don't overwrite success or already-failed
-      // ==========================
       if (existingPayment.status === "success") {
+        // ==========================
+        // OPS ALERT — Razorpay sent failed AFTER captured
+        // This is a Razorpay anomaly — investigate
+        // ==========================
+        sendOpsAlert({
+          level: "warning",
+          category: "webhook_payment",
+          message: `payment.failed received after payment already succeeded for order ${existingPayment.order_id} — Razorpay anomaly`,
+          meta: {
+            order_id: existingPayment.order_id,
+            razorpay_order_id: payment.order_id,
+            razorpay_payment_id: payment.id,
+          },
+        }).catch(() => {});
+
         console.warn(
           "[WEBHOOK] payment.failed received but payment already succeeded — ignoring",
-          {
-            razorpay_order_id: payment.order_id,
-          },
+          { razorpay_order_id: payment.order_id },
         );
         await conn.commit();
         return;
       }
 
       if (existingPayment.status === "failed") {
-        // Already processed — idempotent return
         await conn.commit();
         return;
       }
 
-      // ==========================
-      // UPDATE PAYMENT ROW
-      // ==========================
       await conn.query(
         `UPDATE order_payments
-     SET status = 'failed',
-         raw_webhook = ?
-     WHERE razorpay_order_id = ?
-       AND status NOT IN ('success', 'failed')`,
+         SET status = 'failed',
+             raw_webhook = ?
+         WHERE razorpay_order_id = ?
+           AND status NOT IN ('success', 'failed')`,
         [JSON.stringify(body), payment.order_id],
       );
 
-      // ==========================
-      // RESTORE ORDER TO ALLOW RETRY
-      // Reset expires_at so the user gets a fresh 15-min window to retry
-      // without needing to place a new order
-      // ==========================
       const expiresAt = new Date();
       expiresAt.setMinutes(expiresAt.getMinutes() + 15);
 
       await conn.query(
         `UPDATE eorders
-     SET expires_at = ?
-     WHERE order_id = ?
-       AND status = 'pending_payment'`,
+         SET expires_at = ?
+         WHERE order_id = ?
+           AND status = 'pending_payment'`,
         [expiresAt, existingPayment.order_id],
       );
 
@@ -988,8 +1043,21 @@ async function processEvent(req) {
       await conn.rollback();
     }
 
-    console.error("Ecommerce Webhook error:", err);
+    // ==========================
+    // OPS ALERT — unhandled webhook error
+    // Transaction rolled back — investigate immediately
+    // ==========================
+    sendOpsAlert({
+      level: "critical",
+      category: "webhook_payment",
+      message: `Unhandled webhook error — transaction rolled back`,
+      meta: {
+        event: req.parsedBody?.event,
+        error: err.message,
+      },
+    }).catch(() => {});
 
+    console.error("Ecommerce Webhook error:", err);
     throw err;
   } finally {
     conn.release();
