@@ -12,6 +12,7 @@ require("./services/ExpressBees/cron/shipmentCron");
 require("./services/Bbps/retryCron");
 require("./services/Razorpay/retryCron");
 require("./services/Maintenance/maintenanceCron");
+require("./services/Razorpay/orderExpiryCron");
 
 // dashboard Route
 const dashboardRoute = require("./routes/indexRoute");
