@@ -392,15 +392,15 @@ class LogisticsController {
   // Shipment cancellation
   async cancelShipmentHandler(req, res) {
     try {
-      // const userId = req.user?.user_id;
-      const userId = 1;
+      const userId = req.user?.user_id;
+      // const userId = 1;
 
-      // if (!userId) {
-      //   return res.status(401).json({
-      //     success: false,
-      //     message: "Unauthorized user",
-      //   });
-      // }
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
 
       const { shipmentId } = req.params;
 
