@@ -1,18 +1,33 @@
 const rateLimit = require("express-rate-limit");
 
 // ==========================
+// ipKeyGenerator handles IPv4 + IPv6 correctly
+// Required by express-rate-limit v7+
+// ==========================
+const { ipKeyGenerator } = require("express-rate-limit");
+
+// ==========================
+// SHARED KEY GENERATOR
+// Keys by user ID if authenticated (more accurate),
+// falls back to IP using the safe helper for unauthenticated requests
+// ==========================
+const makeKeyGenerator = () => (req) => {
+  if (req.user?.user_id) {
+    return `user_${req.user.user_id}`;
+  }
+  return ipKeyGenerator(req); // IPv6-safe fallback
+};
+
+// ==========================
 // PAYMENT — strictest
-// 10 attempts per 15 min per IP
+// 10 attempts per 15 min
 // ==========================
 const paymentLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => {
-    // Key by user ID if authenticated, else IP
-    return req.user?.user_id ? `user_${req.user.user_id}` : req.ip;
-  },
+  keyGenerator: makeKeyGenerator(),
   handler: (req, res) => {
     console.warn("[RATE_LIMIT] Payment limit hit", {
       user_id: req.user?.user_id,
@@ -27,12 +42,14 @@ const paymentLimiter = rateLimit({
 
 // ==========================
 // CHECKOUT — moderate
-// 20 per 15 min per user
+// 20 per 15 min
 // ==========================
 const checkoutLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
-  keyGenerator: (req) => `user_${req.user?.user_id || req.ip}`,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: makeKeyGenerator(),
   handler: (req, res) => {
     return res.status(429).json({
       success: false,
@@ -43,12 +60,14 @@ const checkoutLimiter = rateLimit({
 
 // ==========================
 // GENERAL API — loose
-// 100 per 15 min per user
+// 100 per 15 min
 // ==========================
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
-  keyGenerator: (req) => `user_${req.user?.user_id || req.ip}`,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: makeKeyGenerator(),
   handler: (req, res) => {
     return res.status(429).json({
       success: false,

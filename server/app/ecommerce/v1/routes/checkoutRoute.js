@@ -35,7 +35,7 @@ router.post(
   auth,
   checkoutLimiter,
   drainMode,
-  validateBuyNo,
+  validateBuyNow,
   CheckoutController.buyNow,
 );
 

@@ -85,7 +85,7 @@ async function retryMpsFailedRefunds() {
   }
 }
 
-cron.schedule("*/10 * * * *", function () {
+cron.schedule("*/10 * * * *", async function () {
   retryFailedRefunds();
   retryMpsFailedRefunds();
   await cronPing("service_order_retry_cron");
