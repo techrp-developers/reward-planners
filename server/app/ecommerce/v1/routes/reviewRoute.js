@@ -10,7 +10,7 @@ const reviewUpload = require("../../../../middleware/mediaUpload/reviewUpload");
 // check review eligibility
 router.get(
   "/reviewable-order/:variant_id",
-  optionalAuth,
+  auth,
   ReviewController.getReviewableOrder,
 );
 
@@ -25,7 +25,7 @@ router.post(
 // fetch reviews
 router.get(
   "/all-reviews/:product_id",
-  optionalAuth,
+  auth,
   ReviewController.getProductReviews,
 );
 // GET /reviews/10?sort=helpful
