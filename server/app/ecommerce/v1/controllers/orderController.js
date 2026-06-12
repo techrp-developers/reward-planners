@@ -539,6 +539,13 @@ class OrderController {
     try {
       const userId = req.user.user_id;
       // const userId = 1;
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
       const orderId = Number(req.params.orderId);
 
       const data = await OrderModel.getCancellationDetails({
@@ -564,8 +571,8 @@ class OrderController {
   async getInvoice(req, res) {
     try {
       const { orderId } = req.params;
-      // const userId = req.user?.user_id;
-      const userId = 1;
+      const userId = req.user?.user_id;
+      // const userId = 1;
 
       if (!userId) {
         return res.status(401).json({
