@@ -519,6 +519,13 @@ async function processShipmentsAfterPayment(orderId) {
       `,
         [orderId],
       );
+
+      sendOpsAlert({
+        level: "warning",
+        category: "shipment_booking",
+        message: `Partial shipment booking failure for order ${orderId}`,
+        meta: { orderId, booked: counts.booked, total: counts.total },
+      }).catch(() => {});
     } else {
       // All failed
       await conn.query(
@@ -529,6 +536,13 @@ async function processShipmentsAfterPayment(orderId) {
       `,
         [orderId],
       );
+
+      sendOpsAlert({
+        level: "critical",
+        category: "shipment_booking",
+        message: `ALL shipments booking_failed for order ${orderId} — manual intervention required`,
+        meta: { orderId, total: counts.total },
+      }).catch(() => {});
     }
   } finally {
     conn.release();
