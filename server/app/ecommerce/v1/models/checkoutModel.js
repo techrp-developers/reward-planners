@@ -825,7 +825,7 @@ class CheckoutModel {
     const walletBalance = Number(wallet?.balance || 0);
 
     // ===============================
-    // 2. CART + REWARD JOIN (FIXED)
+    // 2. CART + PRODUCT JOIN
     // ===============================
     const [rows] = await db.execute(
       `
@@ -838,6 +838,9 @@ class CheckoutModel {
       p.vendor_id,
       p.category_id,
       p.subcategory_id,
+      p.is_returnable,
+      p.is_replaceable,
+      p.return_window_days,
 
       v.variant_id,
       v.mrp,
@@ -852,12 +855,9 @@ class CheckoutModel {
       GROUP_CONCAT(DISTINCT pi.image_url ORDER BY pi.sort_order ASC) AS images
 
     FROM cart_items ci
-
     JOIN eproducts p ON ci.product_id = p.product_id
     JOIN product_variants v ON ci.variant_id = v.variant_id
-
-    LEFT JOIN product_images pi 
-      ON p.product_id = pi.product_id
+    LEFT JOIN product_images pi ON p.product_id = pi.product_id
 
     WHERE ci.user_id = ?
     GROUP BY ci.cart_item_id
@@ -893,6 +893,10 @@ class CheckoutModel {
         title: row.product_name,
         image: getPublicUrl(imagePath),
 
+        is_returnable: row.is_returnable,
+        return_window: row.return_window_days,
+        is_replaceable: row.is_replaceable,
+
         mrp: Number(row.mrp),
         price: Number(row.sale_price),
         quantity: Number(row.quantity),
@@ -900,6 +904,9 @@ class CheckoutModel {
         itemTotal,
         redeemable: 0,
         rewardEarn: 0,
+
+        // delivery date — populated after shipping calc
+        estimated_delivery_date: null,
 
         reward_redemption_limit: Number(row.reward_redemption_limit || 0),
 
@@ -910,21 +917,16 @@ class CheckoutModel {
       };
     });
 
-    /* ===============================
-        REWARD ENGINE (UNIFIED)
-      =============================== */
-
+    // ===============================
+    // 4. REWARD ENGINE
+    // ===============================
     items.sort((a, b) => a.itemTotal - b.itemTotal);
 
     const rewardCache = {};
-
     let remainingWallet = useRewards ? walletBalance : 0;
     let totalRedeemed = 0;
     let totalRewardEarn = 0;
 
-    /* ===============================
-     5. REWARD ENGINE
-  =============================== */
     for (let item of items) {
       const price = item.price;
       const itemTotal = item.itemTotal;
@@ -944,25 +946,19 @@ class CheckoutModel {
         rewardCache[key] = rules;
       }
 
-      /* ===============================
-       REDEMPTION FIRST
-    =============================== */
+      // Redemption
       const redemptionLimit = item.reward_redemption_limit;
 
       if (useRewards && redemptionLimit > 0 && remainingWallet > 0) {
         const maxAllowed = Math.floor((itemTotal * redemptionLimit) / 100);
-
         const usable = Math.min(remainingWallet, maxAllowed, itemTotal);
 
         item.redeemable = usable;
-
         remainingWallet -= usable;
         totalRedeemed += usable;
       }
 
-      /* ===============================
-       EARNING AFTER REDEMPTION
-    =============================== */
+      // Earning
       let rewardEarn = 0;
 
       if (rules.length) {
@@ -974,16 +970,13 @@ class CheckoutModel {
       totalRewardEarn += rewardEarn;
     }
 
-    /* ===============================
-     SAFETY CAP
-  =============================== */
     totalRedeemed = Math.min(totalRedeemed, totalAmount);
 
     // ===============================
-    // 6. SHIPPING (UNCHANGED)
+    // 5. FETCH DEFAULT ADDRESS
     // ===============================
     const [addressRows] = await db.execute(
-      `SELECT zipcode FROM customer_addresses 
+      `SELECT zipcode FROM customer_addresses
      WHERE user_id = ? AND is_default = 1 LIMIT 1`,
       [userId],
     );
@@ -992,6 +985,9 @@ class CheckoutModel {
 
     const destinationPincode = addressRows[0].zipcode;
 
+    // ===============================
+    // 6. GROUP ITEMS BY VENDOR
+    // ===============================
     const vendorGroups = {};
 
     for (const item of items) {
@@ -1008,24 +1004,28 @@ class CheckoutModel {
       }
 
       const group = vendorGroups[vendorId];
-
       group.totalWeightKg += item.quantity * item.weight;
       group.totalAmount += item.itemTotal;
-
       group.length = Math.max(group.length, item.length);
       group.breadth = Math.max(group.breadth, item.breadth);
       group.height += item.height * item.quantity;
     }
 
+    // ===============================
+    // 7. SHIPPING + EDD PER VENDOR
+    // ===============================
     let shippingTotal = 0;
     const shippingBreakdown = [];
     const eddList = [];
+
+    // Map of vendorId → EDD so we can stamp it onto each item
+    const vendorEDDMap = {};
 
     for (const vendorId in vendorGroups) {
       const vendor = vendorGroups[vendorId];
 
       const [[vendorAddress]] = await db.execute(
-        `SELECT pincode FROM vendor_addresses 
+        `SELECT pincode FROM vendor_addresses
        WHERE vendor_id = ? AND type = 'shipping' LIMIT 1`,
         [vendorId],
       );
@@ -1053,11 +1053,26 @@ class CheckoutModel {
 
       shippingTotal += Number(courier.total_charges);
 
-      const edd = courier.estimated_delivery_date
-        ? new Date(courier.estimated_delivery_date)
-        : new Date(Date.now() + courier.estimated_delivery_days * 86400000);
+      // ==========================
+      // CALCULATE EDD
+      // ==========================
+      let edd;
+
+      if (courier.estimated_delivery_date) {
+        edd = new Date(courier.estimated_delivery_date);
+      } else if (courier.estimated_delivery_days) {
+        edd = new Date(Date.now() + courier.estimated_delivery_days * 86400000);
+      } else {
+        // fallback: 5 days
+        edd = new Date(Date.now() + 5 * 86400000);
+      }
 
       eddList.push(edd);
+
+      // ==========================
+      // STORE EDD PER VENDOR
+      // ==========================
+      vendorEDDMap[Number(vendorId)] = edd;
 
       shippingBreakdown.push({
         vendor_id: Number(vendorId),
@@ -1067,16 +1082,23 @@ class CheckoutModel {
       });
     }
 
+    // ==========================
+    // STAMP EDD ONTO EACH ITEM
+    // ==========================
+    for (const item of items) {
+      item.estimated_delivery_date = vendorEDDMap[item.vendor_id] || null;
+    }
+
     const overallEDD = eddList.length ? eddList.sort((a, b) => b - a)[0] : null;
 
     // ===============================
-    // 7. FINAL TOTAL
+    // 8. FINAL TOTAL
     // ===============================
     const finalProductTotal = totalAmount - totalRedeemed;
     const payableAmount = finalProductTotal + shippingTotal;
 
     // ===============================
-    // 8. RESPONSE
+    // 9. RESPONSE
     // ===============================
     return {
       items,
@@ -1129,7 +1151,9 @@ class CheckoutModel {
       p.vendor_id,
       p.category_id,
       p.subcategory_id,
-
+      p.is_returnable,
+      p.is_replaceable,
+      p.return_window_days,
       v.variant_id,
       v.mrp,
       v.sale_price,
@@ -1271,6 +1295,10 @@ class CheckoutModel {
         title: row.product_name,
         image: getPublicUrl(imagePath),
 
+        is_returnable: row.is_returnable,
+        return_window: row.return_window_days,
+        is_replaceable: row.is_replaceable,
+
         price: salePrice,
         quantity,
 
@@ -1280,6 +1308,7 @@ class CheckoutModel {
         rewardEarn,
 
         stock: row.stock,
+        estimated_delivery_date: expectedDeliveryDate,
       },
 
       wallet: {
