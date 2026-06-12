@@ -4,6 +4,7 @@ const path = require("path");
 const AddressModel = require("../../../common/models/addressModel");
 const xpressService = require("../../../../services/ExpressBees/xpressbees_service");
 const RewardModel = require("../../../../models/rewardModel");
+const { generateOrderRef } = require("../utils/orderRef");
 
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
 function getPublicUrl(path) {
@@ -40,12 +41,12 @@ function calculateReward(amount, rules = []) {
   return Math.floor(total);
 }
 
-function generateOrderRef() {
-  const date = new Date();
-  const ymd = date.toISOString().slice(0, 10).replace(/-/g, "");
-  const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
-  return `ORD-${ymd}-${rand}`;
-}
+// function generateOrderRef() {
+//   const date = new Date();
+//   const ymd = date.toISOString().slice(0, 10).replace(/-/g, "");
+//   const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
+//   return `ORD-${ymd}-${rand}`;
+// }
 
 function formatDate(date) {
   if (!date) return null;
@@ -348,31 +349,45 @@ class CheckoutModel {
       expiresAt.setMinutes(expiresAt.getMinutes() + 15);
 
       // 7 Create order
-      const orderRef = generateOrderRef();
+      let orderId;
+      let refAttempts = 0;
 
-      const [orderRes] = await conn.execute(
-        `
+      while (refAttempts < 3) {
+        try {
+          const orderRef = generateOrderRef();
+
+          const [orderRes] = await conn.execute(
+            `
         INSERT INTO eorders (user_id,company_id, total_amount,order_ref,address_id, product_total, reward_discount, reward_coins_used,reward_earned, reward_coins_earned, shipping_total,status,expires_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
-        [
-          userId,
-          companyId,
-          finalTotal,
-          orderRef,
-          addressId,
-          productTotal,
-          totalRedeemed,
-          totalRedeemed,
-          totalRewardEarn,
-          totalRewardEarn,
-          shippingTotal,
-          "pending_payment",
-          expiresAt,
-        ],
-      );
+            [
+              userId,
+              companyId,
+              finalTotal,
+              orderRef,
+              addressId,
+              productTotal,
+              totalRedeemed,
+              totalRedeemed,
+              totalRewardEarn,
+              totalRewardEarn,
+              shippingTotal,
+              "pending_payment",
+              expiresAt,
+            ],
+          );
 
-      const orderId = orderRes.insertId;
+          orderId = orderRes.insertId;
+          break;
+        } catch (err) {
+          if (err.code === "ER_DUP_ENTRY" && refAttempts < 2) {
+            refAttempts++;
+            continue;
+          }
+          throw err;
+        }
+      }
 
       // 8 create vendor Order
       const vendorOrders = {};
@@ -663,34 +678,46 @@ class CheckoutModel {
       // ===============================
       // 6. CREATE ORDER
       // ===============================
-      const orderRef = generateOrderRef();
+      let orderId;
+      let refAttempts = 0;
 
-      const [orderRes] = await conn.execute(
-        `
-      INSERT INTO eorders
-      (user_id, company_id, total_amount, order_ref, address_id,
-       product_total, reward_discount, reward_coins_used,
-       reward_earned, reward_coins_earned, shipping_total, status, expires_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-        [
-          userId,
-          companyId,
-          finalTotal,
-          orderRef,
-          addressId,
-          itemTotal,
-          redeemable,
-          redeemable,
-          rewardEarn,
-          rewardEarn,
-          shippingCharge,
-          "pending_payment",
-          expiresAt,
-        ],
-      );
+      while (refAttempts < 3) {
+        try {
+          const orderRef = generateOrderRef();
 
-      const orderId = orderRes.insertId;
+          const [orderRes] = await conn.execute(
+            `INSERT INTO eorders
+            (user_id, company_id, total_amount, order_ref, address_id,
+              product_total, reward_discount, reward_coins_used,
+              reward_earned, reward_coins_earned, shipping_total, status, expires_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              userId,
+              companyId,
+              finalTotal,
+              orderRef,
+              addressId,
+              itemTotal,
+              redeemable,
+              redeemable,
+              rewardEarn,
+              rewardEarn,
+              shippingCharge,
+              "pending_payment",
+              expiresAt,
+            ],
+          );
+
+          orderId = orderRes.insertId;
+          break;
+        } catch (err) {
+          if (err.code === "ER_DUP_ENTRY" && refAttempts < 2) {
+            refAttempts++;
+            continue;
+          }
+          throw err;
+        }
+      }
 
       // ===============================
       // 7. VENDOR ORDER
