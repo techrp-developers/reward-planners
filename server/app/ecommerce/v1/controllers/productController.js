@@ -567,8 +567,8 @@ class ProductController {
                 percent: redeemPercent,
                 amount: redeemAmount,
               },
-              rating: 4.6,
-              reviews: "18.9K",
+              rating: product.rating,
+              reviews: product.reviews,
 
               reward: {
                 enabled: canEarn && rewardCoins > 0,

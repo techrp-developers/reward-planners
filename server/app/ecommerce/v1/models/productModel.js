@@ -418,6 +418,162 @@ class ProductModel {
     }
   }
 
+  // async getProductById(productId) {
+  //   try {
+  //     const [productRows] = await db.execute(
+  //       `
+  //     SELECT
+  //       p.*,
+  //       v.full_name AS vendor_name,
+  //       c.category_name,
+  //       sc.subcategory_name,
+  //       ssc.name AS sub_subcategory_name
+  //     FROM eproducts p
+  //     LEFT JOIN vendors v ON p.vendor_id = v.vendor_id
+  //     LEFT JOIN categories c ON p.category_id = c.category_id
+  //     LEFT JOIN sub_categories sc ON p.subcategory_id = sc.subcategory_id
+  //     LEFT JOIN sub_sub_categories ssc ON p.sub_subcategory_id = ssc.sub_subcategory_id
+  //     WHERE p.product_id = ?
+  //     `,
+  //       [productId],
+  //     );
+
+  //     if (!productRows.length) return null;
+
+  //     const product = productRows[0];
+
+  //     // ================= PRODUCT IMAGES =================
+  //     const [images] = await db.execute(
+  //       `SELECT image_url
+  //      FROM product_images
+  //      WHERE product_id = ?`,
+  //       [productId],
+  //     );
+
+  //     product.images = images.map((img) => getPublicUrl(img.image_url));
+
+  //     // ================= PRODUCT VIDEO =================
+  //     const [videos] = await db.execute(
+  //       `SELECT video_url
+  //      FROM product_videos
+  //      WHERE product_id = ?
+  //      LIMIT 1`,
+  //       [productId],
+  //     );
+
+  //     product.video = getPublicUrl(videos[0]?.video_url);
+
+  //     // ================= PRODUCT ATTRIBUTES =================
+  //     const [productAttrRows] = await db.execute(
+  //       `
+  //     SELECT attributes
+  //     FROM product_attributes
+  //     WHERE product_id = ?
+  //     `,
+  //       [productId],
+  //     );
+
+  //     let productAttributes = {};
+
+  //     if (productAttrRows.length && productAttrRows[0].attributes) {
+  //       productAttributes =
+  //         typeof productAttrRows[0].attributes === "string"
+  //           ? JSON.parse(productAttrRows[0].attributes)
+  //           : productAttrRows[0].attributes;
+  //     }
+
+  //     // ================= GET VARIANT ATTRIBUTE KEYS =================
+  //     const [variantKeyRows] = await db.execute(
+  //       `
+  //     SELECT attribute_key
+  //     FROM category_attributes
+  //     WHERE is_variant = 1
+  //     AND (
+  //       subcategory_id = ?
+  //       OR (category_id = ? AND subcategory_id IS NULL)
+  //     )
+  //     `,
+  //       [product.subcategory_id, product.category_id],
+  //     );
+
+  //     const variantKeys = variantKeyRows.map((row) => row.attribute_key);
+
+  //     // Remove variant fields from product attributes
+  //     const filteredProductAttributes = { ...productAttributes };
+
+  //     variantKeys.forEach((key) => {
+  //       delete filteredProductAttributes[key];
+  //     });
+
+  //     product.product_attributes = filteredProductAttributes;
+
+  //     // ================= PRODUCT VARIANTS =================
+  //     const [variants] = await db.execute(
+  //       `
+  //     SELECT *
+  //     FROM product_variants
+  //     WHERE product_id = ?
+  //     AND is_visible = 1
+  //     `,
+  //       [productId],
+  //     );
+
+  //     const attributeMap = {};
+
+  //     for (const variant of variants) {
+  //       variant.variant_attributes = JSON.parse(
+  //         variant.variant_attributes || "{}",
+  //       );
+
+  //       // Build variant options
+  //       for (const [key, value] of Object.entries(variant.variant_attributes)) {
+  //         if (!attributeMap[key]) {
+  //           attributeMap[key] = new Set();
+  //         }
+
+  //         attributeMap[key].add(value);
+  //       }
+
+  //       // Variant images
+  //       const [variantImages] = await db.execute(
+  //         `
+  //       SELECT image_url
+  //       FROM product_variant_images
+  //       WHERE variant_id = ?
+  //       ORDER BY
+  //         CASE
+  //           WHEN sort_order = 0 THEN 999999
+  //           ELSE sort_order
+  //         END ASC,
+  //         image_id ASC
+  //       `,
+  //         [variant.variant_id],
+  //       );
+
+  //       variant.images = variantImages.map((img) =>
+  //         getPublicUrl(img.image_url),
+  //       );
+  //     }
+
+  //     // ================= VARIANT OPTIONS =================
+  //     const attributes = {};
+
+  //     for (const key in attributeMap) {
+  //       attributes[key] = Array.from(attributeMap[key]);
+  //     }
+
+  //     product.attributes = attributes;
+  //     product.variants = variants;
+
+  //     return product;
+  //   } catch (error) {
+  //     console.error("Error fetching product by ID:", error);
+  //     throw error;
+  //   }
+  // }
+
+  // get Products by Category
+
   async getProductById(productId) {
     try {
       const [productRows] = await db.execute(
@@ -441,6 +597,22 @@ class ProductModel {
       if (!productRows.length) return null;
 
       const product = productRows[0];
+
+      // ---------------------Review------------------------------------
+      const [[reviewStats]] = await db.execute(
+        `
+        SELECT
+          ROUND(AVG(rating), 1) AS avg_rating,
+          COUNT(*) AS total_reviews
+        FROM product_reviews
+        WHERE product_id = ?
+          AND status = 'approved'
+        `,
+        [productId],
+      );
+
+      product.rating = Number(reviewStats?.avg_rating || 0).toFixed(1);
+      product.reviews = Number(reviewStats?.total_reviews || 0);
 
       // ================= PRODUCT IMAGES =================
       const [images] = await db.execute(
@@ -572,7 +744,6 @@ class ProductModel {
     }
   }
 
-  // get Products by Category
   async getProductsByCategory({
     search,
     sortBy,
