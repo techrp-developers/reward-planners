@@ -744,6 +744,214 @@ class ProductModel {
     }
   }
 
+  // async getProductsByCategory({
+  //   search,
+  //   sortBy,
+  //   sortOrder,
+  //   limit,
+  //   offset,
+  //   categoryId = null,
+  //   priceMin = null,
+  //   priceMax = null,
+  //   ratingMin = null,
+  // }) {
+  //   try {
+  //     const conditions = [];
+  //     const params = [];
+
+  //     /* ===============================
+  //      SEARCH
+  //   =============================== */
+
+  //     /* ===============================
+  //           PRODUCT MUST BE APPROVED
+  //         =============================== */
+  //     conditions.push("p.status = ?");
+  //     params.push("approved");
+
+  //     conditions.push("p.is_visible = ?");
+  //     params.push(1);
+
+  //     conditions.push("p.is_deleted = ?");
+  //     params.push(0);
+
+  //     conditions.push("v.variant_id IS NOT NULL");
+
+  //     if (categoryId) {
+  //       conditions.push("p.category_id = ?");
+  //       params.push(categoryId);
+  //     }
+
+  //     if (search) {
+  //       conditions.push("p.product_name LIKE ?");
+  //       params.push(`%${search}%`);
+  //     }
+
+  //     // price filters (now SAFE because v is correct)
+  //     if (priceMin !== null) {
+  //       conditions.push("v.sale_price >= ?");
+  //       params.push(priceMin);
+  //     }
+
+  //     if (priceMax !== null) {
+  //       conditions.push("v.sale_price <= ?");
+  //       params.push(priceMax);
+  //     }
+
+  //     // rating filter
+  //     if (ratingMin !== null) {
+  //       conditions.push("p.avg_rating >= ?");
+  //       params.push(ratingMin);
+  //     }
+
+  //     const whereClause = conditions.length
+  //       ? `WHERE ${conditions.join(" AND ")}`
+  //       : "";
+
+  //     /* ===============================
+  //      SORT
+  //   =============================== */
+  //     const sortableColumns = ["created_at", "product_name", "brand_name"];
+  //     if (!sortableColumns.includes(sortBy)) sortBy = "created_at";
+  //     sortOrder = sortOrder === "ASC" ? "ASC" : "DESC";
+
+  //     /* ===============================
+  //      MAIN QUERY
+  //   =============================== */
+
+  //     const query = `
+  //     SELECT
+  //       p.product_id,
+  //       p.product_name,
+  //       p.category_id,
+  //       p.subcategory_id,
+  //       p.brand_name,
+  //       p.avg_rating,
+  //       p.rating_count,
+  //       p.created_at,
+  //       c.category_name,
+  //       sc.subcategory_name,
+  //       ssc.name AS sub_subcategory_name,
+  //       v.mrp,
+  //       v.sale_price,
+  //       v.reward_redemption_limit,
+
+  //       GROUP_CONCAT(
+  //         DISTINCT CONCAT(
+  //           pi.image_id, '::',
+  //           pi.image_url, '::',
+  //           pi.type, '::',
+  //           pi.sort_order
+  //         )
+  //         ORDER BY pi.sort_order ASC
+  //       ) AS images
+
+  //     FROM eproducts p
+
+  //     /* ---- Correct Cheapest Visible Variant ---- */
+  //     LEFT JOIN product_variants v
+  //       ON v.variant_id = (
+  //         SELECT pv2.variant_id
+  //         FROM product_variants pv2
+  //         WHERE pv2.product_id = p.product_id
+  //           AND pv2.is_visible = 1
+  //           AND pv2.sale_price IS NOT NULL
+  //         ORDER BY pv2.sale_price ASC, pv2.variant_id ASC
+  //         LIMIT 1
+  //       )
+
+  //     /* ---- categories ---- */
+  //     LEFT JOIN categories c ON c.category_id = p.category_id
+  //     LEFT JOIN sub_categories sc ON sc.subcategory_id = p.subcategory_id
+  //     LEFT JOIN sub_sub_categories ssc ON ssc.sub_subcategory_id = p.sub_subcategory_id
+
+  //     /* ---- Images ---- */
+  //     LEFT JOIN product_images pi ON p.product_id = pi.product_id
+
+  //     ${whereClause}
+
+  //     GROUP BY p.product_id
+  //     ORDER BY p.${sortBy} ${sortOrder}
+  //     LIMIT ? OFFSET ?
+  //   `;
+
+  //     const dataParams = [...params, limit, offset];
+  //     const [rows] = await db.execute(query, dataParams);
+
+  //     /* ===============================
+  //      IMAGE PARSING
+  //   =============================== */
+  //     const products = rows.map((row) => {
+  //       let images = [];
+
+  //       if (row.images) {
+  //         images = row.images.split(",").map((item) => {
+  //           const [image_id, image_url, type, sort_order] = item.split("::");
+  //           return {
+  //             image_id: Number(image_id),
+  //             image_url,
+  //             type,
+  //             sort_order: Number(sort_order),
+  //           };
+  //         });
+  //       }
+
+  //       return {
+  //         product_id: row.product_id,
+  //         category_id: row.category_id,
+  //         subcategory_id: row.subcategory_id,
+  //         product_name: row.product_name,
+  //         brand_name: row.brand_name,
+  //         category_name: row.category_name,
+  //         subcategory_name: row.subcategory_name,
+  //         sub_subcategory_name: row.sub_subcategory_name,
+  //         created_at: row.created_at,
+  //         avg_rating: row.avg_rating,
+  //         rating_count: row.rating_count,
+  //         mrp: row.mrp,
+  //         sale_price: row.sale_price,
+  //         reward_redemption_limit: row.reward_redemption_limit,
+  //         images,
+  //       };
+  //     });
+
+  //     /* ===============================
+  //      TOTAL COUNT (uses SAME logic)
+  //   =============================== */
+  //     const [[{ total }]] = await db.execute(
+  //       `
+  //     SELECT COUNT(DISTINCT p.product_id) AS total
+  //     FROM eproducts p
+
+  //     LEFT JOIN product_variants v
+  //       ON v.variant_id = (
+  //         SELECT pv2.variant_id
+  //         FROM product_variants pv2
+  //         WHERE pv2.product_id = p.product_id
+  //           AND pv2.is_visible = 1
+  //           AND pv2.sale_price IS NOT NULL
+  //         ORDER BY pv2.sale_price ASC, pv2.variant_id ASC
+  //         LIMIT 1
+  //       )
+
+  //     ${whereClause}
+  //     `,
+  //       params,
+  //     );
+
+  //     return {
+  //       products,
+  //       category_name: rows[0]?.category_name || null,
+  //       totalItems: total,
+  //     };
+  //   } catch (error) {
+  //     console.error("Error fetching products:", error);
+  //     throw error;
+  //   }
+  // }
+
+  // Get Products By Subcategory
+
   async getProductsByCategory({
     search,
     sortBy,
@@ -800,7 +1008,7 @@ class ProductModel {
 
       // rating filter
       if (ratingMin !== null) {
-        conditions.push("p.avg_rating >= ?");
+        conditions.push("COALESCE(rev.avg_rating, 0) >= ?");
         params.push(ratingMin);
       }
 
@@ -826,13 +1034,14 @@ class ProductModel {
         p.category_id,
         p.subcategory_id,
         p.brand_name,
-        p.avg_rating,
-        p.rating_count,
+        COALESCE(rev.avg_rating, 0) AS avg_rating,
+        COALESCE(rev.total_reviews, 0) AS total_reviews,
         p.created_at,
         c.category_name,
         sc.subcategory_name,
         ssc.name AS sub_subcategory_name,
         v.mrp,
+        v.variant_id,
         v.sale_price,
         v.reward_redemption_limit,
 
@@ -859,6 +1068,18 @@ class ProductModel {
           ORDER BY pv2.sale_price ASC, pv2.variant_id ASC
           LIMIT 1
         )
+
+        /* ---- Review ---- */
+        LEFT JOIN (
+          SELECT
+            product_id,
+            ROUND(AVG(rating), 1) AS avg_rating,
+            COUNT(*) AS total_reviews
+          FROM product_reviews
+          WHERE status = 'approved'
+          GROUP BY product_id
+        ) rev
+        ON p.product_id = rev.product_id
 
       /* ---- categories ---- */
       LEFT JOIN categories c ON c.category_id = p.category_id
@@ -898,6 +1119,7 @@ class ProductModel {
 
         return {
           product_id: row.product_id,
+          variant_id: row.variant_id,
           category_id: row.category_id,
           subcategory_id: row.subcategory_id,
           product_name: row.product_name,
@@ -906,8 +1128,8 @@ class ProductModel {
           subcategory_name: row.subcategory_name,
           sub_subcategory_name: row.sub_subcategory_name,
           created_at: row.created_at,
-          avg_rating: row.avg_rating,
-          rating_count: row.rating_count,
+          avg_rating: Number(row.avg_rating).toFixed(1),
+          rating_count: Number(row.total_reviews),
           mrp: row.mrp,
           sale_price: row.sale_price,
           reward_redemption_limit: row.reward_redemption_limit,
@@ -950,7 +1172,6 @@ class ProductModel {
     }
   }
 
-  // Get Products By Subcategory
   async getProductsBySubcategory({
     search,
     sortBy,
