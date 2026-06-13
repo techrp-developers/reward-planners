@@ -1561,6 +1561,10 @@ class ProductModel {
         v.mrp,
         v.reward_redemption_limit,
 
+        COALESCE(rev.avg_rating, 0) AS avg_rating,
+        
+        COALESCE(rev.total_reviews, 0) AS total_reviews,
+
         GROUP_CONCAT(
           DISTINCT CONCAT(
             pi.image_id, '::',
@@ -1594,6 +1598,17 @@ class ProductModel {
           ORDER BY pv2.sale_price ASC, pv2.variant_id ASC
           LIMIT 1
         )
+
+      LEFT JOIN (
+          SELECT
+            product_id,
+            ROUND(AVG(rating), 1) AS avg_rating,
+            COUNT(*) AS total_reviews
+          FROM product_reviews
+          WHERE status = 'approved'
+          GROUP BY product_id
+        ) rev
+        ON p.product_id = rev.product_id
 
       LEFT JOIN product_images pi
         ON pi.product_id = p.product_id
@@ -1692,8 +1707,8 @@ class ProductModel {
             rp_price: redeem_limit > 0 ? `₹${rp_price}` : 0,
             redeem_coins: redeem_limit > 0 ? redeem_coins : 0,
 
-            rating: 4.6,
-            reviews: "18.9K",
+            rating: Number(row.avg_rating).toFixed(1),
+            reviews: Number(row.total_reviews),
 
             reward: {
               enabled: canEarn && rewardCoins > 0,
