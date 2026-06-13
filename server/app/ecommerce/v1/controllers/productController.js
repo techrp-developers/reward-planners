@@ -181,8 +181,8 @@ class ProductController {
             rp_price: redeem_limit > 0 ? `₹${rp_price}` : 0,
             redeem_coins: redeem_limit > 0 ? redeem_coins : 0,
             discount: `${mrpDiscountPercent}%`,
-            rating: 4.6,
-            reviews: "18.9K",
+            rating: product.rating,
+            reviews: product.reviews,
 
             rewardCoins,
             rewardLabel:

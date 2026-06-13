@@ -78,7 +78,6 @@ function calculateReward(orderAmount, rules) {
 }
 
 class ProductModel {
-  // Get all products
   // async getAllProducts({ search, sortBy, sortOrder, limit, offset }) {
   //   try {
   //     const conditions = [];
@@ -127,10 +126,6 @@ class ProductModel {
   //         v.mrp,
   //         v.sale_price,
   //         v.reward_redemption_limit,
-  //         prs.can_earn_reward,
-  //         rr.reward_type,
-  //         rr.reward_value,
-  //         rr.max_reward,
 
   //         GROUP_CONCAT(
   //           DISTINCT CONCAT(
@@ -173,40 +168,6 @@ class ProductModel {
   //       /* ---- Images ---- */
   //       LEFT JOIN product_images pi
   //         ON p.product_id = pi.product_id
-
-  //       /* ---- Reward Settings ---- */
-  //       LEFT JOIN product_reward_settings prs
-  //         ON prs.id = (
-  //           SELECT prs2.id
-  //           FROM product_reward_settings prs2
-  //           WHERE prs2.is_active = 1
-  //             AND (
-  //               (prs2.variant_id = v.variant_id AND prs2.product_id = p.product_id)
-  //               OR (prs2.product_id = p.product_id AND prs2.variant_id IS NULL)
-  //               OR (prs2.subcategory_id = p.subcategory_id)
-  //               OR (prs2.category_id = p.category_id)
-  //               OR (
-  //                 prs2.product_id IS NULL
-  //                 AND prs2.variant_id IS NULL
-  //                 AND prs2.category_id IS NULL
-  //                 AND prs2.subcategory_id IS NULL
-  //               )
-  //             )
-  //           ORDER BY
-  //             CASE
-  //               WHEN prs2.variant_id IS NOT NULL THEN 1
-  //               WHEN prs2.product_id IS NOT NULL THEN 2
-  //               WHEN prs2.subcategory_id IS NOT NULL THEN 3
-  //               WHEN prs2.category_id IS NOT NULL THEN 4
-  //               ELSE 5
-  //             END,
-  //             prs2.priority ASC
-  //           LIMIT 1
-  //       )
-
-  //       LEFT JOIN reward_rules rr
-  //         ON rr.reward_rule_id = prs.reward_rule_id
-  //         AND rr.is_active = 1
 
   //       /* ---- Categories ---- */
   //       LEFT JOIN categories c ON p.category_id = c.category_id
@@ -256,10 +217,6 @@ class ProductModel {
   //         mrp: row.mrp,
   //         sale_price: row.sale_price,
   //         reward_redemption_limit: row.reward_redemption_limit,
-  //         can_earn_reward: row.can_earn_reward ?? 0,
-  //         reward_type: row.reward_type,
-  //         reward_value: row.reward_value,
-  //         max_reward: row.max_reward,
   //         images,
   //       };
   //     });
@@ -285,6 +242,8 @@ class ProductModel {
   //     throw error;
   //   }
   // }
+
+  // Get Product By ID
 
   async getAllProducts({ search, sortBy, sortOrder, limit, offset }) {
     try {
@@ -328,12 +287,18 @@ class ProductModel {
           p.brand_name,
           p.created_at,
           p.short_description,
+
           c.category_name,
           sc.subcategory_name,
           ssc.name AS sub_subcategory_name,
+
+          v.variant_id,
           v.mrp,
           v.sale_price,
           v.reward_redemption_limit,
+
+          COALESCE(rev.avg_rating, 0) AS avg_rating,
+          COALESCE(rev.total_reviews, 0) AS total_reviews,
 
           GROUP_CONCAT(
             DISTINCT CONCAT(
@@ -348,31 +313,28 @@ class ProductModel {
         FROM eproducts p
 
         /* ---- First Variant Only ---- */
-       LEFT JOIN (
-          SELECT pv.*
-          FROM product_variants pv
-          INNER JOIN (
-            SELECT 
-              product_id, 
-              MIN(sale_price) AS min_sale_price
-            FROM product_variants
-            WHERE sale_price IS NOT NULL
-              AND is_visible = 1
-            GROUP BY product_id
-          ) minv
-            ON pv.product_id = minv.product_id
-          AND pv.sale_price = minv.min_sale_price
-          INNER JOIN (
-            SELECT product_id, MIN(variant_id) AS min_variant_id
-            FROM product_variants
-            WHERE is_visible = 1
-            GROUP BY product_id
-          ) tie
-            ON pv.product_id = tie.product_id
-            AND pv.variant_id = tie.min_variant_id
-            WHERE pv.is_visible = 1
-        ) v ON p.product_id = v.product_id
+      LEFT JOIN product_variants v
+        ON v.variant_id = (
+          SELECT pv2.variant_id
+          FROM product_variants pv2
+          WHERE pv2.product_id = p.product_id
+            AND pv2.is_visible = 1
+            AND pv2.sale_price IS NOT NULL
+          ORDER BY pv2.sale_price ASC, pv2.variant_id ASC
+          LIMIT 1
+        )
 
+        /* ---- Review Aggregation ---- */
+       LEFT JOIN (
+          SELECT
+            product_id,
+            ROUND(AVG(rating), 1) AS avg_rating,
+            COUNT(*) AS total_reviews
+          FROM product_reviews
+          WHERE status = 'approved'
+          GROUP BY product_id
+        ) rev
+        ON p.product_id = rev.product_id
 
         /* ---- Images ---- */
         LEFT JOIN product_images pi 
@@ -415,6 +377,7 @@ class ProductModel {
         return {
           product_id: row.product_id,
           category_id: row.category_id,
+          variant_id: row.variant_id,
           subcategory_id: row.subcategory_id,
           product_name: row.product_name,
           category_name: row.category_name,
@@ -426,6 +389,9 @@ class ProductModel {
           mrp: row.mrp,
           sale_price: row.sale_price,
           reward_redemption_limit: row.reward_redemption_limit,
+
+          rating: Number(row.avg_rating).toFixed(1),
+          reviews: Number(row.total_reviews),
           images,
         };
       });
@@ -452,7 +418,6 @@ class ProductModel {
     }
   }
 
-  // Get Product By ID
   async getProductById(productId) {
     try {
       const [productRows] = await db.execute(
