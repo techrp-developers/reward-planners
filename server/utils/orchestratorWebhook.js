@@ -27,6 +27,8 @@ async function handleWebhook(req, res) {
     //  Attach parsed body so child handlers don't re-parse
     req.parsedBody = body;
 
+    console.log(JSON.stringify(body.payload.payment.entity, null, 2));
+
     //  FAN-OUT (parallel execution)
     // await Promise.all([
     //   ecommerceWebhook.processEvent(req),
