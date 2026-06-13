@@ -281,6 +281,7 @@ class ServiceOrderController {
         await connection.rollback();
       }
 
+      console.error("[verifyPayment] ERROR:", err);
       res.status(500).json({
         success: false,
         message: err.message,
