@@ -1738,6 +1738,8 @@ class ProductModel {
         v.sale_price,
         v.mrp,
         v.reward_redemption_limit,
+        COALESCE(rev.avg_rating, 0) AS avg_rating,
+        COALESCE(rev.total_reviews, 0) AS total_reviews,
 
         /* ---- Weighted Score ---- */
         (
@@ -1787,6 +1789,18 @@ class ProductModel {
         GROUP BY product_id
       ) r ON r.product_id = p.product_id
 
+      /* ----- Review ----- */
+      LEFT JOIN (
+        SELECT
+          product_id,
+          ROUND(AVG(rating), 1) AS avg_rating,
+          COUNT(*) AS total_reviews
+        FROM product_reviews
+        WHERE status = 'approved'
+        GROUP BY product_id
+      ) rev
+      ON rev.product_id = p.product_id
+
       /* ----- Active variant ----- */
       INNER JOIN product_variants v
         ON v.variant_id = (
@@ -1794,7 +1808,8 @@ class ProductModel {
           FROM product_variants pv2
           WHERE pv2.product_id = p.product_id
             AND pv2.is_visible = 1
-          ORDER BY pv2.sale_price ASC
+            AND pv2.sale_price IS NOT NULL
+          ORDER BY pv2.sale_price ASC, pv2.variant_id ASC
           LIMIT 1
         )
 
@@ -1886,8 +1901,8 @@ class ProductModel {
             redeem_coins: redeem_limit > 0 ? redeem_coins : 0,
 
             score: row.total_score,
-            rating: 4.6,
-            reviews: "18.9K",
+            rating: Number(row.avg_rating).toFixed(1),
+            reviews: Number(row.total_reviews),
 
             reward: {
               enabled: canEarn && rewardCoins > 0,
