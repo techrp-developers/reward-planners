@@ -1223,7 +1223,7 @@ class ProductModel {
 
       // rating filter
       if (ratingMin !== null) {
-        conditions.push("p.avg_rating >= ?");
+        conditions.push("COALESCE(rev.avg_rating, 0) >= ?");
         params.push(ratingMin);
       }
 
@@ -1244,8 +1244,6 @@ class ProductModel {
         p.category_id,
         p.subcategory_id,
         p.brand_name,
-        p.avg_rating,
-        p.rating_count,
         p.created_at,
         c.category_name,
         sc.subcategory_name,
@@ -1253,6 +1251,10 @@ class ProductModel {
         v.mrp,
         v.sale_price,
         v.reward_redemption_limit,
+        v.variant_id,
+
+        COALESCE(rev.avg_rating, 0) AS avg_rating,
+        COALESCE(rev.total_reviews, 0) AS total_reviews,
 
         GROUP_CONCAT(
           DISTINCT CONCAT(
@@ -1277,6 +1279,18 @@ class ProductModel {
           ORDER BY pv2.sale_price ASC, pv2.variant_id ASC
           LIMIT 1
         )
+
+      /* ---- Review ---- */
+      LEFT JOIN (
+          SELECT
+            product_id,
+            ROUND(AVG(rating), 1) AS avg_rating,
+            COUNT(*) AS total_reviews
+          FROM product_reviews
+          WHERE status = 'approved'
+          GROUP BY product_id
+        ) rev
+        ON p.product_id = rev.product_id
 
       LEFT JOIN categories c ON c.category_id = p.category_id
       LEFT JOIN sub_categories sc 
@@ -1319,8 +1333,8 @@ class ProductModel {
           subcategory_name: row.subcategory_name,
           sub_subcategory_name: row.sub_subcategory_name,
           created_at: row.created_at,
-          avg_rating: row.avg_rating,
-          rating_count: row.rating_count,
+          avg_rating: Number(row.avg_rating).toFixed(1),
+          rating_count: Number(row.total_reviews),
           mrp: row.mrp,
           sale_price: row.sale_price,
           reward_redemption_limit: row.reward_redemption_limit,
