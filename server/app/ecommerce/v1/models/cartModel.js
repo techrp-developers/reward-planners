@@ -161,6 +161,10 @@ class cartModel {
       p.category_id,
       p.subcategory_id,
 
+      p.is_returnable,
+      p.is_replaceable,
+      p.return_window_days,
+
       v.variant_id,
       v.variant_attributes,
       v.mrp,
@@ -205,6 +209,10 @@ class cartModel {
 
           product_name: row.product_name,
           image,
+
+          is_returnable: row.is_returnable,
+          return_window: row.return_window_days,
+          is_replaceable: row.is_replaceable,
 
           sale_price: Number(row.sale_price),
           mrp: Number(row.mrp),
