@@ -295,7 +295,6 @@ class ProductModel {
           v.variant_id,
           v.mrp,
           v.sale_price,
-          v.reward_redemption_limit,
 
           COALESCE(rev.avg_rating, 0) AS avg_rating,
           COALESCE(rev.total_reviews, 0) AS total_reviews,
@@ -388,7 +387,6 @@ class ProductModel {
           created_at: row.created_at,
           mrp: row.mrp,
           sale_price: row.sale_price,
-          reward_redemption_limit: row.reward_redemption_limit,
 
           rating: Number(row.avg_rating).toFixed(1),
           reviews: Number(row.total_reviews),

@@ -6,12 +6,14 @@ const path = require("path");
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
 
 // Helper function
+/* ===============================
+   EARNING CALCULATION (existing, unchanged)
+=============================== */
 function calculateReward(orderAmount, rules) {
   if (!rules || !rules.length) return 0;
 
   const now = new Date();
 
-  // 1. filter valid rules
   const validRules = rules.filter((rule) => {
     if (!rule.is_active) return false;
 
@@ -27,22 +29,18 @@ function calculateReward(orderAmount, rules) {
 
   if (!validRules.length) return 0;
 
-  // 2. split rules
   const stackable = validRules.filter((r) => r.is_stackable);
   const nonStackable = validRules.filter((r) => !r.is_stackable);
 
   let applicable = [];
 
-  // 3. pick highest priority non-stackable
   if (nonStackable.length) {
     nonStackable.sort((a, b) => a.priority - b.priority);
     applicable.push(nonStackable[0]);
   }
 
-  // 4. add stackable
   applicable.push(...stackable);
 
-  // 5. remove duplicates
   const seen = new Set();
   applicable = applicable.filter((r) => {
     if (seen.has(r.reward_rule_id)) return false;
@@ -50,7 +48,6 @@ function calculateReward(orderAmount, rules) {
     return true;
   });
 
-  // 6. calculate reward
   let total = 0;
 
   for (const rule of applicable) {
@@ -72,6 +69,63 @@ function calculateReward(orderAmount, rules) {
   }
 
   return total;
+}
+
+/* ===============================
+   REDEMPTION RESOLUTION (new)
+=============================== */
+function resolveRedemption(orderAmount, rules) {
+  if (!rules || !rules.length) {
+    return { type: null, value: 0, maxRedemptionAmount: null };
+  }
+
+  const now = new Date();
+
+  const validRules = rules.filter((rule) => {
+    if (!rule.is_active) return false;
+    if (rule.start_date && new Date(rule.start_date) > now) return false;
+    if (rule.end_date && new Date(rule.end_date) < now) return false;
+    if (orderAmount < rule.min_order_amount) return false;
+    if (rule.max_order_amount && orderAmount > rule.max_order_amount)
+      return false;
+    if (!rule.can_redeem_reward) return false;
+    if (!rule.redemption_type || rule.redemption_value == null) return false;
+
+    return true;
+  });
+
+  if (!validRules.length) {
+    return { type: null, value: 0, maxRedemptionAmount: null };
+  }
+
+  // rules already ordered by specificity -> priority from getProductRewards,
+  // so the first valid match is the winner. No stacking for redemption.
+  const winner = validRules[0];
+
+  return {
+    type: winner.redemption_type,
+    value: Number(winner.redemption_value),
+    maxRedemptionAmount: winner.max_redemption_amount
+      ? Number(winner.max_redemption_amount)
+      : null,
+  };
+}
+
+function calculateRedeemableCoins(orderAmount, redemption) {
+  if (!redemption.value) return 0;
+
+  let coins =
+    redemption.type === "percentage"
+      ? (orderAmount * redemption.value) / 100
+      : redemption.value;
+
+  if (redemption.maxRedemptionAmount) {
+    coins = Math.min(coins, redemption.maxRedemptionAmount);
+  }
+
+  coins = Math.min(coins, orderAmount); // never exceed the price itself
+
+  return Math.floor(coins);
 }
 
 class ProductController {
@@ -110,11 +164,6 @@ class ProductController {
 
           const salePrice = product.sale_price ? Number(product.sale_price) : 0;
           const mrp = product.mrp ? Number(product.mrp) : 0;
-          const redeem_limit = product.reward_redemption_limit
-            ? Number(product.reward_redemption_limit)
-            : 0;
-          const redeem_coins = Math.floor((salePrice * redeem_limit) / 100);
-          const rp_price = salePrice - redeem_coins;
 
           let rewardCoins = 0;
           let canEarn = false;
@@ -143,6 +192,15 @@ class ProductController {
             canEarn = rules.some((r) => r.can_earn_reward);
           }
 
+          /* ===============================
+              REDEMPTION (rule-based)
+            =============================== */
+          const redemption = resolveRedemption(salePrice, rules);
+          const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
+          const canRedeem = rules.some((r) => r.can_redeem_reward);
+          const redemptionEnabled = canRedeem && redeem_coins > 0;
+          const rp_price = salePrice - redeem_coins;
+
           const mrpDiscountPercent =
             mrp > 0 ? Math.round(((mrp - salePrice) / mrp) * 100) : 0;
 
@@ -157,8 +215,10 @@ class ProductController {
             image: mainImage,
             price: salePrice ? `₹${salePrice}` : null,
             originalPrice: product.mrp ? `₹${Number(product.mrp)}` : null,
-            rp_price: redeem_limit > 0 ? `₹${rp_price}` : 0,
-            redeem_coins: redeem_limit > 0 ? redeem_coins : 0,
+
+            rp_price: redeem_coins > 0 ? `₹${rp_price}` : 0,
+            redeem_coins: redemptionEnabled ? redeem_coins : 0,
+
             discount: `${mrpDiscountPercent}%`,
             rating: product.rating,
             reviews: product.reviews,
