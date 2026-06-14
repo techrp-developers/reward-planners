@@ -2,7 +2,7 @@ const db = require("../config/database");
 
 class CampaignModel {
   //   =======================Helper=================================
-  async campaignExists(campaignId) {
+  async validateCampaign(campaignId) {
     const [rows] = await db.query(
       `
     SELECT campaign_id
@@ -13,7 +13,34 @@ class CampaignModel {
       [campaignId],
     );
 
-    return rows.length > 0;
+    if (!rows.length) {
+      const error = new Error("Campaign not found");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    return rows[0];
+  }
+
+  async validateCampaignItem(campaignId, variantId) {
+    const [rows] = await db.query(
+      `
+    SELECT id
+    FROM campaign_items
+    WHERE campaign_id = ?
+    AND variant_id = ?
+    LIMIT 1
+    `,
+      [campaignId, variantId],
+    );
+
+    if (!rows.length) {
+      const error = new Error("Product not found in campaign");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    return rows[0];
   }
 
   //   =================================Campaign===================================
@@ -95,35 +122,76 @@ class CampaignModel {
   }
 
   async updateCampaign(id, data, banner_image) {
+    await this.validateCampaign(id);
+
+    const fields = [];
+    const values = [];
+
+    if (data.title !== undefined) {
+      fields.push("title = ?");
+      values.push(data.title);
+    }
+
+    if (data.campaign_type !== undefined) {
+      fields.push("campaign_type = ?");
+      values.push(data.campaign_type);
+    }
+
+    if (banner_image) {
+      fields.push("banner_image = ?");
+      values.push(banner_image);
+    }
+
+    if (data.start_at !== undefined) {
+      fields.push("start_at = ?");
+      values.push(data.start_at);
+    }
+
+    if (data.end_at !== undefined) {
+      fields.push("end_at = ?");
+      values.push(data.end_at);
+    }
+
+    if (data.redirect_type !== undefined) {
+      fields.push("redirect_type = ?");
+      values.push(data.redirect_type);
+    }
+
+    if (data.redirect_id !== undefined) {
+      fields.push("redirect_id = ?");
+      values.push(data.redirect_id);
+    }
+
+    if (data.redirect_url !== undefined) {
+      fields.push("redirect_url = ?");
+      values.push(data.redirect_url);
+    }
+
+    if (data.display_order !== undefined) {
+      fields.push("display_order = ?");
+      values.push(data.display_order);
+    }
+
+    if (data.status !== undefined) {
+      fields.push("status = ?");
+      values.push(data.status);
+    }
+
+    if (!fields.length) {
+      const error = new Error("Nothing to update");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    values.push(id);
+
     await db.query(
       `
-      UPDATE campaigns
-      SET
-        title = ?,
-        campaign_type = ?,
-        banner_image = COALESCE(?, banner_image),
-        start_at = ?,
-        end_at = ?,
-        redirect_type = ?,
-        redirect_id = ?,
-        redirect_url = ?,
-        display_order = ?,
-        status = ?
-      WHERE campaign_id = ?
-      `,
-      [
-        data.title,
-        data.campaign_type,
-        banner_image,
-        data.start_at || null,
-        data.end_at || null,
-        data.redirect_type || null,
-        data.redirect_id || null,
-        data.redirect_url || null,
-        data.display_order || 0,
-        data.status,
-        id,
-      ],
+    UPDATE campaigns
+    SET ${fields.join(", ")}
+    WHERE campaign_id = ?
+    `,
+      values,
     );
   }
 
@@ -171,11 +239,7 @@ class CampaignModel {
 
   //   ================================Campaign Items=============================
   async getCampaignItems(campaignId) {
-    const exists = await this.campaignExists(campaignId);
-
-    if (!exists) {
-      throw new Error("Campaign not found");
-    }
+    await this.validateCampaign(campaignId);
 
     const [rows] = await db.query(
       `
@@ -211,11 +275,7 @@ class CampaignModel {
   }
 
   async getAvailableVariants(campaignId) {
-    const exists = await this.campaignExists(campaignId);
-
-    if (!exists) {
-      throw new Error("Campaign not found");
-    }
+    await this.validateCampaign(campaignId);
 
     const [rows] = await db.query(
       `
@@ -236,6 +296,7 @@ class CampaignModel {
         ep.status = 'approved'
         AND ep.is_visible = 1
         AND pv.is_visible = 1
+        AND pv.stock > 0
 
         AND pv.variant_id NOT IN (
           SELECT variant_id
@@ -252,11 +313,7 @@ class CampaignModel {
   }
 
   async addCampaignItems(campaignId, variantIds) {
-    const exists = await this.campaignExists(campaignId);
-
-    if (!exists) {
-      throw new Error("Campaign not found");
-    }
+    await this.validateCampaign(campaignId);
 
     const conn = await db.getConnection();
 
@@ -276,9 +333,10 @@ class CampaignModel {
         );
 
         if (!variantRows.length) {
-          throw new Error(`Variant ${variantId} not found`);
+          const error = new Error(`Variant ${variantId} not found`);
+          error.statusCode = 404;
+          throw error;
         }
-
         const productId = variantRows[0].product_id;
 
         await conn.query(
@@ -305,11 +363,7 @@ class CampaignModel {
   }
 
   async updateCampaignItem(campaignId, variantId, offerPrice, maxQty) {
-    const exists = await this.campaignExists(campaignId);
-
-    if (!exists) {
-      throw new Error("Campaign not found");
-    }
+    await this.validateCampaign(campaignId);
 
     const [variantRows] = await db.query(
       `
@@ -323,7 +377,9 @@ class CampaignModel {
     );
 
     if (!variantRows.length) {
-      throw new Error("Variant not found");
+      const error = new Error("Variant not found");
+      error.statusCode = 404;
+      throw error;
     }
 
     const salePrice = Number(variantRows[0].sale_price);
@@ -335,7 +391,9 @@ class CampaignModel {
 
     if (offerPrice !== undefined && offerPrice !== null) {
       if (Number(offerPrice) > salePrice) {
-        throw new Error("Offer price cannot exceed sale price");
+        const error = new Error("Offer price cannot exceed sale price");
+        error.statusCode = 400;
+        throw error;
       }
 
       fields.push("offer_price = ?");
@@ -344,7 +402,9 @@ class CampaignModel {
 
     if (maxQty !== undefined && maxQty !== null) {
       if (Number(maxQty) > stock) {
-        throw new Error(`Max quantity cannot exceed stock (${stock})`);
+        const error = new Error(`Max quantity cannot exceed stock (${stock})`);
+        error.statusCode = 400;
+        throw error;
       }
 
       fields.push("max_qty = ?");
@@ -352,8 +412,12 @@ class CampaignModel {
     }
 
     if (!fields.length) {
-      throw new Error("Nothing to update");
+      const error = new Error("Nothing to update");
+      error.statusCode = 400;
+      throw error;
     }
+
+    await this.validateCampaignItem(campaignId, variantId);
 
     values.push(campaignId);
     values.push(variantId);
@@ -370,11 +434,9 @@ class CampaignModel {
   }
 
   async removeCampaignItem(campaignId, variantId) {
-    const exists = await this.campaignExists(campaignId);
+    await this.validateCampaign(campaignId);
 
-    if (!exists) {
-      throw new Error("Campaign not found");
-    }
+    await this.validateCampaignItem(campaignId, variantId);
 
     await db.query(
       `

@@ -141,7 +141,7 @@ class CampaignController {
     } catch (err) {
       console.error(err);
 
-      return res.status(500).json({
+      return res.status(err.statusCode || 500).json({
         success: false,
         message: err.message,
       });
@@ -161,7 +161,7 @@ class CampaignController {
         data: campaigns,
       });
     } catch (err) {
-      return res.status(500).json({
+      return res.status(err.statusCode || 500).json({
         success: false,
         message: err.message,
       });
@@ -189,7 +189,7 @@ class CampaignController {
         data: campaign,
       });
     } catch (err) {
-      return res.status(500).json({
+      return res.status(err.statusCode || 500).json({
         success: false,
         message: err.message,
       });
@@ -275,7 +275,7 @@ class CampaignController {
         message: "Campaign updated successfully",
       });
     } catch (err) {
-      return res.status(500).json({
+      return res.status(err.statusCode || 500).json({
         success: false,
         message: err.message,
       });
@@ -306,7 +306,7 @@ class CampaignController {
         message: "Status updated successfully",
       });
     } catch (err) {
-      return res.status(500).json({
+      return res.status(err.statusCode || 500).json({
         success: false,
         message: err.message,
       });
@@ -326,7 +326,7 @@ class CampaignController {
         message: "Campaign deleted successfully",
       });
     } catch (err) {
-      return res.status(500).json({
+      return res.status(err.statusCode || 500).json({
         success: false,
         message: err.message,
       });
@@ -347,7 +347,7 @@ class CampaignController {
         data: items,
       });
     } catch (err) {
-      return res.status(500).json({
+      return res.status(err.statusCode || 500).json({
         success: false,
         message: err.message,
       });
@@ -366,7 +366,7 @@ class CampaignController {
         data: variants,
       });
     } catch (err) {
-      return res.status(500).json({
+      return res.status(err.statusCode || 500).json({
         success: false,
         message: err.message,
       });
@@ -401,7 +401,7 @@ class CampaignController {
         message: "Products added successfully",
       });
     } catch (err) {
-      return res.status(500).json({
+      return res.status(err.statusCode || 500).json({
         success: false,
         message: err.message,
       });
@@ -457,7 +457,7 @@ class CampaignController {
         message: "Campaign item updated",
       });
     } catch (err) {
-      return res.status(500).json({
+      return res.status(err.statusCode || 500).json({
         success: false,
         message: err.message,
       });
@@ -480,7 +480,7 @@ class CampaignController {
         message: "Product removed",
       });
     } catch (err) {
-      return res.status(500).json({
+      return res.status(err.statusCode || 500).json({
         success: false,
         message: err.message,
       });
