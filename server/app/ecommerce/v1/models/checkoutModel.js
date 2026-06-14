@@ -5,48 +5,17 @@ const AddressModel = require("../../../common/models/addressModel");
 const xpressService = require("../../../../services/ExpressBees/xpressbees_service");
 const RewardModel = require("../../../../models/rewardModel");
 const { generateOrderRef } = require("../utils/orderRef");
+const {
+  calculateReward,
+  resolveRedemption,
+  calculateRedeemableCoins,
+} = require("../utils/rewardCalculate");
 
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
 function getPublicUrl(path) {
   if (!path) return null;
   return `${CDN_BASE_URL}/${path}`;
 }
-
-function calculateReward(amount, rules = []) {
-  let total = 0;
-
-  for (let rule of rules) {
-    if (!rule.can_earn_reward) continue;
-
-    let reward = 0;
-
-    if (rule.reward_type === "percentage") {
-      reward = (amount * rule.reward_value) / 100;
-
-      if (rule.max_reward) {
-        reward = Math.min(reward, rule.max_reward);
-      }
-    }
-
-    if (rule.reward_type === "fixed") {
-      reward = rule.reward_value;
-    }
-
-    total += reward;
-
-    // stop if not stackable
-    if (!rule.is_stackable) break;
-  }
-
-  return Math.floor(total);
-}
-
-// function generateOrderRef() {
-//   const date = new Date();
-//   const ymd = date.toISOString().slice(0, 10).replace(/-/g, "");
-//   const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
-//   return `ORD-${ymd}-${rand}`;
-// }
 
 function formatDate(date) {
   if (!date) return null;
@@ -846,7 +815,6 @@ class CheckoutModel {
       v.mrp,
       v.sale_price,
       v.stock,
-      v.reward_redemption_limit,
       v.weight,
       v.length,
       v.breadth,
@@ -908,8 +876,6 @@ class CheckoutModel {
         // delivery date — populated after shipping calc
         estimated_delivery_date: null,
 
-        reward_redemption_limit: Number(row.reward_redemption_limit || 0),
-
         weight: Number(row.weight || 0),
         length: Number(row.length || 0),
         breadth: Number(row.breadth || 0),
@@ -928,10 +894,9 @@ class CheckoutModel {
     let totalRewardEarn = 0;
 
     for (let item of items) {
-      const price = item.price;
       const itemTotal = item.itemTotal;
 
-      const key = `${item.product_id}_${item.variant_id}_${item.category_id}_${item.subcategory_id}_${price}`;
+      const key = `${item.product_id}_${item.variant_id}_${item.category_id}_${item.subcategory_id}_${itemTotal}`;
 
       let rules = rewardCache[key];
 
@@ -941,16 +906,16 @@ class CheckoutModel {
           item.variant_id,
           item.category_id,
           item.subcategory_id,
-          price,
+          itemTotal,
         );
         rewardCache[key] = rules;
       }
 
-      // Redemption
-      const redemptionLimit = item.reward_redemption_limit;
+      // Redemption (rule-based)
+      if (useRewards && remainingWallet > 0) {
+        const redemption = resolveRedemption(itemTotal, rules);
+        const maxAllowed = calculateRedeemableCoins(itemTotal, redemption);
 
-      if (useRewards && redemptionLimit > 0 && remainingWallet > 0) {
-        const maxAllowed = Math.floor((itemTotal * redemptionLimit) / 100);
         const usable = Math.min(remainingWallet, maxAllowed, itemTotal);
 
         item.redeemable = usable;
@@ -958,7 +923,7 @@ class CheckoutModel {
         totalRedeemed += usable;
       }
 
-      // Earning
+      // Earning (on amount actually paid, after redemption)
       let rewardEarn = 0;
 
       if (rules.length) {
@@ -1158,7 +1123,6 @@ class CheckoutModel {
       v.mrp,
       v.sale_price,
       v.stock,
-      v.reward_redemption_limit,
       v.weight,
       v.length,
       v.breadth,
@@ -1195,7 +1159,7 @@ class CheckoutModel {
       row.variant_id,
       row.category_id,
       row.subcategory_id,
-      salePrice,
+      itemTotal,
     );
 
     let remainingWallet = useRewards ? walletBalance : 0;
@@ -1203,12 +1167,11 @@ class CheckoutModel {
     let redeemable = 0;
 
     /* ===============================
-     4. REDEMPTION (variant based)
+     4. REDEMPTION (rule-based)
   =============================== */
-    const redemptionLimit = Number(row.reward_redemption_limit || 0);
-
-    if (useRewards && redemptionLimit > 0 && remainingWallet > 0) {
-      const maxAllowed = Math.floor((itemTotal * redemptionLimit) / 100);
+    if (useRewards && remainingWallet > 0) {
+      const redemption = resolveRedemption(itemTotal, rules);
+      const maxAllowed = calculateRedeemableCoins(itemTotal, redemption);
 
       redeemable = Math.min(remainingWallet, maxAllowed, itemTotal);
 
