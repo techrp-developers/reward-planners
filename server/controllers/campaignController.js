@@ -486,6 +486,73 @@ class CampaignController {
       });
     }
   }
+
+  // ========================================user==========================================
+  async getHomeCampaigns(req, res) {
+    try {
+      const data = await CampaignModel.getHomeCampaigns();
+
+      return res.json({
+        success: true,
+        data,
+      });
+    } catch (err) {
+      return res.status(err.statusCode || 500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  async getCampaigns(req, res) {
+    try {
+      const campaigns = await CampaignModel.getCampaigns(req.query);
+
+      return res.json({
+        success: true,
+        count: campaigns.length,
+        data: campaigns,
+      });
+    } catch (err) {
+      return res.status(err.statusCode || 500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  async getCampaignById(req, res) {
+    try {
+      const campaign = await CampaignModel.getCampaignById(req.params.id);
+
+      return res.json({
+        success: true,
+        data: campaign,
+      });
+    } catch (err) {
+      return res.status(err.statusCode || 500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  async getCampaignProducts(req, res) {
+    try {
+      const products = await CampaignModel.getCampaignProducts(req.params.id);
+
+      return res.json({
+        success: true,
+        count: products.length,
+        data: products,
+      });
+    } catch (err) {
+      return res.status(err.statusCode || 500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
 }
 
 module.exports = new CampaignController();

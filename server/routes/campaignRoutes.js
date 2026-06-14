@@ -57,7 +57,16 @@ router.delete(
 );
 
 // ===========================================user Routes======================================
+// Home screen
+router.get("/campaigns/home", campaignController.getHomeCampaigns);
 
+// Active campaigns list
+router.get("/campaigns", campaignController.getCampaigns);
 
+// Campaign details
+router.get("/campaigns/:id", campaignController.getCampaignById);
+
+// Campaign products
+router.get("/campaigns/:id/products", campaignController.getCampaignProducts);
 
 module.exports = router;

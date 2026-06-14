@@ -447,6 +447,158 @@ class CampaignModel {
       [campaignId, variantId],
     );
   }
+
+  // ======================================================User===================================
+  async getHomeCampaigns() {
+    const [posters] = await db.query(
+      `
+    SELECT
+      campaign_id,
+      title,
+      banner_image,
+      redirect_type,
+      redirect_id,
+      redirect_url
+    FROM campaigns
+    WHERE
+      campaign_type = 'poster'
+      AND status = 'active'
+    ORDER BY display_order
+    `,
+    );
+
+    const [flashSales] = await db.query(
+      `
+    SELECT
+      campaign_id,
+      title,
+      banner_image,
+      start_at,
+      end_at
+    FROM campaigns
+    WHERE
+      campaign_type = 'flash_sale'
+      AND status = 'active'
+      AND NOW() BETWEEN start_at AND end_at
+    ORDER BY display_order
+    `,
+    );
+
+    return {
+      posters,
+      flash_sales: flashSales,
+    };
+  }
+
+  async getCampaigns(filters = {}) {
+    let sql = `
+    SELECT
+      campaign_id,
+      title,
+      campaign_type,
+      banner_image,
+      start_at,
+      end_at
+    FROM campaigns
+    WHERE
+      status = 'active'
+  `;
+
+    const values = [];
+
+    if (filters.campaign_type) {
+      sql += `
+      AND campaign_type = ?
+    `;
+      values.push(filters.campaign_type);
+    }
+
+    sql += `
+    ORDER BY display_order
+  `;
+
+    const [rows] = await db.query(sql, values);
+
+    return rows;
+  }
+
+  async getCampaignById(campaignId) {
+    const [rows] = await db.query(
+      `
+    SELECT
+      campaign_id,
+      title,
+      campaign_type,
+      banner_image,
+      start_at,
+      end_at,
+      redirect_type,
+      redirect_id,
+      redirect_url
+    FROM campaigns
+    WHERE
+      campaign_id = ?
+      AND status = 'active'
+    `,
+      [campaignId],
+    );
+
+    if (!rows.length) {
+      const error = new Error("Campaign not found");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    return rows[0];
+  }
+
+  async getCampaignProducts(campaignId) {
+    await this.getCampaignById(campaignId);
+
+    const [rows] = await db.query(
+      `
+    SELECT
+      ci.id,
+
+      ep.product_id,
+      ep.product_name,
+      ep.product_slug,
+
+      pv.variant_id,
+      pv.sku,
+      pv.variant_attributes,
+
+      pv.mrp,
+
+      pv.sale_price AS original_price,
+
+      CASE
+        WHEN ci.offer_price IS NOT NULL
+          AND ci.offer_price > 0
+        THEN ci.offer_price
+        ELSE pv.sale_price
+      END AS final_price,
+
+      pv.stock
+
+    FROM campaign_items ci
+
+    JOIN eproducts ep
+      ON ep.product_id = ci.product_id
+
+    JOIN product_variants pv
+      ON pv.variant_id = ci.variant_id
+
+    WHERE ci.campaign_id = ?
+      AND ep.status = 'approved'
+      AND ep.is_visible = 1
+      AND pv.is_visible = 1
+    `,
+      [campaignId],
+    );
+
+    return rows;
+  }
 }
 
 module.exports = new CampaignModel();
