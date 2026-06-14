@@ -9,13 +9,14 @@ const wareHouseRoutes = require("./warehouseRoutes");
 const categoryRoutes = require("./categoryRoutes");
 const subCategoryRoutes = require("./subCategoryRoutes");
 const subSubCategoryRoutes = require("./subSubCategoryRoutes");
-const offerRoutes = require("./offerRoute");
-const flashRoutes = require("./flashSaleRoute");
 const orderRoutes = require("./orderRoutes");
 const rewardRoutes = require("./rewardRoutes");
 const logisticRoutes = require("./logisticsRoute");
 const companyRoutes = require("./companyRoute");
 const maintenanceRoutes = require("./maintenanceRoute");
+const offerRoutes = require("./offerRoute");
+const flashRoutes = require("./flashSaleRoute");
+const campaignRoutes = require("./campaignRoutes");
 
 // dashboard Routes
 router.use("/auth", authRoutes);
@@ -27,12 +28,13 @@ router.use("/category", categoryRoutes);
 router.use("/warehouse", wareHouseRoutes);
 router.use("/subcategory", subCategoryRoutes);
 router.use("/subsubcategory", subSubCategoryRoutes);
-router.use("/offer", offerRoutes);
-router.use("/flash", flashRoutes);
 router.use("/order", orderRoutes);
 router.use("/reward", rewardRoutes);
 router.use("/logistics", logisticRoutes);
 router.use("/company", companyRoutes);
 router.use("/maintenance", maintenanceRoutes);
+router.use("/offer", offerRoutes);
+router.use("/flash", flashRoutes);
+router.use("/campaign", campaignRoutes);
 
 module.exports = router;
