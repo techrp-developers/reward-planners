@@ -19,30 +19,29 @@ const ALLOWED_REDIRECT_TYPES = [
   "external_url",
 ];
 
+const validateId = (id, fieldName = "id") => {
+  if (!Number.isInteger(Number(id))) {
+    const err = new Error(`Invalid ${fieldName}`);
+    err.statusCode = 400;
+    throw err;
+  }
+};
+
+const validateRedirect = (redirect_type, redirect_id, redirect_url) => {
+  if (redirect_type === "external_url" && !redirect_url) {
+    const err = new Error("redirect_url is required");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (redirect_type && redirect_type !== "external_url" && !redirect_id) {
+    const err = new Error("redirect_id is required");
+    err.statusCode = 400;
+    throw err;
+  }
+};
+
 class CampaignController {
-  // validation
-  validateId(id, fieldName = "id") {
-    if (!Number.isInteger(Number(id))) {
-      const err = new Error(`Invalid ${fieldName}`);
-      err.statusCode = 400;
-      throw err;
-    }
-  }
-
-  validateRedirect(redirect_type, redirect_id, redirect_url) {
-    if (redirect_type === "external_url" && !redirect_url) {
-      const err = new Error("redirect_url is required");
-      err.statusCode = 400;
-      throw err;
-    }
-
-    if (redirect_type && redirect_type !== "external_url" && !redirect_id) {
-      const err = new Error("redirect_id is required");
-      err.statusCode = 400;
-      throw err;
-    }
-  }
-
   // ==========================
   // Create Campaign
   // ==========================
@@ -109,7 +108,7 @@ class CampaignController {
         });
       }
 
-      this.validateRedirect(redirect_type, redirect_id, redirect_url);
+      validateRedirect(redirect_type, redirect_id, redirect_url);
 
       if (display_order !== undefined && Number(display_order) < 0) {
         return res.status(400).json({
@@ -173,7 +172,7 @@ class CampaignController {
   // ==========================
   async getCampaignById(req, res) {
     try {
-      this.validateId(req.params.id, "campaign id");
+      validateId(req.params.id, "campaign id");
 
       const campaign = await CampaignModel.getCampaignById(req.params.id);
 
@@ -203,7 +202,7 @@ class CampaignController {
     try {
       const { id } = req.params;
 
-      this.validateId(id, "campaign id");
+      validateId(id, "campaign id");
 
       const { campaign_type, status, redirect_type, start_at, end_at } =
         req.body;
@@ -250,7 +249,7 @@ class CampaignController {
         });
       }
 
-      this.validateRedirect(
+      validateRedirect(
         req.body.redirect_type,
         req.body.redirect_id,
         req.body.redirect_url,
@@ -297,7 +296,7 @@ class CampaignController {
         });
       }
 
-      this.validateId(id, "campaign id");
+      validateId(id, "campaign id");
 
       await CampaignModel.updateStatus(id, status);
 
@@ -318,7 +317,7 @@ class CampaignController {
   // ==========================
   async deleteCampaign(req, res) {
     try {
-      this.validateId(req.params.id, "campaign id");
+      validateId(req.params.id, "campaign id");
       await CampaignModel.deleteCampaign(req.params.id);
 
       return res.json({
@@ -338,7 +337,7 @@ class CampaignController {
   // ==========================
   async getCampaignItems(req, res) {
     try {
-      this.validateId(req.params.id, "campaign id");
+      validateId(req.params.id, "campaign id");
 
       const items = await CampaignModel.getCampaignItems(req.params.id);
 
@@ -357,7 +356,7 @@ class CampaignController {
   //   Available variants
   async getAvailableVariants(req, res) {
     try {
-      this.validateId(req.params.id, "campaign id");
+      validateId(req.params.id, "campaign id");
 
       const variants = await CampaignModel.getAvailableVariants(req.params.id);
 
@@ -385,7 +384,7 @@ class CampaignController {
         });
       }
 
-      this.validateId(req.params.id, "campaign id");
+      validateId(req.params.id, "campaign id");
 
       if (!variant_ids.every((id) => Number.isInteger(Number(id)))) {
         return res.status(400).json({
@@ -414,8 +413,8 @@ class CampaignController {
       const { id, variantId } = req.params;
       const { offer_price, max_qty } = req.body;
 
-      this.validateId(id, "campaign id");
-      this.validateId(variantId, "variant id");
+      validateId(id, "campaign id");
+      validateId(variantId, "variant id");
 
       if (offer_price !== undefined && isNaN(Number(offer_price))) {
         return res.status(400).json({
@@ -467,8 +466,8 @@ class CampaignController {
   //   remove campaign items
   async removeCampaignItem(req, res) {
     try {
-      this.validateId(req.params.id, "campaign id");
-      this.validateId(req.params.variantId, "variant id");
+      validateId(req.params.id, "campaign id");
+      validateId(req.params.variantId, "variant id");
 
       await CampaignModel.removeCampaignItem(
         req.params.id,
