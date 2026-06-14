@@ -319,56 +319,6 @@ class RewardController {
       });
     }
   }
-
-  // APPLY REWARD (CALL THIS IN ORDER FLOW)
-  async applyReward(req, res) {
-    try {
-      const { user_id, product_id, variant_id, order_id, order_amount } =
-        req.body;
-
-      if (!user_id || !product_id || !order_id || !order_amount) {
-        return res.status(400).json({
-          success: false,
-          message: "Missing required fields",
-        });
-      }
-
-      // Fetch category + subcategory
-      const [product] = await db.execute(
-        `SELECT category_id, subcategory_id 
-       FROM eproducts 
-       WHERE product_id = ?`,
-        [product_id],
-      );
-
-      if (!product.length) {
-        return res.status(404).json({
-          success: false,
-          message: "Product not found",
-        });
-      }
-
-      const { category_id, subcategory_id } = product[0];
-
-      const result = await RewardService.processOrderReward({
-        user_id,
-        product_id,
-        variant_id,
-        order_id,
-        order_amount,
-        category_id,
-        subcategory_id,
-      });
-
-      return res.json({
-        success: true,
-        message: "Reward processed",
-        data: result,
-      });
-    } catch (err) {
-      return res.status(500).json({ success: false, message: err.message });
-    }
-  }
 }
 
 module.exports = new RewardController();
