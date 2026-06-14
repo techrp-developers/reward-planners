@@ -490,7 +490,7 @@ class CampaignModel {
     };
   }
 
-  async getCampaigns(filters = {}) {
+  async getUserCampaigns(filters = {}) {
     let sql = `
     SELECT
       campaign_id,
@@ -522,7 +522,7 @@ class CampaignModel {
     return rows;
   }
 
-  async getCampaignById(campaignId) {
+  async getUserCampaignById(campaignId) {
     const [rows] = await db.query(
       `
     SELECT

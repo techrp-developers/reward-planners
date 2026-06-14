@@ -61,10 +61,10 @@ router.delete(
 router.get("/campaigns/home", campaignController.getHomeCampaigns);
 
 // Active campaigns list
-router.get("/campaigns", campaignController.getCampaigns);
+router.get("/campaigns", campaignController.getUserCampaigns);
 
 // Campaign details
-router.get("/campaigns/:id", campaignController.getCampaignById);
+router.get("/campaigns/:id", campaignController.getUserCampaignById);
 
 // Campaign products
 router.get("/campaigns/:id/products", campaignController.getCampaignProducts);

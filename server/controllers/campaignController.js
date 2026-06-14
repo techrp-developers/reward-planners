@@ -503,9 +503,9 @@ class CampaignController {
     }
   }
 
-  async getCampaigns(req, res) {
+  async getUserCampaigns(req, res) {
     try {
-      const campaigns = await CampaignModel.getCampaigns(req.query);
+      const campaigns = await CampaignModel.getUserCampaigns(req.query);
 
       return res.json({
         success: true,
@@ -520,9 +520,9 @@ class CampaignController {
     }
   }
 
-  async getCampaignById(req, res) {
+  async getUserCampaignById(req, res) {
     try {
-      const campaign = await CampaignModel.getCampaignById(req.params.id);
+      const campaign = await CampaignModel.getUserCampaignById(req.params.id);
 
       return res.json({
         success: true,
