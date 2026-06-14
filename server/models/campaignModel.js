@@ -488,6 +488,23 @@ class CampaignModel {
     `,
     );
 
+    const [dashboardPosters] = await db.query(
+      `
+      SELECT
+        campaign_id,
+        title,
+        banner_image,
+        redirect_type,
+        redirect_id,
+        redirect_url
+      FROM campaigns
+      WHERE
+        campaign_type = 'dashboard_poster'
+        AND status = 'active'
+      ORDER BY display_order
+      `,
+    );
+
     const [flashSales] = await db.query(
       `
     SELECT
@@ -507,6 +524,10 @@ class CampaignModel {
 
     return {
       posters: posters.map((item) => ({
+        ...item,
+        banner_image: getPublicUrl(item.banner_image),
+      })),
+      dashboard_posters: dashboardPosters.map((item) => ({
         ...item,
         banner_image: getPublicUrl(item.banner_image),
       })),
