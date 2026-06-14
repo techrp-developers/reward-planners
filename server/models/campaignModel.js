@@ -562,7 +562,6 @@ class CampaignModel {
 
       ep.product_id,
       ep.product_name,
-      ep.product_slug,
 
       pv.variant_id,
       pv.sku,

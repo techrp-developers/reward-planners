@@ -4,9 +4,23 @@ const campaignController = require("../controllers/campaignController");
 const { uploadFlashBanner } = require("../middleware/mediaUpload/flashUpload");
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 
-// =================================Admin Routes============================================
+// ================================= USER ROUTES =================================
 
-// create campaign
+// Home screen
+router.get("/home", campaignController.getHomeCampaigns);
+
+// Active campaigns
+router.get("/list", campaignController.getUserCampaigns);
+
+// Campaign details
+router.get("/details/:id", campaignController.getUserCampaignById);
+
+// Campaign products
+router.get("/:id/products", campaignController.getCampaignProducts);
+
+// ================================= ADMIN ROUTES =================================
+
+// Create campaign
 router.post(
   "/campaigns",
   uploadFlashBanner.single("banner_image"),
@@ -16,57 +30,44 @@ router.post(
 // Get all campaigns
 router.get("/campaigns", campaignController.getCampaigns);
 
-// Campaign by Id
+// Campaign details
 router.get("/campaigns/:id", campaignController.getCampaignById);
 
-// Update a campaign
+// Update campaign
 router.put(
   "/campaigns/:id",
   uploadFlashBanner.single("banner_image"),
   campaignController.updateCampaign,
 );
 
-// update campaign status
+// Update status
 router.patch("/campaigns/:id/status", campaignController.updateStatus);
 
-// Delete a campaign
+// Delete campaign
 router.delete("/campaigns/:id", campaignController.deleteCampaign);
 
-// Campaign Products
+// Campaign items
 router.get("/campaigns/:id/items", campaignController.getCampaignItems);
 
-// get available variants
+// Available variants
 router.get(
   "/campaigns/:id/available-variants",
   campaignController.getAvailableVariants,
 );
 
-// add items to campaign
+// Add items
 router.post("/campaigns/:id/items", campaignController.addCampaignItems);
 
-// update campaign items
+// Update item
 router.put(
   "/campaigns/:id/items/:variantId",
   campaignController.updateCampaignItem,
 );
 
-// delete campaign items
+// Delete item
 router.delete(
   "/campaigns/:id/items/:variantId",
   campaignController.removeCampaignItem,
 );
-
-// ===========================================user Routes======================================
-// Home screen
-router.get("/campaigns/home", campaignController.getHomeCampaigns);
-
-// Active campaigns list
-router.get("/campaigns", campaignController.getUserCampaigns);
-
-// Campaign details
-router.get("/campaigns/:id", campaignController.getUserCampaignById);
-
-// Campaign products
-router.get("/campaigns/:id/products", campaignController.getCampaignProducts);
 
 module.exports = router;
