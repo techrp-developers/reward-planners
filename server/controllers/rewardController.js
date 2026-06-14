@@ -20,6 +20,9 @@ class RewardController {
         priority = 1,
         is_stackable = 0,
         expiry_days = 90,
+        redemption_type = null,
+        redemption_value = null,
+        max_redemption_amount = null,
       } = req.body;
 
       if (!reward_type || !reward_value || !source_type) {
@@ -31,8 +34,8 @@ class RewardController {
 
       const [result] = await db.execute(
         `INSERT INTO reward_rules 
-      (name, reward_type, reward_value, max_reward, min_order_amount, max_order_amount, source_type, description, start_date, end_date, priority, is_stackable, expiry_days)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (name, reward_type, reward_value, max_reward, min_order_amount, max_order_amount, source_type, description, start_date, end_date, priority, is_stackable, expiry_days,redemption_type, redemption_value, max_redemption_amount)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           name,
           reward_type,
@@ -47,6 +50,9 @@ class RewardController {
           priority,
           is_stackable,
           expiry_days,
+          redemption_type,
+          redemption_value,
+          max_redemption_amount,
         ],
       );
 
@@ -131,6 +137,9 @@ class RewardController {
         priority,
         is_stackable,
         expiry_days,
+        redemption_type,
+        redemption_value,
+        max_redemption_amount,
       } = req.body;
 
       const [result] = await db.execute(
@@ -149,7 +158,10 @@ class RewardController {
         end_date = ?,
         priority = ?,
         is_stackable = ?,
-        expiry_days = ?
+        expiry_days = ?,
+        redemption_type = ?,
+        redemption_value = ?,
+        max_redemption_amount = ?
        WHERE reward_rule_id = ?`,
         [
           name,
@@ -166,6 +178,9 @@ class RewardController {
           priority,
           is_stackable,
           expiry_days,
+          redemption_type,
+          redemption_value,
+          max_redemption_amount,
           id,
         ],
       );
