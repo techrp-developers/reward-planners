@@ -3,6 +3,8 @@ const router = express.Router();
 const RewardController = require("../controllers/rewardController");
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 
+
+// ===================================================Reward Rules===================================
 // CREATE RULES
 router.post(
   "/create-rule",
@@ -43,6 +45,7 @@ router.delete(
   RewardController.deleteRewardRule,
 );
 
+// =================================================Product mapping to rules================================
 // PRODUCT MAPPING
 router.post(
   "/product-reward-settings",
