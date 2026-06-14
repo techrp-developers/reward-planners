@@ -1,8 +1,8 @@
 const CampaignModel = require("../models/campaignModel");
 const fs = require("fs");
 const path = require("path");
-const { uploadToR2 } = require("../../../../utils/r2upload");
-const { deleteFromR2 } = require("../../../../utils/r2delete");
+const { uploadToR2 } = require("../utils/r2upload");
+const { deleteFromR2 } = require("../utils/r2delete");
 
 const ALLOWED_CAMPAIGN_TYPES = [
   "poster",
