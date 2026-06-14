@@ -138,6 +138,10 @@ class CampaignController {
 
       if (req.file) {
         if (!req.file.mimetype.startsWith("image/")) {
+          if (fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+          }
+
           return res.status(400).json({
             success: false,
             message: "Invalid image file",
@@ -156,18 +160,27 @@ class CampaignController {
 
         await uploadToR2(fileBuffer, banner_image, req.file.mimetype);
 
-        fs.unlinkSync(req.file.path);
-
         await CampaignModel.updateCampaignImage(campaignId, banner_image);
+
+        if (fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
       }
 
-      return res.json({
+      return res.status(201).json({
         success: true,
         campaign_id: campaignId,
         message: "Campaign created successfully",
+        data: {
+          banner_image,
+        },
       });
     } catch (err) {
       console.error(err);
+
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
 
       return res.status(err.statusCode || 500).json({
         success: false,
@@ -360,7 +373,7 @@ class CampaignController {
       });
     }
   }
-  
+
   // ==========================
   // Status
   // ==========================
