@@ -1,4 +1,9 @@
 const db = require("../config/database");
+const CDN_BASE_URL = "https://cdn.rewardplanners.com";
+function getPublicUrl(path) {
+  if (!path) return null;
+  return `${CDN_BASE_URL}/${path}`;
+}
 
 class CampaignModel {
   //   =======================Helper=================================
@@ -115,7 +120,10 @@ class CampaignModel {
 
     const [rows] = await db.query(sql, values);
 
-    return rows;
+    return rows.map((item) => ({
+      ...item,
+      banner_image: getPublicUrl(item.banner_image),
+    }));
   }
 
   async getCampaignById(campaignId) {
@@ -128,7 +136,10 @@ class CampaignModel {
       [campaignId],
     );
 
-    return rows[0];
+    return {
+      ...rows[0],
+      banner_image: getPublicUrl(rows[0].banner_image),
+    };
   }
 
   async updateCampaign(id, data, banner_image) {
@@ -495,8 +506,14 @@ class CampaignModel {
     );
 
     return {
-      posters,
-      flash_sales: flashSales,
+      posters: posters.map((item) => ({
+        ...item,
+        banner_image: getPublicUrl(item.banner_image),
+      })),
+      flash_sales: flashSales.map((item) => ({
+        ...item,
+        banner_image: getPublicUrl(item.banner_image),
+      })),
     };
   }
 
@@ -559,7 +576,10 @@ class CampaignModel {
       throw error;
     }
 
-    return rows[0];
+    return {
+      ...rows[0],
+      banner_image: getPublicUrl(rows[0].banner_image),
+    };
   }
 
   async getCampaignProducts(campaignId) {
