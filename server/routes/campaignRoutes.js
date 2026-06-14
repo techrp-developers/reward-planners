@@ -4,20 +4,6 @@ const campaignController = require("../controllers/campaignController");
 const { uploadFlashBanner } = require("../middleware/mediaUpload/flashUpload");
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 
-// ================================= USER ROUTES =================================
-
-// Home screen
-router.get("/home", campaignController.getHomeCampaigns);
-
-// Active campaigns
-router.get("/list", campaignController.getUserCampaigns);
-
-// Campaign details
-router.get("/details/:id", campaignController.getUserCampaignById);
-
-// Campaign products
-router.get("/:id/products", campaignController.getCampaignProducts);
-
 // ================================= ADMIN ROUTES =================================
 
 // Create campaign
