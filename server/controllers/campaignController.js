@@ -10,6 +10,7 @@ const ALLOWED_CAMPAIGN_TYPES = [
   "featured",
   "seasonal",
   "collection",
+  "dashboard_poster"
 ];
 
 const ALLOWED_STATUSES = ["draft", "active", "archived"];
