@@ -44,6 +44,16 @@ class CampaignModel {
   }
 
   //   =================================Campaign===================================
+  async updateCampaignImage(campaignId, bannerImage) {
+    await db.query(
+      `
+    UPDATE campaigns
+    SET banner_image = ?
+    WHERE campaign_id = ?
+    `,
+      [bannerImage, campaignId],
+    );
+  }
 
   async createCampaign(data) {
     const [result] = await db.query(

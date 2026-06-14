@@ -1,4 +1,8 @@
 const CampaignModel = require("../models/campaignModel");
+const fs = require("fs");
+const path = require("path");
+const { uploadToR2 } = require("../../../../utils/r2upload");
+const { deleteFromR2 } = require("../../../../utils/r2delete");
 
 const ALLOWED_CAMPAIGN_TYPES = [
   "poster",
@@ -117,12 +121,10 @@ class CampaignController {
         });
       }
 
-      const banner_image = req.file ? `/campaigns/${req.file.filename}` : null;
-
       const campaignId = await CampaignModel.createCampaign({
         title,
         campaign_type,
-        banner_image,
+        banner_image: null,
         start_at,
         end_at,
         redirect_type,
@@ -131,6 +133,33 @@ class CampaignController {
         display_order,
         status,
       });
+
+      let banner_image = null;
+
+      if (req.file) {
+        if (!req.file.mimetype.startsWith("image/")) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid image file",
+          });
+        }
+
+        const fileBuffer = fs.readFileSync(req.file.path);
+
+        const extension = path.extname(req.file.originalname);
+
+        const filename = `campaign-${Date.now()}-${Math.random()
+          .toString(36)
+          .substring(2, 8)}${extension}`;
+
+        banner_image = `public/campaigns/${campaignId}/${filename}`;
+
+        await uploadToR2(fileBuffer, banner_image, req.file.mimetype);
+
+        fs.unlinkSync(req.file.path);
+
+        await CampaignModel.updateCampaignImage(campaignId, banner_image);
+      }
 
       return res.json({
         success: true,
@@ -265,22 +294,73 @@ class CampaignController {
         });
       }
 
-      const banner_image = req.file ? `/campaigns/${req.file.filename}` : null;
+      const existing = await CampaignModel.getCampaignById(id);
 
-      await CampaignModel.updateCampaign(id, req.body, banner_image);
+      if (!existing) {
+        return res.status(404).json({
+          success: false,
+          message: "Campaign not found",
+        });
+      }
+
+      let bannerImage = existing.banner_image;
+
+      if (req.file) {
+        if (!req.file.mimetype.startsWith("image/")) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid image file",
+          });
+        }
+
+        const fileBuffer = fs.readFileSync(req.file.path);
+
+        const extension = path.extname(req.file.originalname);
+
+        const filename = `campaign-${Date.now()}-${Math.random()
+          .toString(36)
+          .substring(2, 8)}${extension}`;
+
+        bannerImage = `public/campaigns/${id}/${filename}`;
+
+        await uploadToR2(fileBuffer, bannerImage, req.file.mimetype);
+
+        if (existing.banner_image) {
+          try {
+            await deleteFromR2(existing.banner_image);
+          } catch (err) {
+            console.error("OLD CAMPAIGN IMAGE DELETE ERROR", err);
+          }
+        }
+
+        if (fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
+      }
+
+      await CampaignModel.updateCampaign(id, req.body, bannerImage);
 
       return res.json({
         success: true,
         message: "Campaign updated successfully",
+        data: {
+          banner_image: bannerImage,
+        },
       });
     } catch (err) {
+      console.error("UPDATE CAMPAIGN ERROR:", err);
+
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+
       return res.status(err.statusCode || 500).json({
         success: false,
         message: err.message,
       });
     }
   }
-
+  
   // ==========================
   // Status
   // ==========================
