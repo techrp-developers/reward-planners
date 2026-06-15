@@ -2,79 +2,12 @@ const db = require("../../../../config/database");
 const RewardModel = require("../../../../models/rewardModel");
 const fs = require("fs");
 const path = require("path");
+const { calculateReward, resolveRedemption, calculateRedeemableCoins } = require("../utils/rewardCalculate")
 
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
 function getPublicUrl(path) {
   if (!path) return null;
   return `${CDN_BASE_URL}/${path}`;
-}
-
-function calculateReward(orderAmount, rules) {
-  if (!rules || !rules.length) return 0;
-
-  const now = new Date();
-
-  // 1. filter valid rules
-  const validRules = rules.filter((rule) => {
-    if (!rule.is_active) return false;
-
-    if (rule.start_date && new Date(rule.start_date) > now) return false;
-    if (rule.end_date && new Date(rule.end_date) < now) return false;
-
-    if (orderAmount < rule.min_order_amount) return false;
-    if (rule.max_order_amount && orderAmount > rule.max_order_amount)
-      return false;
-
-    return true;
-  });
-
-  if (!validRules.length) return 0;
-
-  // 2. split rules
-  const stackable = validRules.filter((r) => r.is_stackable);
-  const nonStackable = validRules.filter((r) => !r.is_stackable);
-
-  let applicable = [];
-
-  // 3. pick highest priority non-stackable
-  if (nonStackable.length) {
-    nonStackable.sort((a, b) => a.priority - b.priority);
-    applicable.push(nonStackable[0]);
-  }
-
-  // 4. add stackable
-  applicable.push(...stackable);
-
-  // 5. remove duplicates
-  const seen = new Set();
-  applicable = applicable.filter((r) => {
-    if (seen.has(r.reward_rule_id)) return false;
-    seen.add(r.reward_rule_id);
-    return true;
-  });
-
-  // 6. calculate reward
-  let total = 0;
-
-  for (const rule of applicable) {
-    if (!rule.can_earn_reward) continue;
-
-    let reward = 0;
-
-    if (rule.reward_type === "percentage") {
-      reward = (orderAmount * rule.reward_value) / 100;
-    } else {
-      reward = rule.reward_value;
-    }
-
-    if (rule.max_reward) {
-      reward = Math.min(reward, rule.max_reward);
-    }
-
-    total += Math.floor(reward);
-  }
-
-  return total;
 }
 
 class ProductModel {
