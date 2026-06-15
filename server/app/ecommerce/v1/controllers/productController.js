@@ -606,7 +606,6 @@ class ProductController {
   //         p.brand_name,
   //         v.mrp,
   //         v.sale_price,
-  //         v.reward_redemption_limit,
 
   //         GROUP_CONCAT(
   //           DISTINCT CONCAT(

@@ -62,7 +62,6 @@ class ProductModel {
   //         ssc.name AS sub_subcategory_name,
   //         v.mrp,
   //         v.sale_price,
-  //         v.reward_redemption_limit,
 
   //         GROUP_CONCAT(
   //           DISTINCT CONCAT(
@@ -153,7 +152,6 @@ class ProductModel {
   //         created_at: row.created_at,
   //         mrp: row.mrp,
   //         sale_price: row.sale_price,
-  //         reward_redemption_limit: row.reward_redemption_limit,
   //         images,
   //       };
   //     });
@@ -769,7 +767,6 @@ class ProductModel {
   //       ssc.name AS sub_subcategory_name,
   //       v.mrp,
   //       v.sale_price,
-  //       v.reward_redemption_limit,
 
   //       GROUP_CONCAT(
   //         DISTINCT CONCAT(
@@ -845,7 +842,6 @@ class ProductModel {
   //         rating_count: row.rating_count,
   //         mrp: row.mrp,
   //         sale_price: row.sale_price,
-  //         reward_redemption_limit: row.reward_redemption_limit,
   //         images,
   //       };
   //     });

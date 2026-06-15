@@ -548,7 +548,6 @@ class ProductModel {
         v.variant_attributes,
         v.manufacturing_date,
         v.expiry_date,
-        v.reward_redemption_limit,
         v.created_at
       FROM product_variants v
       WHERE v.product_id = ?
