@@ -1,5 +1,10 @@
 const db = require("../../../../config/database");
 const CampaignModel = require("../../../../models/campaignModel");
+const CDN_BASE_URL = "https://cdn.rewardplanners.com";
+function getPublicUrl(path) {
+  if (!path) return null;
+  return `${CDN_BASE_URL}/${path}`;
+}
 
 class CampaignController {
   // ========================================user==========================================
@@ -56,10 +61,19 @@ class CampaignController {
     try {
       const products = await CampaignModel.getCampaignProducts(req.params.id);
 
+      const data = products.map((product) => {
+        const { image_url, ...rest } = product;
+
+        return {
+          ...rest,
+          image: image_url ? `${CDN_BASE_URL}/${image_url}` : null,
+        };
+      });
+
       return res.json({
         success: true,
         count: products.length,
-        data: products,
+        data,
       });
     } catch (err) {
       return res.status(err.statusCode || 500).json({

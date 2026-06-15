@@ -629,7 +629,9 @@ class CampaignModel {
         ELSE pv.sale_price
       END AS final_price,
 
-      pv.stock
+      pv.stock,
+      
+      pi.image_url
 
     FROM campaign_items ci
 
@@ -638,6 +640,19 @@ class CampaignModel {
 
     JOIN product_variants pv
       ON pv.variant_id = ci.variant_id
+
+    LEFT JOIN (
+      SELECT
+        product_id,
+        MIN(image_id) AS image_id
+      FROM product_images
+      WHERE type = 'gallery'
+      GROUP BY product_id
+    ) pim
+      ON pim.product_id = ep.product_id
+
+    LEFT JOIN product_images pi
+    ON pi.product_id = ep.product_id
 
     WHERE ci.campaign_id = ?
       AND ep.status = 'approved'
