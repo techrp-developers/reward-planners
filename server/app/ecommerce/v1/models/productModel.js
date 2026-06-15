@@ -1487,7 +1487,7 @@ class ProductModel {
         p.category_id,
         p.subcategory_id,
         p.product_name,
-        p.is_discount_eligible
+        p.is_discount_eligible,
         p.brand_name,
         p.created_at,
         v.variant_id,
