@@ -334,11 +334,8 @@ class ProductController {
           const salePrice = Number(product.sale_price) || 0;
           const mrp = Number(product.mrp) || 0;
 
-          const redeem_limit = product.reward_redemption_limit
-            ? Number(product.reward_redemption_limit)
-            : 0;
-          const redeem_coins = Math.floor((salePrice * redeem_limit) / 100);
-          const rp_price = salePrice - redeem_coins;
+          let rewardCoins = 0;
+          let canEarn = false;
 
           /* ===============================
        CACHE KEY
@@ -358,13 +355,23 @@ class ProductController {
             rewardCache[key] = rules;
           }
 
-          let rewardCoins = 0;
-          let canEarn = false;
-
           if (rules.length) {
             rewardCoins = calculateReward(salePrice, rules);
             canEarn = rules.some((r) => r.can_earn_reward);
           }
+
+          /* ===============================
+              REDEMPTION (rule-based)
+            =============================== */
+          const redemption = resolveRedemption(salePrice, rules);
+
+          const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
+
+          const canRedeem = rules.some((r) => r.can_redeem_reward);
+
+          const redemptionEnabled = canRedeem && redeem_coins > 0;
+
+          const rp_price = salePrice - redeem_coins;
 
           const mrpDiscountPercent =
             mrp > 0 ? Math.round(((mrp - salePrice) / mrp) * 100) : 0;
@@ -381,8 +388,8 @@ class ProductController {
             price: salePrice ? `₹${salePrice}` : null,
             originalPrice: mrp ? `₹${mrp}` : null,
             discount: `${mrpDiscountPercent}%`,
-            rp_price: redeem_limit > 0 ? `₹${rp_price}` : 0,
-            redeem_coins: redeem_limit > 0 ? redeem_coins : 0,
+            rp_price: redemptionEnabled ? `₹${rp_price}` : 0,
+            redeem_coins: redemptionEnabled ? redeem_coins : 0,
 
             rating: product.avg_rating,
             reviews: product.rating_count,

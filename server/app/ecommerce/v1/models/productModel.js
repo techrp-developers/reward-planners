@@ -1179,7 +1179,6 @@ class ProductModel {
         ssc.name AS sub_subcategory_name,
         v.mrp,
         v.sale_price,
-        v.reward_redemption_limit,
         v.variant_id,
 
         COALESCE(rev.avg_rating, 0) AS avg_rating,
@@ -1266,7 +1265,6 @@ class ProductModel {
           rating_count: Number(row.total_reviews),
           mrp: row.mrp,
           sale_price: row.sale_price,
-          reward_redemption_limit: row.reward_redemption_limit,
           images,
         };
       });
