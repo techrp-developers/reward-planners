@@ -974,7 +974,6 @@ class ProductModel {
         v.mrp,
         v.variant_id,
         v.sale_price,
-        v.reward_redemption_limit,
 
         GROUP_CONCAT(
           DISTINCT CONCAT(
@@ -1063,7 +1062,6 @@ class ProductModel {
           rating_count: Number(row.total_reviews),
           mrp: row.mrp,
           sale_price: row.sale_price,
-          reward_redemption_limit: row.reward_redemption_limit,
           images,
         };
       });
