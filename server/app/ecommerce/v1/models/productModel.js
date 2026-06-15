@@ -222,6 +222,7 @@ class ProductModel {
           p.brand_name,
           p.created_at,
           p.short_description,
+          p.is_discount_eligible,
 
           c.category_name,
           sc.subcategory_name,
@@ -322,6 +323,7 @@ class ProductModel {
           created_at: row.created_at,
           mrp: row.mrp,
           sale_price: row.sale_price,
+          is_discount_eligible: row.is_discount_eligible,
 
           rating: Number(row.avg_rating).toFixed(1),
           reviews: Number(row.total_reviews),
@@ -965,6 +967,7 @@ class ProductModel {
         p.category_id,
         p.subcategory_id,
         p.brand_name,
+        p.is_discount_eligible,
         COALESCE(rev.avg_rating, 0) AS avg_rating,
         COALESCE(rev.total_reviews, 0) AS total_reviews,
         p.created_at,
@@ -1062,6 +1065,7 @@ class ProductModel {
           rating_count: Number(row.total_reviews),
           mrp: row.mrp,
           sale_price: row.sale_price,
+          is_discount_eligible: row.is_discount_eligible,
           images,
         };
       });
@@ -1172,6 +1176,7 @@ class ProductModel {
         p.product_name,
         p.category_id,
         p.subcategory_id,
+        p.is_discount_eligible,
         p.brand_name,
         p.created_at,
         c.category_name,
@@ -1260,6 +1265,7 @@ class ProductModel {
           category_name: row.category_name,
           subcategory_name: row.subcategory_name,
           sub_subcategory_name: row.sub_subcategory_name,
+          is_discount_eligible: row.is_discount_eligible,
           created_at: row.created_at,
           avg_rating: Number(row.avg_rating).toFixed(1),
           rating_count: Number(row.total_reviews),
@@ -1481,6 +1487,7 @@ class ProductModel {
         p.category_id,
         p.subcategory_id,
         p.product_name,
+        p.is_discount_eligible
         p.brand_name,
         p.created_at,
         v.variant_id,
@@ -1601,6 +1608,7 @@ class ProductModel {
               row.category_id,
               row.subcategory_id,
               salePrice,
+              row.is_discount_eligible,
             );
 
             rewardCache[key] = rules;
@@ -1670,6 +1678,7 @@ class ProductModel {
         p.subcategory_id,
         p.product_name,
         p.brand_name,
+        p.is_discount_eligible,
         v.variant_id,
         v.sale_price,
         v.mrp,
@@ -1804,6 +1813,7 @@ class ProductModel {
               row.category_id,
               row.subcategory_id,
               salePrice,
+              row.is_discount_eligible,
             );
             rewardCache[key] = rules;
           }
@@ -1873,6 +1883,7 @@ class ProductModel {
         p.subcategory_id,
         p.product_name,
         p.brand_name,
+        p.is_discount_eligible,
         p.created_at,
 
         v.variant_id,
@@ -1977,6 +1988,7 @@ class ProductModel {
               row.category_id,
               row.subcategory_id,
               salePrice,
+              row.is_discount_eligible,
             );
             rewardCache[key] = rules;
           }
@@ -2048,6 +2060,7 @@ class ProductModel {
         p.subcategory_id,
         p.product_name,
         p.brand_name,
+        p.is_discount_eligible,
 
         v.variant_id,
         v.sale_price,
@@ -2158,6 +2171,7 @@ class ProductModel {
               row.category_id,
               row.subcategory_id,
               salePrice,
+              row.is_discount_eligible,
             );
             rewardCache[key] = rules;
           }
@@ -2227,6 +2241,7 @@ class ProductModel {
         p.subcategory_id,
         p.product_name,
         p.brand_name,
+        p.is_discount_eligible,
 
         v.variant_id,
         v.sale_price,
@@ -2325,6 +2340,7 @@ class ProductModel {
               row.category_id,
               row.subcategory_id,
               salePrice,
+              row.is_discount_eligible,
             );
             rewardCache[key] = rules;
           }
@@ -2395,6 +2411,7 @@ class ProductModel {
         p.subcategory_id,
         p.product_name,
         p.brand_name,
+        p.is_discount_eligible,
 
         v.variant_id,
         v.sale_price,
@@ -2495,6 +2512,7 @@ class ProductModel {
               row.category_id,
               row.subcategory_id,
               salePrice,
+              row.is_discount_eligible,
             );
             rewardCache[key] = rules;
           }
@@ -2565,7 +2583,7 @@ class ProductModel {
         p.subcategory_id,
         p.product_name,
         p.brand_name,
-
+        p.is_discount_eligible,
         v.variant_id,
         v.sale_price,
         v.mrp,
@@ -2661,6 +2679,7 @@ class ProductModel {
               row.category_id,
               row.subcategory_id,
               salePrice,
+              row.is_discount_eligible,
             );
             rewardCache[key] = rules;
           }
@@ -2731,7 +2750,7 @@ class ProductModel {
         p.subcategory_id,
         p.product_name,
         p.brand_name,
-
+        p.is_discount_eligible,
         v.variant_id,
         v.sale_price,
         v.mrp,
@@ -2814,6 +2833,7 @@ class ProductModel {
               row.category_id,
               row.subcategory_id,
               salePrice,
+              row.is_discount_eligible,
             );
             rewardCache[key] = rules;
           }

@@ -64,6 +64,7 @@ class ProductController {
               product.category_id,
               product.subcategory_id,
               salePrice,
+              product.is_discount_eligible,
             );
 
             rewardCache[key] = rules;
@@ -208,6 +209,7 @@ class ProductController {
               product.category_id,
               product.subcategory_id,
               salePrice,
+              product.is_discount_eligible,
             );
             rewardCache[key] = rules;
           }
@@ -351,6 +353,7 @@ class ProductController {
               product.category_id,
               product.subcategory_id,
               salePrice,
+              product.is_discount_eligible,
             );
             rewardCache[key] = rules;
           }
@@ -470,6 +473,7 @@ class ProductController {
               product.category_id,
               product.subcategory_id,
               salePrice,
+              product.is_discount_eligible,
             );
 
             let rewardCoins = 0;
@@ -734,6 +738,7 @@ class ProductController {
         p.product_name,
         p.category_id,
         p.subcategory_id,
+        p.is_discount_eligible,
         p.brand_name,
         v.variant_id,
         v.sale_price,
@@ -829,6 +834,7 @@ class ProductController {
               row.category_id,
               row.subcategory_id,
               salePrice,
+              row.is_discount_eligible,
             );
 
             rewardCache[key] = rules;
@@ -1285,6 +1291,7 @@ class ProductController {
             product.category_id,
             product.subcategory_id,
             salePrice,
+            product.is_discount_eligible,
           );
 
           /* ===============================
