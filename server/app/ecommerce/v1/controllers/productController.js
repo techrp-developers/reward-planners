@@ -464,19 +464,6 @@ class ProductController {
             const salePrice = Number(variant.sale_price) || 0;
             const mrp = Number(variant.mrp) || 0;
 
-            /* ===============================
-                REDEMPTION
-            =============================== */
-            const redeemPercent = Number(variant.reward_redemption_limit) || 0;
-            const redeemAmount = Math.round((salePrice * redeemPercent) / 100);
-            const finalPrice = salePrice - redeemAmount;
-
-            const mrpDiscountPercent =
-              mrp > 0 ? Math.round(((mrp - finalPrice) / mrp) * 100) : 0;
-
-            /* ===============================
-                  REWARD (FIXED)
-              =============================== */
             const rules = await RewardModel.getProductRewards(
               product.product_id,
               variant.variant_id,
@@ -493,14 +480,43 @@ class ProductController {
               canEarn = rules.some((r) => r.can_earn_reward);
             }
 
+            /* ===============================
+                REDEMPTION (rule-based)
+              =============================== */
+            const redemption = resolveRedemption(salePrice, rules);
+
+            const redemptionPercent =
+              redemption.type === "percentage"
+                ? Number(redemption.value)
+                : salePrice > 0
+                  ? Math.round((finalRedeemCoins / salePrice) * 100)
+                  : 0;
+
+            const redeem_coins = calculateRedeemableCoins(
+              salePrice,
+              redemption,
+            );
+
+            const canRedeem = rules.some((r) => r.can_redeem_reward);
+
+            const redemptionEnabled = canRedeem && redeem_coins > 0;
+
+            const finalRedeemCoins = redemptionEnabled ? redeem_coins : 0;
+
+            const finalPrice = salePrice - finalRedeemCoins;
+
+            const mrpDiscountPercent =
+              mrp > 0 ? Math.round(((mrp - salePrice) / mrp) * 100) : 0;
+
             return {
               ...variant,
               price: `₹${salePrice}`,
-              finalPrice: `₹${finalPrice}`,
+              finalPrice: redemptionEnabled ? `₹${finalPrice}` : null,
               discount: `${mrpDiscountPercent}%`,
               redemption: {
-                percent: redeemPercent,
-                amount: redeemAmount,
+                enabled: redemptionEnabled,
+                percent: redemptionPercent,
+                amount: finalRedeemCoins,
               },
               rating: product.rating,
               reviews: product.reviews,
