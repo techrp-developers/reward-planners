@@ -1262,42 +1262,67 @@ class ProductController {
         offset,
       });
 
-      const processedProducts = products.map((product) => {
-        const imagePath =
-          product.images && product.images.length
-            ? product.images[0].image_url
+      const processedProducts = await Promise.all(
+        products.map(async (product) => {
+          const imagePath =
+            product.images && product.images.length
+              ? product.images[0].image_url
+              : null;
+
+          const mainImage = imagePath
+            ? `${CDN_BASE_URL}/${imagePath}?v=${product.updated_at || Date.now()}`
             : null;
 
-        const mainImage = imagePath
-          ? `${CDN_BASE_URL}/${imagePath}?v=${product.updated_at || Date.now()}`
-          : null;
+          const salePrice = product.sale_price ? Number(product.sale_price) : 0;
 
-        const salePrice = product.sale_price ? Number(product.sale_price) : 0;
+          const mrp = product.mrp ? Number(product.mrp) : 0;
 
-        const discountPercent = product.reward_redemption_limit
-          ? Number(product.reward_redemption_limit)
-          : 0;
+          /* ===============================
+       REWARD RULES
+    =============================== */
+          const rules = await RewardModel.getProductRewards(
+            product.product_id,
+            product.variant_id,
+            product.category_id,
+            product.subcategory_id,
+            salePrice,
+          );
 
-        const discountAmount = Math.round((salePrice * discountPercent) / 100);
+          /* ===============================
+       REDEMPTION
+    =============================== */
+          const redemption = resolveRedemption(salePrice, rules);
 
-        const finalPrice = salePrice - discountAmount;
+          const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
 
-        const mrp = product.mrp ? Number(product.mrp) : 0;
+          const canRedeem = rules.some((r) => r.can_redeem_reward);
 
-        const mrpDiscountPercent =
-          mrp > 0 ? Math.round(((mrp - finalPrice) / mrp) * 100) : 0;
+          const redemptionEnabled = canRedeem && redeem_coins > 0;
 
-        return {
-          id: product.product_id,
-          title: product.product_name,
-          image: mainImage,
-          price: `₹${salePrice}`,
-          originalPrice: `₹${mrp}`,
-          discount: `${mrpDiscountPercent}%`,
-          pointsPrice: `₹${finalPrice}`,
-          points: discountAmount,
-        };
-      });
+          const finalRedeemCoins = redemptionEnabled ? redeem_coins : 0;
+
+          const finalPrice = salePrice - finalRedeemCoins;
+
+          const mrpDiscountPercent =
+            mrp > 0 ? Math.round(((mrp - salePrice) / mrp) * 100) : 0;
+
+          return {
+            id: product.product_id,
+            title: product.product_name,
+
+            image: mainImage,
+
+            price: `₹${salePrice}`,
+            originalPrice: `₹${mrp}`,
+
+            discount: `${mrpDiscountPercent}%`,
+
+            pointsPrice: redemptionEnabled ? `₹${finalPrice}` : null,
+
+            points: finalRedeemCoins,
+          };
+        }),
+      );
 
       return res.json({
         success: true,
