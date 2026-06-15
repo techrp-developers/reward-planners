@@ -119,7 +119,10 @@ class RewardModel {
     category_id,
     subcategory_id,
     order_amount,
+    isDiscountEligible = true,
   ) {
+    if (!isDiscountEligible) return [];
+
     const [rows] = await db.execute(
       `
     SELECT prs.*, rr.*
