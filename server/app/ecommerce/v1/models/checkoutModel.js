@@ -79,7 +79,8 @@ class CheckoutModel {
           v.height,
           p.vendor_id,
           p.category_id,
-          p.subcategory_id
+          p.subcategory_id,
+          p.is_discount_eligible
 
         FROM cart_items ci
         JOIN product_variants v ON ci.variant_id = v.variant_id
@@ -141,6 +142,7 @@ class CheckoutModel {
             item.category_id,
             item.subcategory_id,
             itemTotal,
+            item.is_discount_eligible,
           );
           rewardCache[key] = rules;
         }
@@ -518,7 +520,8 @@ class CheckoutModel {
 
         p.vendor_id,
         p.category_id,
-        p.subcategory_id
+        p.subcategory_id,
+        p.is_discount_eligible
 
       FROM product_variants v
       JOIN eproducts p ON v.product_id = p.product_id
@@ -543,6 +546,7 @@ class CheckoutModel {
         item.category_id,
         item.subcategory_id,
         itemTotal,
+        item.is_discount_eligible,
       );
 
       let redeemable = 0;
@@ -815,6 +819,7 @@ class CheckoutModel {
       p.is_returnable,
       p.is_replaceable,
       p.return_window_days,
+      p.is_discount_eligible,
 
       v.variant_id,
       v.mrp,
@@ -866,6 +871,7 @@ class CheckoutModel {
         title: row.product_name,
         image: getPublicUrl(imagePath),
 
+        is_discount_eligible: row.is_discount_eligible,
         is_returnable: row.is_returnable,
         return_window: row.return_window_days,
         is_replaceable: row.is_replaceable,
@@ -912,6 +918,7 @@ class CheckoutModel {
           item.category_id,
           item.subcategory_id,
           itemTotal,
+          item.is_discount_eligible,
         );
         rewardCache[key] = rules;
       }
@@ -1125,6 +1132,7 @@ class CheckoutModel {
       p.is_returnable,
       p.is_replaceable,
       p.return_window_days,
+      p.is_discount_eligible,
       v.variant_id,
       v.mrp,
       v.sale_price,
@@ -1166,6 +1174,7 @@ class CheckoutModel {
       row.category_id,
       row.subcategory_id,
       itemTotal,
+      row.is_discount_eligible,
     );
 
     let remainingWallet = useRewards ? walletBalance : 0;
