@@ -4,7 +4,11 @@ const db = require("../../../../config/database");
 const fs = require("fs");
 const path = require("path");
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
-const { calculateReward, resolveRedemption, calculateRedeemableCoins } = require("../utils/rewardCalculate")
+const {
+  calculateReward,
+  resolveRedemption,
+  calculateRedeemableCoins,
+} = require("../utils/rewardCalculate");
 
 class ProductController {
   // all the products
@@ -94,7 +98,7 @@ class ProductController {
             price: salePrice ? `₹${salePrice}` : null,
             originalPrice: product.mrp ? `₹${Number(product.mrp)}` : null,
 
-            rp_price: redeem_coins > 0 ? `₹${rp_price}` : 0,
+            rp_price: redemptionEnabled ? `₹${rp_price}` : null,
             redeem_coins: redemptionEnabled ? redeem_coins : 0,
 
             discount: `${mrpDiscountPercent}%`,
