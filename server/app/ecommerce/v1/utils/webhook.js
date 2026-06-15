@@ -915,6 +915,20 @@ async function processEvent(req) {
         [order_id],
       );
 
+      // await NotificationModel.create({
+      //   userId,
+      //   module: "ecommerce",
+      //   type: "order_placed",
+      //   title: "Order placed ✅",
+      //   message: "Your order is confirmed and being processed.",
+      //   icon: "order",
+      //   reference_type: "order",
+      //   reference_id: orderId,
+      //   action_url: `/orders/order-details/${orderId}`,
+      //   metadata: { company_id: companyId },
+      //   priority: "normal",
+      // });
+
       await conn.commit();
 
       processShipmentsAfterPayment(order_id).catch((err) => {

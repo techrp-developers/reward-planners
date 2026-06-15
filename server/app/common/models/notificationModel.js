@@ -6,7 +6,7 @@ class NotificationModel {
   ================================= */
   async create(data) {
     const {
-      user_id,
+      userId,
       module,
       type,
       title,
@@ -38,18 +38,18 @@ class NotificationModel {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
-        user_id,
+        userId,
         module,
         type,
         title,
         message,
         icon || null,
         reference_type || "none",
-        reference_id || null,
+        reference_id ? String(reference_id) : null,
         action_url || null,
         metadata ? JSON.stringify(metadata) : null,
         priority || "normal",
-      ]
+      ],
     );
 
     return result.insertId;
@@ -80,7 +80,7 @@ class NotificationModel {
       ORDER BY notification_id DESC
       LIMIT ?
       `,
-      [userId, Number(limit)]
+      [userId, Number(limit)],
     );
 
     return rows.map((row) => ({
@@ -103,7 +103,7 @@ class NotificationModel {
       WHERE notification_id = ?
       AND user_id = ?
       `,
-      [notificationId, userId]
+      [notificationId, userId],
     );
 
     return result.affectedRows;
@@ -120,7 +120,7 @@ class NotificationModel {
       WHERE user_id = ?
       AND is_read = 0
       `,
-      [userId]
+      [userId],
     );
 
     return result.affectedRows;
@@ -137,7 +137,7 @@ class NotificationModel {
       WHERE user_id = ?
       AND is_read = 0
       `,
-      [userId]
+      [userId],
     );
 
     return row.total;
@@ -153,7 +153,7 @@ class NotificationModel {
       WHERE notification_id = ?
       AND user_id = ?
       `,
-      [notificationId, userId]
+      [notificationId, userId],
     );
 
     return result.affectedRows;
