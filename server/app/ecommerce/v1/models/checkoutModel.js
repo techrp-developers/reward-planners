@@ -77,7 +77,6 @@ class CheckoutModel {
           v.length,
           v.breadth,
           v.height,
-          v.reward_redemption_limit,
           p.vendor_id,
           p.category_id,
           p.subcategory_id
@@ -93,6 +92,12 @@ class CheckoutModel {
       );
 
       if (!cartItems.length) throw new Error("CART_EMPTY");
+
+      cartItems.sort((a, b) => {
+        const totalA = Number(a.sale_price) * a.quantity;
+        const totalB = Number(b.sale_price) * b.quantity;
+        return totalA - totalB;
+      });
 
       // 2 Validate stock
       for (const item of cartItems) {
@@ -125,7 +130,7 @@ class CheckoutModel {
         const itemTotal = Number(item.sale_price) * item.quantity;
         productTotal += itemTotal;
 
-        const key = `${item.product_id}_${item.variant_id}_${item.category_id}_${item.subcategory_id}_${item.sale_price}`;
+        const key = `${item.product_id}_${item.variant_id}_${item.category_id}_${item.subcategory_id}_${itemTotal}`;
 
         let rules = rewardCache[key];
 
@@ -135,17 +140,17 @@ class CheckoutModel {
             item.variant_id,
             item.category_id,
             item.subcategory_id,
-            item.sale_price,
+            itemTotal,
           );
           rewardCache[key] = rules;
         }
 
-        /* ---------- REDEEM ---------- */
+        /* ---------- REDEEM (rule-based) ---------- */
         let redeemable = 0;
-        const limit = Number(item.reward_redemption_limit || 0);
 
-        if (useRewards && limit > 0 && remainingWallet > 0) {
-          const maxAllowed = Math.floor((itemTotal * limit) / 100);
+        if (useRewards && remainingWallet > 0) {
+          const redemption = resolveRedemption(itemTotal, rules);
+          const maxAllowed = calculateRedeemableCoins(itemTotal, redemption);
 
           redeemable = Math.min(remainingWallet, maxAllowed, itemTotal);
 
@@ -170,6 +175,7 @@ class CheckoutModel {
           rewardEarn,
         };
       }
+
       totalRedeemed = Math.min(totalRedeemed, productTotal);
 
       // 4 Group Items by Vendor(Shipping)
@@ -509,7 +515,6 @@ class CheckoutModel {
         v.length,
         v.breadth,
         v.height,
-        v.reward_redemption_limit,
 
         p.vendor_id,
         p.category_id,
@@ -537,23 +542,22 @@ class CheckoutModel {
         variantId,
         item.category_id,
         item.subcategory_id,
-        item.sale_price,
+        itemTotal,
       );
 
       let redeemable = 0;
-      const limit = Number(item.reward_redemption_limit || 0);
 
-      if (useRewards && limit > 0 && walletBalance > 0) {
-        const maxAllowed = Math.floor((itemTotal * limit) / 100);
+      if (useRewards && walletBalance > 0) {
+        const redemption = resolveRedemption(itemTotal, rules);
+        const maxAllowed = calculateRedeemableCoins(itemTotal, redemption);
+
         redeemable = Math.min(walletBalance, maxAllowed, itemTotal);
         walletBalance -= redeemable;
       }
 
       const finalItemTotal = itemTotal - redeemable;
 
-      // ===============================
-      // 4. EARNING
-      // ===============================
+      // 4.EARNING
       let rewardEarn = 0;
       if (rules.length) {
         rewardEarn = calculateReward(finalItemTotal, rules);
@@ -782,6 +786,7 @@ class CheckoutModel {
     }
   }
 
+  // Get checkout details
   async getCheckoutCart(userId, useRewards = true) {
     // ===============================
     // 1. WALLET
@@ -1088,6 +1093,7 @@ class CheckoutModel {
     };
   }
 
+  // buy now details
   async getBuyNowCheckout({
     productId,
     variantId,
