@@ -613,13 +613,10 @@ class CampaignModel {
 
       ep.product_id,
       ep.product_name,
+      ep.brand_name,
 
       pv.variant_id,
-      pv.sku,
-      pv.variant_attributes,
-
       pv.mrp,
-
       pv.sale_price AS original_price,
 
       CASE
@@ -629,8 +626,6 @@ class CampaignModel {
         ELSE pv.sale_price
       END AS final_price,
 
-      pv.stock,
-      
       pi.image_url
 
     FROM campaign_items ci
