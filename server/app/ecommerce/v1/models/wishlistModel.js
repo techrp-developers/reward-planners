@@ -50,7 +50,6 @@ class wishListModel {
       p.brand_name,
       v.mrp,
       v.sale_price,
-      v.reward_redemption_limit,
 
       GROUP_CONCAT(
         DISTINCT CONCAT(
@@ -116,7 +115,6 @@ class wishListModel {
         brand_name: row.brand_name,
         mrp: row.mrp,
         sale_price: row.sale_price,
-        reward_redemption_limit: row.reward_redemption_limit,
         images,
       };
     });
