@@ -739,7 +739,6 @@ class ProductController {
         v.variant_id,
         v.sale_price,
         v.mrp,
-        v.reward_redemption_limit,
 
         COALESCE(rev.avg_rating, 0) AS avg_rating,
         COALESCE(rev.total_reviews, 0) AS total_reviews,
@@ -809,12 +808,6 @@ class ProductController {
           const mrpDiscountPercent =
             mrp > 0 ? Math.round(((mrp - salePrice) / mrp) * 100) : 0;
 
-          const redeem_limit = row.reward_redemption_limit
-            ? Number(row.reward_redemption_limit)
-            : 0;
-          const redeem_coins = Math.floor((salePrice * redeem_limit) / 100);
-          const rp_price = salePrice - redeem_coins;
-
           // Parse image
           let image = null;
           if (row.images) {
@@ -850,6 +843,21 @@ class ProductController {
             canEarn = rules.some((r) => r.can_earn_reward);
           }
 
+          /* ===============================
+            REDEMPTION (rule-based)
+          =============================== */
+          const redemption = resolveRedemption(salePrice, rules);
+
+          const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
+
+          const canRedeem = rules.some((r) => r.can_redeem_reward);
+
+          const redemptionEnabled = canRedeem && redeem_coins > 0;
+
+          const finalRedeemCoins = redemptionEnabled ? redeem_coins : 0;
+
+          const rp_price = salePrice - finalRedeemCoins;
+
           return {
             product_id: row.product_id,
             product_name: row.product_name,
@@ -861,8 +869,9 @@ class ProductController {
             price: `₹${salePrice}`,
             originalPrice: `₹${mrp}`,
             discount: `${mrpDiscountPercent}%`,
-            rp_price: redeem_limit > 0 ? `₹${rp_price}` : 0,
-            redeem_coins: redeem_limit > 0 ? redeem_coins : 0,
+            rp_price: redemptionEnabled ? `₹${rp_price}` : 0,
+
+            redeem_coins: finalRedeemCoins,
 
             rating: Number(row.avg_rating).toFixed(1),
             reviews: Number(row.total_reviews),
