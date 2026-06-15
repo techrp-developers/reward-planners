@@ -485,13 +485,6 @@ class ProductController {
               =============================== */
             const redemption = resolveRedemption(salePrice, rules);
 
-            const redemptionPercent =
-              redemption.type === "percentage"
-                ? Number(redemption.value)
-                : salePrice > 0
-                  ? Math.round((finalRedeemCoins / salePrice) * 100)
-                  : 0;
-
             const redeem_coins = calculateRedeemableCoins(
               salePrice,
               redemption,
@@ -502,6 +495,13 @@ class ProductController {
             const redemptionEnabled = canRedeem && redeem_coins > 0;
 
             const finalRedeemCoins = redemptionEnabled ? redeem_coins : 0;
+
+            const redemptionPercent =
+              redemption.type === "percentage"
+                ? Number(redemption.value)
+                : salePrice > 0
+                  ? Math.round((finalRedeemCoins / salePrice) * 100)
+                  : 0;
 
             const finalPrice = salePrice - finalRedeemCoins;
 
