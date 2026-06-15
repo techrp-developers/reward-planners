@@ -614,6 +614,9 @@ class CampaignModel {
       ep.product_id,
       ep.product_name,
       ep.brand_name,
+      ep.category_id,
+      ep.subcategory_id,
+      ep.is_discount_eligible,
 
       pv.variant_id,
       pv.mrp,
@@ -647,7 +650,7 @@ class CampaignModel {
       ON pim.product_id = ep.product_id
 
     LEFT JOIN product_images pi
-    ON pi.product_id = ep.product_id
+    ON pi.image_id = pim.image_id
 
     WHERE ci.campaign_id = ?
       AND ep.status = 'approved'
