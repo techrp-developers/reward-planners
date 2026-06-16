@@ -5,15 +5,49 @@ const formatDate = (date) => {
   return new Date(date).toLocaleDateString("en-CA"); // YYYY-MM-DD
 };
 
+const toFiniteNumber = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+};
+
+const assertNumberInRange = (value, label, min, max) => {
+  const number = toFiniteNumber(value);
+  if (number === null || number < min || number > max) {
+    throw new Error(`Invalid ${label}`);
+  }
+  return number;
+};
+
 class FitnessService {
   async syncSteps(customerId, payload) {
-    const { steps, distance_km, calories, active_minutes, date } = payload;
+    const {
+      steps: rawSteps,
+      distance_km: rawDistance,
+      calories: rawCalories,
+      active_minutes: rawActiveMinutes,
+      date,
+    } = payload || {};
+
+    const today = formatDate(new Date());
+    if (!date || date !== today) {
+      throw new Error("Only today's steps can be synced");
+    }
+
+    const steps = assertNumberInRange(rawSteps, "step count", 0, 40000);
+    const distance_km = assertNumberInRange(rawDistance ?? 0, "distance", 0, 100);
+    const calories = assertNumberInRange(rawCalories ?? 0, "calories", 0, 10000);
+    const active_minutes = assertNumberInRange(
+      rawActiveMinutes ?? 0,
+      "active minutes",
+      0,
+      1440,
+    );
 
     // -------------------------------
     // Anti cheat
     // -------------------------------
-    if (steps > 40000) {
-      throw new Error("Invalid step count");
+    if (steps > 5000 && active_minutes < 5) {
+      throw new Error("Invalid activity pattern");
     }
 
     // -------------------------------
@@ -42,9 +76,10 @@ class FitnessService {
     const streakData = await FitnessModel.getStreak(customerId);
 
     const existingSteps = await FitnessModel.getStepsByDate(customerId, date);
+    const previousSteps = existingSteps?.steps || 0;
+    const stepDiff = steps - previousSteps;
 
     if (existingSteps) {
-      const previousSteps = existingSteps.steps;
 
       //  Case 1: Same or lower steps → ignore
       if (steps <= previousSteps) {
@@ -57,8 +92,6 @@ class FitnessService {
       }
 
       //  Case 2: Unrealistic jump (anti-cheat)
-      const stepDiff = steps - previousSteps;
-
       if (stepDiff > 20000) {
         throw new Error("Suspicious step increase detected");
       }
@@ -66,6 +99,8 @@ class FitnessService {
       if (stepDiff > 5000 && active_minutes < 5) {
         throw new Error("Invalid activity pattern");
       }
+    } else if (steps > 20000) {
+      throw new Error("Suspicious step increase detected");
     }
 
     // -------------------------------
@@ -101,15 +136,15 @@ class FitnessService {
     let currentStreak = 1;
     let longestStreak = 1;
 
-    const today = new Date(date);
-    const yesterday = new Date(today);
-    yesterday.setDate(today.getDate() - 1);
+    const syncDate = new Date(date);
+    const yesterday = new Date(syncDate);
+    yesterday.setDate(syncDate.getDate() - 1);
 
     if (streakData) {
       const lastDate = new Date(streakData.last_goal_completed_date);
 
       const lastDateStr = formatDate(lastDate);
-      const todayStr = formatDate(today);
+      const todayStr = formatDate(syncDate);
       const yesterdayStr = formatDate(yesterday);
 
       if (lastDateStr === yesterdayStr) {
@@ -410,10 +445,12 @@ class FitnessService {
 
   // select goal
   async selectGoal(customerId, daily_steps) {
+    const dailySteps = assertNumberInRange(daily_steps, "daily steps", 1000, 40000);
+
     await db.execute(
       `INSERT INTO fitness_goals (user_id, daily_steps, start_date)
        VALUES (?, ?, CURDATE())`,
-      [customerId, daily_steps],
+      [customerId, dailySteps],
     );
 
     await db.execute(
@@ -424,23 +461,47 @@ class FitnessService {
 
   // basic profiles
   async saveBasicProfile(customerId, gender, age, goal_type) {
+    const validGenders = ["male", "female", "other"];
+    const validGoals = ["weight_loss", "weight_gain", "stay_healthy"];
+    const normalizedGender = String(gender || "").trim().toLowerCase();
+    const normalizedGoalType = String(goal_type || "").trim();
+    const profileAge = assertNumberInRange(age, "age", 13, 120);
+
+    if (!validGenders.includes(normalizedGender)) {
+      throw new Error("Invalid gender");
+    }
+
+    if (!validGoals.includes(normalizedGoalType)) {
+      throw new Error("Invalid goal type");
+    }
+
     await db.execute(
       `INSERT INTO fitness_profiles (user_id, gender, age, goal_type)
        VALUES (?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE gender=?, age=?, goal_type=?`,
-      [customerId, gender, age, goal_type, gender, age, goal_type],
+      [
+        customerId,
+        normalizedGender,
+        profileAge,
+        normalizedGoalType,
+        normalizedGender,
+        profileAge,
+        normalizedGoalType,
+      ],
     );
   }
 
   // set profile
   async saveBodyProfile(customerId, height, weight) {
-    const bmi = weight / ((height / 100) * (height / 100));
+    const heightCm = assertNumberInRange(height, "height", 80, 250);
+    const weightKg = assertNumberInRange(weight, "weight", 20, 300);
+    const bmi = weightKg / ((heightCm / 100) * (heightCm / 100));
 
     await db.execute(
       `UPDATE fitness_profiles
        SET height_cm=?, weight_kg=?, bmi=?
        WHERE user_id=?`,
-      [height, weight, bmi, customerId],
+      [heightCm, weightKg, bmi, customerId],
     );
   }
 
