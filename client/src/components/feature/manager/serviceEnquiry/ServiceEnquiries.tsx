@@ -65,7 +65,7 @@ const ServiceEnquiries = () => {
       setError(null);
 
       const res = await api.get(
-        "/service-enquiry/list"
+        "/v1/service-enquiry"
       );
 
       if (!res.data.success) {
