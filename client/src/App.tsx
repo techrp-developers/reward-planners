@@ -60,6 +60,7 @@ import OrderView from "./components/feature/manager/order/OrderView";
 
 // Service
 import ServiceEnquiries from "./components/feature/manager/serviceEnquiry/ServiceEnquiries.tsx";
+import ServiceDetails from "./components/feature/manager/serviceEnquiry/ServiceDetails.tsx";
 
 // Manage Rewards
 import RewardRule from "./components/feature/manager/reward/RewardRule";
@@ -254,6 +255,7 @@ export default function App() {
 
         {/* Services */}
         <Route path={routes.manager.services.enquiries} element={<ServiceEnquiries />} />
+        <Route path={routes.manager.services.details} element={<ServiceDetails />} />
 
         {/* Rewards */}
         <Route

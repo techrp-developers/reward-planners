@@ -42,7 +42,8 @@ export const routes = {
       cancellationDetail: "/manager/cancellation-detail/:orderId",
     },
     services:{
-      enquiries:"/manager/enquiries"
+      enquiries:"/manager/enquiries",
+      details: "/manager/enquiry/:id",
     },
     rewards:{
       rewardRule:"/manager/rewards-rule",

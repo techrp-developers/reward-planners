@@ -400,7 +400,7 @@ const ServiceEnquiries = () => {
                           <button
                             onClick={() =>
                               navigate(
-                                `/manager/service-enquiry/${enquiry.id}`
+                                `/manager/enquiry/${enquiry.id}`
                               )
                             }
                             className="px-3 py-1.5 text-xs font-semibold bg-purple-50 text-[#852BAF] border border-purple-200 rounded-lg hover:bg-[#852BAF] hover:text-white transition-all cursor-pointer"
