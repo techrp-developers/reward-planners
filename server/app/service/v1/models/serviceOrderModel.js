@@ -1479,7 +1479,7 @@ class ServiceOrderModel {
 
     FROM service_orders so
 
-    JOIN customers cu
+    JOIN customer cu
       ON cu.user_id = so.user_id
 
     JOIN services s
@@ -1647,7 +1647,7 @@ class ServiceOrderModel {
     LEFT JOIN service_variants sv
       ON sv.id = so.variant_id
 
-    JOIN customers cu
+    JOIN customer cu
       ON cu.user_id = so.user_id
 
     LEFT JOIN customer_addresses ca

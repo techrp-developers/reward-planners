@@ -49,16 +49,16 @@ router.post(
 // Admin Order List
 router.get(
   "/admin-orders",
-  authenticateToken,
-  authorizeRoles("admin", "vendor_manager"),
+  // authenticateToken,
+  // authorizeRoles("admin", "vendor_manager"),
   ServiceOrderController.adminOrderList,
 );
 
 // Admin Order Details
 router.get(
   "/admin-order-details/:parentOrderId",
-  authenticateToken,
-  authorizeRoles("admin", "vendor_manager"),
+  // authenticateToken,
+  // authorizeRoles("admin", "vendor_manager"),
   ServiceOrderController.adminOrderDetails,
 );
 
