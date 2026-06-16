@@ -58,6 +58,9 @@ import OrderDetail from "./components/feature/vendor/orders/OrderDetail";
 import OrderList from "./components/feature/manager/order/OrderList";
 import OrderView from "./components/feature/manager/order/OrderView";
 
+// Service
+import ServiceEnquiries from "./components/feature/manager/serviceEnquiry/ServiceEnquiries.tsx";
+
 // Manage Rewards
 import RewardRule from "./components/feature/manager/reward/RewardRule";
 import RewardForm from "./components/feature/manager/reward/RewardForm";
@@ -248,6 +251,9 @@ export default function App() {
           path={routes.manager.orders.cancellationDetail}
           element={<CancellationDetail />}
         />
+
+        {/* Services */}
+        <Route path={routes.manager.services.enquiries} element={<ServiceEnquiries />} />
 
         {/* Rewards */}
         <Route

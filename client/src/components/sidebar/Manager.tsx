@@ -13,7 +13,7 @@ import {
   FiGift,
   FiLock,
 } from "react-icons/fi";
-import { FaFileAlt } from "react-icons/fa"; //FaBolt
+import { FaFileAlt, FaBolt } from "react-icons/fa";
 import { useAuth } from "../../auth/useAuth";
 import { routes } from "../../routes";
 import logo from "../../assets/logo.svg";
@@ -84,15 +84,14 @@ export default function ManagerNavbar() {
       Icon: FiSliders,
       type: "link",
     },
-    // {
-    //   label: "Flash Sales",
-    //   Icon: FaBolt,
-    //   type: "dropdown",
-    //   children: [
-    //     { label: "Flash Sale List", to: routes.manager.flashlist },
-    //     { label: "Flash Sale Create", to: routes.manager.flashCreate },
-    //   ],
-    // },
+    {
+      label: "Service",
+      Icon: FaBolt,
+      type: "dropdown",
+      children: [
+        { label: "Service Enquiries", to: routes.manager.services.enquiries },
+      ],
+    },
     {
       label: "Orders",
       Icon: FiShoppingCart,
