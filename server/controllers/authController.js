@@ -6,6 +6,9 @@ const { sendOtpEmail, sendPasswordResetEmail } = require("../config/mail");
 const { sendRegistrationSuccessMail } = require("../services/mailBuilder/authNotification");
 const crypto = require("crypto");
 
+const normalizeEmail = (email) =>
+  typeof email === "string" ? email.trim().toLowerCase() : "";
+
 const authController = {
   /* ============================================================
        REGISTER USER (Auto-create vendor if role = vendor)
@@ -16,8 +19,9 @@ const authController = {
       await connection.beginTransaction();
       const { name, email, password, phone } = req.body;
       const role = forcedRole || req.body.role;
+      const normalizedEmail = normalizeEmail(email);
 
-      if (!name || !email || !password || !role) {
+      if (!name || !normalizedEmail || !password || !role) {
         await connection.rollback();
         return res.status(400).json({
           success: false,
@@ -25,17 +29,17 @@ const authController = {
         });
       }
 
-      if (password.length < 5) {
+      if (password.length < 8) {
         await connection.rollback();
         return res.status(400).json({
           success: false,
-          message: "Password must be at least 5 characters long",
+          message: "Password must be at least 8 characters long",
         });
       }
 
       const [existing] = await connection.execute(
         "SELECT user_id FROM eusers WHERE email = ?",
-        [email.toLowerCase()],
+        [normalizedEmail],
       );
 
       if (existing.length > 0) {
@@ -51,7 +55,7 @@ const authController = {
       // Create User
       const [insertUser] = await connection.execute(
         "INSERT INTO eusers (name, email, password, role, phone, created_at) VALUES (?, ?, ?, ?, ?, NOW())",
-        [name, email.toLowerCase(), hashedPassword, role, phone || null],
+        [name, normalizedEmail, hashedPassword, role, phone || null],
       );
 
       //  Otp Creation
@@ -80,7 +84,7 @@ const authController = {
       await connection.commit();
 
       try {
-        await sendOtpEmail(email, otp);
+        await sendOtpEmail(normalizedEmail, otp);
       } catch (mailErr) {
         console.error("Email failed:", mailErr);
       }
@@ -90,7 +94,7 @@ const authController = {
         message: "OTP sent to your email",
         data: {
           user_id: insertUser.insertId,
-          email,
+          email: normalizedEmail,
         },
       });
     } catch (err) {
@@ -110,8 +114,9 @@ const authController = {
      ============================================================ */
   verifyOtp: async (req, res) => {
     const { email, otp } = req.body;
+    const normalizedEmail = normalizeEmail(email);
 
-    if (!email || !otp) {
+    if (!normalizedEmail || !otp) {
       return res.status(400).json({ success: false, message: "Missing data" });
     }
 
@@ -128,7 +133,7 @@ const authController = {
         ORDER BY o.created_at DESC
         LIMIT 1
     `,
-      [email.toLowerCase(), otpHash],
+      [normalizedEmail, otpHash],
     );
 
     if (!rows.length) {
@@ -200,8 +205,9 @@ const authController = {
   // resend OTP
   resendOtp: async (req, res) => {
     const { email } = req.body;
+    const normalizedEmail = normalizeEmail(email);
 
-    if (!email) {
+    if (!normalizedEmail) {
       return res.status(400).json({
         success: false,
         message: "Email is required",
@@ -210,7 +216,7 @@ const authController = {
 
     const [users] = await db.execute(
       "SELECT user_id FROM eusers WHERE email = ?",
-      [email.toLowerCase()],
+      [normalizedEmail],
     );
 
     if (!users.length) {
@@ -236,7 +242,7 @@ const authController = {
 
     // Send mail
     try {
-      await sendOtpEmail(email, otp);
+      await sendOtpEmail(normalizedEmail, otp);
     } catch (mailErr) {
       console.error("OTP MAIL FAILED:", mailErr);
     }
@@ -253,17 +259,18 @@ const authController = {
 
   forgotPassword: async (req, res) => {
     const { email } = req.body;
+    const normalizedEmail = normalizeEmail(email);
 
     const genericResponse = {
       success: true,
       message: "If the email exists, a reset link has been sent",
     };
 
-    if (!email) return res.json(genericResponse);
+    if (!normalizedEmail) return res.json(genericResponse);
 
     const [users] = await db.execute(
       "SELECT user_id, email FROM eusers WHERE email = ?",
-      [email.toLowerCase()],
+      [normalizedEmail],
     );
 
     if (!users.length) {
@@ -321,10 +328,10 @@ const authController = {
       });
     }
 
-    if (password.length < 5) {
+    if (password.length < 8) {
       return res.status(400).json({
         success: false,
-        message: "Password must be at least 5 characters",
+        message: "Password must be at least 8 characters",
       });
     }
 
@@ -369,11 +376,12 @@ const authController = {
   /* ============================================================
        LOGIN USER (Loads correct vendor_id)
      ============================================================ */
-  login: async (req, res) => {
+  login: async (req, res, forcedRole = null) => {
     try {
       const { email, password } = req.body;
+      const normalizedEmail = normalizeEmail(email);
 
-      if (!email || !password) {
+      if (!normalizedEmail || !password) {
         return res.status(400).json({
           success: false,
           message: "Email and password are required",
@@ -381,7 +389,7 @@ const authController = {
       }
 
       const [rows] = await db.execute("SELECT * FROM eusers WHERE email = ?", [
-        email.toLowerCase(),
+        normalizedEmail,
       ]);
 
       if (rows.length === 0) {
@@ -393,6 +401,13 @@ const authController = {
 
       const user = rows[0];
       const { password: _password, ...safeUser } = user;
+
+      if (forcedRole && user.role !== forcedRole) {
+        return res.status(401).json({
+          success: false,
+          message: "Invalid email or password",
+        });
+      }
 
       const valid = await bcrypt.compare(password, user.password);
       if (!valid) {
@@ -530,24 +545,25 @@ const authController = {
   passwordReset: async (req, res) => {
     try {
       const { email, currentPassword, newPassword } = req.body;
+      const normalizedEmail = normalizeEmail(email);
 
-      if (!currentPassword || !newPassword) {
+      if (!normalizedEmail || !currentPassword || !newPassword) {
         return res.status(400).json({
           success: false,
           message: "Email, current password and new password are required",
         });
       }
 
-      if (newPassword.length < 5) {
+      if (newPassword.length < 8) {
         return res.status(400).json({
           success: false,
-          message: "New password must be at least 5 characters",
+          message: "New password must be at least 8 characters",
         });
       }
 
       const [rows] = await db.execute(
         "SELECT password FROM eusers WHERE email = ?",
-        [email],
+        [normalizedEmail],
       );
 
       if (rows.length === 0) {
@@ -571,7 +587,7 @@ const authController = {
 
       await db.execute("UPDATE eusers SET password = ? WHERE email = ?", [
         hashedPassword,
-        email,
+        normalizedEmail,
       ]);
 
       return res.json({

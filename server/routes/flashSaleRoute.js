@@ -2,12 +2,14 @@ const express = require("express");
 const router = express.Router();
 const flashController = require("../controllers/flashController");
 const { uploadFlashBanner } = require("../middleware/mediaUpload/flashUpload");
-const { authorizeRoles } = require("../middleware/auth");
+const { authenticateToken, authorizeRoles } = require("../middleware/auth");
+
+const adminGuard = [authenticateToken, authorizeRoles("vendor_manager", "admin")];
 
 // create flash sale details
 router.post(
   "/flash-sale",
-  // authorizeRoles("vendor_manager", "admin"),
+  ...adminGuard,
   uploadFlashBanner.single("banner_image"),
   flashController.createFlashSale,
 );
@@ -15,35 +17,35 @@ router.post(
 // get flash sale details
 router.get(
   "/flash-sale",
-  // authorizeRoles("vendor_manager", "admin"),
+  ...adminGuard,
   flashController.getFlashSales,
 );
 
 // activate flash sale details
 router.put(
   "/flash-sale/:id/activate",
-  // authorizeRoles("vendor_manager", "admin"),
+  ...adminGuard,
   flashController.activate,
 );
 
 // get flash sale product details
 router.get(
   "/flash-sale-products",
-  // authorizeRoles("vendor_manager", "admin"),
+  ...adminGuard,
   flashController.getActiveProducts,
 );
 
 // edit flash sale details
 router.get(
   "/flash-sale/:id",
-  // authorizeRoles("vendor_manager", "admin"),
+  ...adminGuard,
   flashController.getFlashSaleById,
 );
 
 // update flash sale details
 router.put(
   "/flash-sale/:id",
-  // authorizeRoles("vendor_manager", "admin"),
+  ...adminGuard,
   uploadFlashBanner.single("banner_image"),
   flashController.updateFlashSale,
 );
@@ -53,30 +55,35 @@ router.put(
 // Get variants already added to flash sale
 router.get(
   "/flash-sale/:flashId/variants",
+  ...adminGuard,
   flashController.getFlashSaleVariants,
 );
 
 // Get variants available to add (not already in flash)
 router.get(
   "/flash-sale/:flashId/available-variants",
+  ...adminGuard,
   flashController.getAvailableVariants,
 );
 
 // Add variants to flash sale
 router.post(
   "/flash-sale/:flashId/variants",
+  ...adminGuard,
   flashController.addVariantsToFlashSale,
 );
 
 // Update flash price
 router.put(
   "/flash-sale/:flashId/variants/:variantId",
+  ...adminGuard,
   flashController.updateFlashPrice,
 );
 
 // Remove variant from flash sale
 router.delete(
   "/flash-sale/:flashId/variants/:variantId",
+  ...adminGuard,
   flashController.removeVariantFromFlashSale,
 );
 
