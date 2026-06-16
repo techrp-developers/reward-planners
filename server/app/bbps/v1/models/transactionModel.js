@@ -8,7 +8,7 @@ class TransactionModel {
     (user_id, operator_id, utility_acc_no, cycle_number, amount, bbps_status,fetch_bill)
     VALUES (?, ?, ?, ?, ?, 'INIT', ?)
   `;
-    const [res] = await db.execute(sql, [
+    const [res] = await conn.execute(sql, [
       data.user_id,
       data.operator_id,
       data.utility_acc_no?.trim(),

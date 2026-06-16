@@ -237,8 +237,6 @@ exports.fetchBill = async (body, req) => {
 
     console.info("[BBPS][provider][fetch-bill] payload", {
       operator_id: payload.operator_id,
-      utility_acc_no: payload.utility_acc_no,
-      confirmation_mobile_no: payload.confirmation_mobile_no,
       client_ref_id: payload.client_ref_id,
       source_ip: payload.source_ip,
       dynamicKeys: Object.keys(body || {}).filter(
@@ -249,7 +247,6 @@ exports.fetchBill = async (body, req) => {
     console.info("[BBPS][provider][fetch-bill] request-meta", {
       initiator_id: process.env.EKO_INITIATOR_ID,
       source_ip: payload.source_ip,
-      headers,
       endpoint: ekoUrl(
         `billpayments/fetchbill?initiator_id=${process.env.EKO_INITIATOR_ID}`,
       ),
@@ -269,7 +266,6 @@ exports.fetchBill = async (body, req) => {
       status: res.status,
       success: res.data?.success,
       message: res.data?.message,
-      response: res.data,
     });
 
     return res.data;
@@ -302,7 +298,10 @@ exports.fetchBill = async (body, req) => {
     console.error("[BBPS][provider][fetch-bill] error", {
       statusCode,
       message: normalizedError.message,
-      providerData,
+      providerMessage:
+        typeof providerData === "object"
+          ? providerData?.message || providerData?.error
+          : providerMessage,
     });
 
     throw normalizedError;

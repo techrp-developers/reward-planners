@@ -20,14 +20,14 @@ router.get("/operator/:id", BillController.getOperatorDetails);
 // fetch bill readiness
 router.get(
   "/fetch-bill-check",
-  // auth,
+  auth,
   BillController.getFetchBillReadiness,
 );
 
 // check consumer number and fetch bill details for UI
 router.post(
   "/check-customer-number",
-  // auth,
+  auth,
   fetchBillRateLimit,
   fetchBillValidation,
   BillController.checkCustomerNumber,
@@ -36,7 +36,7 @@ router.post(
 // fetch bill details
 router.post(
   "/fetch-bill",
-  // auth,
+  auth,
   fetchBillRateLimit,
   fetchBillValidation,
   BillController.fetchBill,
@@ -44,7 +44,7 @@ router.post(
 
 router.get(
   "/check-status/:transaction_id",
-  // auth,
+  auth,
   BillController.checkStatus,
 );
 

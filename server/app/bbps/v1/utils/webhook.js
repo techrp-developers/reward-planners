@@ -20,11 +20,15 @@ async function processEvent(req) {
 
       const txn = await TransactionModel.getByIdForUpdate(transactionId, conn);
 
-      if (!txn) return;
+      if (!txn) {
+        await conn.rollback();
+        return;
+      }
 
       //  DOUBLE EXECUTION PROTECTION
       if (txn.bbps_status === "PAID") {
         console.log("Skipping already paid txn:", txn.id);
+        await conn.rollback();
         return;
       }
 
@@ -96,7 +100,7 @@ async function processEvent(req) {
         return;
       }
 
-      await db.execute(
+      await conn.execute(
         `UPDATE razorpay_orders
           SET status='failed',
               raw_response=?

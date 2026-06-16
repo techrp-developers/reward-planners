@@ -24,9 +24,12 @@ class PaymentController {
         });
       }
 
-      const { amount, operator_id, utility_acc_no, cycle_number } = req.body;
+      const { operator_id, utility_acc_no, cycle_number } = req.body;
+      const amount = Number(req.body.amount);
+      const utilityAccountNo =
+        typeof utility_acc_no === "string" ? utility_acc_no.trim() : "";
 
-      if (!amount || amount <= 0 || amount > 5000) {
+      if (!Number.isFinite(amount) || amount <= 0 || amount > 5000) {
         await conn.rollback();
         return res.status(400).json({
           success: false,
@@ -34,7 +37,7 @@ class PaymentController {
         });
       }
 
-      if (!operator_id || !utility_acc_no) {
+      if (!operator_id || !utilityAccountNo) {
         await conn.rollback();
         return res.status(400).json({
           success: false,
@@ -67,7 +70,7 @@ class PaymentController {
         {
           user_id: userId,
           operator_id,
-          utility_acc_no: utility_acc_no.trim(),
+          utility_acc_no: utilityAccountNo,
           cycle_number,
           amount,
           fetch_bill: fetchBillFlag,
@@ -125,8 +128,25 @@ class PaymentController {
     try {
       await conn.beginTransaction();
 
+      const userId = req.user?.user_id;
+      if (!userId) {
+        await conn.rollback();
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
       const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
         req.body;
+
+      if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+        await conn.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Missing payment verification fields",
+        });
+      }
 
       // verify signature
       const generated = crypto
@@ -134,10 +154,11 @@ class PaymentController {
         .update(`${razorpay_order_id}|${razorpay_payment_id}`)
         .digest("hex");
 
-      const isValid = crypto.timingSafeEqual(
-        Buffer.from(generated),
-        Buffer.from(razorpay_signature),
-      );
+      const generatedBuffer = Buffer.from(generated, "hex");
+      const signatureBuffer = Buffer.from(razorpay_signature, "hex");
+      const isValid =
+        generatedBuffer.length === signatureBuffer.length &&
+        crypto.timingSafeEqual(generatedBuffer, signatureBuffer);
 
       if (!isValid) {
         await conn.rollback();
@@ -152,6 +173,14 @@ class PaymentController {
         return res.status(400).json({
           success: false,
           message: "Payment not captured",
+        });
+      }
+
+      if (paymentDetails.order_id !== razorpay_order_id) {
+        await conn.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Payment does not belong to this order",
         });
       }
 
@@ -220,6 +249,22 @@ class PaymentController {
         return res.status(404).json({
           success: false,
           message: "Transaction not found",
+        });
+      }
+
+      if (Number(paymentDetails.amount) !== Math.round(Number(rpOrder.amount) * 100)) {
+        await conn.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Payment amount mismatch",
+        });
+      }
+
+      if (Number(txn.user_id) !== Number(userId)) {
+        await conn.rollback();
+        return res.status(403).json({
+          success: false,
+          message: "Unauthorized transaction",
         });
       }
 
@@ -314,6 +359,15 @@ class PaymentController {
     try {
       await conn.beginTransaction();
       transaction_id = req.body.transaction_id;
+      const userId = req.user?.user_id;
+
+      if (!userId) {
+        await conn.rollback();
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
 
       txn = await TransactionModel.getByIdForUpdate(transaction_id, conn);
 
@@ -321,6 +375,14 @@ class PaymentController {
         await conn.rollback();
         return res.status(404).json({
           message: "Transaction not found",
+        });
+      }
+
+      if (Number(txn.user_id) !== Number(userId)) {
+        await conn.rollback();
+        return res.status(403).json({
+          success: false,
+          message: "Unauthorized transaction",
         });
       }
 

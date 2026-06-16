@@ -18,7 +18,11 @@ const bbpsAuth = (req, res, next) => {
 
     AuthModel.findById(decoded.user_id)
       .then((user) => {
-        if (!user || user.token_version !== decoded.token_version) {
+        // if (
+        //   !user ||
+        //   Number(user.token_version || 0) !== Number(decoded.token_version || 0)
+        // )
+        if (!user) {
           return res.status(401).json({
             success: false,
             message: "Invalid token",

@@ -550,8 +550,7 @@ class BillController {
   async fetchBill(req, res) {
     try {
       const { operator_id } = req.body || {};
-      // const userId = req.user?.user_id;
-      const userId = 1;
+      const userId = req.user?.user_id;
       const operatorId = String(operator_id || "").trim();
 
       if (!userId) {
@@ -611,7 +610,6 @@ class BillController {
       console.info("[BBPS][fetch-bill] request", {
         operator_id: operatorId,
         frontendPayload: normalizedRequest.frontendPayload,
-        providerPayload: normalizedRequest.providerPayload,
         operatorInputParams: normalizedRequest.inputParams,
         user_id: userId,
       });
@@ -623,7 +621,8 @@ class BillController {
 
       console.info("[BBPS][fetch-bill] provider-response", {
         operator_id: operatorId,
-        response: data,
+        success: data?.success,
+        message: data?.message,
       });
 
       if (isProviderValidationError(data)) {
@@ -687,8 +686,7 @@ class BillController {
     try {
       const { transaction_id } = req.params;
 
-      // const userId = req.user?.user_id;
-      const userId = 1;
+      const userId = req.user?.user_id;
 
       if (!userId) {
         return res.status(401).json({

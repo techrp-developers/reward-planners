@@ -92,13 +92,5 @@ exports.payHeaders = async (utility_acc_no, amount, user_code) => {
     request_hash,
   };
 
-  console.info("[BBPS][headers][pay]", {
-    timestamp,
-    secret_key,
-    request_hash,
-    payloadString,
-    headers,
-  });
-
   return headers;
 };

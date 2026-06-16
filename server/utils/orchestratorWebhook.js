@@ -27,7 +27,12 @@ async function handleWebhook(req, res) {
     //  Attach parsed body so child handlers don't re-parse
     req.parsedBody = body;
 
-    console.log(JSON.stringify(body.payload.payment.entity, null, 2));
+    console.info("Razorpay webhook received", {
+      event: body.event,
+      payment_id: body?.payload?.payment?.entity?.id,
+      order_id: body?.payload?.payment?.entity?.order_id,
+      module: body?.payload?.payment?.entity?.notes?.module,
+    });
 
     //  FAN-OUT (parallel execution)
     // await Promise.all([
