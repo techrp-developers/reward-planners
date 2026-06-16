@@ -11,7 +11,7 @@ const auth = async (req, res, next) => {
         message: "Access token required",
       });
     }
-    
+
     const token = authHeader.split(" ")[1];
 
     const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
@@ -31,6 +31,13 @@ const auth = async (req, res, next) => {
         message: "Account inactive",
       });
     }
+
+    // if (Number(user.token_version || 0) !== Number(decoded.token_version || 0)) {
+    //   return res.status(401).json({
+    //     success: false,
+    //     message: "Invalid token",
+    //   });
+    // }
 
     req.user = user;
     next();

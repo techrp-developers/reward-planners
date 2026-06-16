@@ -4,25 +4,34 @@ const authController = require("../controller/authController");
 const auth = require("../middlewares/auth");
 const optionalAuth = require("../middlewares/optionalAuth");
 const upload = require("../../../middleware/mediaUpload/serviceCategoryUpload");
+const { authLimiter } = require("../middlewares/rateLimiter");
 
 /*============================================Profile=================================================*/
 // Activate account
-router.post("/activate-account", authController.activateAccount);
+router.post("/activate-account", authLimiter, authController.activateAccount);
 
 //resend activation otp
-router.post("/resend-activation-otp", authController.resendActivationOTP);
+router.post(
+  "/resend-activation-otp",
+  authLimiter,
+  authController.resendActivationOTP,
+);
 
 // verify OTP
-router.post("/verify-activation-otp", authController.verifyActivationOTP);
+router.post(
+  "/verify-activation-otp",
+  authLimiter,
+  authController.verifyActivationOTP,
+);
 
 // set the password
-router.post("/set-password", authController.setPassword);
+router.post("/set-password", authLimiter, authController.setPassword);
 
 //Login user
-router.post("/login", authController.loginUser);
+router.post("/login", authLimiter, authController.loginUser);
 
 // refresh(not updated)
-router.post("/refresh", authController.refreshAccessToken);
+router.post("/refresh", authLimiter, authController.refreshAccessToken);
 
 // Fcm token(not updated)
 router.post("/update-fcm-token", auth, authController.updateFcmToken);
@@ -31,19 +40,20 @@ router.post("/update-fcm-token", auth, authController.updateFcmToken);
 router.post("/logout", auth, authController.logoutUser);
 
 // Forgot password
-router.post("/forgot-password", authController.forgotPassword);
+router.post("/forgot-password", authLimiter, authController.forgotPassword);
 
 //resend  otp
-router.post("/resend-otp", authController.resendOTP);
+router.post("/resend-otp", authLimiter, authController.resendOTP);
 
 // verify forgot password OTP
 router.post(
   "/verify-forgot-password-otp",
+  authLimiter,
   authController.verifyForgotPasswordOTP,
 );
 
 // Reset password
-router.post("/reset-password", authController.resetPassword);
+router.post("/reset-password", authLimiter, authController.resetPassword);
 
 // change password
 router.put("/change-password", auth, authController.changePassword);

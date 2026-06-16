@@ -23,6 +23,10 @@ const optionalAuth = async (req, res, next) => {
       return next();
     }
 
+    // if (Number(user.token_version || 0) !== Number(decoded.token_version || 0)) {
+    //   return next();
+    // }
+
     req.user = user;
     next();
   } catch {

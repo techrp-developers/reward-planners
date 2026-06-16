@@ -59,6 +59,24 @@ const checkoutLimiter = rateLimit({
 });
 
 // ==========================
+// AUTH / OTP
+// 8 attempts per 15 min
+// ==========================
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: makeKeyGenerator(),
+  handler: (req, res) => {
+    return res.status(429).json({
+      success: false,
+      message: "Too many authentication attempts. Please wait and try again.",
+    });
+  },
+});
+
+// ==========================
 // GENERAL API — loose
 // 100 per 15 min
 // ==========================
@@ -76,4 +94,28 @@ const generalLimiter = rateLimit({
   },
 });
 
-module.exports = { paymentLimiter, checkoutLimiter, generalLimiter };
+// ==========================
+// STEP SYNC
+// 60 syncs per 15 min
+// ==========================
+const stepSyncLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: makeKeyGenerator(),
+  handler: (req, res) => {
+    return res.status(429).json({
+      success: false,
+      message: "Too many step sync attempts. Please wait and try again.",
+    });
+  },
+});
+
+module.exports = {
+  paymentLimiter,
+  checkoutLimiter,
+  authLimiter,
+  generalLimiter,
+  stepSyncLimiter,
+};

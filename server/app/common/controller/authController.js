@@ -27,6 +27,10 @@ function generateOTP() {
   return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
+function normalizeEmail(email) {
+  return typeof email === "string" ? email.trim().toLowerCase() : "";
+}
+
 // helper function
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
 function getPublicUrl(path) {
@@ -92,44 +96,55 @@ class AuthController {
      ACTIVATE ACCOUNT
   ====================================================== */
   async activateAccount(req, res) {
-    const { email } = req.body;
+    try {
+      const { email } = req.body;
 
-    const normalizedEmail = email.trim().toLowerCase();
+      const normalizedEmail = normalizeEmail(email);
+      if (!normalizedEmail) {
+        return res.status(400).json({
+          success: false,
+          message: "Email is required",
+        });
+      }
 
-    const employee = await AuthModel.findEmployeeByEmail(normalizedEmail);
+      const employee = await AuthModel.findEmployeeByEmail(normalizedEmail);
 
-    if (!employee) {
-      return res.status(404).json({
-        success: false,
-        message: "Employee not found",
+      if (!employee) {
+        return res.status(404).json({
+          success: false,
+          message: "Employee not found",
+        });
+      }
+
+      const existingAccount = await AuthModel.findByCompanyUserId(employee.id);
+
+      if (existingAccount) {
+        return res.status(400).json({
+          success: false,
+          message: "Account already activated",
+        });
+      }
+
+      await AuthModel.deleteOTPByEmail(normalizedEmail);
+
+      const otp = generateOTP();
+
+      await AuthModel.storeActivationOTP(normalizedEmail, otp);
+
+      await sendOtpMail({
+        email: normalizedEmail,
+        name: employee.name,
+        otp,
       });
-    }
 
-    const existingAccount = await AuthModel.findByCompanyUserId(employee.id);
-
-    if (existingAccount) {
-      return res.status(400).json({
-        success: false,
-        message: "Account already activated",
+      return res.json({
+        success: true,
+        message: "OTP sent to email",
       });
+    } catch (error) {
+      console.error("Activate account error:", error);
+      return res.status(500).json({ success: false });
     }
-
-    await AuthModel.deleteOTPByEmail(normalizedEmail);
-
-    const otp = generateOTP();
-
-    await AuthModel.storeActivationOTP(normalizedEmail, otp);
-
-    await sendOtpMail({
-      email: normalizedEmail,
-      name: employee.name,
-      otp,
-    });
-
-    return res.json({
-      success: true,
-      message: "OTP sent to email",
-    });
   }
 
   /* ======================================================
@@ -139,7 +154,13 @@ class AuthController {
     try {
       const { email } = req.body;
 
-      const normalizedEmail = email.trim().toLowerCase();
+      const normalizedEmail = normalizeEmail(email);
+      if (!normalizedEmail) {
+        return res.status(400).json({
+          success: false,
+          message: "Email is required",
+        });
+      }
 
       const employee = await AuthModel.findEmployeeByEmail(normalizedEmail);
 
@@ -196,7 +217,7 @@ class AuthController {
         });
       }
 
-      const normalizedEmail = email.trim().toLowerCase();
+      const normalizedEmail = normalizeEmail(email);
 
       const attempt = await AuthModel.getOtpAttempts(normalizedEmail);
 
@@ -249,7 +270,7 @@ class AuthController {
         });
       }
 
-      const normalizedEmail = email.trim().toLowerCase();
+      const normalizedEmail = normalizeEmail(email);
 
       if (password.length < 8) {
         return res.status(400).json({
@@ -353,7 +374,13 @@ class AuthController {
   async loginUser(req, res) {
     try {
       const { email, password } = req.body;
-      const normalizedEmail = email.trim().toLowerCase();
+      const normalizedEmail = normalizeEmail(email);
+      if (!normalizedEmail || !password) {
+        return res.status(400).json({
+          success: false,
+          message: "Email and password are required",
+        });
+      }
 
       const user = await AuthModel.findByEmail(normalizedEmail);
       if (!user) return res.status(401).json({ success: false });
@@ -379,19 +406,19 @@ class AuthController {
 
       const match = await bcrypt.compare(password, user.password);
       if (!match) return res.status(401).json({ success: false });
+      // const tokenVersion = Number(user.token_version || 0);
       const accessToken = jwt.sign(
+        // { user_id: user.user_id, token_version: tokenVersion },
         { user_id: user.user_id },
         process.env.ACCESS_TOKEN_SECRET,
         { expiresIn: ACCESS_EXPIRES },
       );
 
       const refreshToken = jwt.sign(
+        // { user_id: user.user_id, token_version: tokenVersion },
         { user_id: user.user_id },
         process.env.REFRESH_TOKEN_SECRET,
         { expiresIn: `${REFRESH_EXPIRES_DAYS}d` },
-      );
-      const expiryDate = new Date(
-        Date.now() + REFRESH_EXPIRES_DAYS * 24 * 60 * 60 * 1000,
       );
 
       await AuthModel.updateLoginMeta(user.user_id, req.ip);
@@ -401,22 +428,26 @@ class AuthController {
       );
 
       if (firstLoginBonus) {
-        // Send Email
-        await rewardCreditMail({
-          email: user.email,
-          name: user.name,
-          coins: 3000,
-        });
-
-        // Send WhatsApp
-        await enqueueWhatsApp({
-          eventName: "wallet_credit_first_login",
-          ctx: {
-            phone: employee.phone,
-            company_id: employee.company_id,
-            customer_name: employee.name || "User",
+        setImmediate(() => {
+          rewardCreditMail({
+            email: user.email,
+            name: user.name,
             coins: 3000,
-          },
+          }).catch((err) => {
+            console.error("First login reward email failed:", err);
+          });
+
+          enqueueWhatsApp({
+            eventName: "wallet_credit_first_login",
+            ctx: {
+              phone: employee.phone,
+              company_id: employee.company_id,
+              customer_name: employee.name || "User",
+              coins: 3000,
+            },
+          }).catch((err) => {
+            console.error("First login reward WhatsApp failed:", err);
+          });
         });
       }
 
@@ -438,6 +469,9 @@ class AuthController {
   async refreshAccessToken(req, res) {
     try {
       const { refreshToken } = req.body;
+      if (!refreshToken) {
+        return res.status(400).json({ success: false });
+      }
 
       const payload = jwt.verify(
         refreshToken,
@@ -450,6 +484,12 @@ class AuthController {
 
       if (Number(user.status) !== 1)
         return res.status(403).json({ success: false });
+
+      // if (
+      //   Number(user.token_version || 0) !== Number(payload.token_version || 0)
+      // ) {
+      //   return res.status(401).json({ success: false });
+      // }
 
       const newAccessToken = jwt.sign(
         { user_id: user.user_id, token_version: user.token_version },
@@ -497,7 +537,6 @@ class AuthController {
   async changePassword(req, res) {
     const connection = await db.getConnection();
     try {
-      await connection.beginTransaction();
       const userId = req.user?.user_id;
       // const userId = 1;
 
@@ -544,6 +583,7 @@ class AuthController {
 
       const hashedPassword = await bcrypt.hash(newPassword, 12);
 
+      await connection.beginTransaction();
       await AuthModel.updatePassword(connection, userId, hashedPassword);
 
       await connection.commit();
@@ -571,8 +611,15 @@ class AuthController {
   async logoutUser(req, res) {
     try {
       const userId = req.user?.user_id;
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
 
       await AuthModel.clearFcmToken(userId);
+      // await AuthModel.incrementTokenVersion(userId);
 
       return res.json({
         success: true,
@@ -595,7 +642,13 @@ class AuthController {
     try {
       const { email } = req.body;
 
-      const normalizedEmail = email.trim().toLowerCase();
+      const normalizedEmail = normalizeEmail(email);
+      if (!normalizedEmail) {
+        return res.status(400).json({
+          success: false,
+          message: "Email is required",
+        });
+      }
 
       const user = await AuthModel.findByEmail(normalizedEmail);
 
@@ -636,7 +689,13 @@ class AuthController {
     try {
       const { email } = req.body;
 
-      const normalizedEmail = email.trim().toLowerCase();
+      const normalizedEmail = normalizeEmail(email);
+      if (!normalizedEmail) {
+        return res.status(400).json({
+          success: false,
+          message: "Email is required",
+        });
+      }
 
       const employee = await AuthModel.findEmployeeByEmail(normalizedEmail);
 
@@ -683,7 +742,13 @@ class AuthController {
     try {
       const { email, otp } = req.body;
 
-      const normalizedEmail = email.trim().toLowerCase();
+      const normalizedEmail = normalizeEmail(email);
+      if (!normalizedEmail || !otp) {
+        return res.status(400).json({
+          success: false,
+          message: "Email and OTP are required",
+        });
+      }
 
       const attempt = await AuthModel.getOtpAttempts(normalizedEmail);
 
@@ -724,7 +789,13 @@ class AuthController {
     try {
       const { email, newPassword } = req.body;
 
-      const normalizedEmail = email.trim().toLowerCase();
+      const normalizedEmail = normalizeEmail(email);
+      if (!normalizedEmail) {
+        return res.status(400).json({
+          success: false,
+          message: "Email is required",
+        });
+      }
 
       const otpVerified = await AuthModel.checkOTPVerified(normalizedEmail);
 
@@ -843,6 +914,7 @@ class AuthController {
 
   // Add address
   async addAddress(req, res) {
+    const conn = await db.getConnection();
     try {
       const userId = req.user?.user_id;
 
@@ -864,7 +936,9 @@ class AuthController {
       }
 
       //  Check if user already has any address
-      const hasAddress = await AddressModel.hasAnyAddress(userId);
+      await conn.beginTransaction();
+
+      const hasAddress = await AddressModel.hasAnyAddress(userId, conn);
 
       let finalIsDefault = 0;
 
@@ -877,17 +951,22 @@ class AuthController {
         finalIsDefault = 1;
 
         // Clear existing default first
-        await AddressModel.clearDefault(userId);
+        await AddressModel.clearDefault(userId, conn);
       }
 
-      const addressId = await AddressModel.addAddress({
-        user_id: userId,
-        address1,
-        city,
-        zipcode,
-        is_default: finalIsDefault,
-        ...rest,
-      });
+      const addressId = await AddressModel.addAddress(
+        {
+          user_id: userId,
+          address1,
+          city,
+          zipcode,
+          is_default: finalIsDefault,
+          ...rest,
+        },
+        conn,
+      );
+
+      await conn.commit();
 
       return res.status(201).json({
         success: true,
@@ -895,16 +974,20 @@ class AuthController {
         address_id: addressId,
       });
     } catch (error) {
+      await conn.rollback();
       console.error("Add Address Error:", error);
       return res.status(500).json({
         success: false,
         message: "Internal server error",
       });
+    } finally {
+      conn.release();
     }
   }
 
   // Update address
   async updateAddress(req, res) {
+    const conn = await db.getConnection();
     try {
       const userId = req.user?.user_id;
 
@@ -918,10 +1001,17 @@ class AuthController {
       const { address_id } = req.params;
       const data = req.body;
 
+      await conn.beginTransaction();
+
       // 1 Check specific address ownership
-      const address = await AddressModel.getAddressById(address_id, userId);
+      const address = await AddressModel.getAddressById(
+        address_id,
+        userId,
+        conn,
+      );
 
       if (!address) {
+        await conn.rollback();
         return res.status(404).json({
           success: false,
           message: "Address not found",
@@ -929,12 +1019,25 @@ class AuthController {
       }
 
       // Normalize undefined → keep original value
-      const normalizedData = {};
+      const fields = [
+        "address_type",
+        "is_default",
+        "address1",
+        "address2",
+        "city",
+        "zipcode",
+        "state_id",
+        "landmark",
+        "contact_name",
+        "contact_phone",
+        "latitude",
+        "longitude",
+      ];
 
-      for (const key in data) {
-        if (data[key] !== undefined) {
-          normalizedData[key] = data[key];
-        }
+      const normalizedData = {};
+      for (const field of fields) {
+        normalizedData[field] =
+          data[field] !== undefined ? data[field] : address[field];
       }
 
       // -------------------------------
@@ -943,9 +1046,10 @@ class AuthController {
 
       // If user tries to REMOVE default from THIS address
       if (Number(normalizedData.is_default) === 0 && address.is_default === 1) {
-        const defaultCount = await AddressModel.countDefault(userId);
+        const defaultCount = await AddressModel.countDefault(userId, conn);
 
         if (defaultCount === 1) {
+          await conn.rollback();
           return res.status(400).json({
             success: false,
             message: "At least one address must be default",
@@ -955,32 +1059,39 @@ class AuthController {
 
       // If user sets THIS address as default
       if (Number(normalizedData.is_default) === 1) {
-        await AddressModel.clearDefault(userId);
+        await AddressModel.clearDefault(userId, conn);
       }
 
       const updated = await AddressModel.updateAddress(
         address_id,
         userId,
         normalizedData,
+        conn,
       );
 
       if (!updated) {
+        await conn.rollback();
         return res.status(404).json({
           success: false,
           message: "Address not found",
         });
       }
 
+      await conn.commit();
+
       return res.json({
         success: true,
         message: "Address updated successfully",
       });
     } catch (error) {
+      await conn.rollback();
       console.error("Update Address Error:", error);
       return res.status(500).json({
         success: false,
         message: "Failed to update address",
       });
+    } finally {
+      conn.release();
     }
   }
 
@@ -1156,6 +1267,7 @@ class AuthController {
       const existingUser = await AuthModel.getProfile(connection, userId);
 
       if (!existingUser) {
+        await connection.rollback();
         return res.status(404).json({
           success: false,
           message: "User not found",
@@ -1166,6 +1278,7 @@ class AuthController {
 
       if (req.file) {
         if (!req.file.mimetype.startsWith("image/")) {
+          await connection.rollback();
           return res.status(400).json({
             success: false,
             message: "Invalid image file",

@@ -48,7 +48,7 @@ class AddressModel {
   }
 
   // add address
-  async addAddress(data) {
+  async addAddress(data, conn = db) {
     // helper to prevent mysql undefined error
     const safe = (val) => (val === undefined ? null : val);
 
@@ -68,7 +68,7 @@ class AddressModel {
       longitude,
     } = data;
 
-    const [result] = await db.execute(
+    const [result] = await conn.execute(
       `INSERT INTO customer_addresses (
       user_id, 
       address_type, 
@@ -106,8 +106,8 @@ class AddressModel {
   }
 
   // Count default addresses
-  async countDefault(userId) {
-    const [rows] = await db.execute(
+  async countDefault(userId, conn = db) {
+    const [rows] = await conn.execute(
       `SELECT COUNT(*) as count 
      FROM customer_addresses 
      WHERE user_id = ? AND is_default = 1`,
@@ -117,8 +117,8 @@ class AddressModel {
   }
 
   // count user address
-  async hasAnyAddress(userId) {
-    const [rows] = await db.execute(
+  async hasAnyAddress(userId, conn = db) {
+    const [rows] = await conn.execute(
       `SELECT 1 
      FROM customer_addresses 
      WHERE user_id = ? 
@@ -130,8 +130,8 @@ class AddressModel {
   }
 
   //   clear Default Address
-  async clearDefault(userId) {
-    await db.execute(
+  async clearDefault(userId, conn = db) {
+    await conn.execute(
       `UPDATE customer_addresses
        SET is_default = 0
        WHERE user_id = ?`,
@@ -140,7 +140,7 @@ class AddressModel {
   }
 
   //   Update address
-  async updateAddress(addressId, userId, data) {
+  async updateAddress(addressId, userId, data, conn = db) {
     const {
       address_type = null,
       is_default = null,
@@ -190,7 +190,7 @@ class AddressModel {
       userId,
     ];
 
-    const [result] = await db.execute(query, values);
+    const [result] = await conn.execute(query, values);
 
     return result.affectedRows;
   }
@@ -222,8 +222,8 @@ class AddressModel {
 }
 
   //   Fetch address by ID
-  async getAddressById(addressId, userId) {
-    const [rows] = await db.execute(
+  async getAddressById(addressId, userId, conn = db) {
+    const [rows] = await conn.execute(
       `SELECT ca.*, s.state_name as state
      FROM customer_addresses ca
      LEFT JOIN states s ON ca.state_id = s.state_id

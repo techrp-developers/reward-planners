@@ -1,4 +1,5 @@
 const db = require("../../../config/database");
+const bcrypt = require("bcryptjs");
 const fs = require("fs");
 const path = require("path");
 
@@ -13,6 +14,26 @@ class authModel {
   /* ======================================================
      BASIC USER QUERIES
   ====================================================== */
+  // async findByEmail(email) {
+  //   const [rows] = await db.execute(
+  //     `SELECT
+  //       user_id,
+  //       name,
+  //       email,
+  //       password,
+  //       status,
+  //       is_verified,
+  //       // COALESCE(token_version, 0) AS token_version,
+  //       device_id,
+  //       device_name
+  //    FROM customer
+  //    WHERE email = ?`,
+  //     [email],
+  //   );
+
+  //   return rows[0];
+  // }
+
   async findByEmail(email) {
     const [rows] = await db.execute(
       `SELECT 
@@ -41,6 +62,23 @@ class authModel {
     );
     return rows[0];
   }
+
+  // async findById(userId) {
+  //   const [rows] = await db.execute(
+  //     ` SELECT
+  //       user_id,
+  //       name,
+  //       email,
+  //       status,
+  //       is_verified,
+  //       COALESCE(token_version, 0) AS token_version,
+  //       last_login_at
+  //      FROM customer
+  //      WHERE user_id = ?`,
+  //     [userId],
+  //   );
+  //   return rows[0];
+  // }
 
   async findById(userId) {
     const [rows] = await db.execute(
@@ -95,6 +133,29 @@ class authModel {
       email.toLowerCase(),
     ]);
   }
+
+  // async verifyOTP(email, otp) {
+  //   const [rows] = await db.execute(
+  //     `SELECT id, otp, attempt_count
+  //    FROM email_otps
+  //    WHERE email = ?
+  //    AND expiry > NOW()
+  //    ORDER BY id DESC
+  //    LIMIT 1`,
+  //     [email],
+  //   );
+
+  //   const otpRecord = rows[0];
+  //   if (!otpRecord) return null;
+
+  //   const isMatch = await bcrypt.compare(otp.toString(), otpRecord.otp);
+  //   if (!isMatch) return null;
+
+  //   return {
+  //     id: otpRecord.id,
+  //     attempt_count: otpRecord.attempt_count,
+  //   };
+  // }
 
   async verifyOTP(email, otp) {
     const [rows] = await db.execute(
@@ -202,6 +263,16 @@ class authModel {
     return rows[0];
   }
 
+  // async updatePassword(conn, userId, hashedPassword) {
+  //   await conn.execute(
+  //     `UPDATE customer
+  //      SET password = ?,
+  //          token_version = COALESCE(token_version, 0) + 1
+  //      WHERE user_id = ?`,
+  //     [hashedPassword, userId],
+  //   );
+  // }
+
   async updatePassword(conn, userId, hashedPassword) {
     await conn.execute(
       `UPDATE customer
@@ -233,6 +304,15 @@ class authModel {
       [userId],
     );
   }
+
+  // async incrementTokenVersion(userId) {
+  //   await db.execute(
+  //     `UPDATE customer
+  //      SET token_version = COALESCE(token_version, 0) + 1
+  //      WHERE user_id = ?`,
+  //     [userId],
+  //   );
+  // }
 
   async updateFcmToken(userId, fcmToken) {
     await db.execute(
