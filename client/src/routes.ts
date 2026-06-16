@@ -44,6 +44,7 @@ export const routes = {
     services:{
       enquiries:"/manager/enquiries",
       details: "/manager/enquiry/:id",
+      orders: "/manager/orders"
     },
     rewards:{
       rewardRule:"/manager/rewards-rule",
