@@ -160,11 +160,14 @@ async function syncOrderStatus(orderId) {
   if (finalStatus === "delivered" && result.affectedRows > 0) {
     NotificationModel.create({
       user_id: userId,
+      module: "ecommerce",
       type: "delivery",
       title: "Order Successful 📦",
       message: "Your package has been delivered successfully.",
+      icon: "package-check",
       reference_type: "order",
       reference_id: orderId,
+      action_url: `/orders/order-details/${orderId}`,
     }).catch((err) => console.error("Delivery notification failed:", err));
   }
 }
@@ -327,12 +330,16 @@ async function updateShipmentTracking(shipment) {
         if (userId) {
           NotificationModel.create({
             user_id: userId,
+            module: "ecommerce",
             type: "ndr",
             title: "Delivery Failed 🚫",
             message:
               "We couldn't deliver your order. Please update your details.",
+            icon: "alert-circle",
             reference_type: "order",
             reference_id: shipment.order_id,
+            action_url: `/orders/order-details/${shipment.order_id}`,
+            priority: "high",
           }).catch((err) => console.error("NDR notification failed:", err));
         }
       }
@@ -408,12 +415,15 @@ async function updateShipmentTracking(shipment) {
           if (!existingNotif.length && userId) {
             NotificationModel.create({
               user_id: userId,
+              module: "ecommerce",
               type: "rto",
               title: "Order Returned 🚚",
               message:
                 "Your order could not be delivered and is being returned.",
+              icon: "rotate-ccw",
               reference_type: "order",
               reference_id: shipment.order_id,
+              action_url: `/orders/order-details/${shipment.order_id}`,
             }).catch((err) => console.error("RTO notification failed:", err));
           }
         } else {

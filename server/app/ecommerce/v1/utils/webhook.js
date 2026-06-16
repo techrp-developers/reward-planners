@@ -8,6 +8,7 @@ const {
   orderConfirmationMail,
 } = require("../../../../services/mailBuilder/orderConfirmation");
 const { runNonBlocking } = require("../../../../utils/nonBlocking");
+const { notifyUser } = require("../../../common/utils/notification");
 const RefundService = require("../controllers/paymentController");
 
 // booking payload
@@ -916,21 +917,44 @@ async function processEvent(req) {
         [order_id],
       );
 
-      // await NotificationModel.create({
-      //   userId,
-      //   module: "ecommerce",
-      //   type: "order_placed",
-      //   title: "Order placed ✅",
-      //   message: "Your order is confirmed and being processed.",
-      //   icon: "order",
-      //   reference_type: "order",
-      //   reference_id: orderId,
-      //   action_url: `/orders/order-details/${orderId}`,
-      //   metadata: { company_id: companyId },
-      //   priority: "normal",
-      // });
-
       await conn.commit();
+
+      notifyUser(
+        {
+          userId,
+          module: "ecommerce",
+          type: "order_paid",
+          title: "Order confirmed",
+          message: "Your order is confirmed and being processed.",
+          icon: "shopping-bag",
+          reference_type: "order",
+          reference_id: order_id,
+          action_url: `/orders/order-details/${order_id}`,
+          metadata: {
+            reward_coins_used: redeemedCoins,
+            reward_coins_earned: earnedCoins,
+          },
+        },
+        "ecommerce order paid notification",
+      );
+
+      if (earnedCoins > 0) {
+        notifyUser(
+          {
+            userId,
+            module: "wallet",
+            type: "order_reward_earned",
+            title: "Coins earned",
+            message: `You earned ${earnedCoins} reward coins from your order.`,
+            icon: "wallet",
+            reference_type: "order",
+            reference_id: order_id,
+            action_url: "/wallet",
+            metadata: { coins: earnedCoins, order_id },
+          },
+          "order reward notification",
+        );
+      }
 
       processShipmentsAfterPayment(order_id).catch((err) => {
         // ==========================

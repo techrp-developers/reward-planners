@@ -4,6 +4,7 @@ const razorpay = require("../services/razorpay_service");
 const ekoService = require("../services/eko_service");
 const rechargeService = require("../services/recharge_service");
 const db = require("../../../../config/database");
+const { notifyUser } = require("../../../common/utils/notification");
 
 class PaymentController {
   //   create Order
@@ -314,6 +315,22 @@ class PaymentController {
 
         await conn.commit();
 
+        notifyUser(
+          {
+            userId,
+            module: "bbps",
+            type: "bbps_payment_success",
+            title: "Bill payment successful",
+            message: `Your payment of Rs. ${Number(txn.amount).toFixed(2)} was successful.`,
+            icon: "receipt",
+            reference_type: "bbps_transaction",
+            reference_id: txn.id,
+            action_url: `/bbps/transactions/${txn.id}`,
+            metadata: { operator_id: txn.operator_id },
+          },
+          "bbps success notification",
+        );
+
         return res.json({
           success: true,
           transaction_id: txn.id,
@@ -331,6 +348,23 @@ class PaymentController {
         );
 
         await conn.commit();
+
+        notifyUser(
+          {
+            userId,
+            module: "bbps",
+            type: "bbps_payment_retry",
+            title: "Bill payment pending",
+            message: "Your payment was captured, but bill processing will be retried automatically.",
+            icon: "clock",
+            reference_type: "bbps_transaction",
+            reference_id: txn.id,
+            action_url: `/bbps/transactions/${txn.id}`,
+            priority: "high",
+            metadata: { operator_id: txn.operator_id },
+          },
+          "bbps retry notification",
+        );
 
         return res.status(500).json({
           success: false,
@@ -425,6 +459,21 @@ class PaymentController {
       await TransactionModel.updateStatus(txn.id, "PAID", result, conn);
 
       await conn.commit();
+
+      notifyUser(
+        {
+          userId,
+          module: "bbps",
+          type: "bbps_retry_success",
+          title: "Bill payment completed",
+          message: `Your payment of Rs. ${Number(txn.amount).toFixed(2)} completed successfully.`,
+          icon: "receipt",
+          reference_type: "bbps_transaction",
+          reference_id: txn.id,
+          action_url: `/bbps/transactions/${txn.id}`,
+        },
+        "bbps retry success notification",
+      );
 
       return res.json({ success: true, result });
     } catch (err) {

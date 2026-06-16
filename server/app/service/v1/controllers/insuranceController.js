@@ -1,4 +1,5 @@
 const db = require("../../../../config/database");
+const { notifyUser } = require("../../../common/utils/notification");
 
 class InsuranceController {
   // start enquiry
@@ -44,6 +45,22 @@ class InsuranceController {
       `INSERT INTO insurance_enquiries (user_id, insurance_type)
      VALUES (?, ?)`,
       [userId, insurance_type],
+    );
+
+    notifyUser(
+      {
+        userId,
+        module: "service",
+        type: "insurance_enquiry_started",
+        title: "Insurance enquiry started",
+        message: "Your insurance enquiry has been created.",
+        icon: "shield",
+        reference_type: "insurance_enquiry",
+        reference_id: result.insertId,
+        action_url: `/insurance/enquiry/${result.insertId}`,
+        metadata: { insurance_type },
+      },
+      "insurance enquiry notification",
     );
 
     res.json({
@@ -285,6 +302,22 @@ class InsuranceController {
      WHERE id = ? AND user_id = ?`,
         [enquiry_id, userId],
       );
+
+      notifyUser(
+        {
+          userId,
+          module: "service",
+          type: "insurance_enquiry_completed",
+          title: "Insurance enquiry completed",
+          message: "Your insurance enquiry has been submitted successfully.",
+          icon: "shield-check",
+          reference_type: "insurance_enquiry",
+          reference_id: enquiry_id,
+          action_url: `/insurance/enquiry/${enquiry_id}`,
+        },
+        "insurance completed notification",
+      );
+
       res.json({
         success: true,
         message: "Enquiry completed",

@@ -4,6 +4,7 @@ const {
   sendNewEnquiryEmail,
 } = require("../../../../services/mailBuilder/enquiryNotification");
 const { runNonBlocking } = require("../../../../utils/nonBlocking");
+const { notifyUser } = require("../../../common/utils/notification");
 
 class ServiceEnquiryController {
   // create user Enquiry
@@ -64,6 +65,22 @@ class ServiceEnquiryController {
         message: "Enquiry submitted successfully",
         data: result,
       });
+
+      notifyUser(
+        {
+          userId,
+          module: "service",
+          type: "service_enquiry_submitted",
+          title: "Enquiry submitted",
+          message: "Your service enquiry has been submitted. Our team will contact you soon.",
+          icon: "message-circle",
+          reference_type: "service_enquiry",
+          reference_id: result?.id || result?.insertId,
+          action_url: "/services/enquiries",
+          metadata: { service_id, bundle_id, variant_id },
+        },
+        "service enquiry notification",
+      );
     } catch (err) {
       res.status(500).json({ success: false, message: err.message });
     }

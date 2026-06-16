@@ -5,6 +5,7 @@ const db = require("../../../../config/database");
 const {
   expirePendingOrder,
 } = require("../../../../services/Razorpay/orderExpiryService");
+const { notifyUser } = require("../../../common/utils/notification");
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZOR_API_KEY,
@@ -410,6 +411,26 @@ class PaymentController {
         );
 
         await conn.commit(); // commit the failed status
+        const [[orderUser]] = await db.query(
+          `SELECT user_id FROM eorders WHERE order_id = ? LIMIT 1`,
+          [orderId],
+        );
+        notifyUser(
+          {
+            userId: orderUser?.user_id,
+            module: "ecommerce",
+            type: "refund_failed",
+            title: "Refund needs attention",
+            message: "We could not complete your refund automatically. Our team will review it.",
+            icon: "alert-circle",
+            reference_type: "refund",
+            reference_id: refundId,
+            action_url: `/orders/order-details/${orderId}`,
+            priority: "high",
+            metadata: { order_id: orderId, amount },
+          },
+          "refund failed notification",
+        );
         console.error("Razorpay refund API failed:", razorpayErr);
         return;
       }
@@ -448,6 +469,26 @@ class PaymentController {
       );
 
       await conn.commit();
+
+      const [[orderUser]] = await db.query(
+        `SELECT user_id FROM eorders WHERE order_id = ? LIMIT 1`,
+        [orderId],
+      );
+      notifyUser(
+        {
+          userId: orderUser?.user_id,
+          module: "ecommerce",
+          type: "refund_completed",
+          title: "Refund completed",
+          message: `A refund of Rs. ${Number(amount).toFixed(2)} has been processed.`,
+          icon: "refresh-cw",
+          reference_type: "refund",
+          reference_id: refundId,
+          action_url: `/orders/order-details/${orderId}`,
+          metadata: { order_id: orderId, amount, refund_id: refund.id },
+        },
+        "refund completed notification",
+      );
     } catch (err) {
       await conn.rollback();
       console.error("Refund failed:", err);

@@ -1,5 +1,6 @@
 const FitnessModel = require("../models/fitnessModel");
 const db = require("../../../../config/database");
+const { notifyUser } = require("../../../common/utils/notification");
 
 const formatDate = (date) => {
   return new Date(date).toLocaleDateString("en-CA"); // YYYY-MM-DD
@@ -393,6 +394,49 @@ class FitnessService {
       // -------------------------------
       await conn.commit();
 
+      if (totalReward > 0) {
+        notifyUser(
+          {
+            userId: customerId,
+            module: "fitness",
+            type: "fitness_reward_earned",
+            title: "Fitness reward earned",
+            message: `You earned ${totalReward} coins from your fitness progress.`,
+            icon: "footprints",
+            reference_type: "fitness_reward",
+            reference_id: date,
+            action_url: "/fitness/wallet",
+            metadata: {
+              coins: totalReward,
+              goal_achieved: goalAchieved,
+              achievements: unlockedAchievements.map((item) => item.id),
+            },
+          },
+          "fitness reward notification",
+        );
+      }
+
+      for (const achievement of unlockedAchievements) {
+        notifyUser(
+          {
+            userId: customerId,
+            module: "fitness",
+            type: "fitness_achievement_unlocked",
+            title: "Achievement unlocked",
+            message: `You unlocked ${achievement.title}.`,
+            icon: "trophy",
+            reference_type: "fitness_achievement",
+            reference_id: achievement.id,
+            action_url: "/fitness/achievements",
+            metadata: {
+              reward_coins: achievement.reward_coins,
+              achievement_type: achievement.type,
+            },
+          },
+          "fitness achievement notification",
+        );
+      }
+
       const goalMap = {
         weight_loss: "Weight Loss",
         weight_gain: "Weight Gain",
@@ -456,6 +500,22 @@ class FitnessService {
     await db.execute(
       `UPDATE customer SET fitness_onboarding_done = 1 WHERE user_id = ?`,
       [customerId],
+    );
+
+    notifyUser(
+      {
+        userId: customerId,
+        module: "fitness",
+        type: "fitness_goal_set",
+        title: "Fitness goal set",
+        message: `Your daily goal is set to ${dailySteps} steps.`,
+        icon: "target",
+        reference_type: "fitness_goal",
+        reference_id: customerId,
+        action_url: "/fitness",
+        metadata: { daily_steps: dailySteps },
+      },
+      "fitness goal notification",
     );
   }
 

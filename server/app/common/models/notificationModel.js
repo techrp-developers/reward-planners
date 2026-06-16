@@ -6,7 +6,7 @@ class NotificationModel {
   ================================= */
   async create(data) {
     const {
-      userId,
+      user_id,
       module,
       type,
       title,
@@ -38,7 +38,7 @@ class NotificationModel {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
-        userId,
+        user_id,
         module,
         type,
         title,

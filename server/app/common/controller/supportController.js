@@ -1,5 +1,6 @@
 const db = require("../../../config/database");
 const { sendNewTicketMail } = require("../../../services/mailBuilder/ticketNotification");
+const { notifyUser } = require("../utils/notification");
 
 class SupportController {
   async getCategories(req, res) {
@@ -101,6 +102,22 @@ class SupportController {
         category: meta?.category_name,
         user: meta?.user_name,
       }).catch(console.error);
+
+      notifyUser(
+        {
+          userId,
+          module: "common",
+          type: "support_ticket_created",
+          title: "Support ticket created",
+          message: `Your support ticket #${ticketId} has been submitted.`,
+          icon: "support",
+          reference_type: "support_ticket",
+          reference_id: ticketId,
+          action_url: `/support/tickets/${ticketId}`,
+          metadata: { category_id, category: meta?.category_name },
+        },
+        "support ticket notification",
+      );
 
       return res.status(201).json({
         success: true,

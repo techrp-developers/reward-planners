@@ -2,6 +2,7 @@ const db = require("../../../../config/database");
 const TransactionModel = require("../models/transactionModel");
 const ekoService = require("../services/eko_service");
 const rechargeService = require("../services/recharge_service");
+const { notifyUser } = require("../../../common/utils/notification");
 
 async function processEvent(req) {
   const conn = await db.getConnection();
@@ -55,6 +56,22 @@ async function processEvent(req) {
         await TransactionModel.updateStatus(txn.id, "PAID", result, conn);
 
         await conn.commit();
+
+        notifyUser(
+          {
+            userId: txn.user_id,
+            module: "bbps",
+            type: "bbps_payment_success",
+            title: "Bill payment successful",
+            message: `Your payment of Rs. ${Number(txn.amount).toFixed(2)} was successful.`,
+            icon: "receipt",
+            reference_type: "bbps_transaction",
+            reference_id: txn.id,
+            action_url: `/bbps/transactions/${txn.id}`,
+            metadata: { operator_id: txn.operator_id },
+          },
+          "bbps webhook success notification",
+        );
       } catch (err) {
         await TransactionModel.updateStatus(
           txn.id,
@@ -64,6 +81,23 @@ async function processEvent(req) {
         );
 
         await conn.commit();
+
+        notifyUser(
+          {
+            userId: txn.user_id,
+            module: "bbps",
+            type: "bbps_payment_retry",
+            title: "Bill payment pending",
+            message: "Your payment was captured, but bill processing will be retried automatically.",
+            icon: "clock",
+            reference_type: "bbps_transaction",
+            reference_id: txn.id,
+            action_url: `/bbps/transactions/${txn.id}`,
+            priority: "high",
+            metadata: { operator_id: txn.operator_id },
+          },
+          "bbps webhook retry notification",
+        );
       }
     }
 
@@ -111,6 +145,22 @@ async function processEvent(req) {
       await TransactionModel.updateStatus(txn.id, "FAILED_RETRY", body, conn);
 
       await conn.commit();
+
+      notifyUser(
+        {
+          userId: txn.user_id,
+          module: "bbps",
+          type: "bbps_payment_failed",
+          title: "Bill payment failed",
+          message: "Your bill payment failed. Please try again.",
+          icon: "x-circle",
+          reference_type: "bbps_transaction",
+          reference_id: txn.id,
+          action_url: `/bbps/transactions/${txn.id}`,
+          priority: "high",
+        },
+        "bbps webhook failed notification",
+      );
     }
   } catch (err) {
     await conn.rollback();

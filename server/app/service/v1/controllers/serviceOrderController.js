@@ -13,6 +13,7 @@ const {
   finalizePaidServiceOrder,
   generateInvoiceOnce,
 } = require("../utils/paymentFinalizer");
+const { notifyUser } = require("../../../common/utils/notification");
 
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
 function getPublicUrl(path) {
@@ -348,6 +349,23 @@ class ServiceOrderController {
           redirect_to: `/service-order-documents/parent-documents/${parent_order_id}`,
         },
       });
+
+      if (!alreadyPaid) {
+        notifyUser(
+          {
+            userId,
+            module: "service",
+            type: "service_order_paid",
+            title: "Service order confirmed",
+            message: "Your service order is confirmed. Please submit the required documents.",
+            icon: "briefcase",
+            reference_type: "service_order",
+            reference_id: parent_order_id,
+            action_url: `/service-order-documents/parent-documents/${parent_order_id}`,
+          },
+          "service order paid notification",
+        );
+      }
 
       generateInvoiceOnce(parent_order_id).catch((err) => {
         console.error(
@@ -935,6 +953,21 @@ class ServiceOrderController {
         [parentOrderId],
       );
 
+      notifyUser(
+        {
+          userId,
+          module: "service",
+          type: "service_documents_submitted",
+          title: "Documents submitted",
+          message: "Your service documents were submitted successfully.",
+          icon: "file-check",
+          reference_type: "service_order",
+          reference_id: parentOrderId,
+          action_url: `/service-orders/${parentOrderId}`,
+        },
+        "service documents submitted notification",
+      );
+
       return res.json({
         success: true,
         message: "Documents submitted successfully",
@@ -972,7 +1005,7 @@ class ServiceOrderController {
       // validate order exists
       const [[order]] = await db.execute(
         `
-      SELECT id, status
+      SELECT id, user_id, parent_order_id, status
       FROM service_orders
       WHERE id = ?
       `,
@@ -994,6 +1027,22 @@ class ServiceOrderController {
       }
 
       await ServiceOrderModel.updateStatus(id, status);
+
+      notifyUser(
+        {
+          userId: order.user_id,
+          module: "service",
+          type: `service_order_${status}`,
+          title: "Service order updated",
+          message: `Your service order status is now ${status.replace(/_/g, " ")}.`,
+          icon: "briefcase",
+          reference_type: "service_order",
+          reference_id: order.parent_order_id || id,
+          action_url: `/service-orders/${order.parent_order_id || id}`,
+          metadata: { status, service_order_id: id },
+        },
+        "service order status notification",
+      );
 
       res.json({
         success: true,
@@ -1171,6 +1220,22 @@ class ServiceOrderController {
           request_id: requestId,
         },
       });
+
+      notifyUser(
+        {
+          userId,
+          module: "service",
+          type: "service_support_requested",
+          title: "Support request submitted",
+          message: "Your service support request has been submitted.",
+          icon: "life-buoy",
+          reference_type: "support_request",
+          reference_id: requestId,
+          action_url: `/service-orders/${service_order_id}/support`,
+          metadata: { service_order_id, issue_id },
+        },
+        "service support notification",
+      );
     } catch (err) {
       // cleanup temp files
       if (req.files?.length) {
@@ -1490,6 +1555,21 @@ class ServiceOrderController {
       );
 
       await connection.commit();
+
+      notifyUser(
+        {
+          userId,
+          module: "service",
+          type: "service_cancellation_requested",
+          title: "Cancellation requested",
+          message: "Your service order cancellation request has been submitted.",
+          icon: "x-circle",
+          reference_type: "service_order",
+          reference_id: service_order_id,
+          action_url: `/service-orders/${service_order_id}`,
+        },
+        "service cancellation notification",
+      );
 
       res.json({
         success: true,

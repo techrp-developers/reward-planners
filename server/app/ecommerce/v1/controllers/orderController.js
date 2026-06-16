@@ -11,6 +11,7 @@ const {
   enqueueWhatsApp,
 } = require("../../../../services/whatsapp/waEnqueueService");
 const { runNonBlocking } = require("../../../../utils/nonBlocking");
+const { notifyUser } = require("../../../common/utils/notification");
 
 function positiveInt(value, fallback, max = 100) {
   const parsed = Number.parseInt(value, 10);
@@ -514,14 +515,20 @@ class OrderController {
 
       await conn.commit();
 
-      // await NotificationModel.create({
-      //   userId,
-      //   type: "order",
-      //   title: "Order Cancelled ❌📦",
-      //   message: "Your order was cancelled as requested.",
-      //   reference_type: "order",
-      //   reference_id: orderId,
-      // });
+      notifyUser(
+        {
+          userId,
+          module: "ecommerce",
+          type: "order_cancellation_requested",
+          title: "Cancellation requested",
+          message: "Your order cancellation request has been submitted.",
+          icon: "x-circle",
+          reference_type: "order",
+          reference_id: orderId,
+          action_url: `/orders/order-details/${orderId}`,
+        },
+        "order cancellation notification",
+      );
 
       runNonBlocking(
         () => sendOrderPlacedWhatsApp(orderId),

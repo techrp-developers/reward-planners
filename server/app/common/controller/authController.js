@@ -17,6 +17,7 @@ const { sendOtpMail } = require("../../../services/mailBuilder/sendOtp");
 const {
   enqueueWhatsApp,
 } = require("../../../services/whatsapp/waEnqueueService");
+const { notifyUser } = require("../utils/notification");
 const { uploadToR2 } = require("../../../utils/r2upload");
 const { deleteFromR2 } = require("../../../utils/r2delete");
 
@@ -326,6 +327,23 @@ class AuthController {
 
       await conn.commit();
 
+      const createdUser = await AuthModel.findByEmail(normalizedEmail);
+
+      notifyUser(
+        {
+          userId: createdUser?.user_id,
+          module: "common",
+          type: "account_activated",
+          title: "Account activated",
+          message: "Your RewardPlanners account is ready to use.",
+          icon: "user-check",
+          reference_type: "account",
+          reference_id: createdUser?.user_id,
+          action_url: "/profile",
+        },
+        "account activation notification",
+      );
+
       setImmediate(() => {
         accountCreationSuccessMail({
           name: employee.name,
@@ -428,6 +446,22 @@ class AuthController {
       );
 
       if (firstLoginBonus) {
+        notifyUser(
+          {
+            userId: user.user_id,
+            module: "wallet",
+            type: "first_login_reward",
+            title: "Coins credited",
+            message: "You received 3000 reward coins for your first login.",
+            icon: "wallet",
+            reference_type: "wallet",
+            reference_id: user.user_id,
+            action_url: "/wallet",
+            metadata: { coins: 3000 },
+          },
+          "first login reward notification",
+        );
+
         setImmediate(() => {
           rewardCreditMail({
             email: user.email,
@@ -587,6 +621,22 @@ class AuthController {
       await AuthModel.updatePassword(connection, userId, hashedPassword);
 
       await connection.commit();
+
+      notifyUser(
+        {
+          userId,
+          module: "common",
+          type: "password_changed",
+          title: "Password changed",
+          message: "Your account password was changed successfully.",
+          icon: "lock",
+          reference_type: "account",
+          reference_id: userId,
+          action_url: "/profile/security",
+          priority: "high",
+        },
+        "password changed notification",
+      );
 
       return res.json({
         success: true,
@@ -832,6 +882,22 @@ class AuthController {
 
       await conn.commit();
 
+      notifyUser(
+        {
+          userId: user.user_id,
+          module: "common",
+          type: "password_reset",
+          title: "Password reset",
+          message: "Your password was reset successfully.",
+          icon: "lock",
+          reference_type: "account",
+          reference_id: user.user_id,
+          action_url: "/profile/security",
+          priority: "high",
+        },
+        "password reset notification",
+      );
+
       return res.json({
         success: true,
         message: "Password reset successfully",
@@ -968,6 +1034,21 @@ class AuthController {
 
       await conn.commit();
 
+      notifyUser(
+        {
+          userId,
+          module: "common",
+          type: "address_added",
+          title: "Address added",
+          message: "A new address was added to your account.",
+          icon: "map-pin",
+          reference_type: "address",
+          reference_id: addressId,
+          action_url: "/profile/addresses",
+        },
+        "address added notification",
+      );
+
       return res.status(201).json({
         success: true,
         message: "Address added successfully",
@@ -1079,6 +1160,21 @@ class AuthController {
 
       await conn.commit();
 
+      notifyUser(
+        {
+          userId,
+          module: "common",
+          type: "address_updated",
+          title: "Address updated",
+          message: "Your address was updated successfully.",
+          icon: "map-pin",
+          reference_type: "address",
+          reference_id: address_id,
+          action_url: "/profile/addresses",
+        },
+        "address updated notification",
+      );
+
       return res.json({
         success: true,
         message: "Address updated successfully",
@@ -1118,6 +1214,21 @@ class AuthController {
           message: "Address not found",
         });
       }
+
+      notifyUser(
+        {
+          userId,
+          module: "common",
+          type: "address_deleted",
+          title: "Address deleted",
+          message: "An address was removed from your account.",
+          icon: "map-pin",
+          reference_type: "address",
+          reference_id: address_id,
+          action_url: "/profile/addresses",
+        },
+        "address deleted notification",
+      );
 
       return res.json({
         success: true,
@@ -1317,6 +1428,21 @@ class AuthController {
       await AuthModel.updateProfile(connection, userId, updatedData);
 
       await connection.commit();
+
+      notifyUser(
+        {
+          userId,
+          module: "common",
+          type: "profile_updated",
+          title: "Profile updated",
+          message: "Your profile details were updated.",
+          icon: "user",
+          reference_type: "profile",
+          reference_id: userId,
+          action_url: "/profile",
+        },
+        "profile updated notification",
+      );
 
       return res.status(200).json({
         success: true,
