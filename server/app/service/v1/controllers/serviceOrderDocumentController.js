@@ -24,7 +24,10 @@ class ServiceOrderDocumentController {
         });
       }
 
-      const docs = await ServiceOrderDocumentModel.getRequiredDocs(orderId);
+      const docs = await ServiceOrderDocumentModel.getRequiredDocs(
+        orderId,
+        userId,
+      );
 
       res.json({
         success: true,

@@ -1,4 +1,8 @@
 const db = require("../../../../config/database");
+const {
+  finalizePaidServiceOrder,
+  generateInvoiceOnce,
+} = require("./paymentFinalizer");
 
 async function processEvent(req) {
   const body = req.parsedBody;
@@ -39,25 +43,22 @@ async function processEvent(req) {
         return;
       }
 
-      await connection.execute(
-        `UPDATE service_orders
-         SET status = 'documents_pending',
-             payment_id = ?,
-             payment_status = 'paid'
-         WHERE parent_order_id = ? AND payment_status != 'paid'`,
-        [paymentId, parentOrderId],
-      );
-
-      await connection.execute(
-        `UPDATE razorpay_orders
-         SET razorpay_payment_id = ?,
-             status = 'success',
-             raw_response = ?
-         WHERE razorpay_order_id = ?`,
-        [paymentId, JSON.stringify(body), razorpayOrderId],
-      );
+      await finalizePaidServiceOrder({
+        conn: connection,
+        parentOrderId,
+        paymentId,
+        razorpayOrderId,
+        rawResponse: body,
+      });
 
       await connection.commit();
+
+      generateInvoiceOnce(parentOrderId).catch((err) => {
+        console.error(
+          `[webhook] Invoice generation failed for parent_order_id=${parentOrderId}:`,
+          err.message,
+        );
+      });
     } catch (err) {
       await connection.rollback();
       throw err;
@@ -86,7 +87,7 @@ async function processEvent(req) {
       `UPDATE service_orders
        SET payment_status = 'failed'
        WHERE parent_order_id = ?
-       AND payment_status != 'failed'`,
+       AND payment_status NOT IN ('paid', 'failed')`,
       [parentOrderId],
     );
 

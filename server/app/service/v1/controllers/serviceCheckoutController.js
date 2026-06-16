@@ -55,6 +55,8 @@ function calculateSummary({ bundles = [], individual_items = [] }) {
 class ServiceCheckoutController {
   // checkout from cart
   async addToCheckout(req, res) {
+    let conn;
+
     try {
       const userId = req.user?.user_id;
       const addressId = req.body?.address_id;
@@ -88,6 +90,9 @@ class ServiceCheckoutController {
       const createdOrders = [];
       const parentOrderId = crypto.randomUUID();
 
+      conn = await db.getConnection();
+      await conn.beginTransaction();
+
       //  1. Handle individual items
       for (let item of individual_items) {
         const order = await ServiceOrderModel.create({
@@ -100,7 +105,7 @@ class ServiceCheckoutController {
           parent_order_id: parentOrderId,
           bundle_id: null,
           status: "pending_payment",
-        });
+        }, conn);
 
         createdOrders.push(order);
       }
@@ -118,14 +123,16 @@ class ServiceCheckoutController {
             parent_order_id: parentOrderId,
             bundle_id: bundle.bundle_id,
             status: "pending_payment",
-          });
+          }, conn);
 
           createdOrders.push(order);
         }
       }
 
       //3. clear cart
-      await CartModel.clearCart(cart.id);
+      await CartModel.clearCart(cart.id, conn);
+
+      await conn.commit();
 
       res.json({
         success: true,
@@ -136,11 +143,19 @@ class ServiceCheckoutController {
         },
       });
     } catch (err) {
+      if (conn) {
+        await conn.rollback();
+      }
+
       console.log(err);
       res.status(500).json({
         success: false,
         message: err.message,
       });
+    } finally {
+      if (conn) {
+        conn.release();
+      }
     }
   }
 
@@ -176,8 +191,8 @@ class ServiceCheckoutController {
 
       // get price from variant
       const [[variant]] = await db.execute(
-        `SELECT price FROM service_variants WHERE id = ?`,
-        [variant_id],
+        `SELECT price FROM service_variants WHERE id = ? AND service_id = ?`,
+        [variant_id, service_id],
       );
 
       if (!variant) {
@@ -220,6 +235,8 @@ class ServiceCheckoutController {
 
   // buy now bundle
   async buyNowBundle(req, res) {
+    let conn;
+
     try {
       const userId = req.user?.user_id;
 
@@ -271,6 +288,7 @@ class ServiceCheckoutController {
           sv.price AS individual_price
         FROM service_bundle_items bi
         JOIN service_variants sv ON sv.id = bi.variant_id
+          AND sv.service_id = bi.service_id
         WHERE bi.bundle_id = ?`,
         [bundle_id],
       );
@@ -314,6 +332,9 @@ class ServiceCheckoutController {
 
       const createdOrders = [];
 
+      conn = await db.getConnection();
+      await conn.beginTransaction();
+
       // 7 create orders
       for (let item of items) {
         // apply selection logic
@@ -343,10 +364,12 @@ class ServiceCheckoutController {
           parent_order_id: parentOrderId,
           bundle_id: bundle_id,
           status: "pending_payment",
-        });
+        }, conn);
 
         createdOrders.push(order);
       }
+
+      await conn.commit();
 
       res.json({
         success: true,
@@ -358,10 +381,18 @@ class ServiceCheckoutController {
         },
       });
     } catch (err) {
+      if (conn) {
+        await conn.rollback();
+      }
+
       res.status(500).json({
         success: false,
         message: err.message,
       });
+    } finally {
+      if (conn) {
+        conn.release();
+      }
     }
   }
 
@@ -445,9 +476,9 @@ class ServiceCheckoutController {
       JOIN services s ON s.id = sv.service_id
       LEFT JOIN service_documents sd ON sd.service_id = s.id
 
-      WHERE sv.id = ?
+      WHERE sv.id = ? AND sv.service_id = ?
       `,
-        [variant_id],
+        [variant_id, service_id],
       );
 
       if (!rows.length) {
@@ -560,6 +591,7 @@ class ServiceCheckoutController {
         FROM service_bundle_items bi
         JOIN services s ON s.id = bi.service_id
         JOIN service_variants sv ON sv.id = bi.variant_id
+          AND sv.service_id = bi.service_id
 
         WHERE bi.bundle_id = ?
         ORDER BY bi.sort_order`,

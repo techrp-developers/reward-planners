@@ -89,6 +89,8 @@ class ServiceModel {
     );
     const service = rows[0];
 
+    if (!service) return null;
+
     return {
       ...service,
       service_image: getPublicUrl(service.service_image),
@@ -174,6 +176,8 @@ class ServiceModel {
     );
 
     const service = rows[0];
+
+    if (!service) return null;
 
     return {
       ...service,

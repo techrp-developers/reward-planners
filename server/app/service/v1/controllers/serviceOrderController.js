@@ -9,12 +9,21 @@ const razorpay = require("../middlewares/razorpay");
 const db = require("../../../../config/database");
 const crypto = require("crypto");
 const sharp = require("sharp");
-const InvoiceService = require("../../../../services/Invoice/service-invoice");
+const {
+  finalizePaidServiceOrder,
+  generateInvoiceOnce,
+} = require("../utils/paymentFinalizer");
 
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
 function getPublicUrl(path) {
   if (!path) return null;
   return `${CDN_BASE_URL}/${path}`;
+}
+
+function positiveInt(value, fallback, max = 100) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(parsed, max);
 }
 
 // Utility
@@ -73,6 +82,8 @@ function calculateSummary({ bundles = [], individual_items = [] }) {
 class ServiceOrderController {
   // create razorpay order
   async createPaymentOrder(req, res) {
+    let connection;
+
     try {
       const userId = req.user?.user_id;
       // const userId = 1;
@@ -93,21 +104,73 @@ class ServiceOrderController {
         });
       }
 
-      //  Get total amount from DB
-      const [orders] = await db.execute(
-        `SELECT SUM(price) as total 
-        FROM service_orders 
-        WHERE parent_order_id = ?
-        AND user_id = ?`,
+      connection = await db.getConnection();
+      await connection.beginTransaction();
+
+      const [orders] = await connection.execute(
+        `SELECT id, price, status, payment_status
+         FROM service_orders
+         WHERE parent_order_id = ?
+           AND user_id = ?
+         FOR UPDATE`,
         [parent_order_id, userId],
       );
 
-      const totalAmount = Number(orders[0]?.total);
-
-      if (!totalAmount) {
+      if (!orders.length) {
+        await connection.rollback();
         return res.status(400).json({
           success: false,
           message: "Invalid parent_order_id",
+        });
+      }
+
+      const alreadyPaid = orders.some(
+        (order) => order.payment_status === "paid" || order.status !== "pending_payment",
+      );
+
+      if (alreadyPaid) {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Order is not payable",
+        });
+      }
+
+      const totalAmount = orders.reduce(
+        (sum, order) => sum + Number(order.price || 0),
+        0,
+      );
+
+      if (totalAmount <= 0) {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Invalid order amount",
+        });
+      }
+
+      const [[existingPaymentOrder]] = await connection.execute(
+        `SELECT razorpay_order_id, amount
+         FROM razorpay_orders
+         WHERE ref_id = ?
+           AND module = 'service'
+           AND status IN ('created', 'pending')
+         ORDER BY id DESC
+         LIMIT 1`,
+        [parent_order_id],
+      );
+
+      if (existingPaymentOrder) {
+        await connection.commit();
+        return res.json({
+          success: true,
+          data: {
+            key: process.env.RAZOR_API_KEY,
+            orderId: existingPaymentOrder.razorpay_order_id,
+            amount: Math.round(Number(existingPaymentOrder.amount) * 100),
+            currency: "INR",
+            parent_order_id,
+          },
         });
       }
 
@@ -126,7 +189,7 @@ class ServiceOrderController {
       );
 
       try {
-        await db.execute(
+        await connection.execute(
           `INSERT INTO razorpay_orders
          (razorpay_order_id, order_source, receipt, amount, status, ref_id, module)
          VALUES (?, ?, ?, ?, 'created', ?, 'service')`,
@@ -147,6 +210,8 @@ class ServiceOrderController {
         throw dbErr;
       }
 
+      await connection.commit();
+
       res.json({
         success: true,
         data: {
@@ -158,10 +223,18 @@ class ServiceOrderController {
         },
       });
     } catch (err) {
+      if (connection) {
+        await connection.rollback();
+      }
+
       res.status(500).json({
         success: false,
         message: err.message,
       });
+    } finally {
+      if (connection) {
+        connection.release();
+      }
     }
   }
 
@@ -182,6 +255,13 @@ class ServiceOrderController {
 
       const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
         req.body;
+
+      if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+        return res.status(400).json({
+          success: false,
+          message: "Missing payment details",
+        });
+      }
 
       // verify signature
       const body = razorpay_order_id + "|" + razorpay_payment_id;
@@ -214,19 +294,20 @@ class ServiceOrderController {
 
       const parent_order_id = rpOrder.ref_id;
 
-      const [[alreadyPaid]] = await db.execute(
-        `SELECT id FROM service_orders 
-       WHERE parent_order_id = ? 
-       AND payment_status = 'paid' 
-       LIMIT 1`,
-        [parent_order_id],
+      const [[ownedOrder]] = await db.execute(
+        `SELECT id
+         FROM service_orders
+         WHERE parent_order_id = ?
+           AND user_id = ?
+         LIMIT 1`,
+        [parent_order_id, userId],
       );
 
-      if (alreadyPaid) {
-        console.info(
-          `[verifyPayment] Already processed: parent_order_id=${parent_order_id}`,
-        );
-        return res.json({ success: true, message: "Already processed" });
+      if (!ownedOrder) {
+        return res.status(404).json({
+          success: false,
+          message: "Order not found",
+        });
       }
 
       // GET CONNECTION
@@ -235,26 +316,25 @@ class ServiceOrderController {
       // START TRANSACTION
       await connection.beginTransaction();
 
-      // update service orders
-      await connection.execute(
-        `UPDATE service_orders 
-       SET status = 'documents_pending',
-           payment_id = ?,
-           payment_status = 'paid'
-       WHERE parent_order_id = ?
-       AND payment_status != 'paid'`,
-        [razorpay_payment_id, parent_order_id],
+      const [[alreadyPaid]] = await connection.execute(
+        `SELECT id
+         FROM service_orders
+         WHERE parent_order_id = ?
+           AND payment_status = 'paid'
+         LIMIT 1
+         FOR UPDATE`,
+        [parent_order_id],
       );
 
-      // update razorpay_orders
-      await connection.execute(
-        `UPDATE razorpay_orders
-       SET razorpay_payment_id = ?,
-           status = 'success',
-           raw_response = ?
-       WHERE razorpay_order_id = ?`,
-        [razorpay_payment_id, JSON.stringify(req.body), razorpay_order_id],
-      );
+      if (!alreadyPaid) {
+        await finalizePaidServiceOrder({
+          conn: connection,
+          parentOrderId: parent_order_id,
+          paymentId: razorpay_payment_id,
+          razorpayOrderId: razorpay_order_id,
+          rawResponse: req.body,
+        });
+      }
 
       // COMMIT
       await connection.commit();
@@ -269,7 +349,7 @@ class ServiceOrderController {
         },
       });
 
-      InvoiceService.generateInvoice(parent_order_id).catch((err) => {
+      generateInvoiceOnce(parent_order_id).catch((err) => {
         console.error(
           `[verifyPayment] Invoice generation failed for parent_order_id=${parent_order_id}:`,
           err.message,
@@ -307,8 +387,8 @@ class ServiceOrderController {
         });
       }
 
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
+      const page = positiveInt(req.query.page, 1, 10000);
+      const limit = positiveInt(req.query.limit, 10, 50);
 
       const search = req.query.search?.trim() || null;
 
@@ -620,8 +700,17 @@ class ServiceOrderController {
       const { parentId } = req.params;
 
       const [[invoice]] = await db.execute(
-        `SELECT * FROM service_invoices WHERE parent_order_id = ?`,
-        [parentId],
+        `SELECT si.*
+         FROM service_invoices si
+         WHERE si.parent_order_id = ?
+           AND EXISTS (
+             SELECT 1
+             FROM service_orders so
+             WHERE so.parent_order_id = si.parent_order_id
+               AND so.user_id = ?
+           )
+         LIMIT 1`,
+        [parentId, userId],
       );
 
       if (!invoice) {
@@ -635,7 +724,7 @@ class ServiceOrderController {
         success: true,
         data: {
           ...invoice,
-          url: `/uploads/invoices/${invoice.invoice_url}`,
+          url: `/uploads/service-invoices/${invoice.invoice_url}`,
         },
       });
     } catch (error) {
@@ -989,11 +1078,11 @@ class ServiceOrderController {
 
       const [[issue]] = await db.execute(
         `
-      SELECT id
+      SELECT issue_id
 
-      FROM service_order_issue_types
+      FROM service_order_issue_type
 
-      WHERE id = ?
+      WHERE issue_id = ?
       `,
         [issue_id],
       );
@@ -1452,8 +1541,8 @@ class ServiceOrderController {
   //Admin order list
   async adminOrderList(req, res) {
     try {
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
+      const page = positiveInt(req.query.page, 1, 10000);
+      const limit = positiveInt(req.query.limit, 10, 50);
 
       const status = req.query.status || null;
       const search = req.query.search || null;

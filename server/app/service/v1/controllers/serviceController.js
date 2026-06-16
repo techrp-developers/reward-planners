@@ -71,19 +71,27 @@ function getPublicUrl(path) {
   return `${CDN_BASE_URL}/${path}`;
 }
 
+function positiveInt(value, fallback, max = 100) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(parsed, max);
+}
+
 class ServiceController {
   // Find all services
   async getServices(req, res) {
     try {
-      const { category_id, search, page = 1, limit = 10 } = req.query;
+      const { category_id, search } = req.query;
+      const page = positiveInt(req.query.page, 1, 10000);
+      const limit = positiveInt(req.query.limit, 10, 50);
 
       const offset = (page - 1) * limit;
 
       const services = await ServiceModel.findAll({
         category_id,
         search,
-        limit: parseInt(limit),
-        offset: parseInt(offset),
+        limit,
+        offset,
       });
 
       res.json({
@@ -1130,7 +1138,7 @@ class ServiceController {
   // =====================================Top picks===============================================================
   async getTopPicks(req, res) {
     try {
-      const limit = Number(req.query.limit) || 10;
+      const limit = positiveInt(req.query.limit, 10, 50);
 
       const services = await ServiceModel.getTopPicks(limit);
 

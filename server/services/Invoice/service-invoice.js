@@ -4,6 +4,23 @@ const path = require("path");
 const db = require("../../config/database");
 
 async function generateInvoice(parentOrderId) {
+  const [[existingInvoice]] = await db.execute(
+    `SELECT invoice_number, invoice_url, total_amount
+     FROM service_invoices
+     WHERE parent_order_id = ?
+     LIMIT 1`,
+    [parentOrderId]
+  );
+
+  if (existingInvoice) {
+    return {
+      success: true,
+      invoice_number: existingInvoice.invoice_number,
+      invoice_url: `/uploads/service-invoices/${existingInvoice.invoice_url}`,
+      total_amount: Number(existingInvoice.total_amount),
+    };
+  }
+
   // --------------------------------------------------
   // FETCH ORDERS
   // --------------------------------------------------

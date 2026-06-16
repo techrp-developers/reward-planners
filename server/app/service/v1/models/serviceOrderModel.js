@@ -28,8 +28,8 @@ function mapServiceCancelEvent(event) {
 
 class ServiceOrderModel {
   // create order
-  async create(data) {
-    const [result] = await db.execute(
+  async create(data, conn = db) {
+    const [result] = await conn.execute(
       `INSERT INTO service_orders
     (user_id, service_id, variant_id, address_id, enquiry_id, price, parent_order_id, bundle_id, status)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -49,7 +49,7 @@ class ServiceOrderModel {
     const insertId = result.insertId;
     const ref = `SP-ORD-${1000 + insertId}`;
 
-    await db.execute(`UPDATE service_orders SET order_ref = ? WHERE id = ?`, [
+    await conn.execute(`UPDATE service_orders SET order_ref = ? WHERE id = ?`, [
       ref,
       insertId,
     ]);

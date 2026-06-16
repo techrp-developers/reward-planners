@@ -57,7 +57,7 @@ class ServiceOrderDocumentModel {
     return result.insertId;
   }
 
-  async getRequiredDocs(orderId) {
+  async getRequiredDocs(orderId, userId) {
     const [rows] = await db.execute(
       `
     SELECT
@@ -83,10 +83,11 @@ class ServiceOrderDocumentModel {
       AND pod.document_key = sd.document_key
 
     WHERE so.id = ?
+    AND so.user_id = ?
 
     ORDER BY sd.id
     `,
-      [orderId],
+      [orderId, userId],
     );
 
     return await Promise.all(
