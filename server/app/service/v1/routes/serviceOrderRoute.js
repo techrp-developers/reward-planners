@@ -46,6 +46,22 @@ router.post(
   ServiceOrderController.submitDocuments,
 );
 
+// Admin Order List
+router.get(
+  "/admin-orders",
+  authenticateToken,
+  authorizeRoles("admin", "vendor_manager"),
+  ServiceOrderController.adminOrderList,
+);
+
+// Admin Order Details
+router.get(
+  "/admin-order-details/:parentOrderId",
+  authenticateToken,
+  authorizeRoles("admin", "vendor_manager"),
+  ServiceOrderController.adminOrderDetails,
+);
+
 // Admin update order status
 router.put(
   "/status/:id",

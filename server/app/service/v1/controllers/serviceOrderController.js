@@ -1448,6 +1448,61 @@ class ServiceOrderController {
       });
     }
   }
+
+  //Admin order list
+  async adminOrderList(req, res) {
+    try {
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+
+      const status = req.query.status || null;
+      const search = req.query.search || null;
+
+      const result = await ServiceOrderModel.getAllOrders({
+        page,
+        limit,
+        status,
+        search,
+      });
+
+      return res.json({
+        success: true,
+        ...result,
+      });
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+
+  // admin order details
+  async adminOrderDetails(req, res) {
+    try {
+      const { parentOrderId } = req.params;
+
+      const order =
+        await ServiceOrderModel.getOrderByParentIdAdmin(parentOrderId);
+
+      if (!order) {
+        return res.status(404).json({
+          success: false,
+          message: "Order not found",
+        });
+      }
+
+      return res.json({
+        success: true,
+        data: order,
+      });
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
 }
 
 module.exports = new ServiceOrderController();

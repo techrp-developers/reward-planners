@@ -1458,6 +1458,307 @@ class ServiceOrderModel {
       [serviceOrderId],
     );
   }
+
+  // Admin order list
+  async getAllOrders({ page = 1, limit = 10, status = null, search = null }) {
+    let sql = `
+    SELECT
+      so.id,
+      so.parent_order_id,
+      so.order_ref,
+      so.price,
+      so.status,
+      so.created_at,
+      so.payment_status,
+
+      cu.name,
+      cu.email,
+      cu.phone,
+
+      s.name AS service_name
+
+    FROM service_orders so
+
+    JOIN customers cu
+      ON cu.user_id = so.user_id
+
+    JOIN services s
+      ON s.id = so.service_id
+
+    WHERE 1=1
+  `;
+
+    const params = [];
+
+    if (search) {
+      sql += `
+      AND (
+        so.parent_order_id LIKE ?
+        OR so.order_ref LIKE ?
+        OR cu.name LIKE ?
+        OR cu.email LIKE ?
+        OR cu.phone LIKE ?
+      )
+    `;
+
+      const q = `%${search}%`;
+
+      params.push(q, q, q, q, q);
+    }
+
+    sql += ` ORDER BY so.created_at DESC`;
+
+    const [rows] = await db.execute(sql, params);
+
+    const grouped = {};
+
+    rows.forEach((row) => {
+      if (!grouped[row.parent_order_id]) {
+        grouped[row.parent_order_id] = {
+          parent_order_id: row.parent_order_id,
+
+          customer_name: row.name?.trim() || "",
+
+          email: row.email,
+
+          mobile: row.phone,
+
+          created_at: row.created_at,
+
+          total_amount: 0,
+
+          items: [],
+
+          statuses: [],
+        };
+      }
+
+      grouped[row.parent_order_id].items.push({
+        id: row.id,
+        order_ref: row.order_ref,
+        service_name: row.service_name,
+        price: Number(row.price),
+        status: row.status,
+      });
+
+      grouped[row.parent_order_id].statuses.push(row.status);
+
+      grouped[row.parent_order_id].total_amount += Number(row.price);
+    });
+
+    const orders = Object.values(grouped).map((order) => {
+      let finalStatus = "pending_payment";
+
+      if (
+        order.statuses.some(
+          (s) => s === "in_progress" || s === "documents_pending",
+        )
+      ) {
+        finalStatus = "in_progress";
+      } else if (order.statuses.every((s) => s === "completed")) {
+        finalStatus = "completed";
+      } else if (order.statuses.every((s) => s === "cancelled")) {
+        finalStatus = "cancelled";
+      } else if (order.statuses.some((s) => s === "completed")) {
+        finalStatus = "completed";
+      }
+
+      return {
+        parent_order_id: order.parent_order_id,
+
+        customer_name: order.customer_name,
+
+        email: order.email,
+
+        mobile: order.mobile,
+
+        created_at: order.created_at,
+
+        total_amount: order.total_amount,
+
+        status: finalStatus,
+
+        total_services: order.items.length,
+
+        items: order.items,
+      };
+    });
+
+    const filteredOrders =
+      status && status !== "all"
+        ? orders.filter((order) => order.status === status)
+        : orders;
+
+    const total = filteredOrders.length;
+
+    const offset = (page - 1) * limit;
+
+    return {
+      orders: filteredOrders.slice(offset, offset + limit),
+
+      total,
+
+      currentPage: page,
+
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  // order detail by Id
+  async getOrderByParentIdAdmin(orderId) {
+    const parentId = orderId;
+
+    const [rows] = await db.execute(
+      `
+    SELECT 
+      so.id,
+      so.order_ref,
+      so.price,
+      so.status,
+      so.bundle_id,
+      so.created_at,
+
+      ca.address_type,
+      ca.address1,
+      ca.address2,
+      ca.city,
+      ca.zipcode,
+      ca.landmark,
+      ca.contact_name,
+      ca.contact_phone,
+
+      cu.name,
+      cu.email,
+      cu.phone,
+
+      st.state_name,
+      c.country_name,
+
+      s.name AS service_name,
+      sv.variant_name,
+      sv.title,
+      sv.image_url
+
+    FROM service_orders so
+
+    JOIN services s
+      ON s.id = so.service_id
+
+    LEFT JOIN service_variants sv
+      ON sv.id = so.variant_id
+
+    JOIN customers cu
+      ON cu.user_id = so.user_id
+
+    LEFT JOIN customer_addresses ca
+      ON so.address_id = ca.address_id
+
+    LEFT JOIN states st
+      ON ca.state_id = st.state_id
+
+    LEFT JOIN countries c
+      ON ca.country_id = c.country_id
+
+    WHERE so.parent_order_id = ?
+    `,
+      [parentId],
+    );
+
+    if (!rows.length) return null;
+
+    const statuses = rows.map((r) => r.status);
+
+    let finalStatus = "pending_payment";
+
+    if (
+      statuses.some((s) => s === "in_progress" || s === "documents_pending")
+    ) {
+      finalStatus = "in_progress";
+    } else if (statuses.every((s) => s === "completed")) {
+      finalStatus = "completed";
+    } else if (statuses.every((s) => s === "cancelled")) {
+      finalStatus = "cancelled";
+    } else if (statuses.some((s) => s === "completed")) {
+      finalStatus = "completed";
+    }
+
+    const response = {
+      parent_order_id: parentId,
+
+      status: finalStatus,
+
+      created_at: rows[0].created_at,
+
+      customer: {
+        name: rows[0].name || "",
+        email: rows[0].email || "",
+        mobile: rows[0].phone || "",
+      },
+
+      address: rows[0].address1
+        ? {
+            address_type: rows[0].address_type,
+            address1: rows[0].address1,
+            address2: rows[0].address2,
+            city: rows[0].city,
+            zipcode: rows[0].zipcode,
+            landmark: rows[0].landmark,
+            contact_name: rows[0].contact_name,
+            contact_phone: rows[0].contact_phone,
+            state: rows[0].state_name,
+            country: rows[0].country_name,
+          }
+        : null,
+
+      items: [],
+
+      bundles: {},
+
+      total_amount: 0,
+    };
+
+    rows.forEach((row) => {
+      const item = {
+        id: row.id,
+
+        order_ref: row.order_ref,
+
+        service_name: row.service_name,
+
+        variant_name: row.variant_name,
+
+        title: row.title,
+
+        image_url: row.image_url ? getPublicUrl(row.image_url) : null,
+
+        price: Number(row.price),
+
+        status: row.status,
+      };
+
+      if (row.bundle_id) {
+        if (!response.bundles[row.bundle_id]) {
+          response.bundles[row.bundle_id] = {
+            bundle_id: row.bundle_id,
+            items: [],
+            bundle_total: 0,
+          };
+        }
+
+        response.bundles[row.bundle_id].items.push(item);
+
+        response.bundles[row.bundle_id].bundle_total += Number(row.price);
+      } else {
+        response.items.push(item);
+      }
+
+      response.total_amount += Number(row.price);
+    });
+
+    response.bundles = Object.values(response.bundles);
+
+    return response;
+  }
 }
 
 module.exports = new ServiceOrderModel();
