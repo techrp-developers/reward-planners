@@ -166,6 +166,32 @@ const RewardForm: React.FC = () => {
             </div>
           </div>
 
+          {/* SECTION: RANGE */}
+          <h3>Range</h3>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Min Order Amount</label>
+              <input
+                type="number"
+                name="min_order_amount"
+                value={form.min_order_amount}
+                onChange={handleChange}
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Max Order Amount</label>
+              <input
+                type="number"
+                name="max_order_amount"
+                value={form.max_order_amount}
+                onChange={handleChange}
+                placeholder="Optional"
+              />
+            </div>
+          </div>
+
           {/* SECTION: Reward Config */}
           <h3>Reward Configuration</h3>
           <div className="form-row">
@@ -241,30 +267,7 @@ const RewardForm: React.FC = () => {
               <div className="form-group"></div>
             </div>
           )}
-
-          <div className="form-row">
-            <div className="form-group">
-              <label>Min Order Amount</label>
-              <input
-                type="number"
-                name="min_order_amount"
-                value={form.min_order_amount}
-                onChange={handleChange}
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label>Max Order Amount</label> {/* <--- 3. ADDED TO UI */}
-              <input
-                type="number"
-                name="max_order_amount"
-                value={form.max_order_amount}
-                onChange={handleChange}
-                placeholder="Optional"
-              />
-            </div>
-          </div>
-
+          
           {/* SECTION: ADVANCED */}
           <h3>Advanced Settings</h3>
           <div className="form-group">
