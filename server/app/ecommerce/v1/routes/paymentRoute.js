@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const PaymentController = require("../controllers/paymentController");
+const auth = require("../../../common/middlewares/auth");
 const drainMode = require("../../../../middleware/drainMode");
 const {
   validateCreateOrder,
@@ -15,6 +16,7 @@ const {
 // create payment
 router.post(
   "/create-order",
+  auth,
   paymentLimiter,
   drainMode,
   validateCreateOrder,
@@ -24,13 +26,14 @@ router.post(
 // verify payment
 router.post(
   "/verify-payment",
+  auth,
   paymentLimiter,
   validateVerifyPayment,
   PaymentController.verifyPayment,
 );
 
 // Payment status
-router.get("/payment-status/:orderId", PaymentController.paymentStatus);
+router.get("/payment-status/:orderId", auth, PaymentController.paymentStatus);
 
 // refund
 // router.post('/refund', PaymentController.refundPayment);

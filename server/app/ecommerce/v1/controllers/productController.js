@@ -10,12 +10,24 @@ const {
   calculateRedeemableCoins,
 } = require("../utils/rewardCalculate");
 
+function positiveInt(value, fallback, max = 100) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(parsed, max);
+}
+
+function nonNegativeInt(value, fallback = 0, max = 10000) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+  return Math.min(parsed, max);
+}
+
 class ProductController {
   // all the products
   async getAllProducts(req, res) {
     try {
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
+      const page = positiveInt(req.query.page, 1, 10000);
+      const limit = positiveInt(req.query.limit, 10, 50);
       const offset = (page - 1) * limit;
 
       const search = req.query.search || "";
@@ -146,8 +158,8 @@ class ProductController {
         });
       }
 
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
+      const page = positiveInt(req.query.page, 1, 10000);
+      const limit = positiveInt(req.query.limit, 10, 50);
       const offset = (page - 1) * limit;
 
       const search = req.query.search || "";
@@ -291,8 +303,8 @@ class ProductController {
         });
       }
 
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
+      const page = positiveInt(req.query.page, 1, 10000);
+      const limit = positiveInt(req.query.limit, 10, 50);
       const offset = (page - 1) * limit;
 
       const search = req.query.search || "";
@@ -905,8 +917,8 @@ class ProductController {
     try {
       const userId = req.user?.user_id;
       // const userId = 1;
-      const limit = req.query.limit ? Number(req.query.limit) : 10;
-      const offset = req.query.offset ? Number(req.query.offset) : 0;
+      const limit = positiveInt(req.query.limit, 10, 50);
+      const offset = nonNegativeInt(req.query.offset);
 
       if (!userId) {
         return res.status(401).json({
@@ -939,8 +951,8 @@ class ProductController {
   // Get New Arrivals
   async getNewArrivals(req, res) {
     try {
-      const limit = req.query.limit ? Number(req.query.limit) : 10;
-      const offset = req.query.offset ? Number(req.query.offset) : 0;
+      const limit = positiveInt(req.query.limit, 10, 50);
+      const offset = nonNegativeInt(req.query.offset);
 
       const products = await ProductModel.getNewArrivals(limit, offset);
 
@@ -963,8 +975,8 @@ class ProductController {
   async getCustomersAlsoBought(req, res) {
     try {
       const productId = Number(req.params.productId);
-      const limit = req.query.limit ? Number(req.query.limit) : 10;
-      const offset = req.query.offset ? Number(req.query.offset) : 0;
+      const limit = positiveInt(req.query.limit, 10, 50);
+      const offset = nonNegativeInt(req.query.offset);
 
       if (!productId) {
         return res.status(400).json({
@@ -998,9 +1010,9 @@ class ProductController {
   // Trending Products
   async getTrendingProducts(req, res) {
     try {
-      const limit = req.query.limit ? Number(req.query.limit) : 10;
-      const days = req.query.days ? Number(req.query.days) : 30;
-      const offset = req.query.offset ? Number(req.query.offset) : 0;
+      const limit = positiveInt(req.query.limit, 10, 50);
+      const days = positiveInt(req.query.days, 30, 365);
+      const offset = nonNegativeInt(req.query.offset);
 
       const products = await ProductModel.getTrendingProducts(
         limit,
@@ -1027,9 +1039,9 @@ class ProductController {
   // Best sellers
   async getBestSellers(req, res) {
     try {
-      const limit = req.query.limit ? Number(req.query.limit) : 10;
-      const days = req.query.days ? Number(req.query.days) : 30;
-      const offset = req.query.offset ? Number(req.query.offset) : 0;
+      const limit = positiveInt(req.query.limit, 10, 50);
+      const days = positiveInt(req.query.days, 30, 365);
+      const offset = nonNegativeInt(req.query.offset);
 
       const products = await ProductModel.getBestSellers(limit, offset, days);
 
@@ -1052,9 +1064,9 @@ class ProductController {
   // Most viewed products
   async getMostViewedProducts(req, res) {
     try {
-      const limit = req.query.limit ? Number(req.query.limit) : 10;
-      const days = req.query.days ? Number(req.query.days) : 30;
-      const offset = req.query.offset ? Number(req.query.offset) : 0;
+      const limit = positiveInt(req.query.limit, 10, 50);
+      const days = positiveInt(req.query.days, 30, 365);
+      const offset = nonNegativeInt(req.query.offset);
 
       const products = await ProductModel.getMostViewedProducts(
         limit,
@@ -1081,8 +1093,8 @@ class ProductController {
   // Top rated Products
   async getTopRatedProducts(req, res) {
     try {
-      const limit = req.query.limit ? Number(req.query.limit) : 10;
-      const offset = req.query.offset ? Number(req.query.offset) : 0;
+      const limit = positiveInt(req.query.limit, 10, 50);
+      const offset = nonNegativeInt(req.query.offset);
 
       const products = await ProductModel.getTopRatedProducts(limit, offset);
 
@@ -1198,8 +1210,8 @@ class ProductController {
   async getSimilarProducts(req, res) {
     try {
       const productId = Number(req.params.productId);
-      const limit = req.query.limit ? Number(req.query.limit) : 10;
-      const offset = req.query.offset ? Number(req.query.offset) : 0;
+      const limit = positiveInt(req.query.limit, 10, 50);
+      const offset = nonNegativeInt(req.query.offset);
 
       if (!productId) {
         return res.status(400).json({
@@ -1257,8 +1269,8 @@ class ProductController {
     try {
       const q = (req.query.q || "").trim();
 
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 20;
+      const page = positiveInt(req.query.page, 1, 10000);
+      const limit = positiveInt(req.query.limit, 20, 50);
       const offset = (page - 1) * limit;
 
       const { products, totalItems } = await ProductModel.loadProducts({

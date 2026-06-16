@@ -3,6 +3,12 @@ const db = require("../../../../config/database");
 const fs = require("fs");
 const path=require("path");
 
+function positiveInt(value, fallback, max = 100) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(parsed, max);
+}
+
 class ReviewController {
   // checking if user can review product, then submit review
   async getReviewableOrder(req, res) {
@@ -41,6 +47,7 @@ class ReviewController {
   // submit review
   async submitReview(req, res) {
     const conn = await db.getConnection();
+    const movedFiles = [];
 
     try {
       await conn.beginTransaction();
@@ -71,6 +78,14 @@ class ReviewController {
         return res.status(400).json({ message: "Invalid rating" });
       }
 
+      if (!product_id || !variant_id || !order_id) {
+        await conn.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Product, variant, and order are required",
+        });
+      }
+
       // Verify purchase
       const [orderCheck] = await conn.execute(
         `
@@ -80,10 +95,11 @@ class ReviewController {
       WHERE o.order_id = ?
       AND o.user_id = ?
       AND o.status = 'delivered'
+      AND oi.product_id = ?
       AND oi.variant_id = ?
       LIMIT 1
       `,
-        [order_id, userId, variant_id],
+        [order_id, userId, product_id, variant_id],
       );
 
       if (orderCheck.length === 0) {
@@ -145,6 +161,7 @@ class ReviewController {
           const finalPath = path.join(reviewDir, finalFileName);
 
           fs.renameSync(file.path, finalPath);
+          movedFiles.push(finalPath);
 
           mediaList.push({
             media_url: `/reviews/user_${userId}/review_${reviewId}/${finalFileName}`,
@@ -172,6 +189,12 @@ class ReviewController {
         });
       }
 
+      movedFiles.forEach((filePath) => {
+        try {
+          fs.unlinkSync(filePath);
+        } catch {}
+      });
+
       if (err.code === "ER_DUP_ENTRY") {
         return res.status(400).json({
           success: false,
@@ -196,8 +219,8 @@ class ReviewController {
       const { product_id } = req.params;
       const { sort, rating } = req.query;
 
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 5;
+      const page = positiveInt(req.query.page, 1, 10000);
+      const limit = positiveInt(req.query.limit, 5, 25);
       const offset = (page - 1) * limit;
 
       const userId = req.user?.user_id || null;

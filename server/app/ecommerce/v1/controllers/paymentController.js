@@ -2,6 +2,9 @@ const PaymentModel = require("../models/paymentModel");
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
 const db = require("../../../../config/database");
+const {
+  expirePendingOrder,
+} = require("../../../../services/Razorpay/orderExpiryService");
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZOR_API_KEY,
@@ -11,7 +14,12 @@ const razorpay = new Razorpay({
 class PaymentController {
   // create payment
   async createOrder(req, res) {
+    const userId = req.user?.user_id;
     const { orderId } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized user" });
+    }
 
     if (!orderId) {
       return res.status(400).json({ message: "orderId required" });
@@ -30,10 +38,10 @@ class PaymentController {
       const [[order]] = await conn.query(
         `SELECT total_amount, status, expires_at
        FROM eorders
-       WHERE order_id = ?
+       WHERE order_id = ? AND user_id = ?
        LIMIT 1
        FOR UPDATE`,
-        [orderId],
+        [orderId, userId],
       );
 
       if (!order) {
@@ -52,20 +60,7 @@ class PaymentController {
       }
 
       if (order.expires_at && new Date(order.expires_at) < new Date()) {
-        await conn.query(
-          `UPDATE eorders
-         SET status = 'cancelled', expires_at = NULL
-         WHERE order_id = ? AND status = 'pending_payment'`,
-          [orderId],
-        );
-
-        await conn.query(
-          `UPDATE order_payments
-         SET status = 'expired'
-         WHERE order_id = ? AND status IN ('created', 'pending')`,
-          [orderId],
-        );
-
+        await expirePendingOrder(conn, orderId);
         await conn.commit();
         return res.status(400).json({ message: "Order expired" });
       }
@@ -204,8 +199,13 @@ class PaymentController {
   //   verify Payment
   async verifyPayment(req, res) {
     try {
+      const userId = req.user?.user_id;
       const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
         req.body;
+
+      if (!userId) {
+        return res.status(401).json({ status: "unauthorized" });
+      }
 
       // ==========================
       // 1. VALIDATE ALL FIELDS PRESENT
@@ -247,8 +247,8 @@ class PaymentController {
       // 4. FETCH ORDER ROW
       // ==========================
       const [[order]] = await db.query(
-        `SELECT status FROM eorders WHERE order_id = ? LIMIT 1`,
-        [payment.order_id],
+        `SELECT status FROM eorders WHERE order_id = ? AND user_id = ? LIMIT 1`,
+        [payment.order_id, userId],
       );
 
       if (!order) {
@@ -301,13 +301,20 @@ class PaymentController {
   // payment status
   async paymentStatus(req, res) {
     res.set("Cache-Control", "no-store");
+    const userId = req.user?.user_id;
     const { orderId } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({
+        message: "Unauthorized user",
+      });
+    }
 
     const [rows] = await db.query(
       `SELECT status, expires_at
         FROM eorders
-        WHERE order_id = ?`,
-      [orderId],
+        WHERE order_id = ? AND user_id = ?`,
+      [orderId, userId],
     );
 
     if (!rows.length) {

@@ -25,7 +25,7 @@ router.post(
 // fetch reviews
 router.get(
   "/all-reviews/:product_id",
-  auth,
+  optionalAuth,
   ReviewController.getProductReviews,
 );
 // GET /reviews/10?sort=helpful
