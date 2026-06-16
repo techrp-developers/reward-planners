@@ -7,6 +7,7 @@ const { sendOpsAlert } = require("../../../../services/alertService");
 const {
   orderConfirmationMail,
 } = require("../../../../services/mailBuilder/orderConfirmation");
+const { runNonBlocking } = require("../../../../utils/nonBlocking");
 const RefundService = require("../controllers/paymentController");
 
 // booking payload
@@ -950,12 +951,14 @@ async function processEvent(req) {
         console.error("Shipment processing failed:", err);
       });
 
-      sendOrderPlacedWhatsApp(order_id).catch((err) =>
-        console.error("WA failed:", err),
+      runNonBlocking(
+        () => sendOrderPlacedWhatsApp(order_id),
+        "order placed WhatsApp",
       );
 
-      sendOrderPlacedEmail(order_id).catch((err) =>
-        console.error("Email failed:", err),
+      runNonBlocking(
+        () => sendOrderPlacedEmail(order_id),
+        "order placed email",
       );
 
       console.log("Ecommerce payment success", {

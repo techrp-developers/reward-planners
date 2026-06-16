@@ -10,6 +10,7 @@ const archiver = require("archiver");
 const {
   enqueueWhatsApp,
 } = require("../../../../services/whatsapp/waEnqueueService");
+const { runNonBlocking } = require("../../../../utils/nonBlocking");
 
 function positiveInt(value, fallback, max = 100) {
   const parsed = Number.parseInt(value, 10);
@@ -522,9 +523,9 @@ class OrderController {
       //   reference_id: orderId,
       // });
 
-      //  Send WhatsApp
-      sendOrderPlacedWhatsApp(orderId).catch((err) =>
-        console.error("WA failed:", err),
+      runNonBlocking(
+        () => sendOrderPlacedWhatsApp(orderId),
+        "order cancellation WhatsApp",
       );
 
       return res.json({

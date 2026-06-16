@@ -3,6 +3,7 @@ const ServiceEnquiryModel = require("../models/serviceEnquiryModel");
 const {
   sendNewEnquiryEmail,
 } = require("../../../../services/mailBuilder/enquiryNotification");
+const { runNonBlocking } = require("../../../../utils/nonBlocking");
 
 class ServiceEnquiryController {
   // create user Enquiry
@@ -169,12 +170,15 @@ class ServiceEnquiryController {
         });
       }
 
-      // send mail
-      await sendNewEnquiryEmail({ name, email, contact, subject, description });
+      runNonBlocking(
+        () =>
+          sendNewEnquiryEmail({ name, email, contact, subject, description }),
+        "service enquiry email",
+      );
 
       return res.status(200).json({
         success: true,
-        message: "Enquiry sent successfully",
+        message: "Enquiry submitted successfully",
       });
     } catch (error) {
       console.error("Enquiry Error:", error);
