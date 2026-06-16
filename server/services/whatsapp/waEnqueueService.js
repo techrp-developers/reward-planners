@@ -57,75 +57,79 @@ function buildButtonValuesFromConfig(buttonConfig, ctx) {
 }
 
 async function enqueueWhatsApp({ eventName, ctx }) {
+  if (!eventName || !ctx || typeof ctx !== "object") {
+    return { ok: false, reason: "INVALID_PAYLOAD" };
+  }
+
   // ctx must include: phone, company_id, etc.
   const phone_full = normalizePhone(ctx.phone);
   if (!phone_full) return { ok: false, reason: "MISSING_PHONE" };
 
-  // 1) Find matching Rule (company rules first, then global)
-  const [rules] = await pool.query(
-    `
-    SELECT * FROM wa_rules
-    WHERE event_name = ?
-      AND is_active = 1
-      AND (company_id = ? OR company_id IS NULL)
-    ORDER BY (company_id IS NULL) ASC, priority ASC
-    `,
-    [eventName, ctx.company_id ?? null],
-  );
-
-  let picked = null;
-  for (const r of rules) {
-    const cond = safeJsonParse(r.condition_json, null);
-    if (matchCondition(cond, ctx)) {
-      picked = r;
-      break;
-    }
-  }
-
-  if (!picked) return { ok: false, reason: "NO_RULE" };
-
-  // 2) Find matching Template (company override first)
-  const [tplRows] = await pool.query(
-    `
-    SELECT * FROM wa_templates
-    WHERE template_key = ?
-      AND is_active = 1
-      AND (company_id = ? OR company_id IS NULL)
-    ORDER BY (company_id IS NULL) ASC
-    LIMIT 1
-    `,
-    [picked.template_key, ctx.company_id ?? null],
-  );
-
-  if (!tplRows.length) return { ok: false, reason: "TEMPLATE_NOT_FOUND" };
-
-  const tpl = tplRows[0];
-
-  // 3) Build Body Values (exact placeholders {{1}}, {{2}}...)
-  const bodyValues = buildBodyValues(picked.template_key, ctx);
-
-  //  Validate body_values_count to avoid Interakt 400
-  const expectedCount = Number(tpl.body_values_count ?? 0);
-  if (expectedCount && bodyValues.length !== expectedCount) {
-    return {
-      ok: false,
-      reason: "BODY_VALUES_COUNT_MISMATCH",
-      template_key: picked.template_key,
-      expected: expectedCount,
-      got: bodyValues.length,
-      bodyValues,
-    };
-  }
-
-  //  Build Button Values from template button_config (for authentication/button templates)
-  const buttonValues = buildButtonValuesFromConfig(tpl.button_config, ctx);
-
-  // 4) Create Unique Key for Idempotency (prevents double send)
-  const idem_key = `${ctx.company_id || "GLOBAL"}|${eventName}|${
-    picked.template_key
-  }|${phone_full}|${ctx.order_id || Date.now()}`;
-
   try {
+    // 1) Find matching Rule (company rules first, then global)
+    const [rules] = await pool.query(
+      `
+      SELECT * FROM wa_rules
+      WHERE event_name = ?
+        AND is_active = 1
+        AND (company_id = ? OR company_id IS NULL)
+      ORDER BY (company_id IS NULL) ASC, priority ASC
+      `,
+      [eventName, ctx.company_id ?? null],
+    );
+
+    let picked = null;
+    for (const r of rules) {
+      const cond = safeJsonParse(r.condition_json, null);
+      if (matchCondition(cond, ctx)) {
+        picked = r;
+        break;
+      }
+    }
+
+    if (!picked) return { ok: false, reason: "NO_RULE" };
+
+    // 2) Find matching Template (company override first)
+    const [tplRows] = await pool.query(
+      `
+      SELECT * FROM wa_templates
+      WHERE template_key = ?
+        AND is_active = 1
+        AND (company_id = ? OR company_id IS NULL)
+      ORDER BY (company_id IS NULL) ASC
+      LIMIT 1
+      `,
+      [picked.template_key, ctx.company_id ?? null],
+    );
+
+    if (!tplRows.length) return { ok: false, reason: "TEMPLATE_NOT_FOUND" };
+
+    const tpl = tplRows[0];
+
+    // 3) Build Body Values (exact placeholders {{1}}, {{2}}...)
+    const bodyValues = buildBodyValues(picked.template_key, ctx);
+
+    //  Validate body_values_count to avoid Interakt 400
+    const expectedCount = Number(tpl.body_values_count ?? 0);
+    if (expectedCount && bodyValues.length !== expectedCount) {
+      return {
+        ok: false,
+        reason: "BODY_VALUES_COUNT_MISMATCH",
+        template_key: picked.template_key,
+        expected: expectedCount,
+        got: bodyValues.length,
+        bodyValues,
+      };
+    }
+
+    //  Build Button Values from template button_config (for authentication/button templates)
+    const buttonValues = buildButtonValuesFromConfig(tpl.button_config, ctx);
+
+    // 4) Create Unique Key for Idempotency (prevents double send)
+    const idem_key = `${ctx.company_id || "GLOBAL"}|${eventName}|${
+      picked.template_key
+    }|${phone_full}|${ctx.order_id || Date.now()}`;
+
     //  Store both body_values and button_values in queue
     await pool.query(
       `
@@ -159,7 +163,9 @@ async function enqueueWhatsApp({ eventName, ctx }) {
     ) {
       return { ok: true, queued: false, duplicate: true };
     }
-    throw e;
+
+    console.error("[WA_ENQUEUE] Failed to enqueue WhatsApp:", e);
+    return { ok: false, reason: "QUEUE_ERROR", error: e.message };
   }
 }
 

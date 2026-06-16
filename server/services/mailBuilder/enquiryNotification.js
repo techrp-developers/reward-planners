@@ -1,4 +1,4 @@
-const { sendMail } = require("../mailService");
+const { sendMailBestEffort } = require("../mailService");
 const { renderTemplate } = require("../../utils/templateRenderer");
 
 async function sendNewEnquiryEmail(data) {
@@ -11,11 +11,11 @@ async function sendNewEnquiryEmail(data) {
     companyName: "Reward Planners",
   });
 
-  await sendMail({
+  return sendMailBestEffort({
     to: "info@rewardplanners.com",
     subject: "New Enquiry Received",
     html,
-  });
+  }, "enquiry notification mail");
 }
 
 module.exports = {

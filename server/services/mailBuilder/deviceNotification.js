@@ -1,4 +1,4 @@
-const { sendMail } = require("../mailService");
+const { sendMailBestEffort } = require("../mailService");
 const { renderTemplate } = require("../../utils/templateRenderer");
 
 async function sendNewDeviceLoginEmail(user) {
@@ -10,11 +10,11 @@ async function sendNewDeviceLoginEmail(user) {
     companyName: "Reward Planners",
   });
 
-  await sendMail({
+  return sendMailBestEffort({
     to: user.email,
     subject: "New login detected on your RewardPlanners account",
     html,
-  });
+  }, "new device login mail");
 }
 
 module.exports = {

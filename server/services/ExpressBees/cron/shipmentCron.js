@@ -158,14 +158,14 @@ async function syncOrderStatus(orderId) {
   // NOTIFICATION (ONLY ON DELIVERY)
   // =====================
   if (finalStatus === "delivered" && result.affectedRows > 0) {
-    await NotificationModel.create({
+    NotificationModel.create({
       user_id: userId,
       type: "delivery",
       title: "Order Successful 📦",
       message: "Your package has been delivered successfully.",
       reference_type: "order",
       reference_id: orderId,
-    });
+    }).catch((err) => console.error("Delivery notification failed:", err));
   }
 }
 
@@ -325,7 +325,7 @@ async function updateShipmentTracking(shipment) {
         );
 
         if (userId) {
-          await NotificationModel.create({
+          NotificationModel.create({
             user_id: userId,
             type: "ndr",
             title: "Delivery Failed 🚫",
@@ -333,7 +333,7 @@ async function updateShipmentTracking(shipment) {
               "We couldn't deliver your order. Please update your details.",
             reference_type: "order",
             reference_id: shipment.order_id,
-          });
+          }).catch((err) => console.error("NDR notification failed:", err));
         }
       }
     }
@@ -406,7 +406,7 @@ async function updateShipmentTracking(shipment) {
           );
 
           if (!existingNotif.length && userId) {
-            await NotificationModel.create({
+            NotificationModel.create({
               user_id: userId,
               type: "rto",
               title: "Order Returned 🚚",
@@ -414,7 +414,7 @@ async function updateShipmentTracking(shipment) {
                 "Your order could not be delivered and is being returned.",
               reference_type: "order",
               reference_id: shipment.order_id,
-            });
+            }).catch((err) => console.error("RTO notification failed:", err));
           }
         } else {
           await conn.rollback();
