@@ -60,7 +60,11 @@ const RewardForm: React.FC = () => {
     }
   };
 
-  const handleChange = (e) => {
+  const handleChange = (
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >,
+  ) => {
     const { name, value } = e.target;
 
     if (name === "redemption_type" && value === "") {

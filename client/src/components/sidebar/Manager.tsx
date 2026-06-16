@@ -13,7 +13,7 @@ import {
   FiGift,
   FiLock,
 } from "react-icons/fi";
-import { FaFileAlt, FaBolt } from "react-icons/fa";
+import { FaFileAlt } from "react-icons/fa"; //FaBolt
 import { useAuth } from "../../auth/useAuth";
 import { routes } from "../../routes";
 import logo from "../../assets/logo.svg";

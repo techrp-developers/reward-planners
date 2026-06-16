@@ -7,12 +7,11 @@ import {
   FaSpinner,
   FaArrowLeft,
   FaDownload,
-  FaCheck,
 } from "react-icons/fa";
 
 import { useNavigate, useParams } from "react-router-dom";
 import QuillEditor from "../../../QuillEditor";
-import Swal from "../../../../utils/swalFallback";
+// import Swal from "../../../../utils/swalFallback";
 
 // const API_BASE = import.meta.env.VITE_API_URL;
 import { api } from "../../../../api/api";
