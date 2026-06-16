@@ -26,7 +26,18 @@ router.get(
   ServiceEnquiryController.getEnquiryById,
 );
 
+// Update enquiry status
+router.put(
+  "/:id/status",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  ServiceEnquiryController.updateEnquiryStatus,
+);
+
 // extra-(not needed)
-router.post('/send-enquiry-notification', ServiceEnquiryController.sendEnquiryNotification);
+router.post(
+  "/send-enquiry-notification",
+  ServiceEnquiryController.sendEnquiryNotification,
+);
 
 module.exports = router;

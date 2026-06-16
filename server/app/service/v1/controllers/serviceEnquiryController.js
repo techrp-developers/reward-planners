@@ -111,6 +111,51 @@ class ServiceEnquiryController {
     }
   }
 
+  // update Enquiry status
+  async updateEnquiryStatus(req, res) {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      const allowedStatuses = ["new", "contacted", "converted", "closed"];
+
+      if (!allowedStatuses.includes(status)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid status",
+        });
+      }
+
+      const [result] = await db.query(
+        `
+      UPDATE service_enquiries
+      SET status = ?
+      WHERE id = ?
+      `,
+        [status, id],
+      );
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Enquiry not found",
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: "Status updated successfully",
+      });
+    } catch (error) {
+      console.error("updateEnquiryStatus", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Something went wrong",
+      });
+    }
+  }
+
   // send enquiry notification
   async sendEnquiryNotification(req, res) {
     try {
