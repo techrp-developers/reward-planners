@@ -90,7 +90,7 @@ export default function ManagerNavbar() {
       type: "dropdown",
       children: [
         { label: "Service Enquiries", to: routes.manager.services.enquiries },
-        { label: "Service Orders", to: routes.manager.services.orders },
+        { label: "Service Orders", to: routes.manager.services.service_orders },
       ],
     },
     {
