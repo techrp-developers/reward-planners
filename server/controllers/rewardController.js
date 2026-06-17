@@ -257,7 +257,7 @@ class RewardController {
 
       const targets = [
         variant_id ? 1 : 0,
-        product_id ? 1 : 0,
+        !variant_id && product_id ? 1 : 0,
         subcategory_id ? 1 : 0,
         category_id ? 1 : 0,
       ];

@@ -40,10 +40,11 @@ class RewardModel {
       throw new Error("reward_rule_id is required");
     }
 
-    // ensure only one targeting level
+    // ensure only one targeting level. A variant target may include product_id
+    // only as context for display/lookup, so it should count as variant.
     const targets = [
       variant_id ? 1 : 0,
-      product_id ? 1 : 0,
+      !variant_id && product_id ? 1 : 0,
       subcategory_id ? 1 : 0,
       category_id ? 1 : 0,
     ];
@@ -76,8 +77,11 @@ class RewardModel {
     }
 
     const [existing] = await db.execute(
-      `SELECT id FROM product_reward_settings WHERE ${where}`,
-      params,
+      `SELECT id
+       FROM product_reward_settings
+       WHERE ${where}
+       AND reward_rule_id = ?`,
+      [...params, reward_rule_id],
     );
 
     if (existing.length > 0) {
@@ -85,9 +89,9 @@ class RewardModel {
 
       await db.execute(
         `UPDATE product_reward_settings
-       SET reward_rule_id = ?, can_earn_reward = ?, can_redeem_reward = ?, priority = ?, is_active = 1
+       SET can_earn_reward = ?, can_redeem_reward = ?, priority = ?, is_active = 1
        WHERE id = ?`,
-        [reward_rule_id, can_earn_reward, can_redeem_reward, priority, id],
+        [can_earn_reward, can_redeem_reward, priority, id],
       );
 
       return id;
