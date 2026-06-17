@@ -84,6 +84,30 @@ const ProductRewardMapping = () => {
     fetchCategories();
   }, []);
 
+  useEffect(() => {
+    const existing = findExistingMappingForSelection();
+
+    if (!existing) {
+      setEditingId(null);
+      return;
+    }
+
+    setEditingId(existing.id);
+    setForm((prev) => ({
+      ...prev,
+      reward_rule_id: existing.reward_rule_id?.toString() || "",
+      can_earn_reward: Number(existing.can_earn_reward),
+      can_redeem_reward: Number(existing.can_redeem_reward),
+    }));
+  }, [
+    targetType,
+    form.product_id,
+    form.variant_id,
+    form.category_id,
+    form.subcategory_id,
+    mappings,
+  ]);
+
   const fetchProducts = async () => {
     const res = await api.get("/product/product-list");
     setProducts(res.data?.products || []);
@@ -115,6 +139,65 @@ const ProductRewardMapping = () => {
     setForm((prev) => ({ ...prev, category_id: categoryId, subcategory_id: "" }));
     const res = await api.get(`/subcategory/${categoryId}`);
     setSubcategories(res.data.data || []);
+  };
+
+  const handleTargetTypeChange = (value: string) => {
+    setTargetType(value);
+    setEditingId(null);
+    setVariants([]);
+    setSubcategories([]);
+    setForm((prev) => ({
+      ...prev,
+      product_id: "",
+      variant_id: "",
+      category_id: "",
+      subcategory_id: "",
+      reward_rule_id: "",
+      can_earn_reward: 1,
+      can_redeem_reward: 1,
+    }));
+  };
+
+  const findExistingMappingForSelection = () => {
+    if (targetType === "global") {
+      return mappings.find(
+        (m) =>
+          !m.product_id &&
+          !m.variant_id &&
+          !m.category_id &&
+          !m.subcategory_id,
+      );
+    }
+
+    if (targetType === "product" && form.product_id) {
+      return mappings.find(
+        (m) =>
+          Number(m.product_id) === Number(form.product_id) &&
+          !m.variant_id,
+      );
+    }
+
+    if (targetType === "variant" && form.product_id && form.variant_id) {
+      return mappings.find(
+        (m) =>
+          Number(m.product_id) === Number(form.product_id) &&
+          Number(m.variant_id) === Number(form.variant_id),
+      );
+    }
+
+    if (targetType === "category" && form.category_id) {
+      return mappings.find(
+        (m) => Number(m.category_id) === Number(form.category_id),
+      );
+    }
+
+    if (targetType === "subcategory" && form.subcategory_id) {
+      return mappings.find(
+        (m) => Number(m.subcategory_id) === Number(form.subcategory_id),
+      );
+    }
+
+    return undefined;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -183,6 +266,11 @@ const ProductRewardMapping = () => {
     if (m.product_id) {
       const res = await api.get(`/variant/product/${m.product_id}`);
       setVariants(res.data.data || []);
+    }
+
+    if (m.category_id) {
+      const res = await api.get(`/subcategory/${m.category_id}`);
+      setSubcategories(res.data.data || []);
     }
   };
 
@@ -327,7 +415,7 @@ const ProductRewardMapping = () => {
               <label className="block text-xs font-semibold text-gray-500 mb-1.5">Target Type</label>
               <select
                 value={targetType}
-                onChange={(e) => setTargetType(e.target.value)}
+              onChange={(e) => handleTargetTypeChange(e.target.value)}
                 className={selectCls}
               >
                 <option value="variant">Variant</option>
@@ -445,13 +533,19 @@ const ProductRewardMapping = () => {
             />
           </div>
 
+          {editingId && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              Existing mapping found for this target. Saving will update that mapping instead of creating a duplicate.
+            </div>
+          )}
+
           <button
             type="submit"
             className="flex items-center gap-2 px-6 py-3 text-sm font-bold text-white rounded-xl cursor-pointer transition-all hover:opacity-90 active:scale-[0.98]"
             style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }}
           >
             {editingId ? <FiEdit2 size={14} /> : <FiPlus size={14} />}
-            {editingId ? "Update Mapping" : "Create Mapping"}
+            {editingId ? "Update Existing Mapping" : "Create Mapping"}
           </button>
         </form>
       </div>
