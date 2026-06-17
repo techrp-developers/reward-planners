@@ -1,5 +1,18 @@
+function compareRewardRules(a, b) {
+  return (
+    Number(a.target_rank || 99) - Number(b.target_rank || 99) ||
+    Number(b.min_order_amount || 0) - Number(a.min_order_amount || 0) ||
+    Number(a.max_order_amount || Number.MAX_SAFE_INTEGER) -
+      Number(b.max_order_amount || Number.MAX_SAFE_INTEGER) ||
+    Number(a.mapping_priority || a.priority || 0) -
+      Number(b.mapping_priority || b.priority || 0) ||
+    Number(a.rule_priority || a.priority || 0) -
+      Number(b.rule_priority || b.priority || 0)
+  );
+}
+
 /* ===============================
-   EARNING CALCULATION (existing, unchanged)
+   EARNING CALCULATION
 =============================== */
 function calculateReward(orderAmount, rules) {
   if (!rules || !rules.length) return 0;
@@ -27,11 +40,11 @@ function calculateReward(orderAmount, rules) {
   let applicable = [];
 
   if (nonStackable.length) {
-    nonStackable.sort((a, b) => a.priority - b.priority);
+    nonStackable.sort(compareRewardRules);
     applicable.push(nonStackable[0]);
   }
 
-  applicable.push(...stackable);
+  applicable.push(...stackable.sort(compareRewardRules));
 
   const seen = new Set();
   applicable = applicable.filter((r) => {
@@ -87,7 +100,7 @@ function resolveRedemption(orderAmount, rules) {
     return { type: null, value: 0, maxRedemptionAmount: null };
   }
 
-  const winner = validRules[0];
+  const winner = validRules.sort(compareRewardRules)[0];
 
   return {
     type: winner.redemption_type,

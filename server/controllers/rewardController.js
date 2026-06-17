@@ -41,7 +41,7 @@ class RewardController {
           reward_value,
           max_reward || null,
           min_order_amount || 0,
-          max_order_amount || 0,
+          max_order_amount || null,
           source_type,
           description || null,
           start_date || null,

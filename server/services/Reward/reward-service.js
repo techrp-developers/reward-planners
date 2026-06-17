@@ -1,6 +1,19 @@
 const db = require("../../config/database");
 const RewardModel = require("../../models/rewardModel");
 
+function compareRewardRules(a, b) {
+  return (
+    Number(a.target_rank || 99) - Number(b.target_rank || 99) ||
+    Number(b.min_order_amount || 0) - Number(a.min_order_amount || 0) ||
+    Number(a.max_order_amount || Number.MAX_SAFE_INTEGER) -
+      Number(b.max_order_amount || Number.MAX_SAFE_INTEGER) ||
+    Number(a.mapping_priority || a.priority || 0) -
+      Number(b.mapping_priority || b.priority || 0) ||
+    Number(a.rule_priority || a.priority || 0) -
+      Number(b.rule_priority || b.priority || 0)
+  );
+}
+
 class RewardService {
   // CALCULATE REWARD
   calculateReward(amount, rule) {
@@ -90,12 +103,12 @@ class RewardService {
 
       // Ensure correct priority for non-stackable
       if (nonStackableRules.length > 0) {
-        nonStackableRules.sort((a, b) => a.priority - b.priority);
+        nonStackableRules.sort(compareRewardRules);
         applicableRules.push(nonStackableRules[0]);
       }
 
       // Add stackable rules
-      applicableRules.push(...stackableRules);
+      applicableRules.push(...stackableRules.sort(compareRewardRules));
 
       // 5. REMOVE DUPLICATES
       const seen = new Set();
