@@ -126,7 +126,8 @@ class ServiceOrderController {
       }
 
       const alreadyPaid = orders.some(
-        (order) => order.payment_status === "paid" || order.status !== "pending_payment",
+        (order) =>
+          order.payment_status === "paid" || order.status !== "pending_payment",
       );
 
       if (alreadyPaid) {
@@ -357,7 +358,8 @@ class ServiceOrderController {
             module: "service",
             type: "service_order_paid",
             title: "Service order confirmed",
-            message: "Your service order is confirmed. Please submit the required documents.",
+            message:
+              "Your service order is confirmed. Please submit the required documents.",
             icon: "briefcase",
             reference_type: "service_order",
             reference_id: parent_order_id,
@@ -483,6 +485,7 @@ class ServiceOrderController {
         // documents
         const documents = await ServiceOrderDocumentModel.getRequiredDocs(
           item.id,
+          userId,
         );
 
         // feedback
@@ -1562,7 +1565,8 @@ class ServiceOrderController {
           module: "service",
           type: "service_cancellation_requested",
           title: "Cancellation requested",
-          message: "Your service order cancellation request has been submitted.",
+          message:
+            "Your service order cancellation request has been submitted.",
           icon: "x-circle",
           reference_type: "service_order",
           reference_id: service_order_id,
