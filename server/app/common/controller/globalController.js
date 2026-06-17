@@ -1,7 +1,11 @@
 const GlobalModel = require("../models/globalModel");
+const AuthModel = require("../models/authModel");
 const db = require("../../../config/database");
-const fs = require("fs");
-const path = require("path");
+const {
+  enqueueWhatsApp,
+} = require("../../../services/whatsapp/waEnqueueService");
+const { notifyUser } = require("../utils/notification");
+const { runNonBlocking } = require("../../../utils/nonBlocking");
 
 class GlobalController {
   // get balance
@@ -62,7 +66,16 @@ class GlobalController {
         description = "Reward points have been credited to your account",
       } = req.body;
 
-      if (!email || !coins || Number(coins) <= 0) {
+      const normalizedEmail = String(email || "")
+        .trim()
+        .toLowerCase();
+      const creditCoins = Number(coins);
+
+      if (
+        !normalizedEmail ||
+        !Number.isFinite(creditCoins) ||
+        creditCoins <= 0
+      ) {
         return res.status(400).json({
           success: false,
           message: "Email and valid coins are required",
@@ -70,16 +83,118 @@ class GlobalController {
       }
 
       const result = await GlobalModel.creditWalletByEmail({
-        email,
-        coins: Number(coins),
+        email: normalizedEmail,
+        coins: creditCoins,
         title,
         description,
       });
+
+      // notifyUser(
+      //   {
+      //     userId: result.user.user_id,
+      //     module: "wallet",
+      //     type: "wallet_credit",
+      //     title,
+      //     message: `${result.coins} reward points have been credited to your account.`,
+      //     icon: "wallet",
+      //     reference_type: "wallet",
+      //     reference_id: result.transactionId,
+      //     action_url: "/wallet",
+      //     metadata: {
+      //       coins: result.coins,
+      //       balance: result.balance,
+      //       transaction_id: result.transactionId,
+      //     },
+      //   },
+      //   "manual wallet credit notification",
+      // );
+
+      runNonBlocking(async () => {
+        const employee = await AuthModel.findEmployeeByEmail(normalizedEmail);
+
+        if (employee?.phone) {
+          const waResult = await enqueueWhatsApp({
+            eventName: "rewardpointsupdate",
+            ctx: {
+              phone: employee.phone,
+              company_id: employee.company_id,
+              order_id: result.transactionId,
+              customer_name: employee.name || result.user.name,
+              coins: result.coins,
+              points: result.coins,
+              balance: result.balance,
+            },
+          });
+
+          if (!waResult.ok) {
+            console.warn("[WALLET_CREDIT_WA] WhatsApp not queued:", waResult);
+          }
+        }
+      }, "manual wallet credit WhatsApp");
 
       return res.json({
         success: true,
         message: "Reward points credited successfully",
         data: result,
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  // Launch event message
+  async sendLaunchCampaign(req, res) {
+    try {
+      const employees = await GlobalModel.getCampaignRecipients();
+
+      runNonBlocking(async () => {
+        let queued = 0;
+        let failed = 0;
+        let skipped = 0;
+
+        for (const employee of employees) {
+          if (!employee.contact) {
+            skipped += 1;
+            continue;
+          }
+
+          const waResult = await enqueueWhatsApp({
+            eventName: "reward_planners_launch_invitation",
+            ctx: {
+              phone: employee.contact,
+              company_id: employee.company_id,
+              customer_name: employee.name || "Employee",
+              contact: employee.contact,
+            },
+          });
+
+          if (waResult.ok) {
+            queued += 1;
+          } else {
+            failed += 1;
+            console.warn("[LAUNCH_CAMPAIGN_WA] WhatsApp not queued:", {
+              employee_id: employee.id,
+              phone: employee.contact,
+              result: waResult,
+            });
+          }
+        }
+
+        console.info("[LAUNCH_CAMPAIGN_WA] Completed", {
+          total: employees.length,
+          queued,
+          failed,
+          skipped,
+        });
+      }, "launch campaign WhatsApp");
+
+      return res.json({
+        success: true,
+        message: "Launch campaign queued",
+        total: employees.length,
       });
     } catch (err) {
       return res.status(500).json({

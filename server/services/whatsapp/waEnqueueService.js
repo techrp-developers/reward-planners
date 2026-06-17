@@ -173,6 +173,8 @@ function buildBodyValues(templateKey, ctx) {
   // Safe defaults to prevent crashes if data is missing
   const name = ctx.customer_name || "User";
   const coins = ctx.coins || "0";
+  const points = ctx.points ?? coins;
+  const balance = ctx.balance ?? "0";
   const orderId = String(ctx.order_id || "");
   const otp = String(ctx.otp || "");
   const amount = String(ctx.total_amount || "0");
@@ -224,6 +226,12 @@ function buildBodyValues(templateKey, ctx) {
 
     case "wallet_credit_first_login":
       return [name, coins];
+
+    case "rewardpointsupdate":
+      return [name, String(points), String(balance)];
+
+    case "reward_planners_launch_invitation":
+      return [name];
 
     case "create_account_notification":
       return [name];

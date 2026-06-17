@@ -1,6 +1,4 @@
 const db = require("../../../config/database");
-const fs = require("fs");
-const path = require("path");
 const ProductModel = require("../../ecommerce/v1/models/productModel");
 const ServiceModel = require("../../service/v1/models/serviceModel");
 
@@ -24,16 +22,19 @@ class GlobalModel {
   // Points credit to the user
   async creditWalletByEmail({ email, coins, title, description }) {
     const conn = await db.getConnection();
+    const normalizedEmail = String(email || "")
+      .trim()
+      .toLowerCase();
 
     try {
       await conn.beginTransaction();
 
       const [users] = await conn.execute(
-        `SELECT user_id,name,email,phone
+        `SELECT user_id,name,email
        FROM customer
        WHERE email = ?
        LIMIT 1`,
-        [email],
+        [normalizedEmail],
       );
 
       if (!users.length) {
@@ -45,7 +46,8 @@ class GlobalModel {
       const [wallets] = await conn.execute(
         `SELECT wallet_id,balance
        FROM customer_wallet
-       WHERE user_id = ?`,
+       WHERE user_id = ?
+       FOR UPDATE`,
         [user.user_id],
       );
 
@@ -60,8 +62,8 @@ class GlobalModel {
       await conn.execute(
         `UPDATE customer_wallet
        SET balance = ?
-       WHERE user_id = ?`,
-        [newBalance, user.user_id],
+       WHERE wallet_id = ?`,
+        [newBalance, wallet.wallet_id],
       );
 
       const [txResult] = await conn.execute(
@@ -103,6 +105,42 @@ class GlobalModel {
     } finally {
       conn.release();
     }
+  }
+
+  // single company employees
+  async getEmployeesForCampaign(companyId) {
+    const [rows] = await db.execute(
+      `SELECT
+        id,
+        company_id,
+        name,
+        contact
+     FROM company_users
+     WHERE company_id = ?
+     AND status = 1
+     AND contact IS NOT NULL
+     AND contact <> ''`,
+      [companyId],
+    );
+
+    return rows;
+  }
+
+  // all the employees
+  async getCampaignRecipients() {
+    const [rows] = await db.execute(
+      `SELECT
+        id,
+        company_id,
+        name,
+        contact
+     FROM company_users
+     WHERE status = 1
+       AND contact IS NOT NULL
+       AND TRIM(contact) <> ''`,
+    );
+
+    return rows;
   }
 }
 
