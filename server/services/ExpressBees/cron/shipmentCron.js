@@ -162,7 +162,7 @@ async function syncOrderStatus(orderId) {
       user_id: userId,
       module: "ecommerce",
       type: "delivery",
-      title: "Order Successful 📦",
+      title: "Order delivered",
       message: "Your package has been delivered successfully.",
       icon: "package-check",
       reference_type: "order",
@@ -332,7 +332,7 @@ async function updateShipmentTracking(shipment) {
             user_id: userId,
             module: "ecommerce",
             type: "ndr",
-            title: "Delivery Failed 🚫",
+            title: "Delivery failed",
             message:
               "We couldn't deliver your order. Please update your details.",
             icon: "alert-circle",
@@ -417,7 +417,7 @@ async function updateShipmentTracking(shipment) {
               user_id: userId,
               module: "ecommerce",
               type: "rto",
-              title: "Order Returned 🚚",
+              title: "Order returned",
               message:
                 "Your order could not be delivered and is being returned.",
               icon: "rotate-ccw",
@@ -497,3 +497,4 @@ cron.schedule("*/10 * * * *", async () => {
     console.error("Booking retry cron error:", err);
   }
 });
+
