@@ -193,7 +193,7 @@ const ServiceOrderList: React.FC = () => {
                           <button
                             onClick={() =>
                               navigate(
-                                `/manager/service-order-view/${order.parent_order_id}`
+                                `/manager/service-order-details/${order.parent_order_id}`
                               )
                             }
                             className="font-semibold text-[#852BAF] hover:underline cursor-pointer"
@@ -250,7 +250,7 @@ const ServiceOrderList: React.FC = () => {
                           <button
                             onClick={() =>
                               navigate(
-                                `/manager/service-order-view/${order.parent_order_id}`
+                                `/manager/service-order-details/${order.parent_order_id}`
                               )
                             }
                             className="px-4 py-1.5 text-sm font-semibold bg-purple-50 text-[#852BAF] border border-purple-200 rounded-lg hover:bg-gradient-to-r hover:from-[#852BAF] hover:to-[#FC3F78] hover:text-white hover:border-transparent transition-all cursor-pointer"
