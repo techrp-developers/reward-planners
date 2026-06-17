@@ -20,6 +20,90 @@ class GlobalModel {
 
     return result;
   }
+
+  // Points credit to the user
+  async creditWalletByEmail({ email, coins, title, description }) {
+    const conn = await db.getConnection();
+
+    try {
+      await conn.beginTransaction();
+
+      const [users] = await conn.execute(
+        `SELECT user_id,name,email,phone
+       FROM customer
+       WHERE email = ?
+       LIMIT 1`,
+        [email],
+      );
+
+      if (!users.length) {
+        throw new Error("Customer not found");
+      }
+
+      const user = users[0];
+
+      const [wallets] = await conn.execute(
+        `SELECT wallet_id,balance
+       FROM customer_wallet
+       WHERE user_id = ?`,
+        [user.user_id],
+      );
+
+      if (!wallets.length) {
+        throw new Error("Wallet not found");
+      }
+
+      const wallet = wallets[0];
+
+      const newBalance = Number(wallet.balance) + Number(coins);
+
+      await conn.execute(
+        `UPDATE customer_wallet
+       SET balance = ?
+       WHERE user_id = ?`,
+        [newBalance, user.user_id],
+      );
+
+      const [txResult] = await conn.execute(
+        `INSERT INTO wallet_transactions
+      (
+        user_id,
+        title,
+        description,
+        transaction_type,
+        coins,
+        balance_after,
+        category,
+        reason_code
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          user.user_id,
+          title,
+          description,
+          "credit",
+          coins,
+          newBalance,
+          "admin",
+          "ADMIN_ADJUSTMENT",
+        ],
+      );
+
+      await conn.commit();
+
+      return {
+        user,
+        coins,
+        balance: newBalance,
+        transactionId: txResult.insertId,
+      };
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+  }
 }
 
 module.exports = new GlobalModel();

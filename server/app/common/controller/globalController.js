@@ -52,5 +52,41 @@ class GlobalController {
       throw error;
     }
   }
+
+  async creditWallet(req, res) {
+    try {
+      const {
+        email,
+        coins,
+        title = "Reward Points Credited",
+        description = "Reward points have been credited to your account",
+      } = req.body;
+
+      if (!email || !coins || Number(coins) <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Email and valid coins are required",
+        });
+      }
+
+      const result = await GlobalModel.creditWalletByEmail({
+        email,
+        coins: Number(coins),
+        title,
+        description,
+      });
+
+      return res.json({
+        success: true,
+        message: "Reward points credited successfully",
+        data: result,
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
 }
 module.exports = new GlobalController();
