@@ -1,11 +1,16 @@
 const db = require("../../../config/database");
 
+function toDbValue(value) {
+  return value === undefined ? null : value;
+}
+
 class NotificationModel {
   /* ================================
      CREATE NOTIFICATION
   ================================= */
   async create(data) {
     const {
+      userId,
       user_id,
       module,
       type,
@@ -18,6 +23,19 @@ class NotificationModel {
       metadata,
       priority,
     } = data;
+
+    const notificationUserId = userId ?? user_id;
+
+    if (!notificationUserId || !module || !type || !title || !message) {
+      console.error("[NOTIFICATION] Missing required fields:", {
+        userId: notificationUserId,
+        module,
+        type,
+        title,
+        message,
+      });
+      return null;
+    }
 
     const [result] = await db.execute(
       `
@@ -38,17 +56,17 @@ class NotificationModel {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
-        user_id,
+        notificationUserId,
         module,
         type,
         title,
         message,
-        icon || null,
-        reference_type || "none",
-        reference_id ? String(reference_id) : null,
-        action_url || null,
-        metadata ? JSON.stringify(metadata) : null,
-        priority || "normal",
+        toDbValue(icon) || null,
+        toDbValue(reference_type) || "none",
+        reference_id == null ? null : String(reference_id),
+        toDbValue(action_url) || null,
+        metadata == null ? null : JSON.stringify(metadata),
+        toDbValue(priority) || "normal",
       ],
     );
 
