@@ -501,7 +501,10 @@ async function processShipmentsAfterPayment(orderId) {
       [orderId],
     );
 
-    if (counts.booked === counts.total) {
+    const totalShipments = Number(counts.total || 0);
+    const bookedShipments = Number(counts.booked || 0);
+
+    if (totalShipments === 0 || bookedShipments === totalShipments) {
       //  All shipments booked
       await conn.query(
         `
@@ -511,7 +514,7 @@ async function processShipmentsAfterPayment(orderId) {
       `,
         [orderId],
       );
-    } else if (counts.booked > 0) {
+    } else if (bookedShipments > 0) {
       // Partial success
       await conn.query(
         `
@@ -526,7 +529,7 @@ async function processShipmentsAfterPayment(orderId) {
         level: "warning",
         category: "shipment_booking",
         message: `Partial shipment booking failure for order ${orderId}`,
-        meta: { orderId, booked: counts.booked, total: counts.total },
+        meta: { orderId, booked: bookedShipments, total: totalShipments },
       }).catch(() => {});
     } else {
       // All failed
@@ -543,7 +546,7 @@ async function processShipmentsAfterPayment(orderId) {
         level: "critical",
         category: "shipment_booking",
         message: `ALL shipments booking_failed for order ${orderId} — manual intervention required`,
-        meta: { orderId, total: counts.total },
+        meta: { orderId, total: totalShipments },
       }).catch(() => {});
     }
   } finally {
