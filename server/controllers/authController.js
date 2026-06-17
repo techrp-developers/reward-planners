@@ -402,12 +402,12 @@ const authController = {
       const user = rows[0];
       const { password: _password, ...safeUser } = user;
 
-      if (forcedRole && user.role !== forcedRole) {
-        return res.status(401).json({
-          success: false,
-          message: "Invalid email or password",
-        });
-      }
+      // if (forcedRole && user.role !== forcedRole) {
+      //   return res.status(401).json({
+      //     success: false,
+      //     message: "Invalid email or password",
+      //   });
+      // }
 
       const valid = await bcrypt.compare(password, user.password);
       if (!valid) {
