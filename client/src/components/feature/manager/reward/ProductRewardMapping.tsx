@@ -105,6 +105,7 @@ const ProductRewardMapping = () => {
     form.variant_id,
     form.category_id,
     form.subcategory_id,
+    form.reward_rule_id,
     mappings,
   ]);
 
@@ -159,9 +160,15 @@ const ProductRewardMapping = () => {
   };
 
   const findExistingMappingForSelection = () => {
+    if (!form.reward_rule_id) return undefined;
+
+    const hasSameRule = (m: Mapping) =>
+      Number(m.reward_rule_id) === Number(form.reward_rule_id);
+
     if (targetType === "global") {
       return mappings.find(
         (m) =>
+          hasSameRule(m) &&
           !m.product_id &&
           !m.variant_id &&
           !m.category_id &&
@@ -172,6 +179,7 @@ const ProductRewardMapping = () => {
     if (targetType === "product" && form.product_id) {
       return mappings.find(
         (m) =>
+          hasSameRule(m) &&
           Number(m.product_id) === Number(form.product_id) &&
           !m.variant_id,
       );
@@ -180,6 +188,7 @@ const ProductRewardMapping = () => {
     if (targetType === "variant" && form.product_id && form.variant_id) {
       return mappings.find(
         (m) =>
+          hasSameRule(m) &&
           Number(m.product_id) === Number(form.product_id) &&
           Number(m.variant_id) === Number(form.variant_id),
       );
@@ -187,13 +196,17 @@ const ProductRewardMapping = () => {
 
     if (targetType === "category" && form.category_id) {
       return mappings.find(
-        (m) => Number(m.category_id) === Number(form.category_id),
+        (m) =>
+          hasSameRule(m) &&
+          Number(m.category_id) === Number(form.category_id),
       );
     }
 
     if (targetType === "subcategory" && form.subcategory_id) {
       return mappings.find(
-        (m) => Number(m.subcategory_id) === Number(form.subcategory_id),
+        (m) =>
+          hasSameRule(m) &&
+          Number(m.subcategory_id) === Number(form.subcategory_id),
       );
     }
 
