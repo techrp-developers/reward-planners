@@ -15,16 +15,16 @@ router.get("/app-status", GlobalController.getAppStatus);
 // Update wallet coins
 router.post(
   "/credit-wallet",
-  // authenticateToken,
-  // authorizeRoles("vendor_manager", "admin"),
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
   GlobalController.creditWallet,
 );
 
-router.post(
-  "/campaigns/launch-event",
-  // authenticateToken,
-  // authorizeRoles("vendor_manager", "admin"),
-  GlobalController.sendLaunchCampaign,
-);
+// router.post(
+//   "/campaigns/launch-event",
+//   authenticateToken,
+//   authorizeRoles("vendor_manager", "admin"),
+//   GlobalController.sendLaunchCampaign,
+// );
 
 module.exports = router;
