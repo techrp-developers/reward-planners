@@ -1,0 +1,1814 @@
+﻿{
+    "info":  {
+                 "_postman_id":  "9c7b6dbb-5d55-46b8-8ab0-crm-modules",
+                 "name":  "Reward Planners API - CRM Modules",
+                 "description":  "CRM admin, manager, warehouse, and dashboard module routes from server/routes. Import the auth collection first and generate crm_token before calling protected requests.",
+                 "schema":  "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+             },
+    "auth":  {
+                 "type":  "bearer",
+                 "bearer":  [
+                                {
+                                    "key":  "token",
+                                    "value":  "{{crm_token}}",
+                                    "type":  "string"
+                                }
+                            ]
+             },
+    "item":  [
+                 {
+                     "name":  "Vendor Management",
+                     "item":  [
+                                  {
+                                      "name":  "GET Approved Vendors",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}vendor/approved-list",
+                                                      "description":  "Roles: vendor_manager, admin, warehouse_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "PUT Update Vendor Status",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"status\": \"approved\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}vendor/status/{{vendor_id}}",
+                                                      "description":  "Roles: admin, vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "PUT Update Vendor Document Status",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"status\": \"approved\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}vendor/documents/{{document_id}}/status",
+                                                      "description":  "Roles: admin, vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "POST Create Category",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "formdata",
+                                                                   "formdata":  [
+                                                                                    {
+                                                                                        "key":  "name",
+                                                                                        "value":  "",
+                                                                                        "type":  "text"
+                                                                                    },
+                                                                                    {
+                                                                                        "key":  "cover_image",
+                                                                                        "type":  "file",
+                                                                                        "src":  [
+
+                                                                                                ]
+                                                                                    }
+                                                                                ]
+                                                               },
+                                                      "url":  "{{base_url}}vendor/create-category",
+                                                      "description":  "Roles: vendor_manager. Multipart field: cover_image"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Category By ID",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}vendor/category/{{category_id}}",
+                                                      "description":  "Roles: vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "PUT Update Category",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "formdata",
+                                                                   "formdata":  [
+                                                                                    {
+                                                                                        "key":  "name",
+                                                                                        "value":  "",
+                                                                                        "type":  "text"
+                                                                                    },
+                                                                                    {
+                                                                                        "key":  "cover_image",
+                                                                                        "type":  "file",
+                                                                                        "src":  [
+
+                                                                                                ]
+                                                                                    }
+                                                                                ]
+                                                               },
+                                                      "url":  "{{base_url}}vendor/update-category/{{category_id}}",
+                                                      "description":  "Roles: vendor_manager. Multipart field: cover_image"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "DELETE Category",
+                                      "request":  {
+                                                      "method":  "DELETE",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}vendor/delete-category/{{category_id}}",
+                                                      "description":  "Roles: vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "POST Create Subcategory",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "formdata",
+                                                                   "formdata":  [
+                                                                                    {
+                                                                                        "key":  "category_id",
+                                                                                        "value":  "{{category_id}}",
+                                                                                        "type":  "text"
+                                                                                    },
+                                                                                    {
+                                                                                        "key":  "name",
+                                                                                        "value":  "",
+                                                                                        "type":  "text"
+                                                                                    },
+                                                                                    {
+                                                                                        "key":  "cover_image",
+                                                                                        "type":  "file",
+                                                                                        "src":  [
+
+                                                                                                ]
+                                                                                    }
+                                                                                ]
+                                                               },
+                                                      "url":  "{{base_url}}vendor/create-subcategory",
+                                                      "description":  "Roles: vendor_manager. Multipart field: cover_image"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Subcategories",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}vendor/subcategory",
+                                                      "description":  "Roles: vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Subcategory By ID",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}vendor/subcategory/{{subcategory_id}}",
+                                                      "description":  "Roles: vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "PUT Update Subcategory",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "formdata",
+                                                                   "formdata":  [
+                                                                                    {
+                                                                                        "key":  "name",
+                                                                                        "value":  "",
+                                                                                        "type":  "text"
+                                                                                    },
+                                                                                    {
+                                                                                        "key":  "cover_image",
+                                                                                        "type":  "file",
+                                                                                        "src":  [
+
+                                                                                                ]
+                                                                                    }
+                                                                                ]
+                                                               },
+                                                      "url":  "{{base_url}}vendor/update-subcategory/{{subcategory_id}}",
+                                                      "description":  "Roles: vendor_manager. Multipart field: cover_image"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "DELETE Subcategory",
+                                      "request":  {
+                                                      "method":  "DELETE",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}vendor/delete-subcategory/{{subcategory_id}}",
+                                                      "description":  "Roles: vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "POST Create Sub-subcategory",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"subcategory_id\": \"{{subcategory_id}}\",\n  \"name\": \"\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}vendor/create-sub-subcategory",
+                                                      "description":  "Roles: vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Sub-subcategories",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}vendor/sub-subcategory",
+                                                      "description":  "Roles: vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Sub-subcategory By ID",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}vendor/sub-subcategory/{{subsubcategory_id}}",
+                                                      "description":  "Roles: vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "PUT Update Sub-subcategory",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"name\": \"\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}vendor/update-sub-subcategory/{{subsubcategory_id}}",
+                                                      "description":  "Roles: vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "DELETE Sub-subcategory",
+                                      "request":  {
+                                                      "method":  "DELETE",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}vendor/delete-sub-subcategory/{{subsubcategory_id}}",
+                                                      "description":  "Roles: vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET All Vendors",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}vendor/",
+                                                      "description":  "Roles: admin, vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Vendor By ID",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}vendor/{{vendor_id}}",
+                                                      "description":  "Roles: admin, vendor_manager"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Manager Dashboard",
+                     "item":  [
+                                  {
+                                      "name":  "GET Stats",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}manager/stats",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET All Vendors",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}manager/all-vendors",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Download Vendor Report",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}manager/download-vendor-report",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "PUT Approve Product",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}manager/product/approve/{{product_id}}",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "PUT Reject Product",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"reason\": \"\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}manager/product/reject/{{product_id}}",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "PUT Product Resubmission",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"reason\": \"\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}manager/product/resubmission/{{product_id}}",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Documents",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}manager/documents",
+                                                      "description":  "Roles: vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "POST Create Document",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"name\": \"\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}manager/create-document",
+                                                      "description":  "Roles: vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Document By ID",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}manager/document/{{document_id}}",
+                                                      "description":  "Roles: vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "PUT Update Document",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"name\": \"\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}manager/update-document/{{document_id}}",
+                                                      "description":  "Roles: vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "DELETE Document",
+                                      "request":  {
+                                                      "method":  "DELETE",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}manager/delete-document/{{document_id}}",
+                                                      "description":  "Roles: vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "POST Create Category Documents",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"category_id\": \"{{category_id}}\",\n  \"document_ids\": []\n}"
+                                                               },
+                                                      "url":  "{{base_url}}manager/create-category-documents",
+                                                      "description":  "Roles: vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Category Documents",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}manager/category-documents",
+                                                      "description":  "Roles: vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Category Document By ID",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}manager/category-documents/{{category_document_id}}",
+                                                      "description":  "Roles: vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "DELETE Category Document",
+                                      "request":  {
+                                                      "method":  "DELETE",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}manager/category-documents/{{category_document_id}}",
+                                                      "description":  "Roles: vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Category Attributes",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}manager/category-attributes",
+                                                      "description":  "Roles: admin, vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "POST Category Attribute",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"name\": \"\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}manager/category-attributes",
+                                                      "description":  "Roles: admin, vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "PUT Category Attribute",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"name\": \"\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}manager/category-attributes/{{attribute_id}}",
+                                                      "description":  "Roles: admin, vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "DELETE Category Attribute",
+                                      "request":  {
+                                                      "method":  "DELETE",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}manager/category-attributes/{{attribute_id}}",
+                                                      "description":  "Roles: admin, vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "POST Category Attribute Values",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"attribute_id\": \"{{attribute_id}}\",\n  \"values\": []\n}"
+                                                               },
+                                                      "url":  "{{base_url}}manager/category-attribute-values",
+                                                      "description":  "Roles: admin, vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Category Attribute Values",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}manager/category-attribute-values/{{attribute_id}}",
+                                                      "description":  "Roles: admin, vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "DELETE Category Attribute Value",
+                                      "request":  {
+                                                      "method":  "DELETE",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"value_id\": \"{{attribute_value_id}}\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}manager/category-attribute-values",
+                                                      "description":  "Roles: admin, vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "PUT Deactivate Vendor",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}manager/deactivate/{{vendor_id}}",
+                                                      "description":  "Roles: admin, vendor_manager"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Product Management",
+                     "item":  [
+                                  {
+                                      "name":  "DELETE Remove Product",
+                                      "request":  {
+                                                      "method":  "DELETE",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}product/remove-product/{{product_id}}",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET All Products",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}product/all-products",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Product List",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}product/product-list",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Download Product Report",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}product/download-product-report",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Products By Vendor",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}product/vendor-products/{{vendor_id}}",
+                                                      "description":  "Roles: admin, vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Approved Product List",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}product/approved-list",
+                                                      "description":  "Roles: vendor_manager, admin, warehouse_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Approved Product Details",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}product/approved-products/{{product_id}}",
+                                                      "description":  "Roles: vendor_manager, admin, warehouse_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Required Category Documents",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}product/category/required_docs/{{category_id}}",
+                                                      "description":  "Roles: vendor, admin, vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Product By ID",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}product/{{product_id}}",
+                                                      "description":  "Roles: vendor, vendor_manager, admin"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Product Variants",
+                     "item":  [
+                                  {
+                                      "name":  "GET Variants By Product",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}variant/product/{{product_id}}",
+                                                      "description":  "Roles: vendor, vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Variant By ID",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}variant/{{variant_id}}",
+                                                      "description":  "Roles: vendor, vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Variant Images",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}variant/{{variant_id}}/images",
+                                                      "description":  "Roles: vendor, vendor_manager, admin"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Orders",
+                     "item":  [
+                                  {
+                                      "name":  "GET Order List",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}order/order-list",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Order Details",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}order/order-details/{{order_id}}",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Cancellation Requests",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}order/cancellation-requests",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Cancellation Request Details",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}order/cancellation-request/{{order_id}}",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "POST Approve Cancellation",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}order/approve-cancellation/{{order_id}}",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "POST Reject Cancellation",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"reason\": \"\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}order/reject-cancellation/{{order_id}}",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "POST Approve Service Cancellation",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}order/approve-service-cancellation/{{service_order_id}}",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "POST Reject Service Cancellation",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"reason\": \"\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}order/reject-service-cancellation/{{service_order_id}}",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "POST Approve MPS Service Cancellation",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}order/approve-mps-service-cancellation/{{service_order_id}}",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "POST Reject MPS Service Cancellation",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"reason\": \"\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}order/reject-mps-service-cancellation/{{service_order_id}}",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Warehouse",
+                     "item":  [
+                                  {
+                                      "name":  "POST Stock In",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n}"
+                                                               },
+                                                      "url":  "{{base_url}}warehouse/stock-in",
+                                                      "description":  "Roles: warehouse_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Stock In",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}warehouse/stock-in",
+                                                      "description":  "Roles: warehouse_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Stock In By GRN",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}warehouse/stock-in/{{grn}}",
+                                                      "description":  "Roles: warehouse_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "PUT Stock In",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n}"
+                                                               },
+                                                      "url":  "{{base_url}}warehouse/stock-in/{{grn}}",
+                                                      "description":  "Roles: warehouse_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "POST Stock Adjustments",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n}"
+                                                               },
+                                                      "url":  "{{base_url}}warehouse/stock-adjustments",
+                                                      "description":  "Roles: warehouse_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Stock Adjustments",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}warehouse/stock-adjustments",
+                                                      "description":  "Roles: warehouse_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET All Warehouses",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}warehouse/all-warehouses",
+                                                      "description":  "Roles: warehouse_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Inventory Record",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}warehouse/inventory-record",
+                                                      "description":  "Roles: warehouse_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Search Inventory",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}warehouse/search",
+                                                      "description":  "Roles: warehouse_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "PUT Send To Inventory",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n}"
+                                                               },
+                                                      "url":  "{{base_url}}warehouse/send-to-inventory",
+                                                      "description":  "Roles: warehouse_manager"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Campaign",
+                     "item":  [
+                                  {
+                                      "name":  "POST Create Campaign",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "formdata",
+                                                                   "formdata":  [
+                                                                                    {
+                                                                                        "key":  "name",
+                                                                                        "value":  "",
+                                                                                        "type":  "text"
+                                                                                    },
+                                                                                    {
+                                                                                        "key":  "banner_image",
+                                                                                        "type":  "file",
+                                                                                        "src":  [
+
+                                                                                                ]
+                                                                                    }
+                                                                                ]
+                                                               },
+                                                      "url":  "{{base_url}}campaign/campaigns",
+                                                      "description":  "Roles: vendor_manager, admin. Multipart field: banner_image"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Campaigns",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}campaign/campaigns",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Campaign By ID",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}campaign/campaigns/{{campaign_id}}",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "PUT Update Campaign",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "formdata",
+                                                                   "formdata":  [
+                                                                                    {
+                                                                                        "key":  "name",
+                                                                                        "value":  "",
+                                                                                        "type":  "text"
+                                                                                    },
+                                                                                    {
+                                                                                        "key":  "banner_image",
+                                                                                        "type":  "file",
+                                                                                        "src":  [
+
+                                                                                                ]
+                                                                                    }
+                                                                                ]
+                                                               },
+                                                      "url":  "{{base_url}}campaign/campaigns/{{campaign_id}}",
+                                                      "description":  "Roles: vendor_manager, admin. Multipart field: banner_image"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "PATCH Campaign Status",
+                                      "request":  {
+                                                      "method":  "PATCH",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"status\": \"active\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}campaign/campaigns/{{campaign_id}}/status",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "DELETE Campaign",
+                                      "request":  {
+                                                      "method":  "DELETE",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}campaign/campaigns/{{campaign_id}}",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Campaign Items",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}campaign/campaigns/{{campaign_id}}/items",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Campaign Available Variants",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}campaign/campaigns/{{campaign_id}}/available-variants",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "POST Add Campaign Items",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"items\": []\n}"
+                                                               },
+                                                      "url":  "{{base_url}}campaign/campaigns/{{campaign_id}}/items",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "PUT Update Campaign Item",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n}"
+                                                               },
+                                                      "url":  "{{base_url}}campaign/campaigns/{{campaign_id}}/items/{{variant_id}}",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "DELETE Campaign Item",
+                                      "request":  {
+                                                      "method":  "DELETE",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}campaign/campaigns/{{campaign_id}}/items/{{variant_id}}",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Company",
+                     "item":  [
+                                  {
+                                      "name":  "POST Create Company",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "formdata",
+                                                                   "formdata":  [
+                                                                                    {
+                                                                                        "key":  "name",
+                                                                                        "value":  "",
+                                                                                        "type":  "text"
+                                                                                    },
+                                                                                    {
+                                                                                        "key":  "company_logo",
+                                                                                        "type":  "file",
+                                                                                        "src":  [
+
+                                                                                                ]
+                                                                                    }
+                                                                                ]
+                                                               },
+                                                      "url":  "{{base_url}}company/create-company",
+                                                      "description":  "Roles: admin. Multipart field: company_logo"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "PUT Update Company",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "formdata",
+                                                                   "formdata":  [
+                                                                                    {
+                                                                                        "key":  "name",
+                                                                                        "value":  "",
+                                                                                        "type":  "text"
+                                                                                    },
+                                                                                    {
+                                                                                        "key":  "company_logo",
+                                                                                        "type":  "file",
+                                                                                        "src":  [
+
+                                                                                                ]
+                                                                                    }
+                                                                                ]
+                                                               },
+                                                      "url":  "{{base_url}}company/update-company/{{company_id}}",
+                                                      "description":  "Roles: admin. Multipart field: company_logo"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "DELETE Company",
+                                      "request":  {
+                                                      "method":  "DELETE",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}company/delete-company/{{company_id}}",
+                                                      "description":  "Roles: admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Companies",
+                                      "request":  {
+                                                      "auth":  {
+                                                                   "type":  "noauth"
+                                                               },
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}company/",
+                                                      "description":  "Public route"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Company By ID",
+                                      "request":  {
+                                                      "auth":  {
+                                                                   "type":  "noauth"
+                                                               },
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}company/{{company_id}}",
+                                                      "description":  "Public route"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Maintenance",
+                     "item":  [
+                                  {
+                                      "name":  "PUT Set Maintenance",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"is_maintenance\": true\n}"
+                                                               },
+                                                      "url":  "{{base_url}}maintenance/set-maintenance",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Logistics",
+                     "item":  [
+                                  {
+                                      "name":  "POST Resolve NDR",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n}"
+                                                               },
+                                                      "url":  "{{base_url}}logistics/shipments/{{shipment_id}}/resolve-ndr",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Summary",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}logistics/summary",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Status Breakdown",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}logistics/status-breakdown",
+                                                      "description":  "Roles: admin, vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET NDR",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}logistics/ndr",
+                                                      "description":  "Roles: admin, vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET SLA",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}logistics/sla",
+                                                      "description":  "Roles: admin, vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Couriers",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}logistics/couriers",
+                                                      "description":  "Roles: admin, vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Events",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}logistics/events",
+                                                      "description":  "Roles: admin, vendor_manager"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Reward",
+                     "item":  [
+                                  {
+                                      "name":  "POST Create Rule",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n}"
+                                                               },
+                                                      "url":  "{{base_url}}reward/create-rule",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Rules",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}reward/get-rule",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Rule By ID",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}reward/get-rule/{{reward_rule_id}}",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "PUT Update Rule",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n}"
+                                                               },
+                                                      "url":  "{{base_url}}reward/update-rule/{{reward_rule_id}}",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "DELETE Rule",
+                                      "request":  {
+                                                      "method":  "DELETE",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}reward/delete-rule/{{reward_rule_id}}",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "POST Product Reward Settings",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"product_id\": \"{{product_id}}\",\n  \"rule_id\": \"{{reward_rule_id}}\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}reward/product-reward-settings",
+                                                      "description":  "Roles: vendor_manager, admin"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Product Reward Settings",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}reward/product-reward-settings",
+                                                      "description":  "Roles: admin, vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "DELETE Product Reward Setting",
+                                      "request":  {
+                                                      "method":  "DELETE",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}reward/product-reward-settings/{{product_reward_setting_id}}",
+                                                      "description":  "Roles: admin, vendor_manager"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Reference Routes",
+                     "item":  [
+                                  {
+                                      "name":  "GET Categories",
+                                      "request":  {
+                                                      "auth":  {
+                                                                   "type":  "noauth"
+                                                               },
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}category/",
+                                                      "description":  "Public route"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Category Documents",
+                                      "request":  {
+                                                      "auth":  {
+                                                                   "type":  "noauth"
+                                                               },
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}category/{{category_id}}/documents",
+                                                      "description":  "Public route"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Category Attributes",
+                                      "request":  {
+                                                      "auth":  {
+                                                                   "type":  "noauth"
+                                                               },
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}category/attributes",
+                                                      "description":  "Public route"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Category Attributes Template",
+                                      "request":  {
+                                                      "auth":  {
+                                                                   "type":  "noauth"
+                                                               },
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}category/attributes-template",
+                                                      "description":  "Public route"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Subcategories",
+                                      "request":  {
+                                                      "auth":  {
+                                                                   "type":  "noauth"
+                                                               },
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}subcategory/",
+                                                      "description":  "Public route"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Subcategories By Category",
+                                      "request":  {
+                                                      "auth":  {
+                                                                   "type":  "noauth"
+                                                               },
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}subcategory/{{category_id}}",
+                                                      "description":  "Public route"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Subcategory Features",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}subcategory/features/{{subcategory_id}}",
+                                                      "description":  "Roles: vendor, admin, vendor_manager"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Sub-subcategories",
+                                      "request":  {
+                                                      "auth":  {
+                                                                   "type":  "noauth"
+                                                               },
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}subsubcategory/",
+                                                      "description":  "Public route"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "GET Sub-subcategories By Subcategory",
+                                      "request":  {
+                                                      "auth":  {
+                                                                   "type":  "noauth"
+                                                               },
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}subsubcategory/{{subcategory_id}}",
+                                                      "description":  "Public route"
+                                                  }
+                                  }
+                              ]
+                 }
+             ],
+    "variable":  [
+                     {
+                         "key":  "base_url",
+                         "value":  "https://rewardplanners.com/api/crm/",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "crm_token",
+                         "value":  "",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "vendor_id",
+                         "value":  "1",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "document_id",
+                         "value":  "1",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "category_id",
+                         "value":  "1",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "subcategory_id",
+                         "value":  "1",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "subsubcategory_id",
+                         "value":  "1",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "product_id",
+                         "value":  "1",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "variant_id",
+                         "value":  "1",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "order_id",
+                         "value":  "1",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "service_order_id",
+                         "value":  "1",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "grn",
+                         "value":  "GRN-001",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "campaign_id",
+                         "value":  "1",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "company_id",
+                         "value":  "1",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "shipment_id",
+                         "value":  "1",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "reward_rule_id",
+                         "value":  "1",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "product_reward_setting_id",
+                         "value":  "1",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "attribute_id",
+                         "value":  "1",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "attribute_value_id",
+                         "value":  "1",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "category_document_id",
+                         "value":  "1",
+                         "type":  "string"
+                     }
+                 ]
+}
