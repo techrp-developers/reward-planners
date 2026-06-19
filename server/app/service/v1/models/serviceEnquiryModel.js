@@ -52,11 +52,17 @@ class ServiceEnquiryModel {
       s.name AS service_name,
 
       sv.variant_name AS variant_name,
-      sv.title AS variant_title
+      sv.title AS variant_title,
+
+      sb.name AS bundle_name,
+      sb.description AS bundle_description,
+      sb.banner_image AS bundle_banner_image
 
     FROM service_enquiries se
     JOIN services s ON s.id = se.service_id
     LEFT JOIN service_variants sv ON sv.id = se.variant_id
+    LEFT JOIN service_bundles sb ON sb.id = se.bundle_id
+
     ORDER BY se.created_at DESC
     `,
     );
@@ -93,10 +99,14 @@ class ServiceEnquiryModel {
       se.created_at,
       s.name AS service_name,
       sv.variant_name AS variant_name,
-      sv.title as variant_title
+      sv.title as variant_title,
+      sb.name AS bundle_name,
+      sb.description AS bundle_description,
+      sb.banner_image AS bundle_banner_image
     FROM service_enquiries se
     JOIN services s ON s.id = se.service_id
     LEFT JOIN service_variants sv ON sv.id = se.variant_id
+    LEFT JOIN service_bundles sb ON sb.id = se.bundle_id
     WHERE se.id = ?
     `,
       [id],

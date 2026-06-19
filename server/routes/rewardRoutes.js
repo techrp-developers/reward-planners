@@ -3,6 +3,7 @@ const router = express.Router();
 const RewardController = require("../controllers/rewardController");
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 
+// ===================================================Reward Rules===================================
 // CREATE RULES
 router.post(
   "/create-rule",
@@ -43,6 +44,7 @@ router.delete(
   RewardController.deleteRewardRule,
 );
 
+// =================================================Product mapping to rules================================
 // PRODUCT MAPPING
 router.post(
   "/product-reward-settings",
@@ -56,23 +58,15 @@ router.get(
   "/product-reward-settings",
   authenticateToken,
   authorizeRoles("admin", "vendor_manager"),
-  RewardController.getProductRewardMappings
+  RewardController.getProductRewardMappings,
 );
 
 // Delete product Mapping
 router.delete(
   "/product-reward-settings/:id",
   authenticateToken,
-  authorizeRoles("admin","vendor_manager"),
-  RewardController.deleteProductRewardMapping
-);
-
-// APPLY (test / debug / can be internal)
-router.post(
-  "/apply",
-  authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
-  RewardController.applyReward,
+  authorizeRoles("admin", "vendor_manager"),
+  RewardController.deleteProductRewardMapping,
 );
 
 module.exports = router;

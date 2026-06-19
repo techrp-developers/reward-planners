@@ -984,7 +984,7 @@ export default function Onboarding() {
         <div className="p-6 mb-6 text-green-800 bg-green-100 border border-green-300 rounded-xl">
           <h3 className="text-lg font-semibold">Onboarding Completed</h3>
           <p className="mt-2">
-            Your vendor onboarding has already been approved successfully.
+            Your vendor onboarding details has already been approved successfully.
           </p>
         </div>
       )}
@@ -1433,13 +1433,6 @@ export default function Onboarding() {
                 onChange={handleChange}
                 required={!isSameAsBilling}
               />
-              {/* <FormInput
-                id="shippingState"
-                label="Shipping State"
-                value={formData.shippingState}
-                onChange={handleChange}
-                required={!isSameAsBilling}
-              /> */}
               <div className="flex flex-col space-y-1.5">
                 <label className="text-xs font-bold uppercase tracking-wider text-gray-600 ml-1">
                   Shipping State <span className="text-[#FC3F78]">*</span>

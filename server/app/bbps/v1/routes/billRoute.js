@@ -8,6 +8,9 @@ const fetchBillRateLimit = require("../middlewares/fetchBillRateLimit");
 // Categories
 router.get("/categories", BillController.getCategories);
 
+// BBPS operator locations / telecom circles
+router.get("/locations", BillController.getLocations);
+
 // Operators
 router.get("/operators", BillController.getOperators);
 
@@ -17,17 +20,19 @@ router.get("/operators-grouped", BillController.getGroupedOperators);
 // Operator details
 router.get("/operator/:id", BillController.getOperatorDetails);
 
+router.get("/recharge/plans", auth, BillController.getRechargePlans);
+
 // fetch bill readiness
 router.get(
   "/fetch-bill-check",
-  // auth,
+  auth,
   BillController.getFetchBillReadiness,
 );
 
 // check consumer number and fetch bill details for UI
 router.post(
   "/check-customer-number",
-  // auth,
+  auth,
   fetchBillRateLimit,
   fetchBillValidation,
   BillController.checkCustomerNumber,
@@ -36,7 +41,7 @@ router.post(
 // fetch bill details
 router.post(
   "/fetch-bill",
-  // auth,
+  auth,
   fetchBillRateLimit,
   fetchBillValidation,
   BillController.fetchBill,
@@ -44,7 +49,7 @@ router.post(
 
 router.get(
   "/check-status/:transaction_id",
-  // auth,
+  auth,
   BillController.checkStatus,
 );
 

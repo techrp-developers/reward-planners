@@ -10,7 +10,7 @@ const {
 // Fetch Active Services
 router.get("/all-categories", ServiceCategoryController.getCategories);
 
-// Create a category
+// Admin create category
 router.post(
   "/create-category",
   authenticateToken,
@@ -22,7 +22,7 @@ router.post(
 // Get By Id
 router.get("/find/:id", ServiceCategoryController.getCategoryById);
 
-// update
+// Admin update category
 router.put(
   "/update/:id",
   authenticateToken,
@@ -31,7 +31,7 @@ router.put(
   ServiceCategoryController.updateCategory,
 );
 
-// Delete
+// Admin delete category
 router.delete(
   "/remove/:id",
   authenticateToken,

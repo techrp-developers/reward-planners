@@ -9,7 +9,11 @@ const razorpay = require("../middlewares/razorpay");
 const db = require("../../../../config/database");
 const crypto = require("crypto");
 const sharp = require("sharp");
-const InvoiceService = require("../../../../services/Invoice/service-invoice");
+const {
+  finalizePaidServiceOrder,
+  generateInvoiceOnce,
+} = require("../utils/paymentFinalizer");
+const { notifyUser } = require("../../../common/utils/notification");
 
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
 function getPublicUrl(path) {
@@ -17,10 +21,15 @@ function getPublicUrl(path) {
   return `${CDN_BASE_URL}/${path}`;
 }
 
+function positiveInt(value, fallback, max = 100) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(parsed, max);
+}
+
 // Utility
 const ALLOWED_STATUSES = [
   "pending_payment",
-  "payment_done",
   "documents_pending",
   "documents_uploaded",
   "in_progress",
@@ -72,99 +81,13 @@ function calculateSummary({ bundles = [], individual_items = [] }) {
 }
 
 class ServiceOrderController {
-  // direct order
-  async createDirectOrder(req, res) {
-    try {
-      const userId = req.user?.user_id;
-
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: "Unauthorized user",
-        });
-      }
-
-      const { service_id, variant_id } = req.body;
-
-      const [[variant]] = await db.execute(
-        `SELECT price FROM service_variants WHERE id = ?`,
-        [variant_id],
-      );
-
-      const price = variant.price;
-
-      if (!service_id || !price) {
-        return res.status(400).json({
-          success: false,
-          message: "service_id and price are required",
-        });
-      }
-
-      const order = await ServiceOrderModel.create({
-        user_id: userId,
-        service_id,
-        variant_id: variant_id || null,
-        enquiry_id: null,
-        price,
-        status: "payment_done",
-      });
-
-      res.status(201).json({
-        success: true,
-        message: "Order created successfully",
-        data: order,
-      });
-    } catch (err) {
-      res.status(500).json({ success: false, message: err.message });
-    }
-  }
-
-  // enquiry order
-  async createEnquiryOrder(req, res) {
-    try {
-      const userId = req.user?.user_id;
-
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: "Unauthorized user",
-        });
-      }
-
-      const { enquiryId } = req.params;
-
-      const enquiry = await ServiceEnquiryModel.findById(enquiryId);
-
-      if (!enquiry) {
-        return res.status(404).json({
-          success: false,
-          message: "Enquiry not found",
-        });
-      }
-
-      const order = await ServiceOrderModel.create({
-        user_id: userId,
-        service_id: enquiry.service_id,
-        variant_id: enquiry.variant_id,
-        enquiry_id: enquiry.id,
-        price: 0,
-        status: "documents_pending",
-      });
-
-      res.json({
-        success: true,
-        message: "Order created from enquiry",
-        data: order,
-      });
-    } catch (err) {
-      res.status(500).json({ success: false, message: err.message });
-    }
-  }
-
   // create razorpay order
   async createPaymentOrder(req, res) {
+    let connection;
+
     try {
       const userId = req.user?.user_id;
+      // const userId = 1;
 
       if (!userId) {
         return res.status(401).json({
@@ -182,21 +105,74 @@ class ServiceOrderController {
         });
       }
 
-      //  Get total amount from DB
-      const [orders] = await db.execute(
-        `SELECT SUM(price) as total 
-        FROM service_orders 
-        WHERE parent_order_id = ?
-        AND user_id = ?`,
+      connection = await db.getConnection();
+      await connection.beginTransaction();
+
+      const [orders] = await connection.execute(
+        `SELECT id, price, status, payment_status
+         FROM service_orders
+         WHERE parent_order_id = ?
+           AND user_id = ?
+         FOR UPDATE`,
         [parent_order_id, userId],
       );
 
-      const totalAmount = Number(orders[0]?.total);
-
-      if (!totalAmount) {
+      if (!orders.length) {
+        await connection.rollback();
         return res.status(400).json({
           success: false,
           message: "Invalid parent_order_id",
+        });
+      }
+
+      const alreadyPaid = orders.some(
+        (order) =>
+          order.payment_status === "paid" || order.status !== "pending_payment",
+      );
+
+      if (alreadyPaid) {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Order is not payable",
+        });
+      }
+
+      const totalAmount = orders.reduce(
+        (sum, order) => sum + Number(order.price || 0),
+        0,
+      );
+
+      if (totalAmount <= 0) {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Invalid order amount",
+        });
+      }
+
+      const [[existingPaymentOrder]] = await connection.execute(
+        `SELECT razorpay_order_id, amount
+         FROM razorpay_orders
+         WHERE ref_id = ?
+           AND module = 'service'
+           AND status IN ('created', 'pending')
+         ORDER BY id DESC
+         LIMIT 1`,
+        [parent_order_id],
+      );
+
+      if (existingPaymentOrder) {
+        await connection.commit();
+        return res.json({
+          success: true,
+          data: {
+            key: process.env.RAZOR_API_KEY,
+            orderId: existingPaymentOrder.razorpay_order_id,
+            amount: Math.round(Number(existingPaymentOrder.amount) * 100),
+            currency: "INR",
+            parent_order_id,
+          },
         });
       }
 
@@ -210,12 +186,33 @@ class ServiceOrderController {
         },
       });
 
-      await db.execute(
-        `INSERT INTO razorpay_orders
-      (razorpay_order_id, receipt, amount, status, ref_id, module)
-      VALUES (?, ?, ?, 'created', ?, 'service')`,
-        [razorpayOrder.id, parent_order_id, totalAmount, parent_order_id],
+      console.info(
+        `[createPaymentOrder] Razorpay order created: ${razorpayOrder.id} for parent_order_id=${parent_order_id}`,
       );
+
+      try {
+        await connection.execute(
+          `INSERT INTO razorpay_orders
+         (razorpay_order_id, order_source, receipt, amount, status, ref_id, module)
+         VALUES (?, ?, ?, ?, 'created', ?, 'service')`,
+          [
+            razorpayOrder.id,
+            "internal",
+            parent_order_id,
+            totalAmount,
+            parent_order_id,
+          ],
+        );
+      } catch (dbErr) {
+        // Razorpay order exists but DB record failed — log for manual reconciliation
+        console.error(
+          `[createPaymentOrder] DB insert failed for Razorpay order ${razorpayOrder.id}:`,
+          dbErr.message,
+        );
+        throw dbErr;
+      }
+
+      await connection.commit();
 
       res.json({
         success: true,
@@ -228,17 +225,28 @@ class ServiceOrderController {
         },
       });
     } catch (err) {
+      if (connection) {
+        await connection.rollback();
+      }
+
       res.status(500).json({
         success: false,
         message: err.message,
       });
+    } finally {
+      if (connection) {
+        connection.release();
+      }
     }
   }
 
   // verify payment
   async verifyPayment(req, res) {
+    let connection;
+
     try {
       const userId = req.user?.user_id;
+      // const userId = 1;
 
       if (!userId) {
         return res.status(401).json({
@@ -250,11 +258,18 @@ class ServiceOrderController {
       const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
         req.body;
 
+      if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+        return res.status(400).json({
+          success: false,
+          message: "Missing payment details",
+        });
+      }
+
       // verify signature
       const body = razorpay_order_id + "|" + razorpay_payment_id;
 
       const expectedSignature = crypto
-        .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+        .createHmac("sha256", process.env.RAZOR_SECRET_KEY)
         .update(body.toString())
         .digest("hex");
 
@@ -265,7 +280,7 @@ class ServiceOrderController {
         });
       }
 
-      //  GET parent_order_id FROM DB
+      // GET parent_order_id FROM DB
       const [[rpOrder]] = await db.execute(
         `SELECT ref_id FROM razorpay_orders 
        WHERE razorpay_order_id = ?`,
@@ -281,69 +296,101 @@ class ServiceOrderController {
 
       const parent_order_id = rpOrder.ref_id;
 
-      const [[alreadyPaid]] = await db.execute(
-        `SELECT id FROM service_orders 
-          WHERE parent_order_id = ? AND payment_status = 'paid' LIMIT 1`,
-        [parent_order_id],
-      );
-
-      if (alreadyPaid) {
-        return res.json({ success: true, message: "Already processed" });
-      }
-
-      //  TRANSACTION
-      await db.beginTransaction();
-
-      try {
-        // update service orders
-        await db.execute(
-          `UPDATE service_orders 
-         SET status = 'documents_pending',
-             payment_id = ?,
-             payment_status = 'paid'
+      const [[ownedOrder]] = await db.execute(
+        `SELECT id
+         FROM service_orders
          WHERE parent_order_id = ?
-         AND payment_status != 'paid'`,
-          [razorpay_payment_id, parent_order_id],
-        );
+           AND user_id = ?
+         LIMIT 1`,
+        [parent_order_id, userId],
+      );
 
-        // update razorpay_orders
-        await db.execute(
-          `UPDATE razorpay_orders
-         SET razorpay_payment_id = ?,
-             status = 'success',
-             raw_response = ?
-         WHERE razorpay_order_id = ?`,
-          [razorpay_payment_id, JSON.stringify(req.body), razorpay_order_id],
-        );
-
-        await InvoiceService.generateInvoice(parent_order_id);
-
-        await db.commit();
-      } catch (err) {
-        await db.rollback();
-        throw err;
+      if (!ownedOrder) {
+        return res.status(404).json({
+          success: false,
+          message: "Order not found",
+        });
       }
 
-      // redirect
-      const [[firstOrder]] = await db.execute(
-        `SELECT id FROM service_orders 
-       WHERE parent_order_id = ? 
-       ORDER BY id ASC LIMIT 1`,
+      // GET CONNECTION
+      connection = await db.getConnection();
+
+      // START TRANSACTION
+      await connection.beginTransaction();
+
+      const [[alreadyPaid]] = await connection.execute(
+        `SELECT id
+         FROM service_orders
+         WHERE parent_order_id = ?
+           AND payment_status = 'paid'
+         LIMIT 1
+         FOR UPDATE`,
         [parent_order_id],
       );
+
+      if (!alreadyPaid) {
+        await finalizePaidServiceOrder({
+          conn: connection,
+          parentOrderId: parent_order_id,
+          paymentId: razorpay_payment_id,
+          razorpayOrderId: razorpay_order_id,
+          rawResponse: req.body,
+        });
+      }
+
+      // COMMIT
+      await connection.commit();
+
+      // await InvoiceService.generateInvoice(parent_order_id);
 
       res.json({
         success: true,
         message: "Payment successful",
         data: {
-          redirect_to: `/service-order-documents/documents/${firstOrder.id}`,
+          redirect_to: `/service-order-documents/parent-documents/${parent_order_id}`,
         },
       });
+
+      if (!alreadyPaid) {
+        notifyUser(
+          {
+            userId,
+            module: "service",
+            type: "service_order_paid",
+            title: "Service order confirmed",
+            message:
+              "Your service order is confirmed. Please submit the required documents.",
+            icon: "briefcase",
+            reference_type: "service_order",
+            reference_id: parent_order_id,
+            action_url: `/service-order-documents/parent-documents/${parent_order_id}`,
+          },
+          "service order paid notification",
+        );
+      }
+
+      generateInvoiceOnce(parent_order_id).catch((err) => {
+        console.error(
+          `[verifyPayment] Invoice generation failed for parent_order_id=${parent_order_id}:`,
+          err.message,
+        );
+      });
     } catch (err) {
+      // ROLLBACK
+      if (connection) {
+        await connection.rollback();
+      }
+
+      console.error("[verifyPayment] ERROR:", err);
       res.status(500).json({
         success: false,
         message: err.message,
       });
+    } finally {
+      // RELEASE CONNECTION
+      if (connection) {
+        connection.release();
+      }
     }
   }
 
@@ -351,6 +398,7 @@ class ServiceOrderController {
   async getMyOrders(req, res) {
     try {
       const userId = req.user?.user_id;
+      // const userId = 1;
 
       if (!userId) {
         return res.status(401).json({
@@ -359,13 +407,40 @@ class ServiceOrderController {
         });
       }
 
-      const { status } = req.query;
+      const page = positiveInt(req.query.page, 1, 10000);
+      const limit = positiveInt(req.query.limit, 10, 50);
 
-      const orders = await ServiceOrderModel.getUserOrders(userId, status);
+      const search = req.query.search?.trim() || null;
+
+      const status = req.query.status || null;
+
+      const fromDate = req.query.from_date || null;
+      const toDate = req.query.to_date || null;
+      const timeFilter = req.query.time_filter || null;
+
+      const orders = await ServiceOrderModel.getUserOrders({
+        userId,
+        status,
+        search,
+        fromDate,
+        toDate,
+        timeFilter,
+        page,
+        limit,
+      });
 
       res.json({
         success: true,
-        data: orders,
+
+        orders: orders.orders,
+
+        total: orders.total,
+
+        totalPages: orders.totalPages,
+
+        currentPage: orders.currentPage,
+
+        summary: orders.summary,
       });
     } catch (err) {
       res.status(500).json({
@@ -379,6 +454,7 @@ class ServiceOrderController {
   async getOrderDetails(req, res) {
     try {
       const userId = req.user?.user_id;
+      // const userId = 1;
 
       if (!userId) {
         return res.status(401).json({
@@ -387,9 +463,12 @@ class ServiceOrderController {
         });
       }
 
-      const { id } = req.params;
+      const { parentOrderId } = req.params;
 
-      const order = await ServiceOrderModel.getOrderById(id, userId);
+      const order = await ServiceOrderModel.getOrderByParentId(
+        parentOrderId,
+        userId,
+      );
 
       if (!order) {
         return res.status(404).json({
@@ -398,101 +477,224 @@ class ServiceOrderController {
         });
       }
 
-      // Feedback
-      const [[feedback]] = await db.execute(
-        `SELECT id FROM service_feedback 
-       WHERE parent_order_id = ? AND user_id = ?`,
-        [order.parent_order_id, userId],
-      );
+      // =========================================
+      // PROCESS INDIVIDUAL ITEMS
+      // =========================================
 
-      const canGiveFeedback = order.status === "completed" && !feedback;
+      const processItem = async (item) => {
+        // documents
+        const documents = await ServiceOrderDocumentModel.getRequiredDocs(
+          item.id,
+          userId,
+        );
 
-      // Cancel orders
-      const canCancel = [
-        "pending_payment",
-        "documents_pending",
-        "in_progress",
-      ].includes(order.status);
+        // feedback
+        const [[feedback]] = await db.execute(
+          `SELECT * FROM service_feedback
+         WHERE service_order_id = ?
+         AND user_id = ?`,
+          [item.id, userId],
+        );
 
-      // documents
-      const documents = await ServiceOrderDocumentModel.getRequiredDocs(id);
+        const canGiveFeedback = item.status === "completed" && !feedback;
 
-      // Timeline
-      let timeline = null;
-      if (order.status !== "cancelled") {
-        timeline = [
-          { status: "Order Confirmed", completed: true },
-          {
-            status: "Order in Progress",
-            completed: ["in_progress", "completed"].includes(order.status),
-          },
-          {
-            status: "Order Delivered",
-            completed: order.status === "completed",
-          },
-        ];
-      }
+        // cancellation
+        const [[cancellation]] = await db.execute(
+          `SELECT * FROM service_order_cancellations
+         WHERE service_order_id = ?`,
+          [item.id],
+        );
 
-      // Cancellation
-      const [[cancellation]] = await db.execute(
-        `SELECT * FROM service_order_cancellations 
-          WHERE parent_order_id = ?`,
-        [order.parent_order_id],
-      );
+        // refund
+        const [[refund]] = await db.execute(
+          `SELECT * FROM service_order_refunds
+         WHERE service_order_id = ?`,
+          [item.id],
+        );
 
-      let cancellationTimeline = null;
+        // can cancel
+        const canCancel = [
+          "pending_payment",
+          "documents_pending",
+          "in_progress",
+        ].includes(item.status);
 
-      if (cancellation) {
-        cancellationTimeline = [
-          { status: "Cancellation Requested", completed: true },
-          {
-            status: "Cancellation Confirmed",
-            completed: cancellation.status === "approved",
-          },
-          {
-            status: "Refund Initiated",
-            completed: ["initiated", "completed"].includes(
-              cancellation.refund_status,
-            ),
-          },
-          {
-            status: "Refund Completed",
-            completed: cancellation.refund_status === "completed",
-          },
-        ];
-      }
-      // Refund Summary
-      const refund = cancellation
-        ? {
-            total_refund: Number(cancellation.refund_amount),
-            refund_method: "original",
-            status: cancellation.refund_status,
-          }
-        : null;
+        // timeline
+        let timeline = [];
 
-      res.json({
-        success: true,
-        data: {
-          order,
+        // cancelled flow
+        if (item.status === "cancelled") {
+          timeline = [
+            {
+              status: "Cancellation Requested",
+              completed: true,
+            },
+            {
+              status: "Cancellation Confirmed",
+              completed: cancellation?.status === "approved",
+            },
+            {
+              status: "Refund Initiated",
+              completed: ["initiated", "completed"].includes(
+                cancellation?.refund_status,
+              ),
+            },
+            {
+              status: "Refund Completed",
+              completed: cancellation?.refund_status === "completed",
+            },
+          ];
+        } else {
+          timeline = [
+            {
+              status: "Order Confirmed",
+              completed: true,
+            },
+            {
+              status: "Documents Submitted",
+              completed: [
+                "documents_uploaded",
+                "in_progress",
+                "completed",
+              ].includes(item.status),
+            },
+            {
+              status: "In Progress",
+              completed: ["in_progress", "completed"].includes(item.status),
+            },
+            {
+              status: "Completed",
+              completed: item.status === "completed",
+            },
+          ];
+        }
+
+        return {
+          ...item,
+
           documents,
-          timeline,
-          cancellation: cancellation
-            ? {
-                can_cancel: canCancel,
-                status: cancellation.status,
-                timeline: cancellationTimeline,
-              }
-            : {
-                can_cancel: canCancel,
-              },
 
-          refund,
+          timeline,
 
           feedback: {
             can_submit: canGiveFeedback,
             submitted: !!feedback,
             data: feedback || null,
           },
+
+          cancellation: cancellation
+            ? {
+                can_cancel: canCancel,
+                status: cancellation.status,
+                reason: cancellation.reason,
+                refund_status: cancellation.refund_status,
+              }
+            : {
+                can_cancel: canCancel,
+              },
+
+          refund: refund
+            ? {
+                amount: Number(refund.refund_amount),
+                method: refund.refund_method,
+                status: refund.status,
+              }
+            : null,
+        };
+      };
+
+      // =========================================
+      // PROCESS INDIVIDUAL ITEMS
+      // =========================================
+
+      const processedItems = [];
+
+      for (const item of order.items) {
+        processedItems.push(await processItem(item));
+      }
+
+      // =========================================
+      // PROCESS BUNDLES
+      // =========================================
+
+      const processedBundles = [];
+
+      for (const bundle of order.bundles) {
+        const processedBundleItems = [];
+
+        for (const item of bundle.items) {
+          processedBundleItems.push(await processItem(item));
+        }
+
+        processedBundles.push({
+          ...bundle,
+          items: processedBundleItems,
+        });
+      }
+
+      // =========================================
+      // SUMMARY
+      // =========================================
+
+      const allItems = [
+        ...processedItems,
+        ...processedBundles.flatMap((b) => b.items),
+      ];
+
+      const completedServices = allItems.filter(
+        (i) => i.status === "completed",
+      ).length;
+
+      // =========================================
+      // PARENT TIMELINE (AGGREGATE)
+      // =========================================
+
+      const parentTimeline = [
+        {
+          status: "Order Confirmed",
+          completed: true,
+        },
+        {
+          status: "Services In Progress",
+          completed: allItems.some((i) =>
+            ["in_progress", "completed"].includes(i.status),
+          ),
+        },
+        {
+          status: "Order Completed",
+          completed: allItems.every((i) => i.status === "completed"),
+        },
+        {
+          status: "Order Cancelled",
+          completed: allItems.every((i) => i.status === "cancelled"),
+        },
+      ];
+
+      res.json({
+        success: true,
+
+        data: {
+          parent_order_id: order.parent_order_id,
+
+          created_at: order.created_at,
+
+          status: order.status,
+
+          address: order.address,
+
+          total_amount: order.total_amount,
+
+          summary: {
+            total_services: allItems.length,
+            completed_services: completedServices,
+            total_bundles: processedBundles.length,
+          },
+
+          timeline: parentTimeline,
+
+          items: processedItems,
+
+          bundles: processedBundles,
         },
       });
     } catch (err) {
@@ -506,8 +708,8 @@ class ServiceOrderController {
   // invoice Details
   async getInvoiceDetails(req, res) {
     try {
-      // const userId = req.user?.user_id;
-      const userId = 1;
+      const userId = req.user?.user_id;
+      // const userId = 1;
 
       if (!userId) {
         return res.status(401).json({
@@ -519,8 +721,17 @@ class ServiceOrderController {
       const { parentId } = req.params;
 
       const [[invoice]] = await db.execute(
-        `SELECT * FROM service_invoices WHERE parent_order_id = ?`,
-        [parentId],
+        `SELECT si.*
+         FROM service_invoices si
+         WHERE si.parent_order_id = ?
+           AND EXISTS (
+             SELECT 1
+             FROM service_orders so
+             WHERE so.parent_order_id = si.parent_order_id
+               AND so.user_id = ?
+           )
+         LIMIT 1`,
+        [parentId, userId],
       );
 
       if (!invoice) {
@@ -534,7 +745,7 @@ class ServiceOrderController {
         success: true,
         data: {
           ...invoice,
-          url: `/uploads/invoices/${invoice.invoice_url}`,
+          url: `/uploads/service-invoices/${invoice.invoice_url}`,
         },
       });
     } catch (error) {
@@ -546,86 +757,7 @@ class ServiceOrderController {
     }
   }
 
-  // upload user documents for an order
-  async uploadDocument(req, res) {
-    try {
-      const userId = req.user?.user_id;
-
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: "Unauthorized user",
-        });
-      }
-
-      const { orderId } = req.params;
-      const { document_id } = req.body;
-
-      if (!document_id) {
-        return res.status(400).json({
-          success: false,
-          message: "document_id required",
-        });
-      }
-
-      const order = await ServiceOrderModel.getOrderById(orderId, userId);
-
-      if (!order) {
-        return res.status(404).json({
-          success: false,
-          message: "Order not found",
-        });
-      }
-
-      if (!req.file) {
-        return res.status(400).json({
-          success: false,
-          message: "File required",
-        });
-      }
-
-      //  Read file buffer
-      const fileBuffer = fs.readFileSync(req.file.path);
-
-      //  Extract extension safely
-      const originalName = req.file.originalname;
-
-      const extension = originalName.includes(".")
-        ? originalName.split(".").pop()
-        : "bin";
-
-      //  Create R2 path
-      const r2Path = `private/service-order-documents/${orderId}/${document_id}_${Date.now()}.${extension}`;
-
-      //  Upload to R2 (no processing)
-      await uploadToR2(fileBuffer, r2Path, req.file.mimetype);
-
-      //  Delete temp file
-      fs.unlinkSync(req.file.path);
-
-      // Save in DB
-      await ServiceOrderDocumentModel.uploadOrUpdate({
-        order_id: orderId,
-        document_id,
-        file_path: r2Path,
-      });
-
-      res.json({
-        success: true,
-        message: "Document uploaded successfully",
-      });
-    } catch (err) {
-      if (req.file && fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-      }
-      res.status(500).json({
-        success: false,
-        message: err.message,
-      });
-    }
-  }
-
-  // submit documents
+  // upload order document
   async submitDocuments(req, res) {
     try {
       const userId = req.user?.user_id;
@@ -637,42 +769,222 @@ class ServiceOrderController {
         });
       }
 
-      const { orderId } = req.params;
+      const { parentOrderId } = req.params;
 
-      const order = await ServiceOrderModel.getOrderById(orderId, userId);
+      // ===================================
+      // Validate Order Ownership
+      // ===================================
 
-      if (!order) {
+      const [orders] = await db.execute(
+        `
+      SELECT
+        id,
+        service_id,
+        status
+      FROM service_orders
+      WHERE parent_order_id = ?
+      AND user_id = ?
+      `,
+        [parentOrderId, userId],
+      );
+
+      if (!orders.length) {
         return res.status(404).json({
           success: false,
           message: "Order not found",
         });
       }
 
-      const docs = await ServiceOrderDocumentModel.getRequiredDocs(orderId);
+      // ===================================
+      // Get Required Documents
+      // ===================================
 
-      // check mandatory docs
-      const missingDocs = docs.filter((d) => d.is_mandatory && !d.uploaded);
+      const [requiredDocs] = await db.execute(
+        `
+      SELECT DISTINCT
+        document_key,
+        document_name,
+        is_mandatory
+      FROM service_documents sd
+
+      JOIN service_orders so
+        ON so.service_id = sd.service_id
+
+      WHERE so.parent_order_id = ?
+      `,
+        [parentOrderId],
+      );
+
+      // ===================================
+      // Existing Uploaded Documents
+      // ===================================
+
+      const [uploadedDocs] = await db.execute(
+        `
+      SELECT
+        document_key,
+        uploaded
+      FROM parent_order_documents
+      WHERE parent_order_id = ?
+      `,
+        [parentOrderId],
+      );
+
+      const uploadedMap = {};
+
+      uploadedDocs.forEach((doc) => {
+        uploadedMap[doc.document_key] = doc;
+      });
+
+      // ===================================
+      // Validate & Upload
+      // ===================================
+
+      for (const requiredDoc of requiredDocs) {
+        const file = req.files?.find(
+          (f) => f.fieldname === requiredDoc.document_key,
+        );
+
+        const existingDoc = uploadedMap[requiredDoc.document_key];
+
+        // ===================================
+        // Mandatory document check
+        // ===================================
+
+        if (requiredDoc.is_mandatory && !file && !existingDoc) {
+          return res.status(400).json({
+            success: false,
+            message: `${requiredDoc.document_name} is required`,
+          });
+        }
+
+        // Already uploaded earlier
+        if (!file && existingDoc) {
+          continue;
+        }
+
+        // Optional doc skipped
+        if (!file) {
+          continue;
+        }
+
+        // ===================================
+        // Upload File
+        // ===================================
+
+        const fileBuffer = fs.readFileSync(file.path);
+
+        const extension = path.extname(file.originalname);
+
+        const r2Path =
+          `private/service-order-documents/` +
+          `${parentOrderId}/` +
+          `${requiredDoc.document_key}_${Date.now()}${extension}`;
+
+        await uploadToR2(fileBuffer, r2Path, file.mimetype);
+
+        // cleanup temp file
+        if (fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
+
+        // ===================================
+        // Save Document
+        // ===================================
+
+        await ServiceOrderDocumentModel.uploadOrUpdateParentDocument({
+          parent_order_id: parentOrderId,
+          document_key: requiredDoc.document_key,
+          file_path: r2Path,
+        });
+      }
+
+      // ===================================
+      // Final Validation
+      // ===================================
+
+      const [finalDocs] = await db.execute(
+        `
+      SELECT
+        document_key,
+        uploaded
+      FROM parent_order_documents
+      WHERE parent_order_id = ?
+      `,
+        [parentOrderId],
+      );
+
+      const finalMap = {};
+
+      finalDocs.forEach((doc) => {
+        finalMap[doc.document_key] = doc;
+      });
+
+      const missingDocs = [];
+
+      for (const requiredDoc of requiredDocs) {
+        const uploaded = finalMap[requiredDoc.document_key];
+
+        if (requiredDoc.is_mandatory && !uploaded) {
+          missingDocs.push({
+            document_key: requiredDoc.document_key,
+
+            document_name: requiredDoc.document_name,
+          });
+        }
+      }
 
       if (missingDocs.length) {
         return res.status(400).json({
           success: false,
           message: "Please upload all required documents",
-          missing: missingDocs,
+          missing_documents: missingDocs,
         });
       }
 
-      // update order status
-      await ServiceOrderModel.updateStatus(orderId, "documents_uploaded");
+      // ===================================
+      // Update Status
+      // ===================================
 
-      res.json({
-        success: true,
-        message: "Documents uploaded successfully",
-        data: {
-          order_ref: order.order_ref,
+      await db.execute(
+        `
+      UPDATE service_orders
+      SET status = 'documents_uploaded'
+      WHERE parent_order_id = ?
+      AND status = 'documents_pending'
+      `,
+        [parentOrderId],
+      );
+
+      notifyUser(
+        {
+          userId,
+          module: "service",
+          type: "service_documents_submitted",
+          title: "Documents submitted",
+          message: "Your service documents were submitted successfully.",
+          icon: "file-check",
+          reference_type: "service_order",
+          reference_id: parentOrderId,
+          action_url: `/service-orders/${parentOrderId}`,
         },
+        "service documents submitted notification",
+      );
+
+      return res.json({
+        success: true,
+        message: "Documents submitted successfully",
       });
     } catch (err) {
-      res.status(500).json({
+      if (req.files?.length) {
+        for (const file of req.files) {
+          if (file.path && fs.existsSync(file.path)) {
+            fs.unlinkSync(file.path);
+          }
+        }
+      }
+
+      return res.status(500).json({
         success: false,
         message: err.message,
       });
@@ -693,18 +1005,51 @@ class ServiceOrderController {
         });
       }
 
-      const affected = await ServiceOrderModel.updateStatus(id, status);
+      // validate order exists
+      const [[order]] = await db.execute(
+        `
+      SELECT id, user_id, parent_order_id, status
+      FROM service_orders
+      WHERE id = ?
+      `,
+        [id],
+      );
 
-      if (!affected) {
+      if (!order) {
         return res.status(404).json({
           success: false,
-          message: "Order not found",
+          message: "Service order not found",
         });
       }
 
+      if (order.status === "completed" && status !== "completed") {
+        return res.status(400).json({
+          success: false,
+          message: "Completed service cannot be changed",
+        });
+      }
+
+      await ServiceOrderModel.updateStatus(id, status);
+
+      notifyUser(
+        {
+          userId: order.user_id,
+          module: "service",
+          type: `service_order_${status}`,
+          title: "Service order updated",
+          message: `Your service order status is now ${status.replace(/_/g, " ")}.`,
+          icon: "briefcase",
+          reference_type: "service_order",
+          reference_id: order.parent_order_id || id,
+          action_url: `/service-orders/${order.parent_order_id || id}`,
+          metadata: { status, service_order_id: id },
+        },
+        "service order status notification",
+      );
+
       res.json({
         success: true,
-        message: "Order status updated",
+        message: "Service order status updated",
       });
     } catch (err) {
       res.status(500).json({
@@ -712,6 +1057,20 @@ class ServiceOrderController {
         message: err.message,
       });
     }
+  }
+
+  // Issue Reasons
+  async getIssueTypes(req, res) {
+    const [rows] = await db.execute(
+      `
+    SELECT issue_id, issue_text
+    FROM service_order_issue_type
+    WHERE is_active = 1
+    ORDER BY sort_order ASC
+    `,
+    );
+
+    res.json({ success: true, reasons: rows });
   }
 
   // create support request
@@ -727,59 +1086,117 @@ class ServiceOrderController {
         });
       }
 
-      const { parent_order_id, issue_type, description } = req.body;
+      const { service_order_id, issue_id, description } = req.body;
 
-      if (!parent_order_id || !issue_type) {
+      // =====================================
+      // Validation
+      // =====================================
+
+      if (!service_order_id || !issue_id) {
         return res.status(400).json({
           success: false,
-          message: "parent_order_id and issue_type required",
+          message: "service_order_id and issue_id required",
         });
       }
 
-      const allowedIssues = [
-        "document_missing",
-        "incorrect_details",
-        "status_issue",
-        "payment_issue",
-        "other",
-      ];
+      // =====================================
+      // Validate service order ownership
+      // =====================================
 
-      if (!allowedIssues.includes(issue_type)) {
-        return res.status(400).json({
+      const [[order]] = await db.execute(
+        `
+      SELECT
+        id,
+        status
+
+      FROM service_orders
+
+      WHERE id = ?
+      AND user_id = ?
+      `,
+        [service_order_id, userId],
+      );
+
+      if (!order) {
+        return res.status(404).json({
           success: false,
-          message: "Invalid issue type",
+          message: "Service order not found",
         });
       }
 
-      // 1 Insert request
+      // =====================================
+      // Validate issue exists
+      // =====================================
+
+      const [[issue]] = await db.execute(
+        `
+      SELECT issue_id
+
+      FROM service_order_issue_type
+
+      WHERE issue_id = ?
+      `,
+        [issue_id],
+      );
+
+      if (!issue) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid issue",
+        });
+      }
+
+      // =====================================
+      // Create support request
+      // =====================================
+
       const [result] = await db.execute(
-        `INSERT INTO order_support_requests 
-       (parent_order_id, user_id, issue_type, description)
-       VALUES (?, ?, ?, ?)`,
-        [parent_order_id, userId, issue_type, description || null],
+        `
+      INSERT INTO order_support_requests
+      (
+        service_order_id,
+        user_id,
+        issue_id,
+        description
+      )
+      VALUES
+      (
+        ?, ?, ?, ?
+      )
+      `,
+        [service_order_id, userId, issue_id, description || null],
       );
 
       const requestId = result.insertId;
 
-      // 2 Handle files (if any)
-      if (req.files && req.files.length) {
+      // =====================================
+      // Upload attachments
+      // =====================================
+
+      if (req.files?.length) {
         for (const file of req.files) {
           try {
             const fileName = `${Date.now()}-${Math.random()
               .toString(36)
               .substring(2, 8)}-${file.originalname}`;
 
-            const key = `public/support/${requestId}/${fileName}`;
+            const key = `public/service-support/${requestId}/${fileName}`;
 
             // upload to R2
             const fileUrl = await uploadToR2(file.path, key, file.mimetype);
 
-            // save in DB
+            // save attachment
             await db.execute(
               `
-            INSERT INTO order_support_attachments 
-            (request_id, file_url)
-            VALUES (?, ?)
+            INSERT INTO order_support_attachments
+            (
+              request_id,
+              file_url
+            )
+            VALUES
+            (
+              ?, ?
+            )
             `,
               [requestId, fileUrl],
             );
@@ -791,7 +1208,7 @@ class ServiceOrderController {
           } catch (fileErr) {
             console.error("SUPPORT FILE UPLOAD ERROR:", fileErr);
 
-            // cleanup temp file on error
+            // cleanup temp file
             if (file.path && fs.existsSync(file.path)) {
               fs.unlinkSync(file.path);
             }
@@ -801,13 +1218,29 @@ class ServiceOrderController {
 
       res.json({
         success: true,
-        message: "Support request submitted",
+        message: "Support request submitted successfully",
         data: {
           request_id: requestId,
         },
       });
+
+      notifyUser(
+        {
+          userId,
+          module: "service",
+          type: "service_support_requested",
+          title: "Support request submitted",
+          message: "Your service support request has been submitted.",
+          icon: "life-buoy",
+          reference_type: "support_request",
+          reference_id: requestId,
+          action_url: `/service-orders/${service_order_id}/support`,
+          metadata: { service_order_id, issue_id },
+        },
+        "service support notification",
+      );
     } catch (err) {
-      // cleanup all temp files
+      // cleanup temp files
       if (req.files?.length) {
         for (const file of req.files) {
           if (file.path && fs.existsSync(file.path)) {
@@ -823,19 +1256,65 @@ class ServiceOrderController {
     }
   }
 
+  // support request list by service order
   async getSupportRequestsByOrderId(req, res) {
     try {
-      const { parentId } = req.params;
+      const userId = req.user?.user_id;
+      // const userId = 1;
 
-      // 1. Get support requests
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      const { serviceOrderId } = req.params;
+
+      // =====================================
+      // Validate service order ownership
+      // =====================================
+
+      const [[order]] = await db.execute(
+        `
+      SELECT id
+
+      FROM service_orders
+
+      WHERE id = ?
+      AND user_id = ?
+      `,
+        [serviceOrderId, userId],
+      );
+
+      if (!order) {
+        return res.status(404).json({
+          success: false,
+          message: "Service order not found",
+        });
+      }
+
+      // =====================================
+      // Get support requests
+      // =====================================
+
       const [requests] = await db.execute(
         `
-      SELECT *
-      FROM order_support_requests
-      WHERE parent_order_id = ?
-      ORDER BY created_at DESC
+      SELECT
+        osr.*,
+
+        soit.issue_text
+
+      FROM order_support_requests osr
+
+      LEFT JOIN service_order_issue_types soit
+        ON soit.issue_id = osr.issue_id
+
+      WHERE osr.service_order_id = ?
+
+      ORDER BY osr.created_at DESC
       `,
-        [parentId],
+        [serviceOrderId],
       );
 
       if (!requests.length) {
@@ -845,20 +1324,32 @@ class ServiceOrderController {
         });
       }
 
-      // 2. Extract request IDs
+      // =====================================
+      // Extract request IDs
+      // =====================================
+
       const requestIds = requests.map((r) => r.id);
 
-      // 3. Get all attachments
+      // =====================================
+      // Get attachments
+      // =====================================
+
       const [attachments] = await db.execute(
         `
       SELECT *
+
       FROM order_support_attachments
-      WHERE request_id IN (${requestIds.map(() => "?").join(",")})
+
+      WHERE request_id IN
+      (${requestIds.map(() => "?").join(",")})
       `,
         requestIds,
       );
 
-      // 4. Group attachments by request_id
+      // =====================================
+      // Group attachments
+      // =====================================
+
       const attachmentMap = {};
 
       attachments.forEach((file) => {
@@ -866,16 +1357,33 @@ class ServiceOrderController {
           attachmentMap[file.request_id] = [];
         }
 
-        attachmentMap[file.request_id].push(file);
+        attachmentMap[file.request_id].push({
+          id: file.id,
+          file_url: getPublicUrl(file.file_url),
+          created_at: file.created_at,
+        });
       });
 
-      // 5. Attach files to each request
+      // =====================================
+      // Final formatting
+      // =====================================
+
       const formatted = requests.map((request) => ({
-        ...request,
-        attachments: (attachmentMap[request.id] || []).map((file) => ({
-          ...file,
-          file_url: getPublicUrl(file.file_url),
-        })),
+        id: request.id,
+
+        service_order_id: request.service_order_id,
+
+        issue_id: request.issue_id,
+
+        issue_name: request.issue_text,
+
+        description: request.description,
+
+        status: request.status,
+
+        created_at: request.created_at,
+
+        attachments: attachmentMap[request.id] || [],
       }));
 
       res.json({
@@ -890,46 +1398,85 @@ class ServiceOrderController {
     }
   }
 
+  // Cancellation Reason
+  async getCancellationReasons(req, res) {
+    const [rows] = await db.execute(
+      `
+    SELECT reason_id, reason_text
+    FROM order_cancellation_reasons
+    WHERE is_active = 1
+    ORDER BY sort_order ASC
+    `,
+    );
+
+    res.json({ success: true, reasons: rows });
+  }
+
   // =================================================Cancel order=======================================================
-  async cancelOrder(req, res) {
+  async cancelOrderRequest(req, res) {
     let connection;
 
     try {
-      // const userId = req.user?.user_id;
-      const userId = 1;
+      const userId = req.user?.user_id;
+      // const userId = 1;
 
-      const { parent_order_id, reason, comment } = req.body;
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
 
-      if (!parent_order_id || !reason) {
+      const { service_order_id, reason_id, comment } = req.body;
+
+      if (!service_order_id || !reason_id) {
         return res.status(400).json({
           success: false,
-          message: "parent_order_id and reason required",
+          message: "service_order_id and reason_id required",
         });
       }
 
       connection = await db.getConnection();
+
       await connection.beginTransaction();
 
-      // 1 Validate order
+      // =====================================
+      // Validate order ownership
+      // =====================================
+
       const [[order]] = await connection.execute(
-        `SELECT status FROM service_orders 
-       WHERE parent_order_id = ? AND user_id = ?
-       LIMIT 1`,
-        [parent_order_id, userId],
+        `
+      SELECT
+        id,
+        status,
+        payment_status
+
+      FROM service_orders
+
+      WHERE id = ?
+      AND user_id = ?
+      `,
+        [service_order_id, userId],
       );
 
       if (!order) {
         await connection.rollback();
+
         return res.status(404).json({
           success: false,
-          message: "Order not found",
+          message: "Service order not found",
         });
       }
 
-      // 2 Check allowed states
+      // =====================================
+      // Allowed statuses
+      // =====================================
+
       const allowedStatuses = [
         "pending_payment",
+        "payment_done",
         "documents_pending",
+        "documents_uploaded",
         "in_progress",
       ];
 
@@ -938,15 +1485,23 @@ class ServiceOrderController {
 
         return res.status(400).json({
           success: false,
-          message: "Order cannot be cancelled at this stage",
+          message: "Cancellation not allowed at this stage",
         });
       }
 
-      // 3 Prevent duplicate requests
+      // =====================================
+      // Prevent duplicate requests
+      // =====================================
+
       const [[existing]] = await connection.execute(
-        `SELECT id FROM service_order_cancellations 
-       WHERE parent_order_id = ? AND user_id = ?`,
-        [parent_order_id, userId],
+        `
+      SELECT id
+
+      FROM service_order_cancellations
+
+      WHERE service_order_id = ?
+      `,
+        [service_order_id],
       );
 
       if (existing) {
@@ -958,192 +1513,167 @@ class ServiceOrderController {
         });
       }
 
-      // 4 Calculate refund
-      const [orders] = await connection.execute(
-        `SELECT price, reward_coins_used FROM service_orders WHERE parent_order_id = ?`,
-        [parent_order_id],
-      );
+      // =====================================
+      // Create cancellation request
+      // =====================================
 
-      const totalRefund = orders.reduce((sum, o) => sum + Number(o.price), 0);
-
-      const coinsUsed = orders.reduce(
-        (sum, o) => sum + Number(o.reward_coins_used || 0),
-        0,
-      );
-
-      const refundToWallet = coinsUsed;
-      const refundToCard = totalRefund - coinsUsed;
-
-      if (refundToCard > 0) {
-        await connection.execute(
-          `INSERT INTO service_order_refunds
-        (parent_order_id, user_id, refund_amount, refund_method, status)
-        VALUES (?, ?, ?, 'original', 'pending')`,
-          [parent_order_id, userId, refundToCard],
-        );
-      }
-
-      const [[alreadyRefunded]] = await connection.execute(
-        `SELECT refund_amount 
-       FROM service_orders 
-       WHERE parent_order_id = ? 
-       AND refund_amount > 0 LIMIT 1`,
-        [parent_order_id],
-      );
-
-      if (alreadyRefunded) {
-        await connection.rollback();
-        return res.status(400).json({
-          success: false,
-          message: "Refund already processed",
-        });
-      }
-
-      // 5 Insert cancellation
       await connection.execute(
-        `INSERT INTO service_order_cancellations 
-       (parent_order_id, user_id, reason, comment, status, refund_amount, refund_status)
-       VALUES (?, ?, ?, ?, 'approved', ?, 'completed')`,
-        [parent_order_id, userId, reason, comment || null, totalRefund],
+        `
+      INSERT INTO service_order_cancellations
+      (
+        service_order_id,
+        user_id,
+        reason_id,
+        comment,
+        status,
+        refund_status
+      )
+      VALUES
+      (
+        ?, ?, ?, ?, 'requested', 'pending'
+      )
+      `,
+        [service_order_id, userId, reason_id, comment || null],
       );
 
-      // 6 Update orders
+      // =====================================
+      // Timeline entry
+      // =====================================
+
       await connection.execute(
-        `UPDATE service_orders 
-          SET status = 'cancelled',
-              cancelled_at = NOW(),
-              refund_amount = ?
-          WHERE parent_order_id = ?`,
-        [totalRefund, parent_order_id],
-      );
-
-      // 7 Refund coins (wallet)
-      if (coinsUsed > 0) {
-        // ensure wallet exists
-        await connection.execute(
-          `INSERT INTO customer_wallet (user_id, balance)
-         VALUES (?, 0)
-         ON DUPLICATE KEY UPDATE user_id = user_id`,
-          [userId],
-        );
-
-        // update balance
-        await connection.execute(
-          `UPDATE customer_wallet 
-         SET balance = balance + ?
-         WHERE user_id = ?`,
-          [coinsUsed, userId],
-        );
-
-        // fetch updated balance
-        const [[wallet]] = await connection.execute(
-          `SELECT balance FROM customer_wallet WHERE user_id = ?`,
-          [userId],
-        );
-
-        // log transaction
-        await connection.execute(
-          `INSERT INTO wallet_transactions
-         (user_id, title, description, transaction_type, coins, balance_after, category, reference_id, reason_code)
-         VALUES (?, ?, ?, 'credit', ?, ?, 'order', ?, 'ADMIN_ADJUSTMENT')`,
-          [
-            userId,
-            "Order Cancellation Refund",
-            `Coins refunded for order ${parent_order_id}`,
-            coinsUsed,
-            wallet.balance,
-            parent_order_id,
-          ],
-        );
-      }
-
-      const [[payment]] = await connection.execute(
-        `SELECT payment_id 
-        FROM service_orders
-        WHERE parent_order_id = ?
-        LIMIT 1`,
-        [parent_order_id],
+        `
+        INSERT INTO
+        service_order_cancellation_timeline
+        (
+          service_order_id,
+          event
+        )
+        VALUES
+        (
+          ?,
+          'cancellation_requested'
+        )
+      `,
+        [service_order_id],
       );
 
       await connection.commit();
 
-      if (payment?.payment_id && refundToCard > 0) {
-        await this.processRefund({
-          razorpay_payment_id: payment.payment_id,
-          amount: refundToCard,
-          parent_order_id,
-        });
-      }
+      notifyUser(
+        {
+          userId,
+          module: "service",
+          type: "service_cancellation_requested",
+          title: "Cancellation requested",
+          message:
+            "Your service order cancellation request has been submitted.",
+          icon: "x-circle",
+          reference_type: "service_order",
+          reference_id: service_order_id,
+          action_url: `/service-orders/${service_order_id}`,
+        },
+        "service cancellation notification",
+      );
 
       res.json({
         success: true,
-        message: "Order cancelled successfully",
-        data: {
-          total_refund: totalRefund,
-          breakdown: {
-            to_card: refundToCard,
-            coins_reversed: refundToWallet,
-          },
-        },
+        message: "Cancellation request submitted successfully",
       });
     } catch (err) {
-      if (connection) await connection.rollback();
+      if (connection) {
+        await connection.rollback();
+      }
 
       res.status(500).json({
         success: false,
         message: err.message,
       });
     } finally {
-      if (connection) connection.release();
+      if (connection) {
+        connection.release();
+      }
     }
   }
 
-  async processRefund(data) {
+  // get service cancellation details
+  async cancellationDetails(req, res) {
     try {
-      const { razorpay_payment_id, amount, parent_order_id } = data;
+      const userId = req.user?.user_id;
+      // const userId = 1;
 
-      // idempotency check
-      const [existing] = await db.execute(
-        `SELECT id FROM service_order_refunds
-       WHERE parent_order_id = ?
-       AND status = 'completed'
-       LIMIT 1`,
-        [parent_order_id],
-      );
+      const serviceOrderId = Number(req.params.serviceOrderId);
 
-      if (existing.length) {
-        console.log("Refund already processed");
-        return;
-      }
-
-      // call Razorpay
-      const refund = await razorpay.payments.refund(razorpay_payment_id, {
-        amount: Math.round(Number(amount) * 100),
+      const data = await ServiceOrderModel.getCancellationDetails({
+        userId,
+        serviceOrderId,
       });
 
-      // update refund record
-      await db.execute(
-        `UPDATE service_order_refunds
-       SET status = 'completed',
-           razorpay_refund_id = ?
-       WHERE parent_order_id = ?
-       AND status = 'pending'
-       ORDER BY created_at DESC
-       LIMIT 1`,
-        [refund.id, parent_order_id],
-      );
+      return res.json({
+        success: true,
+        data,
+      });
     } catch (error) {
-      console.error("Refund failed:", error);
+      console.error("Service cancellation details error:", error);
 
-      await db.execute(
-        `UPDATE service_order_refunds
-       SET status = 'failed'
-       WHERE parent_order_id = ?
-       AND status = 'pending'
-       ORDER BY created_at DESC
-       LIMIT 1`,
-        [parent_order_id],
-      );
+      return res.status(500).json({
+        success: false,
+        message: "Unable to fetch cancellation details",
+      });
+    }
+  }
+
+  //Admin order list
+  async adminOrderList(req, res) {
+    try {
+      const page = positiveInt(req.query.page, 1, 10000);
+      const limit = positiveInt(req.query.limit, 10, 50);
+
+      const status = req.query.status || null;
+      const search = req.query.search || null;
+
+      const result = await ServiceOrderModel.getAllOrders({
+        page,
+        limit,
+        status,
+        search,
+      });
+
+      return res.json({
+        success: true,
+        ...result,
+      });
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+
+  // admin order details
+  async adminOrderDetails(req, res) {
+    try {
+      const { parentOrderId } = req.params;
+
+      const order =
+        await ServiceOrderModel.getOrderByParentIdAdmin(parentOrderId);
+
+      if (!order) {
+        return res.status(404).json({
+          success: false,
+          message: "Order not found",
+        });
+      }
+
+      return res.json({
+        success: true,
+        data: order,
+      });
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+        message: error.message,
+      });
     }
   }
 }

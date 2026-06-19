@@ -56,15 +56,6 @@ class CheckoutController {
         expectedRedeemable,
       );
 
-      // await NotificationModel.create({
-      //   userId,
-      //   type: "order",
-      //   title: "Order placed ✅",
-      //   message: "Your order is confirmed and being processed.",
-      //   reference_type: "order",
-      //   reference_id: orderId,
-      // });
-
       return res.json({
         success: true,
         message: "Order placed successfully",
@@ -240,7 +231,7 @@ class CheckoutController {
           message: "Delivery not available for this address",
         });
       }
-      
+
       return res.status(500).json({
         success: false,
         message: "Checkout failed",

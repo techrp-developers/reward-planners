@@ -1,7 +1,7 @@
 const db = require("../../../../config/database");
 const TransactionModel = require("../models/transactionModel");
-const ekoService = require("../services/eko_service");
-const rechargeService = require("../services/recharge_service");
+const { processTransaction } = require("../services/paymentProcessor");
+const { notifyUser } = require("../../../common/utils/notification");
 
 async function processEvent(req) {
   const conn = await db.getConnection();
@@ -16,50 +16,103 @@ async function processEvent(req) {
       await conn.beginTransaction();
 
       const payment = body.payload.payment.entity;
-      const transactionId = payment.notes.transaction_id;
+      const [[rpOrder]] = await conn.execute(
+        `SELECT ref_id, amount
+         FROM razorpay_orders
+         WHERE razorpay_order_id = ? AND module = 'bbps'
+         FOR UPDATE`,
+        [payment.order_id],
+      );
 
-      const txn = await TransactionModel.getByIdForUpdate(transactionId, conn);
+      if (!rpOrder) {
+        await conn.rollback();
+        return;
+      }
 
-      if (!txn) return;
+      if (Number(payment.amount) !== Math.round(Number(rpOrder.amount) * 100)) {
+        throw new Error("Captured Razorpay payment amount mismatch");
+      }
+
+      const txn = await TransactionModel.getByIdForUpdate(
+        rpOrder.ref_id,
+        conn,
+      );
+
+      if (!txn) {
+        await conn.rollback();
+        return;
+      }
 
       //  DOUBLE EXECUTION PROTECTION
       if (txn.bbps_status === "PAID") {
         console.log("Skipping already paid txn:", txn.id);
+        await conn.rollback();
         return;
       }
 
-      try {
-        let result;
+      await conn.execute(
+        `UPDATE razorpay_orders
+         SET status = 'success', razorpay_payment_id = ?, raw_response = ?
+         WHERE razorpay_order_id = ? AND module = 'bbps'`,
+        [payment.id, JSON.stringify(body), payment.order_id],
+      );
 
-        if (txn.fetch_bill === 1) {
-          //  BBPS FLOW
-          result = await ekoService.payBill({
-            utility_acc_no: txn.utility_acc_no.trim(),
-            operator_id: txn.operator_id,
-            amount: txn.amount,
-            cycle_number: txn.cycle_number,
-          });
-        } else {
-          //  RECHARGE FLOW
-          result = await rechargeService.recharge({
-            mobile: txn.utility_acc_no.trim(),
-            operator_id: txn.operator_id,
-            amount: txn.amount,
-          });
-        }
+      try {
+        const result = await processTransaction(txn, req);
 
         await TransactionModel.updateStatus(txn.id, "PAID", result, conn);
 
         await conn.commit();
+
+        notifyUser(
+          {
+            userId: txn.user_id,
+            module: "bbps",
+            type: "bbps_payment_success",
+            title: "Bill payment successful",
+            message: `Your payment of Rs. ${Number(txn.amount).toFixed(2)} was successful.`,
+            icon: "receipt",
+            reference_type: "bbps_transaction",
+            reference_id: txn.id,
+            action_url: `/bbps/transactions/${txn.id}`,
+            metadata: { operator_id: txn.operator_id },
+          },
+          "bbps webhook success notification",
+        );
       } catch (err) {
+        const failureStatus =
+          err.retryable === false ? "FAILED_FINAL" : "FAILED_RETRY";
+        const willRetry = failureStatus === "FAILED_RETRY";
+
         await TransactionModel.updateStatus(
           txn.id,
-          "FAILED_RETRY",
-          err.message,
+          failureStatus,
+          err.providerResponse || err.message,
           conn,
         );
 
         await conn.commit();
+
+        notifyUser(
+          {
+            userId: txn.user_id,
+            module: "bbps",
+            type: willRetry
+              ? "bbps_payment_retry"
+              : "bbps_payment_failed",
+            title: willRetry ? "Bill payment pending" : "Bill payment failed",
+            message: willRetry
+              ? "Your payment was captured, but bill processing will be retried automatically."
+              : "Your payment was captured, but the provider rejected the bill payment.",
+            icon: willRetry ? "clock" : "x-circle",
+            reference_type: "bbps_transaction",
+            reference_id: txn.id,
+            action_url: `/bbps/transactions/${txn.id}`,
+            priority: "high",
+            metadata: { operator_id: txn.operator_id },
+          },
+          "bbps webhook retry notification",
+        );
       }
     }
 
@@ -96,17 +149,32 @@ async function processEvent(req) {
         return;
       }
 
-      await db.execute(
+      await conn.execute(
         `UPDATE razorpay_orders
-          SET status='failed',
-              raw_response=?
+          SET raw_response=?
           WHERE razorpay_order_id=?`,
         [JSON.stringify(body), razorpayOrderId],
       );
 
-      await TransactionModel.updateStatus(txn.id, "FAILED_RETRY", body, conn);
+      await TransactionModel.updateStatus(txn.id, "PAYMENT_FAILED", body, conn);
 
       await conn.commit();
+
+      notifyUser(
+        {
+          userId: txn.user_id,
+          module: "bbps",
+          type: "bbps_payment_failed",
+          title: "Bill payment failed",
+          message: "Your bill payment failed. Please try again.",
+          icon: "x-circle",
+          reference_type: "bbps_transaction",
+          reference_id: txn.id,
+          action_url: `/bbps/transactions/${txn.id}`,
+          priority: "high",
+        },
+        "bbps webhook failed notification",
+      );
     }
   } catch (err) {
     await conn.rollback();

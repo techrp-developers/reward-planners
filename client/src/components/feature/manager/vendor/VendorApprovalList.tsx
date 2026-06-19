@@ -16,19 +16,27 @@ import { api } from "../../../../api/api";
 
 interface VendorItem {
   vendor_id: number;
-  company_name: string;
-  full_name: string;
+  company_name: string | null;
+  full_name: string | null;
+  email: string | null;
+  phone: string | null;
   status: "sent_for_approval" | "approved" | "rejected" | "deleted";
-  rejection_reason?: string;
-  email: string;
-  phone?: string;
+  rejection_reason?: string | null;
   submitted_at: string;
 }
 
-type FilterValue = "All" | "sent_for_approval" | "approved" | "rejected" | "deleted";
+type FilterValue =
+  | "All"
+  | "sent_for_approval"
+  | "approved"
+  | "rejected"
+  | "deleted";
 
 const StatusChip = ({ status }: { status: VendorItem["status"] }) => {
-  const map: Record<VendorItem["status"], { label: string; cls: string; icon: React.ReactNode }> = {
+  const map: Record<
+    VendorItem["status"],
+    { label: string; cls: string; icon: React.ReactNode }
+  > = {
     approved: {
       label: "Approved",
       cls: "bg-emerald-50 text-emerald-700 border border-emerald-200",
@@ -53,7 +61,9 @@ const StatusChip = ({ status }: { status: VendorItem["status"] }) => {
 
   const cfg = map[status];
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide ${cfg.cls}`}>
+    <span
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide ${cfg.cls}`}
+    >
       {cfg.icon} {cfg.label}
     </span>
   );
@@ -78,11 +88,13 @@ export default function VendorApprovalList() {
 
   const filteredVendors = vendors.filter((v) => {
     const matchesStatus = filter === "All" ? true : v.status === filter;
+
     const matchesSearch =
-      v.company_name.toLowerCase().includes(debouncedSearch) ||
-      v.full_name.toLowerCase().includes(debouncedSearch) ||
-      v.email.toLowerCase().includes(debouncedSearch) ||
-      (v.phone || "").toLowerCase().includes(debouncedSearch);
+      (v.company_name ?? "").toLowerCase().includes(debouncedSearch) ||
+      (v.full_name ?? "").toLowerCase().includes(debouncedSearch) ||
+      (v.email ?? "").toLowerCase().includes(debouncedSearch) ||
+      (v.phone ?? "").toLowerCase().includes(debouncedSearch);
+
     return matchesStatus && matchesSearch;
   });
 
@@ -143,7 +155,9 @@ export default function VendorApprovalList() {
       const res = await api.put(`/manager/deactivate/${vendorId}`);
       if (res.data) {
         setVendors((prev) =>
-          prev.map((v) => (v.vendor_id === vendorId ? { ...v, status: "deleted" } : v))
+          prev.map((v) =>
+            v.vendor_id === vendorId ? { ...v, status: "deleted" } : v,
+          ),
         );
         await Swal.fire({
           title: "Deactivated",
@@ -174,16 +188,17 @@ export default function VendorApprovalList() {
     );
   }
 
-  const inputCls = "px-4 py-2.5 bg-gray-50/60 border border-gray-200 rounded-xl text-sm text-gray-700 outline-none focus:ring-4 focus:ring-[#852BAF]/15 focus:border-[#852BAF] focus:bg-white transition-all";
+  const inputCls =
+    "px-4 py-2.5 bg-gray-50/60 border border-gray-200 rounded-xl text-sm text-gray-700 outline-none focus:ring-4 focus:ring-[#852BAF]/15 focus:border-[#852BAF] focus:bg-white transition-all";
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-
       {/* ── PAGE HEADER ── */}
       <div
         className="flex items-center justify-between p-5 rounded-2xl"
         style={{
-          background: "linear-gradient(135deg, rgba(133,43,175,0.06) 0%, rgba(252,63,120,0.04) 100%)",
+          background:
+            "linear-gradient(135deg, rgba(133,43,175,0.06) 0%, rgba(252,63,120,0.04) 100%)",
           border: "1px solid rgba(133,43,175,0.1)",
         }}
       >
@@ -212,7 +227,8 @@ export default function VendorApprovalList() {
             className="px-3 py-1.5 rounded-xl"
             style={{ background: "rgba(133,43,175,0.07)", color: "#852BAF" }}
           >
-            {filteredVendors.length} vendor{filteredVendors.length !== 1 ? "s" : ""}
+            {filteredVendors.length} vendor
+            {filteredVendors.length !== 1 ? "s" : ""}
           </span>
         </div>
       </div>
@@ -220,7 +236,10 @@ export default function VendorApprovalList() {
       {/* ── MAIN CARD ── */}
       <div
         className="bg-white rounded-2xl vendor-section-card overflow-hidden"
-        style={{ border: "1px solid rgba(133,43,175,0.08)", boxShadow: "0 4px 24px rgba(133,43,175,0.06)" }}
+        style={{
+          border: "1px solid rgba(133,43,175,0.08)",
+          boxShadow: "0 4px 24px rgba(133,43,175,0.06)",
+        }}
       >
         {/* FILTER BAR */}
         <div className="px-6 pt-5 pb-4 border-b border-gray-50">
@@ -228,7 +247,10 @@ export default function VendorApprovalList() {
             {/* Status Tabs */}
             <div
               className="flex gap-1 p-1 rounded-xl"
-              style={{ background: "rgba(133,43,175,0.04)", border: "1px solid rgba(133,43,175,0.08)" }}
+              style={{
+                background: "rgba(133,43,175,0.04)",
+                border: "1px solid rgba(133,43,175,0.08)",
+              }}
             >
               {filterTabs.map(({ label, value }) => (
                 <button
@@ -241,7 +263,10 @@ export default function VendorApprovalList() {
                   }`}
                   style={
                     filter === value
-                      ? { background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }
+                      ? {
+                          background:
+                            "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
+                        }
                       : {}
                   }
                 >
@@ -252,7 +277,10 @@ export default function VendorApprovalList() {
 
             {/* Search */}
             <div className="relative">
-              <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+              <FiSearch
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
+                size={14}
+              />
               <input
                 type="text"
                 placeholder="Search vendors…"
@@ -267,7 +295,10 @@ export default function VendorApprovalList() {
         {/* REPORT FILTERS */}
         <div
           className="px-6 py-3 flex flex-wrap items-center justify-between gap-3"
-          style={{ background: "rgba(133,43,175,0.02)", borderBottom: "1px solid rgba(133,43,175,0.06)" }}
+          style={{
+            background: "rgba(133,43,175,0.02)",
+            borderBottom: "1px solid rgba(133,43,175,0.06)",
+          }}
         >
           <div className="flex gap-2 flex-wrap items-center">
             <select
@@ -299,7 +330,9 @@ export default function VendorApprovalList() {
             onClick={handleDownloadVendorReport}
             disabled={!fromDate && !toDate && filter === "All"}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm text-white cursor-pointer transition-all hover:opacity-90 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }}
+            style={{
+              background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
+            }}
           >
             <FaDownload size={13} /> Download Report
           </button>
@@ -309,7 +342,12 @@ export default function VendorApprovalList() {
         <div className="overflow-x-auto">
           <table className="min-w-full">
             <thead>
-              <tr style={{ background: "linear-gradient(90deg, rgba(133,43,175,0.04) 0%, rgba(252,63,120,0.02) 100%)" }}>
+              <tr
+                style={{
+                  background:
+                    "linear-gradient(90deg, rgba(133,43,175,0.04) 0%, rgba(252,63,120,0.02) 100%)",
+                }}
+              >
                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-400 uppercase tracking-wider">
                   Vendor
                 </th>
@@ -336,21 +374,32 @@ export default function VendorApprovalList() {
                     <div className="flex items-center gap-3">
                       <div
                         className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-white text-sm shrink-0"
-                        style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }}
+                        style={{
+                          background:
+                            "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
+                        }}
                       >
-                        {v.company_name.charAt(0).toUpperCase()}
+                        {v.company_name?.charAt(0).toUpperCase() ?? "?"}
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-gray-900">{v.company_name}</p>
-                        <p className="text-xs text-gray-400 mt-0.5">Owner: {v.full_name}</p>
-                        <p className="text-xs text-gray-400">{v.submitted_at}</p>
+                        <p className="text-sm font-semibold text-gray-900">
+                          <p>{v.company_name ?? "N/A"}</p>
+                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          <p>Owner: {v.full_name ?? "N/A"}</p>
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          {v.submitted_at}
+                        </p>
                       </div>
                     </div>
                   </td>
 
                   <td className="px-6 py-4">
                     <p className="text-sm text-gray-700">{v.email}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{v.phone || "No phone"}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {v.phone || "No phone"}
+                    </p>
                   </td>
 
                   <td className="px-6 py-4">
@@ -368,7 +417,10 @@ export default function VendorApprovalList() {
                         <Link to={`/manager/vendor-review/${v.vendor_id}`}>
                           <button
                             className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white rounded-xl cursor-pointer transition-all hover:opacity-90 active:scale-95"
-                            style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }}
+                            style={{
+                              background:
+                                "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
+                            }}
                           >
                             <FaEye size={11} /> Review
                           </button>
@@ -381,7 +433,9 @@ export default function VendorApprovalList() {
                         </button>
                       </div>
                     ) : (
-                      <span className="text-xs text-gray-400 italic">No actions available</span>
+                      <span className="text-xs text-gray-400 italic">
+                        No actions available
+                      </span>
                     )}
                   </td>
                 </tr>
@@ -395,12 +449,19 @@ export default function VendorApprovalList() {
           <div className="py-16 text-center">
             <div
               className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4"
-              style={{ background: "linear-gradient(135deg, rgba(133,43,175,0.08) 0%, rgba(252,63,120,0.05) 100%)" }}
+              style={{
+                background:
+                  "linear-gradient(135deg, rgba(133,43,175,0.08) 0%, rgba(252,63,120,0.05) 100%)",
+              }}
             >
               <FaFileAlt className="text-[#852BAF] opacity-50" size={24} />
             </div>
-            <h3 className="text-base font-bold text-gray-700 mb-1">No Vendors Found</h3>
-            <p className="text-sm text-gray-400">No match for the current filter or search.</p>
+            <h3 className="text-base font-bold text-gray-700 mb-1">
+              No Vendors Found
+            </h3>
+            <p className="text-sm text-gray-400">
+              No match for the current filter or search.
+            </p>
           </div>
         )}
       </div>

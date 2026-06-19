@@ -61,6 +61,77 @@ class ServiceBannerModel {
       },
     }));
   }
+
+  // find banner
+  async findById(id) {
+    const [[row]] = await db.execute(
+      `
+    SELECT *
+    FROM service_banners
+    WHERE id = ?
+    `,
+      [id],
+    );
+
+    return row;
+  }
+
+  // update banner
+  async update(id, data) {
+    await db.execute(
+      `
+    UPDATE service_banners
+    SET
+      title = ?,
+      subtitle = ?,
+      image_url = ?,
+      redirect_type = ?,
+      redirect_id = ?,
+      redirect_url = ?,
+      sort_order = ?,
+      is_active = ?
+    WHERE id = ?
+    `,
+      [
+        data.title,
+        data.subtitle,
+        data.image_url,
+        data.redirect_type,
+        data.redirect_id,
+        data.redirect_url,
+        data.sort_order,
+        data.is_active,
+        id,
+      ],
+    );
+  }
+
+  // Delete banner
+  async delete(id) {
+    await db.execute(
+      `
+    DELETE FROM service_banners
+    WHERE id = ?
+    `,
+      [id],
+    );
+  }
+
+  // Admin banners
+  async getAllBanners() {
+    const [rows] = await db.execute(
+      `
+    SELECT *
+    FROM service_banners
+    ORDER BY sort_order ASC
+    `,
+    );
+
+    return rows.map((b) => ({
+      ...b,
+      image_url: getPublicUrl(b.image_url),
+    }));
+  }
 }
 
 module.exports = new ServiceBannerModel();

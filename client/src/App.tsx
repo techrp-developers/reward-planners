@@ -58,6 +58,12 @@ import OrderDetail from "./components/feature/vendor/orders/OrderDetail";
 import OrderList from "./components/feature/manager/order/OrderList";
 import OrderView from "./components/feature/manager/order/OrderView";
 
+// Service
+import ServiceEnquiries from "./components/feature/manager/serviceEnquiry/ServiceEnquiries.tsx";
+import ServiceDetails from "./components/feature/manager/serviceEnquiry/ServiceDetails.tsx";
+import ServiceOrderList from "./components/feature/manager/serviceOrder/ServiceOrderList.tsx";
+import ServiceOrderView from "./components/feature/manager/serviceOrder/ServiceOrderView.tsx";
+
 // Manage Rewards
 import RewardRule from "./components/feature/manager/reward/RewardRule";
 import RewardForm from "./components/feature/manager/reward/RewardForm";
@@ -67,9 +73,11 @@ import ProductRewardMapping from "./components/feature/manager/reward/ProductRew
 import AttributeManagement from "./components/feature/manager/attribute/attributes";
 
 /* Sales */
-import FlashSaleCreate from "./components/feature/manager/flashSale/FlashSaleCreate";
-import FlashSaleList from "./components/feature/manager/flashSale/FlashSaleList";
-import FlashSaleVariant from "./components/feature/manager/flashSale/FlashSaleVariant";
+// import FlashSaleCreate from "./components/feature/manager/flashSale/FlashSaleCreate";
+// import FlashSaleList from "./components/feature/manager/flashSale/FlashSaleList";
+// import FlashSaleVariant from "./components/feature/manager/flashSale/FlashSaleVariant";
+
+/* Order */
 import CancellationRequest from "./components/feature/manager/order/CancellationRequest";
 import CancellationDetail from "./components/feature/manager/order/CancellationDetail";
 import ManageRewards from "./components/feature/hr/ManageRewards.tsx";
@@ -218,7 +226,7 @@ export default function App() {
         />
 
         {/* Flash Sale */}
-        <Route path={routes.manager.flashlist} element={<FlashSaleList />} />
+        {/* <Route path={routes.manager.flashlist} element={<FlashSaleList />} />
 
         <Route
           path={routes.manager.flashCreate}
@@ -230,7 +238,7 @@ export default function App() {
         <Route
           path="/manager/flash-variants/:flashId"
           element={<FlashSaleVariant />}
-        />
+        /> */}
 
         {/* Orders */}
         <Route path={routes.manager.orders.orderList} element={<OrderList />} />
@@ -245,6 +253,24 @@ export default function App() {
         <Route
           path={routes.manager.orders.cancellationDetail}
           element={<CancellationDetail />}
+        />
+
+        {/* Services */}
+        <Route
+          path={routes.manager.services.enquiries}
+          element={<ServiceEnquiries />}
+        />
+        <Route
+          path={routes.manager.services.details}
+          element={<ServiceDetails />}
+        />
+        <Route
+          path={routes.manager.services.service_orders}
+          element={<ServiceOrderList />}
+        />
+        <Route
+          path={routes.manager.services.service_order_details}
+          element={<ServiceOrderView />}
         />
 
         {/* Rewards */}
@@ -262,17 +288,35 @@ export default function App() {
 
         <Route path={routes.manager.rewards.edit} element={<RewardForm />} />
 
-        <Route path={routes.manager.rewards.mapping} element={<ProductRewardMapping />} />
+        <Route
+          path={routes.manager.rewards.mapping}
+          element={<ProductRewardMapping />}
+        />
       </Route>
 
       {/* ========== ADMIN ========== */}
       <Route element={<AdminLayout />}>
         <Route path={routes.admin.dashboard} element={<AdminDashboard />} />
-        <Route path={routes.admin.vendors} element={<AdminVendorApprovalList />} />
-        <Route path={routes.admin.changePassword} element={<ChangePasswordPage />} />
-        <Route path={routes.admin.products} element={<AdminProductApprovalList />} />
-        <Route path={routes.admin.productView} element={<AdminProductViewPage />} />
-        <Route path={routes.admin.vendorReview} element={<AdminVendorApprovalForm />} />
+        <Route
+          path={routes.admin.vendors}
+          element={<AdminVendorApprovalList />}
+        />
+        <Route
+          path={routes.admin.changePassword}
+          element={<ChangePasswordPage />}
+        />
+        <Route
+          path={routes.admin.products}
+          element={<AdminProductApprovalList />}
+        />
+        <Route
+          path={routes.admin.productView}
+          element={<AdminProductViewPage />}
+        />
+        <Route
+          path={routes.admin.vendorReview}
+          element={<AdminVendorApprovalForm />}
+        />
         <Route path={routes.admin.services} element={<AdminServicesPage />} />
       </Route>
 
@@ -281,9 +325,11 @@ export default function App() {
         <Route path={routes.hr.dashboard} element={<HrDashboard />} />
         <Route path={routes.hr.onboarding} element={<EmployeeOnboarding />} />
         <Route path={routes.hr.employees} element={<EmployeeList />} />
-        <Route path={routes.hr.changePassword} element={<ChangePasswordPage />} />
-          <Route path={routes.hr.rewards} element={<ManageRewards />} />
-
+        <Route
+          path={routes.hr.changePassword}
+          element={<ChangePasswordPage />}
+        />
+        <Route path={routes.hr.rewards} element={<ManageRewards />} />
       </Route>
 
       {/* ========== FALLBACK ========== */}

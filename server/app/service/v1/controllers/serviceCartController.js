@@ -25,8 +25,8 @@ class ServiceCartController {
 
       // get variant price
       const [[variant]] = await db.execute(
-        `SELECT price FROM service_variants WHERE id = ?`,
-        [variant_id],
+        `SELECT price FROM service_variants WHERE id = ? AND service_id = ?`,
+        [variant_id, service_id],
       );
 
       if (!variant) {
@@ -82,6 +82,13 @@ class ServiceCartController {
         [bundleId],
       );
 
+      if (!bundle) {
+        return res.status(404).json({
+          success: false,
+          message: "Bundle not found",
+        });
+      }
+
       // get cart
       const cart = await CartModel.getOrCreateCart(userId);
 
@@ -105,6 +112,7 @@ class ServiceCartController {
 
           FROM service_bundle_items bi
           JOIN service_variants sv ON sv.id = bi.variant_id
+            AND sv.service_id = bi.service_id
 
           WHERE bi.bundle_id = ?`,
         [bundleId],

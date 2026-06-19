@@ -1,4 +1,4 @@
-const { sendMail } = require("../mailService");
+const { sendMailBestEffort } = require("../mailService");
 const { renderTemplate } = require("../../utils/templateRenderer");
 
 async function rewardCreditMail(data) {
@@ -9,11 +9,11 @@ async function rewardCreditMail(data) {
     companyName: "Reward Planners",
   });
 
-  await sendMail({
+  return sendMailBestEffort({
     to: data.email,
     subject: "Your RewardPlanners wallet just got richer 💰",
     html,
-  });
+  }, "first time reward mail");
 }
 
 module.exports = {

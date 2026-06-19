@@ -141,7 +141,7 @@ export default function VendorDashboard() {
             <div>
               <p className="text-sm font-bold text-gray-800">Complete your vendor onboarding</p>
               <p className="text-xs text-gray-500 mt-0.5">
-                Your account is pending approval. Submit your business details to start selling.
+               Your account is pending approval. Submit your business details to get verified and start selling on our platform.
               </p>
             </div>
           </div>

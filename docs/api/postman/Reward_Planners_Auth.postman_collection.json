@@ -1,0 +1,367 @@
+﻿{
+    "info":  {
+                 "_postman_id":  "f6a7dbd0-4d7f-4f91-9a74-auth-start",
+                 "name":  "Reward Planners API - Authentication",
+                 "description":  "Postman collection for generating CRM admin/manager tokens and customer app tokens. Import this collection, update the credential variables, then run the login requests to save tokens for future module APIs.",
+                 "schema":  "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+             },
+    "item":  [
+                 {
+                     "name":  "01 - Token Generation",
+                     "item":  [
+                                  {
+                                      "name":  "Admin Login - Generate CRM Token",
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027Admin login succeeded\u0027, function () {",
+                                                                                    "  pm.response.to.have.status(200);",
+                                                                                    "});",
+                                                                                    "",
+                                                                                    "const json = pm.response.json();",
+                                                                                    "if (json \u0026\u0026 json.data \u0026\u0026 json.data.token) {",
+                                                                                    "  pm.collectionVariables.set(\u0027admin_token\u0027, json.data.token);",
+                                                                                    "  pm.collectionVariables.set(\u0027crm_token\u0027, json.data.token);",
+                                                                                    "}"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ],
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}auth/admin/login",
+                                                      "description":  "Generates a CRM token for admin users. The response token is saved to `admin_token` and `crm_token` collection variables."
+                                                  },
+                                      "response":  [
+
+                                                   ]
+                                  },
+                                  {
+                                      "name":  "Manager Login - Generate CRM Token",
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027Manager login succeeded\u0027, function () {",
+                                                                                    "  pm.response.to.have.status(200);",
+                                                                                    "});",
+                                                                                    "",
+                                                                                    "const json = pm.response.json();",
+                                                                                    "if (json \u0026\u0026 json.data \u0026\u0026 json.data.token) {",
+                                                                                    "  pm.collectionVariables.set(\u0027manager_token\u0027, json.data.token);",
+                                                                                    "  pm.collectionVariables.set(\u0027crm_token\u0027, json.data.token);",
+                                                                                    "}"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ],
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"email\": \"{{manager_email}}\",\n  \"password\": \"{{manager_password}}\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}auth/manager/login",
+                                                      "description":  "Generates a CRM token for manager users. The response token is saved to `manager_token` and `crm_token` collection variables."
+                                                  },
+                                      "response":  [
+
+                                                   ]
+                                  },
+                                  {
+                                      "name":  "Customer Login - Generate Access and Refresh Tokens",
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027Customer login succeeded\u0027, function () {",
+                                                                                    "  pm.response.to.have.status(200);",
+                                                                                    "});",
+                                                                                    "",
+                                                                                    "const json = pm.response.json();",
+                                                                                    "if (json \u0026\u0026 json.accessToken) {",
+                                                                                    "  pm.collectionVariables.set(\u0027customer_access_token\u0027, json.accessToken);",
+                                                                                    "}",
+                                                                                    "if (json \u0026\u0026 json.refreshToken) {",
+                                                                                    "  pm.collectionVariables.set(\u0027customer_refresh_token\u0027, json.refreshToken);",
+                                                                                    "}"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ],
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"email\": \"{{customer_email}}\",\n  \"password\": \"{{customer_password}}\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}v1/auth/login",
+                                                      "description":  "Generates customer app tokens. The response `accessToken` is saved to `customer_access_token`; `refreshToken` is saved to `customer_refresh_token`."
+                                                  },
+                                      "response":  [
+
+                                                   ]
+                                  },
+                                  {
+                                      "name":  "Customer Refresh - Generate New Access Token",
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027Customer token refresh succeeded\u0027, function () {",
+                                                                                    "  pm.response.to.have.status(200);",
+                                                                                    "});",
+                                                                                    "",
+                                                                                    "const json = pm.response.json();",
+                                                                                    "if (json \u0026\u0026 json.accessToken) {",
+                                                                                    "  pm.collectionVariables.set(\u0027customer_access_token\u0027, json.accessToken);",
+                                                                                    "}"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ],
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"refreshToken\": \"{{customer_refresh_token}}\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}v1/auth/refresh",
+                                                      "description":  "Uses the customer refresh token to generate a new customer access token."
+                                                  },
+                                      "response":  [
+
+                                                   ]
+                                  }
+                              ],
+                     "description":  "Run these requests first to create tokens. CRM module APIs should use `{{crm_token}}`, `{{admin_token}}`, or `{{manager_token}}`. Customer app APIs should use `{{customer_access_token}}`."
+                 },
+                 {
+                     "name":  "02 - Token Checks",
+                     "item":  [
+                                  {
+                                      "name":  "CRM Me - Check Admin or Manager Token",
+                                      "request":  {
+                                                      "auth":  {
+                                                                   "type":  "bearer",
+                                                                   "bearer":  [
+                                                                                  {
+                                                                                      "key":  "token",
+                                                                                      "value":  "{{crm_token}}",
+                                                                                      "type":  "string"
+                                                                                  }
+                                                                              ]
+                                                               },
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}auth/me",
+                                                      "description":  "Checks the current CRM token. Use this after admin or manager login."
+                                                  },
+                                      "response":  [
+
+                                                   ]
+                                  },
+                                  {
+                                      "name":  "Customer User Info - Check Customer Access Token",
+                                      "request":  {
+                                                      "auth":  {
+                                                                   "type":  "bearer",
+                                                                   "bearer":  [
+                                                                                  {
+                                                                                      "key":  "token",
+                                                                                      "value":  "{{customer_access_token}}",
+                                                                                      "type":  "string"
+                                                                                  }
+                                                                              ]
+                                                               },
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{base_url}}v1/auth/user-info",
+                                                      "description":  "Checks the customer access token."
+                                                  },
+                                      "response":  [
+
+                                                   ]
+                                  }
+                              ],
+                     "description":  "Optional requests to verify that saved tokens work."
+                 },
+                 {
+                     "name":  "03 - Customer Account Activation",
+                     "item":  [
+                                  {
+                                      "name":  "Activate Account - Send OTP",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"email\": \"{{customer_email}}\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}v1/auth/activate-account",
+                                                      "description":  "Starts customer account activation by sending an OTP."
+                                                  },
+                                      "response":  [
+
+                                                   ]
+                                  },
+                                  {
+                                      "name":  "Verify Activation OTP",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"email\": \"{{customer_email}}\",\n  \"otp\": \"{{customer_otp}}\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}v1/auth/verify-activation-otp",
+                                                      "description":  "Verifies the customer activation OTP."
+                                                  },
+                                      "response":  [
+
+                                                   ]
+                                  },
+                                  {
+                                      "name":  "Set Customer Password",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"email\": \"{{customer_email}}\",\n  \"password\": \"{{customer_password}}\"\n}"
+                                                               },
+                                                      "url":  "{{base_url}}v1/auth/set-password",
+                                                      "description":  "Sets the password after OTP verification. After this succeeds, run Customer Login."
+                                                  },
+                                      "response":  [
+
+                                                   ]
+                                  }
+                              ],
+                     "description":  "Use this only when the customer account has not been activated yet."
+                 }
+             ],
+    "variable":  [
+                     {
+                         "key":  "base_url",
+                         "value":  "https://rewardplanners.com/api/crm/",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "admin_email",
+                         "value":  "admin@example.com",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "admin_password",
+                         "value":  "password123",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "manager_email",
+                         "value":  "manager@example.com",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "manager_password",
+                         "value":  "password123",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "customer_email",
+                         "value":  "customer@example.com",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "customer_password",
+                         "value":  "password123",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "customer_otp",
+                         "value":  "1234",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "admin_token",
+                         "value":  "",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "manager_token",
+                         "value":  "",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "crm_token",
+                         "value":  "",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "customer_access_token",
+                         "value":  "",
+                         "type":  "string"
+                     },
+                     {
+                         "key":  "customer_refresh_token",
+                         "value":  "",
+                         "type":  "string"
+                     }
+                 ]
+}

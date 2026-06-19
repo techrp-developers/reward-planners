@@ -114,38 +114,39 @@ const TodoModel = {
   },
 
   async updateTodo(id, created_by, data) {
-    const {
-      task_date,
-      start_time,
-      end_time,
-      title,
-      subtitle,
-      reminder_time,
-    } = data;
+    const fields = [];
+    const params = [];
+
+    const allowedFields = [
+      "task_date",
+      "start_time",
+      "end_time",
+      "title",
+      "subtitle",
+      "reminder_time",
+    ];
+
+    for (const field of allowedFields) {
+      if (Object.prototype.hasOwnProperty.call(data, field)) {
+        fields.push(`${field} = ?`);
+        params.push(field === "subtitle" ? data[field] || "" : data[field] || null);
+      }
+    }
+
+    if (!fields.length) {
+      return { affectedRows: 0 };
+    }
+
+    params.push(id, created_by);
 
     const [result] = await db.query(
       `
       UPDATE todos
-      SET 
-        task_date = ?,
-        start_time = ?,
-        end_time = ?,
-        title = ?,
-        subtitle = ?,
-        reminder_time = ?
+      SET ${fields.join(", ")}
       WHERE id = ?
       AND created_by = ?
       `,
-      [
-        task_date,
-        start_time,
-        end_time,
-        title,
-        subtitle || "",
-        reminder_time || null,
-        id,
-        created_by,
-      ]
+      params
     );
 
     return result;

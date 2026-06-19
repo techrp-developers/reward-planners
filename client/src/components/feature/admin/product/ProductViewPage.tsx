@@ -7,12 +7,11 @@ import {
   FaSpinner,
   FaArrowLeft,
   FaDownload,
-  FaCheck,
 } from "react-icons/fa";
 
 import { useNavigate, useParams } from "react-router-dom";
 import QuillEditor from "../../../QuillEditor";
-import Swal from "../../../../utils/swalFallback";
+// import Swal from "../../../../utils/swalFallback";
 
 // const API_BASE = import.meta.env.VITE_API_URL;
 import { api } from "../../../../api/api";
@@ -29,7 +28,6 @@ type ProductVariant = {
   manufacturing_date: string | null;
   expiry_date: string | null;
   created_at: string;
-  reward_redemption_limit?: number | null;
 };
 
 interface ProductView {
@@ -188,8 +186,6 @@ export default function ReviewProductPage() {
     Record<string, string[]>
   >({});
   const [attributeSchema, setAttributeSchema] = useState<AttributeSchemaItem[]>([]);
-  const [rewardLimits, setRewardLimits] = useState<Record<number, number>>({});
-  const [savingLimit, setSavingLimit] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     if (!productId) {
@@ -284,15 +280,6 @@ export default function ReviewProductPage() {
 
       setProduct(mapped);
 
-      // reward Limit
-      const initialLimits: Record<number, number> = {};
-
-      (mapped.variants || []).forEach((v: ProductVariant) => {
-        initialLimits[v.variant_id] = v.reward_redemption_limit ?? 0;
-      });
-
-      setRewardLimits(initialLimits);
-
       if (mapped.subCategoryId) {
         const params = new URLSearchParams({
           categoryId: String(mapped.categoryId),
@@ -320,49 +307,6 @@ export default function ReviewProductPage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  };
-
-  const updateRewardLimit = async (variantId: number) => {
-    try {
-      if (!product?.productId) return;
-
-      setSavingLimit((prev) => ({ ...prev, [variantId]: true }));
-
-      const newLimit = rewardLimits[variantId];
-
-      await api.post("/variant/update-reward-limit", {
-        product_id: product.productId,
-        variant_id: variantId,
-        reward_redemption_limit: newLimit,
-      });
-
-      // ✅ sync UI with saved value
-      setRewardLimits((prev) => ({
-        ...prev,
-        [variantId]: newLimit,
-      }));
-
-      await Swal.fire({
-        title: "Success!",
-        text: "Reward Limit Updated Successfully",
-        icon: "success",
-        timer: 1200,
-        showConfirmButton: false,
-        customClass: { popup: "rounded-2xl" },
-      });
-    } catch (err) {
-      console.error("Failed to update reward limit", err);
-
-      await Swal.fire({
-        title: "Failed",
-        text: "Failed to update reward limit",
-        icon: "error",
-        confirmButtonText: "OK",
-        buttonsStyling: false,
-      });
-    } finally {
-      setSavingLimit((prev) => ({ ...prev, [variantId]: false }));
-    }
   };
 
   if (loading) {
@@ -568,7 +512,6 @@ export default function ReviewProductPage() {
                     <th className="px-4 py-3">Sale Price</th>
                     <th className="px-4 py-3">Stock</th>
                     <th className="px-4 py-3">Visibility</th>
-                    <th className="px-4 py-3">Reward Redemption Limit (%)</th>
                   </tr>
                 </thead>
 
@@ -626,38 +569,6 @@ export default function ReviewProductPage() {
                         >
                           {variant.is_visible ? "Visible" : "Hidden"}
                         </span>
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            min={0}
-                            value={rewardLimits[variant.variant_id] ?? 0}
-                            onChange={(e) =>
-                              setRewardLimits((prev) => ({
-                                ...prev,
-                                [variant.variant_id]: Number(e.target.value),
-                              }))
-                            }
-                            className="w-24 p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#852BAF]"
-                            placeholder="Limit"
-                          />
-
-                          <button
-                            onClick={() =>
-                              updateRewardLimit(variant.variant_id)
-                            }
-                            disabled={savingLimit[variant.variant_id]}
-                            className="flex items-center justify-center p-2 text-white bg-green-600 rounded-lg cursor-pointer hover:bg-green-700 disabled:opacity-50"
-                          >
-                            {savingLimit[variant.variant_id] ? (
-                              <FaSpinner className="text-sm animate-spin" />
-                            ) : (
-                              <FaCheck className="text-sm" />
-                            )}
-                          </button>
-                        </div>
                       </td>
                     </tr>
                   ))}

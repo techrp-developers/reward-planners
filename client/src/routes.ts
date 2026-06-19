@@ -33,13 +33,19 @@ export const routes = {
     addDocument:"/manager/document/DocumentAdd",
     linkDocument:"/manager/document/DocumentCategory",
     attributes: "/manager/attributes",
-    flashlist: "/manager/flashlist",
-    flashCreate: "/manager/flash-sale",
+    // flashlist: "/manager/flashlist",
+    // flashCreate: "/manager/flash-sale",
     orders:{
       orderList: "/manager/orders",
       details: "/manager/order-view/:orderId",
       cancellationRequest: "/manager/cancellation-request",
       cancellationDetail: "/manager/cancellation-detail/:orderId",
+    },
+    services:{
+      enquiries:"/manager/enquiries",
+      details: "/manager/enquiry/:id",
+      service_orders: "/manager/service-orders",
+      service_order_details: "/manager/service-order-details/:parentOrderId"
     },
     rewards:{
       rewardRule:"/manager/rewards-rule",

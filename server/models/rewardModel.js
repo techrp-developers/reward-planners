@@ -40,10 +40,11 @@ class RewardModel {
       throw new Error("reward_rule_id is required");
     }
 
-    // ensure only one targeting level
+    // ensure only one targeting level. A variant target may include product_id
+    // only as context for display/lookup, so it should count as variant.
     const targets = [
       variant_id ? 1 : 0,
-      product_id ? 1 : 0,
+      !variant_id && product_id ? 1 : 0,
       subcategory_id ? 1 : 0,
       category_id ? 1 : 0,
     ];
@@ -76,8 +77,11 @@ class RewardModel {
     }
 
     const [existing] = await db.execute(
-      `SELECT id FROM product_reward_settings WHERE ${where}`,
-      params,
+      `SELECT id
+       FROM product_reward_settings
+       WHERE ${where}
+       AND reward_rule_id = ?`,
+      [...params, reward_rule_id],
     );
 
     if (existing.length > 0) {
@@ -85,9 +89,9 @@ class RewardModel {
 
       await db.execute(
         `UPDATE product_reward_settings
-       SET reward_rule_id = ?, can_earn_reward = ?, can_redeem_reward = ?, priority = ?, is_active = 1
+       SET can_earn_reward = ?, can_redeem_reward = ?, priority = ?, is_active = 1
        WHERE id = ?`,
-        [reward_rule_id, can_earn_reward, can_redeem_reward, priority, id],
+        [can_earn_reward, can_redeem_reward, priority, id],
       );
 
       return id;
@@ -113,16 +117,82 @@ class RewardModel {
   }
 
   // GET PRODUCT REWARD CONFIG
+  // async getProductRewards(
+  //   product_id,
+  //   variant_id,
+  //   category_id,
+  //   subcategory_id,
+  //   order_amount,
+  //   isDiscountEligible = true,
+  // ) {
+  //   if (!isDiscountEligible) return [];
+
+  //   const [rows] = await db.execute(
+  //     `
+  //   SELECT prs.*, rr.*
+  //   FROM product_reward_settings prs
+  //   JOIN reward_rules rr 
+  //     ON prs.reward_rule_id = rr.reward_rule_id
+  //   WHERE prs.is_active = 1
+  //     AND rr.is_active = 1
+  //     AND (
+  //       (prs.variant_id = ? AND prs.product_id = ?) OR
+  //       (prs.product_id = ? AND prs.variant_id IS NULL) OR
+  //       (prs.subcategory_id = ?) OR
+  //       (prs.category_id = ?) OR
+  //       (prs.product_id IS NULL AND prs.variant_id IS NULL AND prs.category_id IS NULL AND prs.subcategory_id IS NULL)
+  //     )
+  //     AND (? >= rr.min_order_amount)
+  //     AND (rr.max_order_amount IS NULL OR ? <= rr.max_order_amount)
+  //   ORDER BY 
+  //     CASE
+  //       WHEN prs.variant_id IS NOT NULL THEN 1
+  //       WHEN prs.product_id IS NOT NULL THEN 2
+  //       WHEN prs.subcategory_id IS NOT NULL THEN 3
+  //       WHEN prs.category_id IS NOT NULL THEN 4
+  //       ELSE 5
+  //     END,
+  //     prs.priority ASC,
+  //     rr.priority ASC
+  //   `,
+  //     [
+  //       variant_id || 0,
+  //       product_id || 0,
+  //       product_id || 0,
+  //       subcategory_id || 0,
+  //       category_id || 0,
+  //       order_amount,
+  //       order_amount,
+  //     ],
+  //   );
+
+  //   return rows;
+  // }
+
   async getProductRewards(
     product_id,
     variant_id,
     category_id,
     subcategory_id,
     order_amount,
+    isDiscountEligible = true,
   ) {
+    if (!isDiscountEligible) return [];
+
     const [rows] = await db.execute(
       `
-    SELECT prs.*, rr.*
+    SELECT
+      prs.*,
+      rr.*,
+      prs.priority AS mapping_priority,
+      rr.priority AS rule_priority,
+      CASE
+        WHEN prs.variant_id IS NOT NULL THEN 1
+        WHEN prs.product_id IS NOT NULL THEN 2
+        WHEN prs.subcategory_id IS NOT NULL THEN 3
+        WHEN prs.category_id IS NOT NULL THEN 4
+        ELSE 5
+      END AS target_rank
     FROM product_reward_settings prs
     JOIN reward_rules rr 
       ON prs.reward_rule_id = rr.reward_rule_id
@@ -136,7 +206,7 @@ class RewardModel {
         (prs.product_id IS NULL AND prs.variant_id IS NULL AND prs.category_id IS NULL AND prs.subcategory_id IS NULL)
       )
       AND (? >= rr.min_order_amount)
-      AND (rr.max_order_amount IS NULL OR ? <= rr.max_order_amount)
+      AND (rr.max_order_amount IS NULL OR rr.max_order_amount = 0 OR ? <= rr.max_order_amount)
     ORDER BY 
       CASE
         WHEN prs.variant_id IS NOT NULL THEN 1
@@ -145,6 +215,8 @@ class RewardModel {
         WHEN prs.category_id IS NOT NULL THEN 4
         ELSE 5
       END,
+      rr.min_order_amount DESC,
+      COALESCE(rr.max_order_amount, 999999999) ASC,
       prs.priority ASC,
       rr.priority ASC
     `,

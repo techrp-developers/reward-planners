@@ -2,21 +2,16 @@ const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
 
+const tempDir = path.join(__dirname, "../../uploads/temp");
+
+if (!fs.existsSync(tempDir)) {
+  fs.mkdirSync(tempDir, { recursive: true });
+}
+
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    const tempDir = path.join(__dirname, "../../uploads/temp");
-
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true });
-    }
-
     cb(null, tempDir);
   },
-
-  // filename: function (req, file, cb) {
-  //   const ext = path.extname(file.originalname);
-  //   cb(null, `icon${ext}`);
-  // },
 
   filename: function (req, file, cb) {
     const ext = path.extname(file.originalname);
@@ -29,9 +24,25 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
-  const allowed = ["image/png", "image/jpeg", "image/jpg", "image/svg+xml"];
+  const allowedMimeTypes = [
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+  ];
 
-  if (!allowed.includes(file.mimetype)) {
+  const allowedExtensions = [
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp"
+  ];
+
+  const ext = path.extname(file.originalname).toLowerCase();
+
+  if (
+    !allowedMimeTypes.includes(file.mimetype) ||
+    !allowedExtensions.includes(ext)
+  ) {
     return cb(new Error("Only image files are allowed"), false);
   }
 
@@ -42,6 +53,6 @@ module.exports = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 2 * 1024 * 1024,
+    fileSize: 5 * 1024 * 1024,
   },
 });

@@ -7,7 +7,7 @@ const {
 } = require("../../../../middleware/auth");
 const upload = require("../../../../middleware/mediaUpload/serviceCategoryUpload");
 
-// add Variant
+// Admin create service Variant
 router.post(
   "/create-variant",
   authenticateToken,
@@ -16,7 +16,7 @@ router.post(
   ServiceVariantController.addVariant,
 );
 
-// update variant
+// Admin update service variant
 router.put(
   "/update-variant/:id",
   authenticateToken,
@@ -28,7 +28,7 @@ router.put(
 // Get variant by Id
 router.get("/find/:serviceId", ServiceVariantController.getVariantsByService);
 
-// delete a variant
+// Admin delete service variant
 router.delete(
   "/remove/:id",
   authenticateToken,
@@ -42,7 +42,7 @@ router.get(
   ServiceVariantController.getVariantSection,
 );
 
-// add variant section details
+// Admin add variant section details
 router.post(
   "/variant-section",
   authenticateToken,
@@ -50,7 +50,7 @@ router.post(
   ServiceVariantController.addVariantSection,
 );
 
-// delete a variant section details
+// Admin delete variant section details
 router.delete(
   "/variant-section/:variantId",
   authenticateToken,

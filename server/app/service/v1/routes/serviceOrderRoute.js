@@ -8,19 +8,15 @@ const {
   authenticateToken,
   authorizeRoles,
 } = require("../../../../middleware/auth");
-
-// Direct Order
-router.post("/direct", auth, ServiceOrderController.createDirectOrder);
-
-// Enquiry Order
-router.post(
-  "/from-enquiry/:enquiryId",
-  auth,
-  ServiceOrderController.createEnquiryOrder,
-);
+const drainMode = require("../../../../middleware/drainMode");
 
 // create razorpay order
-router.post("/create-order", auth, ServiceOrderController.createPaymentOrder);
+router.post(
+  "/create-order",
+  auth,
+  drainMode,
+  ServiceOrderController.createPaymentOrder,
+);
 
 // verify payment
 router.post("/verify-payment", auth, ServiceOrderController.verifyPayment);
@@ -29,7 +25,11 @@ router.post("/verify-payment", auth, ServiceOrderController.verifyPayment);
 router.get("/my-orders", auth, ServiceOrderController.getMyOrders);
 
 // get order details
-router.get("/order-details/:id", auth, ServiceOrderController.getOrderDetails);
+router.get(
+  "/order-details/:parentOrderId",
+  auth,
+  ServiceOrderController.getOrderDetails,
+);
 
 // Get invoice
 router.get(
@@ -40,20 +40,29 @@ router.get(
 
 // upload order document
 router.post(
-  "/upload-document/:orderId",
+  "/submit-documents/:parentOrderId",
   auth,
-  upload.single("file"),
-  ServiceOrderController.uploadDocument,
-);
-
-// submit document
-router.post(
-  "/submit-documents/:orderId",
-  auth,
+  upload.any(),
   ServiceOrderController.submitDocuments,
 );
 
-// update order status from admin side
+// Admin Order List
+router.get(
+  "/admin-orders",
+  authenticateToken,
+  authorizeRoles("admin", "vendor_manager"),
+  ServiceOrderController.adminOrderList,
+);
+
+// Admin Order Details
+router.get(
+  "/admin-order-details/:parentOrderId",
+  authenticateToken,
+  authorizeRoles("admin", "vendor_manager"),
+  ServiceOrderController.adminOrderDetails,
+);
+
+// Admin update order status
 router.put(
   "/status/:id",
   authenticateToken,
@@ -62,9 +71,31 @@ router.put(
 );
 
 // ================================================Cancel order======================================================
-router.post("/cancel-order", auth, ServiceOrderController.cancelOrder);
+// Get cancellation Reason
+router.get(
+  "/cancellation-reasons",
+  ServiceOrderController.getCancellationReasons,
+);
+
+// request order cancellation
+router.post(
+  "/cancel-order-request",
+  auth,
+  ServiceOrderController.cancelOrderRequest,
+);
+
+// get cancellation details
+router.get(
+  "/cancellation-details/:serviceOrderId",
+  auth,
+  ServiceOrderController.cancellationDetails,
+);
 
 // ========================================Help section========================================================
+// Get Issue Type
+router.get("/issue-types", ServiceOrderController.getIssueTypes);
+
+// order help
 router.post(
   "/order-help",
   auth,
@@ -72,9 +103,9 @@ router.post(
   ServiceOrderController.createSupportRequest,
 );
 
-// support request list for admin
+// Admin list for support request
 router.get(
-  "/order-help/:parentId",
+  "/order-help/:serviceOrderId",
   auth,
   ServiceOrderController.getSupportRequestsByOrderId,
 );

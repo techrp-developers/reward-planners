@@ -10,7 +10,7 @@ const reviewUpload = require("../../../../middleware/mediaUpload/reviewUpload");
 // check review eligibility
 router.get(
   "/reviewable-order/:variant_id",
-  optionalAuth,
+  auth,
   ReviewController.getReviewableOrder,
 );
 

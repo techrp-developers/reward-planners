@@ -1,4 +1,4 @@
-const { sendMail } = require("../mailService");
+const { sendMailBestEffort } = require("../mailService");
 const { renderTemplate } = require("../../utils/templateRenderer");
 
  async function notifyVendorStatusChange(vendor, status) {
@@ -24,11 +24,11 @@ const { renderTemplate } = require("../../utils/templateRenderer");
 
   const html = renderTemplate(template, variables);
 
-  await sendMail({
+  return sendMailBestEffort({
     to: vendor.email,
     subject,
     html,
-  });
+  }, "vendor status mail");
 }
 
 

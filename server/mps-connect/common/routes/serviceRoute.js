@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const ServiceController = require("../controller/serviceController");
 const authenticateClient = require("../middlewares/authenticateClient");
+const upload = require("../../../middleware/mediaUpload/serviceDocumentUpload");
 
 // Feedback
 router.post("/feedback", authenticateClient, ServiceController.submitFeedback);
@@ -49,6 +50,63 @@ router.get(
   "/buy-now-preview",
   authenticateClient,
   ServiceController.getBuyNowPreview,
+);
+
+// =================================Create razor pay orders======================
+// create razorpay order
+router.post(
+  "/create-order",
+  authenticateClient,
+  ServiceController.createPaymentOrder,
+);
+
+// verify payment
+router.post(
+  "/verify-payment",
+  authenticateClient,
+  ServiceController.verifyPayment,
+);
+
+// ========================================Document =============================================
+// parent based document page
+router.get(
+  "/parent-documents/:parentOrderId",
+  authenticateClient,
+  ServiceController.getServiceParentOrderDocumentPage,
+);
+
+// submit document
+router.post(
+  "/submit-documents/:parentOrderId",
+  authenticateClient,
+  upload.any(),
+  ServiceController.submitDocuments,
+);
+
+// ================================================Order information===========================================
+// Get all orders
+router.get("/my-orders", authenticateClient, ServiceController.getMyOrders);
+
+router.get(
+  "/order-details/:parentOrderId",
+  authenticateClient,
+  ServiceController.getOrderDetails,
+);
+
+// ======================================Feedback from user====================================================
+router.post("/feedback", authenticateClient, ServiceController.submitFeedback);
+
+// =========================================Order cancellation===========================================
+router.post(
+  "/cancel-order-request",
+  authenticateClient,
+  ServiceController.cancelOrderRequest,
+);
+
+router.get(
+  "/cancellation-details/:serviceOrderId",
+  authenticateClient,
+  ServiceController.cancellationDetails,
 );
 
 module.exports = router;

@@ -24,6 +24,7 @@ router.get(
 router.get(
   "/stock-in/:grn",
   authenticateToken,
+  authorizeRoles("warehouse_manager"),
   wareHouseController.getStockInByGrn
 );
 
@@ -31,6 +32,7 @@ router.get(
 router.put(
   "/stock-in/:grn",
   authenticateToken,
+  authorizeRoles("warehouse_manager"),
   wareHouseController.updateStockIn
 );
 

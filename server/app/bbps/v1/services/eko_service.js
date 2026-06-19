@@ -1,5 +1,5 @@
 const axios = require("axios");
-const { randomUUID } = require("crypto");
+const { createHash } = require("crypto");
 const headerUtil = require("../utils/header");
 const retry = require("../utils/retry");
 const {
@@ -9,13 +9,17 @@ const {
 } = require("../utils/network");
 
 const resolveBaseUrl = () => {
-  // if (process.env.EKO_BASE_URL) {
-  //   return process.env.EKO_BASE_URL;
-  // }
+  if (process.env.EKO_BASE_URL) {
+    return process.env.EKO_BASE_URL.trim();
+  }
 
-  // const isProduction = process.env.NODE_ENV === "production";
-  // return isProduction ? process.env.EKO_BASE_URL_PROD : process.env.EKO_BASE_URL_UAT;
-  return process.env.EKO_BASE_URL_PROD;
+  const providerEnvironment = (process.env.EKO_ENV || "production")
+    .trim()
+    .toLowerCase();
+
+  return ["uat", "staging", "test"].includes(providerEnvironment)
+    ? process.env.EKO_BASE_URL_UAT
+    : process.env.EKO_BASE_URL_PROD;
 };
 
 const ensureTrailingSlash = (url = "") => {
@@ -24,6 +28,36 @@ const ensureTrailingSlash = (url = "") => {
 
 const BASE = ensureTrailingSlash(resolveBaseUrl() || "");
 const ekoUrl = (path) => `${BASE}${path}`;
+const resolveRechargeBaseUrl = () => {
+  if (process.env.EKO_RECHARGE_BASE_URL) {
+    return process.env.EKO_RECHARGE_BASE_URL.trim();
+  }
+
+  const providerEnvironment = (process.env.EKO_ENV || "production")
+    .trim()
+    .toLowerCase();
+
+  if (["uat", "staging", "test"].includes(providerEnvironment)) {
+    return (
+      process.env.EKO_RECHARGE_BASE_URL_UAT ||
+      "https://staging.eko.in:25004/ekoapi/v3/"
+    );
+  }
+
+  return (
+    process.env.EKO_RECHARGE_BASE_URL_PROD ||
+    "https://api.eko.in:25002/ekoicici/v3/"
+  );
+};
+const RECHARGE_BASE = ensureTrailingSlash(resolveRechargeBaseUrl());
+const ekoRechargeUrl = (path) => `${RECHARGE_BASE}${path}`;
+const configuredFetchBillTimeout = Number(
+  process.env.EKO_FETCH_BILL_TIMEOUT_MS || 30000,
+);
+const FETCH_BILL_TIMEOUT_MS =
+  Number.isFinite(configuredFetchBillTimeout) && configuredFetchBillTimeout > 0
+    ? configuredFetchBillTimeout
+    : 30000;
 
 // 0. Get Locations
 exports.getLocations = async () => {
@@ -118,10 +152,94 @@ exports.getOperatorDetails = async (id) => {
   return res.data;
 };
 
+exports.getRechargePlans = async ({ mobile, operatorCode, circleId }) => {
+  const headers = await headerUtil.fetchHeaders();
+  const path = `customer/payment/bbps/recharge/${encodeURIComponent(
+    mobile,
+  )}/operator/plans`;
+
+  const params = {
+    initiator_id: process.env.EKO_INITIATOR_ID,
+    user_code: process.env.EKO_USER_CODE,
+  };
+
+  if (operatorCode) {
+    params.phone_operator_code = operatorCode;
+  }
+
+  if (circleId) {
+    params.circleid = circleId;
+  }
+
+  const response = await axios.get(ekoRechargeUrl(path), {
+    headers,
+    params,
+    timeout: FETCH_BILL_TIMEOUT_MS,
+  });
+
+  const providerResponse = response.data || {};
+
+  if (Number(providerResponse.status) !== 0) {
+    const error = new Error(
+      providerResponse.message || "EKO failed to return recharge plans",
+    );
+    error.statusCode = 502;
+    error.details = providerResponse;
+    throw error;
+  }
+
+  const planGroups = Array.isArray(providerResponse.dependent_params)
+    ? providerResponse.dependent_params
+    : [];
+  const rawPlans = planGroups.flatMap((group) =>
+    Array.isArray(group?.value) ? group.value : [],
+  );
+  const uniquePlans = new Map();
+
+  for (const plan of rawPlans) {
+    const amount = String(plan?.amount || "").trim();
+    const validity = String(plan?.validity || "").trim();
+    const description = String(plan?.plan_description || "").trim();
+
+    if (!/^\d+(?:\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) {
+      continue;
+    }
+
+    const fingerprint = `${operatorCode}|${circleId}|${amount}|${validity}|${description}`;
+
+    if (!uniquePlans.has(fingerprint)) {
+      uniquePlans.set(fingerprint, {
+        planId: createHash("sha256")
+          .update(fingerprint)
+          .digest("hex")
+          .slice(0, 20),
+        amount,
+        validity: validity || null,
+        description: description || null,
+      });
+    }
+  }
+
+  return {
+    status: providerResponse.status,
+    responseTypeId: providerResponse.response_type_id,
+    message: providerResponse.message,
+    operatorId: operatorCode ? String(operatorCode) : null,
+    circleId: circleId ? String(circleId) : null,
+    mobile,
+    count: uniquePlans.size,
+    plans: Array.from(uniquePlans.values()).sort(
+      (first, second) => Number(first.amount) - Number(second.amount),
+    ),
+  };
+};
+
 exports.getFetchBillReadiness = async (req, operatorId) => {
   const sourceIpDetails = await getBbpsSourceIPDetails(req);
   const coreConfig = {
     baseUrlConfigured: Boolean(BASE),
+    providerEnvironment: (process.env.EKO_ENV || "production").toLowerCase(),
+    providerBaseUrl: BASE || null,
     developerKeyConfigured: Boolean(process.env.EKO_DEVELOPER_KEY),
     accessKeyConfigured: Boolean(process.env.EKO_ACCESS_KEY),
     userCodeConfigured: Boolean(process.env.EKO_USER_CODE),
@@ -230,15 +348,13 @@ exports.fetchBill = async (body, req) => {
       operator_id,
       ...dynamicParams,
       user_code: process.env.EKO_USER_CODE,
-      client_ref_id: randomUUID(),
+      client_ref_id: Date.now().toString(),
       hc_channel: "0",
       source_ip: sourceIp,
     };
 
     console.info("[BBPS][provider][fetch-bill] payload", {
       operator_id: payload.operator_id,
-      utility_acc_no: payload.utility_acc_no,
-      confirmation_mobile_no: payload.confirmation_mobile_no,
       client_ref_id: payload.client_ref_id,
       source_ip: payload.source_ip,
       dynamicKeys: Object.keys(body || {}).filter(
@@ -249,32 +365,48 @@ exports.fetchBill = async (body, req) => {
     console.info("[BBPS][provider][fetch-bill] request-meta", {
       initiator_id: process.env.EKO_INITIATOR_ID,
       source_ip: payload.source_ip,
-      headers,
       endpoint: ekoUrl(
         `billpayments/fetchbill?initiator_id=${process.env.EKO_INITIATOR_ID}`,
       ),
     });
 
-    const res = await retry(() =>
-      axios.post(
-        ekoUrl(
-          `billpayments/fetchbill?initiator_id=${process.env.EKO_INITIATOR_ID}`,
+    const res = await retry(
+      () =>
+        axios.post(
+          ekoUrl(
+            `billpayments/fetchbill?initiator_id=${process.env.EKO_INITIATOR_ID}`,
+          ),
+          payload,
+          { headers, timeout: FETCH_BILL_TIMEOUT_MS },
         ),
-        payload,
-        { headers, timeout: 15000 },
-      ),
+      1,
     );
 
     console.info("[BBPS][provider][fetch-bill] response", {
       status: res.status,
       success: res.data?.success,
       message: res.data?.message,
-      response: res.data,
+      responseKeys:
+        res.data && typeof res.data === "object" ? Object.keys(res.data) : [],
+      dataKeys:
+        res.data?.data && typeof res.data.data === "object"
+          ? Object.keys(res.data.data)
+          : [],
     });
+
+    if (res.data && typeof res.data === "object" && !Array.isArray(res.data)) {
+      return {
+        ...res.data,
+        client_ref_id: res.data.client_ref_id || payload.client_ref_id,
+      };
+    }
 
     return res.data;
   } catch (error) {
-    const statusCode = error.response?.status || 500;
+    const isTimeout =
+      error.code === "ECONNABORTED" ||
+      /timeout/i.test(String(error.message || ""));
+    const statusCode = isTimeout ? 504 : error.response?.status || 500;
     const providerData = error.response?.data;
     const hasHtmlBody =
       typeof providerData === "string" && /<\s*html/i.test(providerData);
@@ -287,7 +419,9 @@ exports.fetchBill = async (body, req) => {
       error.message;
 
     const normalizedError = new Error(
-      statusCode === 401
+      isTimeout
+        ? `BBPS provider timed out after ${FETCH_BILL_TIMEOUT_MS}ms`
+        : statusCode === 401
         ? "Provider authorization failed"
         : statusCode === 403
           ? "Provider access forbidden"
@@ -298,11 +432,15 @@ exports.fetchBill = async (body, req) => {
       providerData && typeof providerData === "object"
         ? providerData
         : undefined;
+    normalizedError.providerMessage = providerMessage;
 
     console.error("[BBPS][provider][fetch-bill] error", {
       statusCode,
       message: normalizedError.message,
-      providerData,
+      providerMessage:
+        typeof providerData === "object"
+          ? providerData?.message || providerData?.error
+          : providerMessage,
     });
 
     throw normalizedError;
@@ -321,7 +459,7 @@ exports.payBill = async (body, req) => {
   const payload = {
     ...body,
     user_code: process.env.EKO_USER_CODE,
-    client_ref_id: Date.now(),
+    client_ref_id: body.client_ref_id || Date.now().toString(),
     hc_channel: "0",
     source_ip: sourceIp,
   };

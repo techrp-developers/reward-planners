@@ -1,8 +1,10 @@
 const cron = require("node-cron");
 const TransactionModel = require("../../app/bbps/v1/models/transactionModel");
-const ekoService = require("../../app/bbps/v1/services/eko_service");
-const rechargeService = require("../../app/bbps/v1/services/recharge_service");
+const {
+  processTransaction,
+} = require("../../app/bbps/v1/services/paymentProcessor");
 const db = require("../../config/database");
+const { cronPing, checkCronHealth } = require("../../services/cronMonitor");
 
 cron.schedule("*/5 * * * *", async () => {
   console.log("🔁 BBPS retry cron running...");
@@ -18,29 +20,12 @@ cron.schedule("*/5 * * * *", async () => {
 
       freshTxn = await TransactionModel.getByIdForUpdate(txn.id, conn);
 
-      if (!freshTxn || freshTxn.bbps_status === "PAID") {
+      if (!freshTxn || freshTxn.bbps_status !== "FAILED_RETRY") {
         await conn.rollback();
         continue;
       }
 
-      let res;
-
-      if (freshTxn.fetch_bill === 1) {
-        // BBPS
-        res = await ekoService.payBill({
-          utility_acc_no: freshTxn.utility_acc_no,
-          operator_id: freshTxn.operator_id,
-          amount: freshTxn.amount,
-          cycle_number: freshTxn.cycle_number,
-        });
-      } else {
-        // RECHARGE
-        res = await rechargeService.recharge({
-          mobile: freshTxn.utility_acc_no.trim(),
-          operator_id: freshTxn.operator_id,
-          amount: freshTxn.amount,
-        });
-      }
+      const res = await processTransaction(freshTxn);
 
       await TransactionModel.updateStatus(freshTxn.id, "PAID", res, conn);
 
@@ -53,17 +38,23 @@ cron.schedule("*/5 * * * *", async () => {
       console.error(`❌ Retry failed: ${txn.id}`, err.message);
 
       // increment retry OUTSIDE transaction
-      if (freshTxn && freshTxn.retry_count + 1 >= freshTxn.max_retry) {
+      if (
+        freshTxn &&
+        (err.retryable === false ||
+          freshTxn.retry_count + 1 >= freshTxn.max_retry)
+      ) {
         await TransactionModel.updateStatus(
           txn.id,
           "FAILED_FINAL",
-          err.message,
+          err.providerResponse || err.message,
         );
       } else {
-        await TransactionModel.incrementRetry(txn.id, conn);
+        await TransactionModel.incrementRetry(txn.id);
       }
     } finally {
       conn.release();
     }
   }
+
+  await cronPing("bbps_payment_cron");
 });

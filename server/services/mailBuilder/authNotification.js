@@ -1,4 +1,4 @@
-const { sendMail } = require("../mailService");
+const { sendMailBestEffort } = require("../mailService");
 const { renderTemplate } = require("../../utils/templateRenderer");
 
 async function sendRegistrationSuccessMail(user) {
@@ -7,11 +7,11 @@ async function sendRegistrationSuccessMail(user) {
     companyName: "Reward Planners",
   });
 
-  await sendMail({
+  return sendMailBestEffort({
     to: user.email,
     subject: "Registration Successful",
     html,
-  });
+  }, "registration success mail");
 }
 
 module.exports = {

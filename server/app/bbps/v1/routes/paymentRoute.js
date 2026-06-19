@@ -2,14 +2,25 @@ const express = require("express");
 const router = express.Router();
 const PaymentController = require("../controllers/paymentController");
 const auth = require("../../../common/middlewares/auth");
+const drainMode = require("../../../../middleware/drainMode");
+const {
+  paymentLimiter,
+  generalLimiter,
+} = require("../../../common/middlewares/rateLimiter");
 
 // create payment
-router.post("/create-order", auth, PaymentController.createOrder);
+router.post(
+  "/create-order",
+  auth,
+  paymentLimiter,
+  drainMode,
+  PaymentController.createOrder,
+);
 
 // verify payment
-router.post("/verify-payment", auth, PaymentController.verifyPayment);
+router.post("/verify-payment", auth, paymentLimiter, PaymentController.verifyPayment);
 
 // retry Transaction
-router.post("/retry", auth, PaymentController.retryTransaction);
+router.post("/retry", auth, generalLimiter, PaymentController.retryTransaction);
 
 module.exports = router;

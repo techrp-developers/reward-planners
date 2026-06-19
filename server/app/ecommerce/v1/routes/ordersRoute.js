@@ -21,15 +21,12 @@ router.post("/cancel/:orderId", auth, OrderController.requestOrderCancellation);
 // Get cancellation Details
 router.get(
   "/cancellation-details/:orderId",
+  auth,
   OrderController.cancellationDetails,
 );
 
 // =======================================Invoice==========================================
 // Get order Invoice
-router.get(
-  "/invoice/:orderId",
-  auth,
-  OrderController.getInvoice,
-);
+router.get("/invoice/:orderId", auth, OrderController.getInvoice);
 
 module.exports = router;

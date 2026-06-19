@@ -41,9 +41,24 @@ export default function ManagerNavbar() {
   const isActive = (to: string) => pathname === to;
 
   const navItems: NavItem[] = [
-    { label: "Dashboard", to: routes.manager.dashboard, Icon: FiGrid, type: "link" },
-    { label: "Vendors", to: routes.manager.vendors, Icon: FiUsers, type: "link" },
-    { label: "Products", to: routes.manager.products, Icon: FiPackage, type: "link" },
+    {
+      label: "Dashboard",
+      to: routes.manager.dashboard,
+      Icon: FiGrid,
+      type: "link",
+    },
+    {
+      label: "Vendors",
+      to: routes.manager.vendors,
+      Icon: FiUsers,
+      type: "link",
+    },
+    {
+      label: "Products",
+      to: routes.manager.products,
+      Icon: FiPackage,
+      type: "link",
+    },
     {
       label: "Category",
       Icon: FiTag,
@@ -63,14 +78,19 @@ export default function ManagerNavbar() {
         { label: "Category Link Document", to: routes.manager.linkDocument },
       ],
     },
-    { label: "Category Attributes", to: routes.manager.attributes, Icon: FiSliders, type: "link" },
     {
-      label: "Flash Sales",
+      label: "Category Attributes",
+      to: routes.manager.attributes,
+      Icon: FiSliders,
+      type: "link",
+    },
+    {
+      label: "Service",
       Icon: FaBolt,
       type: "dropdown",
       children: [
-        { label: "Flash Sale List", to: routes.manager.flashlist },
-        { label: "Flash Sale Create", to: routes.manager.flashCreate },
+        { label: "Service Enquiries", to: routes.manager.services.enquiries },
+        { label: "Service Orders", to: routes.manager.services.service_orders },
       ],
     },
     {
@@ -79,7 +99,10 @@ export default function ManagerNavbar() {
       type: "dropdown",
       children: [
         { label: "Order List", to: routes.manager.orders.orderList },
-        { label: "Cancellation Request", to: routes.manager.orders.cancellationRequest },
+        {
+          label: "Cancellation Request",
+          to: routes.manager.orders.cancellationRequest,
+        },
       ],
     },
     {
@@ -97,7 +120,8 @@ export default function ManagerNavbar() {
     <nav
       className="fixed top-0 left-0 flex flex-col w-64 h-full font-sans"
       style={{
-        background: "linear-gradient(180deg, #ffffff 0%, #fdf8ff 60%, #fff5f8 100%)",
+        background:
+          "linear-gradient(180deg, #ffffff 0%, #fdf8ff 60%, #fff5f8 100%)",
         borderRight: "1px solid rgba(133,43,175,0.1)",
         boxShadow: "4px 0 32px rgba(133,43,175,0.08)",
         animation: "slideInLeft 0.35s cubic-bezier(.22,.68,0,1.2) both",
@@ -113,7 +137,11 @@ export default function ManagerNavbar() {
               boxShadow: "0 6px 20px rgba(133,43,175,0.35)",
             }}
           >
-            <img src={logo} alt="Rewards Logo" className="object-contain w-7 h-7" />
+            <img
+              src={logo}
+              alt="Rewards Logo"
+              className="object-contain w-7 h-7"
+            />
           </div>
           <div>
             <h1 className="text-[17px] font-extrabold text-gray-900 leading-none tracking-tight">
@@ -128,16 +156,15 @@ export default function ManagerNavbar() {
         <div
           className="w-full h-px mt-5 rounded-full"
           style={{
-            background: "linear-gradient(90deg, rgba(133,43,175,0.25) 0%, rgba(252,63,120,0.15) 60%, transparent 100%)",
+            background:
+              "linear-gradient(90deg, rgba(133,43,175,0.25) 0%, rgba(252,63,120,0.15) 60%, transparent 100%)",
           }}
         />
       </div>
 
       {/* ── MANAGER BADGE ── */}
       <div className="px-4 mb-2">
-        <div
-          className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold bg-purple-50 text-purple-700 border border-purple-100"
-        >
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold bg-purple-50 text-purple-700 border border-purple-100">
           <FiGrid className="shrink-0" size={13} />
           <span>Manager Console</span>
           <div className="ml-auto w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
@@ -148,18 +175,24 @@ export default function ManagerNavbar() {
       <div className="flex-1 px-3 space-y-0.5 overflow-y-auto vendor-sidebar-scroll pb-2">
         {navItems.map((item, i) => {
           const isDropdownOpen = openDropdown === item.label;
-          const isItemActive = item.type === "link" && !!item.to && isActive(item.to);
+          const isItemActive =
+            item.type === "link" && !!item.to && isActive(item.to);
 
           return (
             <div
               key={item.label}
               className="outline-none"
-              style={{ animation: "slideInLeft 0.3s ease both", animationDelay: `${i * 45}ms` }}
+              style={{
+                animation: "slideInLeft 0.3s ease both",
+                animationDelay: `${i * 45}ms`,
+              }}
             >
               {item.type === "dropdown" ? (
                 <>
                   <button
-                    onClick={() => setOpenDropdown(isDropdownOpen ? null : item.label)}
+                    onClick={() =>
+                      setOpenDropdown(isDropdownOpen ? null : item.label)
+                    }
                     className={`flex items-center justify-between w-full gap-3 px-4 py-3 rounded-xl transition-all duration-200 group cursor-pointer ${
                       isDropdownOpen
                         ? "bg-purple-50/70"
@@ -169,7 +202,9 @@ export default function ManagerNavbar() {
                     <div className="flex items-center gap-3">
                       <item.Icon
                         className={`text-lg transition-colors ${
-                          isDropdownOpen ? "text-[#852BAF]" : "text-gray-400 group-hover:text-[#852BAF]"
+                          isDropdownOpen
+                            ? "text-[#852BAF]"
+                            : "text-gray-400 group-hover:text-[#852BAF]"
                         }`}
                       />
                       <span
@@ -182,14 +217,18 @@ export default function ManagerNavbar() {
                     </div>
                     <FiChevronDown
                       className={`transition-transform duration-300 ${
-                        isDropdownOpen ? "rotate-180 text-[#852BAF]" : "text-gray-400"
+                        isDropdownOpen
+                          ? "rotate-180 text-[#852BAF]"
+                          : "text-gray-400"
                       }`}
                     />
                   </button>
 
                   <div
                     className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                      isDropdownOpen ? "max-h-52 opacity-100 mt-1" : "max-h-0 opacity-0"
+                      isDropdownOpen
+                        ? "max-h-52 opacity-100 mt-1"
+                        : "max-h-0 opacity-0"
                     }`}
                   >
                     <div
@@ -208,7 +247,9 @@ export default function ManagerNavbar() {
                         >
                           <FiChevronRight
                             className={`text-xs transition-all duration-200 ${
-                              isActive(child.to) ? "text-[#852BAF] translate-x-1" : "text-gray-300"
+                              isActive(child.to)
+                                ? "text-[#852BAF] translate-x-1"
+                                : "text-gray-300"
                             }`}
                           />
                           <span>{child.label}</span>
@@ -227,13 +268,18 @@ export default function ManagerNavbar() {
                   }`}
                   style={
                     isItemActive
-                      ? { background: "linear-gradient(135deg, #852BAF 0%, #C64EFE 100%)" }
+                      ? {
+                          background:
+                            "linear-gradient(135deg, #852BAF 0%, #C64EFE 100%)",
+                        }
                       : {}
                   }
                 >
                   <item.Icon
                     className={`text-lg transition-colors ${
-                      isItemActive ? "text-white" : "text-gray-400 group-hover:text-[#852BAF]"
+                      isItemActive
+                        ? "text-white"
+                        : "text-gray-400 group-hover:text-[#852BAF]"
                     }`}
                   />
                   <span className="text-sm font-semibold">{item.label}</span>
@@ -248,7 +294,8 @@ export default function ManagerNavbar() {
       <div
         className="p-3 m-3 rounded-2xl"
         style={{
-          background: "linear-gradient(135deg, rgba(133,43,175,0.06) 0%, rgba(252,63,120,0.04) 100%)",
+          background:
+            "linear-gradient(135deg, rgba(133,43,175,0.06) 0%, rgba(252,63,120,0.04) 100%)",
           border: "1px solid rgba(133,43,175,0.12)",
         }}
       >
@@ -297,7 +344,10 @@ export default function ManagerNavbar() {
         >
           <div
             className="w-full h-px mb-2"
-            style={{ background: "linear-gradient(90deg, rgba(133,43,175,0.2), transparent)" }}
+            style={{
+              background:
+                "linear-gradient(90deg, rgba(133,43,175,0.2), transparent)",
+            }}
           />
           <div className="space-y-0.5">
             <Link

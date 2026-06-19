@@ -4,8 +4,6 @@ const WalletController = require("../controller/walletController");
 const auth = require("../middlewares/auth");
 const optionalAuth = require("../middlewares/optionalAuth");
 
-/*===================================================Wallet===========================================*/
-
 // check review eligibility
 router.get("/balance", auth, WalletController.getWallet);
 

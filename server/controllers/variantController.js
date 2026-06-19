@@ -304,51 +304,6 @@ class VariantController {
     }
   }
 
-  // update the reward limit
-  async updateRewardRedemptionLimit(req, res) {
-    try {
-      const { product_id, variant_id, reward_redemption_limit } = req.body;
-
-      if (!product_id || !variant_id || reward_redemption_limit === undefined) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "product_id, variant_id and reward_redemption_limit are required",
-        });
-      }
-
-      // check variant belongs to product
-      const isValid = await variantModel.checkVariantProductRelation(
-        product_id,
-        variant_id,
-      );
-
-      if (!isValid) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid product_id and variant_id combination",
-        });
-      }
-
-      await variantModel.updateRewardLimit(
-        product_id,
-        variant_id,
-        reward_redemption_limit,
-      );
-
-      return res.status(200).json({
-        success: true,
-        message: "Reward redemption limit updated successfully",
-      });
-    } catch (err) {
-      console.error("Update reward limit error:", err);
-      return res.status(500).json({
-        success: false,
-        message: "Internal server error",
-      });
-    }
-  }
-
   // async reorder variant images
   async reorderVariantImages(req, res) {
     const { images } = req.body;

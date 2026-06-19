@@ -28,14 +28,6 @@ router.put(
   VariantController.updateVariant,
 );
 
-// create variant discount
-router.post(
-  "/update-reward-limit",
-  authenticateToken,
-  authorizeRoles("vendor_manager"),
-  VariantController.updateRewardRedemptionLimit,
-);
-
 //  GET variant images
 router.get(
   "/:variantId/images",

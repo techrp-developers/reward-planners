@@ -1,5 +1,7 @@
 const ekoService = require("../services/eko_service");
 const TransactionModel = require("../models/transactionModel");
+const BillFetchModel = require("../models/billFetchModel");
+const db = require("../../../../config/database");
 
 /**
  * @typedef {Object} FrontendFetchBillPayload
@@ -25,7 +27,15 @@ const pickFirstValue = (sources, keys) => {
     for (const key of keys) {
       const value = source[key];
 
-      if (value !== undefined && value !== null && value !== "") {
+      const normalizedString =
+        typeof value === "string" ? value.trim().toLowerCase() : "";
+
+      if (
+        value !== undefined &&
+        value !== null &&
+        value !== "" &&
+        !["null", "undefined"].includes(normalizedString)
+      ) {
         return value;
       }
     }
@@ -55,25 +65,34 @@ const normalizeFetchBillResponse = (providerResponse, requestPayload) => {
   const customerName = pickFirstValue(sources, [
     "customer_name",
     "customerName",
+    "customername",
+    "utilitycustomername",
     "name",
     "consumer_name",
+    "consumername",
     "biller_name",
   ]);
   const amount = pickFirstValue(sources, [
     "amount",
     "bill_amount",
     "billAmount",
+    "billamount",
     "due_amount",
+    "dueamount",
     "total_amount",
   ]);
   const dueDate = pickFirstValue(sources, [
     "due_date",
     "dueDate",
+    "duedate",
+    "billDueDate",
     "bill_due_date",
+    "billduedate",
   ]);
   const billNumber = pickFirstValue(sources, [
     "bill_number",
     "billNumber",
+    "billnumber",
     "bill_no",
     "reference_id",
     "referenceId",
@@ -81,6 +100,7 @@ const normalizeFetchBillResponse = (providerResponse, requestPayload) => {
   const billDate = pickFirstValue(sources, [
     "bill_date",
     "billDate",
+    "billdate",
     "billing_date",
   ]);
 
@@ -104,6 +124,11 @@ const normalizeFetchBillResponse = (providerResponse, requestPayload) => {
 const extractOperatorRecord = (operatorData) => {
   if (!operatorData) return null;
 
+  // Operator-detail responses keep the operator at the root and parameters in data.
+  if (typeof operatorData === "object" && operatorData.operator_id) {
+    return operatorData;
+  }
+
   // EKO MOST COMMON FORMAT
   if (Array.isArray(operatorData?.data) && operatorData.data.length > 0) {
     return operatorData.data[0];
@@ -120,11 +145,6 @@ const extractOperatorRecord = (operatorData) => {
   // Sometimes direct array
   if (Array.isArray(operatorData) && operatorData.length > 0) {
     return operatorData[0];
-  }
-
-  // Already a clean operator object (has operator_id)
-  if (typeof operatorData === "object" && operatorData.operator_id) {
-    return operatorData;
   }
 
   return null;
@@ -367,8 +387,7 @@ const isProviderValidationError = (providerResponse) => {
   return (
     providerResponse.response_type_id === -1 ||
     providerResponse.status === 97 ||
-    Boolean(providerResponse.invalid_params) ||
-    /no key for response/i.test(String(providerResponse.message || ""))
+    Boolean(providerResponse.invalid_params)
   );
 };
 
@@ -397,10 +416,25 @@ const hasProviderBillData = (providerResponse) => {
   for (const source of sources) {
     if (!source || typeof source !== "object") continue;
 
-    const amount = source.amount || source.bill_amount || source.billAmount;
+    const amount = pickFirstValue([source], [
+      "amount",
+      "bill_amount",
+      "billAmount",
+      "billamount",
+      "due_amount",
+      "dueamount",
+      "total_amount",
+    ]);
 
-    const customerName =
-      source.customer_name || source.consumer_name || source.name;
+    const customerName = pickFirstValue([source], [
+      "customer_name",
+      "customerName",
+      "customername",
+      "utilitycustomername",
+      "consumer_name",
+      "consumername",
+      "name",
+    ]);
 
     //  STRICT CHECK
     if (hasValue(amount) && hasValue(customerName)) {
@@ -502,6 +536,68 @@ class BillController {
     }
   }
 
+  async getLocations(req, res) {
+    try {
+      const data = await ekoService.getLocations();
+      return res.json(data);
+    } catch (error) {
+      console.error("[BBPS][locations] error", error.response?.data || error.message);
+      return res.status(error.response?.status || 502).json({
+        success: false,
+        message: "Failed to fetch BBPS locations",
+      });
+    }
+  }
+
+  async getRechargePlans(req, res) {
+    try {
+      const mobile = String(req.query.mobile || "").trim();
+      const operatorCode = String(req.query.operator_id || "").trim();
+      const circleId = String(req.query.circle_id || "").trim();
+
+      if (!/^[1-9][0-9]{9}$/.test(mobile)) {
+        return res.status(400).json({
+          success: false,
+          message: "A valid 10-digit mobile number is required",
+        });
+      }
+
+      if (
+        (operatorCode && !/^\d+$/.test(operatorCode)) ||
+        (circleId && !/^\d+$/.test(circleId))
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "operator_id and circle_id must be numeric when provided",
+        });
+      }
+
+      const data = await ekoService.getRechargePlans({
+        mobile,
+        operatorCode,
+        circleId,
+      });
+
+      return res.json({
+        success: true,
+        message: "Recharge plans fetched successfully",
+        data,
+      });
+    } catch (error) {
+      const statusCode = error.statusCode || error.response?.status || 502;
+      console.error("[BBPS][recharge-plans] error", {
+        statusCode,
+        provider: error.response?.data || error.message,
+      });
+
+      return res.status(statusCode).json({
+        success: false,
+        message:
+          error.response?.data?.message || "Failed to fetch recharge plans",
+      });
+    }
+  }
+
   async checkCustomerNumber(req, res) {
     try {
       const operatorId = String(req.body?.operator_id || "").trim();
@@ -550,8 +646,7 @@ class BillController {
   async fetchBill(req, res) {
     try {
       const { operator_id } = req.body || {};
-      // const userId = req.user?.user_id;
-      const userId = 1;
+      const userId = req.user?.user_id;
       const operatorId = String(operator_id || "").trim();
 
       if (!userId) {
@@ -611,7 +706,6 @@ class BillController {
       console.info("[BBPS][fetch-bill] request", {
         operator_id: operatorId,
         frontendPayload: normalizedRequest.frontendPayload,
-        providerPayload: normalizedRequest.providerPayload,
         operatorInputParams: normalizedRequest.inputParams,
         user_id: userId,
       });
@@ -623,19 +717,27 @@ class BillController {
 
       console.info("[BBPS][fetch-bill] provider-response", {
         operator_id: operatorId,
-        response: data,
+        client_ref_id: data?.client_ref_id,
+        success: data?.success,
+        message: data?.message,
       });
 
-      if (isProviderValidationError(data)) {
-        const providerMessage = /no key for response/i.test(
-          String(data?.message || ""),
-        )
-          ? "Provider returned an invalid fetch bill response. Please verify operator input mapping and EKO configuration."
-          : data?.message || "Provider validation failed";
+      if (/no key for response/i.test(String(data?.message || ""))) {
+        return res.status(502).json({
+          success: false,
+          message:
+            "EKO could not map the biller's response. Contact EKO support with the client_ref_id.",
+          data: {
+            message: data.message,
+            client_ref_id: data.client_ref_id,
+          },
+        });
+      }
 
+      if (isProviderValidationError(data)) {
         return res.status(400).json({
           success: false,
-          message: providerMessage,
+          message: data?.message || "Provider validation failed",
           data,
         });
       }
@@ -655,10 +757,27 @@ class BillController {
         utility_acc_no: normalizedRequest.providerPayload.utility_acc_no,
       });
 
+      const billFetchId = await BillFetchModel.create({
+        user_id: userId,
+        operator_id: operatorId,
+        utility_acc_no: normalizedRequest.providerPayload.utility_acc_no,
+        cycle_number: normalizedRequest.providerPayload.cycle_number,
+        confirmation_mobile_no:
+          normalizedRequest.providerPayload.confirmation_mobile_no,
+        sender_name: normalizedRequest.providerPayload.sender_name,
+        amount: normalized.bill.amount,
+        provider_ref_id:
+          data?.data?.bbpstrxnrefid || data?.client_ref_id || null,
+        provider_response: data,
+      });
+
       return res.status(200).json({
         success: true,
         message: "Bill details fetched successfully",
-        data: normalized,
+        data: {
+          ...normalized,
+          billFetchId,
+        },
       });
     } catch (e) {
       const statusCode = e.statusCode || e.response?.status || 500;
@@ -672,6 +791,7 @@ class BillController {
       console.error("[BBPS][fetch-bill] error", {
         statusCode,
         message,
+        providerMessage: e.providerMessage,
         provider: safeDetails || e.response?.data || e.response?.status,
       });
 
@@ -687,8 +807,7 @@ class BillController {
     try {
       const { transaction_id } = req.params;
 
-      // const userId = req.user?.user_id;
-      const userId = 1;
+      const userId = req.user?.user_id;
 
       if (!userId) {
         return res.status(401).json({
@@ -716,7 +835,7 @@ class BillController {
         });
       }
 
-      if (txn.user_id !== userId) {
+      if (Number(txn.user_id) !== Number(userId)) {
         return res.status(403).json({ message: "Unauthorized" });
       }
 
@@ -739,7 +858,10 @@ class BillController {
 
       if (txn.bbps_status === "PAID") {
         finalStatus = "SUCCESS";
-      } else if (txn.bbps_status === "FAILED_FINAL") {
+      } else if (
+        txn.bbps_status === "FAILED_FINAL" ||
+        txn.bbps_status === "PAYMENT_FAILED"
+      ) {
         finalStatus = "FAILED";
       } else if (txn.bbps_status === "FAILED_RETRY") {
         finalStatus = "RETRYING";

@@ -3,34 +3,60 @@ const router = express.Router();
 const authController = require("../controller/authController");
 const auth = require("../middlewares/auth");
 const optionalAuth = require("../middlewares/optionalAuth");
-const { uploadReviewMedia } = require("../../../middleware/mediaUpload/productUpload");
+const upload = require("../../../middleware/mediaUpload/serviceCategoryUpload");
+const { authLimiter } = require("../middlewares/rateLimiter");
 
 /*============================================Profile=================================================*/
+// Activate account
+router.post("/activate-account", authLimiter, authController.activateAccount);
 
-// router.post("/register", authController.registerUser);
-router.post('/activate-account', authController.activateAccount);
-router.post('/verify-activation-otp', authController.verifyActivationOTP);
-router.post('/set-password', authController.setPassword);
-router.post("/login", authController.loginUser);
-// router.get("/verify-email", authController.verifyEmail);
+//resend activation otp
+router.post(
+  "/resend-activation-otp",
+  authLimiter,
+  authController.resendActivationOTP,
+);
 
-// Newly added
-router.get("/device-change/allow", authController.allowDeviceChange);
-router.get("/device-change/deny", authController.denyDeviceChange);
+// verify OTP
+router.post(
+  "/verify-activation-otp",
+  authLimiter,
+  authController.verifyActivationOTP,
+);
+
+// set the password
+router.post("/set-password", authLimiter, authController.setPassword);
+
+//Login user
+router.post("/login", authLimiter, authController.loginUser);
+
+// refresh(not updated)
+router.post("/refresh", authLimiter, authController.refreshAccessToken);
+
+// Fcm token(not updated)
 router.post("/update-fcm-token", auth, authController.updateFcmToken);
 
-
-router.post("/refresh", authController.refreshAccessToken);
+// Logout user
 router.post("/logout", auth, authController.logoutUser);
-router.post("/logout-all", auth, authController.logoutAllDevices);
-router.post("/forgot-password", authController.forgotPassword);
-router.post("/reset-password", authController.resetPassword);
-// router.post("/resend-verification", authController.resendVerification);
-router.put(
-  "/change-password",
-  auth,
-  authController.changePassword,
+
+// Forgot password
+router.post("/forgot-password", authLimiter, authController.forgotPassword);
+
+//resend  otp
+router.post("/resend-otp", authLimiter, authController.resendOTP);
+
+// verify forgot password OTP
+router.post(
+  "/verify-forgot-password-otp",
+  authLimiter,
+  authController.verifyForgotPasswordOTP,
 );
+
+// Reset password
+router.post("/reset-password", authLimiter, authController.resetPassword);
+
+// change password
+router.put("/change-password", auth, authController.changePassword);
 
 /*=============================================Address================================================*/
 // Fetch all the countries
@@ -58,10 +84,18 @@ router.get("/addresses", auth, authController.getMyAddresses);
 router.get("/address/:address_id", auth, authController.getAddressById);
 
 /*===================================================User Information===========================================*/
-router.get("/user-info", optionalAuth, authController.getUserInfo);
+// user information overall
+router.get("/user-info", auth, authController.getUserInfo);
 
+// update profile information
+router.put(
+  "/profile",
+  auth,
+  upload.single("user_image"),
+  authController.updateProfile,
+);
+
+// delete customer record
 router.delete("/delete-customer", auth, authController.deleteCustomer);
-
-
 
 module.exports = router;

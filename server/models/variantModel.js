@@ -114,31 +114,6 @@ class VariantModel {
     return result.affectedRows;
   }
 
-  // check variant
-  async checkVariantProductRelation(productId, variantId) {
-    const qry = `
-        SELECT 1
-        FROM product_variants
-        WHERE variant_id = ?
-          AND product_id = ?
-        LIMIT 1
-      `;
-
-    const rows = await db.execute(qry, [variantId, productId]);
-    return rows.length > 0;
-  }
-
-  // update reward Limit
-  async updateRewardLimit(productId, variantId, rewardLimit) {
-    const qry = `
-    UPDATE product_variants
-    SET reward_redemption_limit = ?
-    WHERE variant_id = ?
-      AND product_id = ?
-  `;
-
-    return await db.execute(qry, [rewardLimit, variantId, productId]);
-  }
 }
 
 module.exports = new VariantModel();

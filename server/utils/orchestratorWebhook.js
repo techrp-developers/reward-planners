@@ -1,8 +1,8 @@
 const crypto = require("crypto");
-
-const ecommerceWebhook = require("./paymentWebHook");
-const serviceWebhook = require("../../app/service/v1/utils/webhook");
-const bbpsWebhook = require("../../app/bbps/v1/utils/webhook");
+const ecommerceWebhook = require("../app/ecommerce/v1/utils/webhook");
+const serviceWebhook = require("../app/service/v1/utils/webhook");
+const mpsServiceWebhook = require("../mps-connect/common/utils/webhook");
+const bbpsWebhook = require("../app/bbps/v1/utils/webhook");
 
 async function handleWebhook(req, res) {
   try {
@@ -27,6 +27,13 @@ async function handleWebhook(req, res) {
     //  Attach parsed body so child handlers don't re-parse
     req.parsedBody = body;
 
+    console.info("Razorpay webhook received", {
+      event: body.event,
+      payment_id: body?.payload?.payment?.entity?.id,
+      order_id: body?.payload?.payment?.entity?.order_id,
+      module: body?.payload?.payment?.entity?.notes?.module,
+    });
+
     //  FAN-OUT (parallel execution)
     // await Promise.all([
     //   ecommerceWebhook.processEvent(req),
@@ -43,11 +50,13 @@ async function handleWebhook(req, res) {
     const handler =
       moduleType === "service"
         ? serviceWebhook
-        : moduleType === "ecommerce"
-          ? ecommerceWebhook
-          : moduleType === "bbps"
-            ? bbpsWebhook
-            : null;
+        : moduleType === "mps"
+          ? mpsServiceWebhook
+          : moduleType === "ecommerce"
+            ? ecommerceWebhook
+            : moduleType === "bbps"
+              ? bbpsWebhook
+              : null;
 
     if (!handler) {
       console.warn("Unknown module in webhook", {

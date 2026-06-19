@@ -71,19 +71,27 @@ function getPublicUrl(path) {
   return `${CDN_BASE_URL}/${path}`;
 }
 
+function positiveInt(value, fallback, max = 100) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(parsed, max);
+}
+
 class ServiceController {
   // Find all services
   async getServices(req, res) {
     try {
-      const { category_id, search, page = 1, limit = 10 } = req.query;
+      const { category_id, search } = req.query;
+      const page = positiveInt(req.query.page, 1, 10000);
+      const limit = positiveInt(req.query.limit, 10, 50);
 
       const offset = (page - 1) * limit;
 
       const services = await ServiceModel.findAll({
         category_id,
         search,
-        limit: parseInt(limit),
-        offset: parseInt(offset),
+        limit,
+        offset,
       });
 
       res.json({
@@ -94,6 +102,138 @@ class ServiceController {
       res.status(500).json({
         success: false,
         message: err.message,
+      });
+    }
+  }
+
+  async getSearchSuggestions(req, res) {
+    try {
+      const q = (req.query.q || "").trim();
+
+      const suggestions = await ServiceModel.getSearchSuggestions({
+        search: q,
+        limit: 10,
+      });
+
+      return res.json({
+        success: true,
+        suggestions,
+      });
+    } catch (error) {
+      console.error("Service suggestion error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  }
+
+  async saveSearchHistory(req, res) {
+    try {
+      const userId = req.user?.user_id;
+      // const userId = 1;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      const keyword = (req.body.keyword || "").trim();
+
+      if (!keyword) {
+        return res.json({
+          success: true,
+        });
+      }
+
+      await db.execute(
+        `INSERT INTO service_search_history
+       (user_id, keyword)
+       VALUES (?, ?)
+       ON DUPLICATE KEY UPDATE
+       created_at = CURRENT_TIMESTAMP`,
+        [userId, keyword],
+      );
+
+      return res.json({
+        success: true,
+      });
+    } catch (error) {
+      console.error("Save service search history error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  }
+
+  async getSearchHistory(req, res) {
+    try {
+      const userId = req.user?.user_id;
+      // const userId = 1;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      const [rows] = await db.execute(
+        `SELECT keyword
+       FROM service_search_history
+       WHERE user_id = ?
+       ORDER BY created_at DESC
+       LIMIT 10`,
+        [userId],
+      );
+
+      return res.json({
+        success: true,
+        history: rows.map((row) => row.keyword),
+      });
+    } catch (error) {
+      console.error("Get service search history error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  }
+
+  async clearSearchHistory(req, res) {
+    try {
+      const userId = req.user?.user_id;
+      // const userId = 1;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      await db.execute(
+        `DELETE FROM service_search_history
+       WHERE user_id = ?`,
+        [userId],
+      );
+
+      return res.json({
+        success: true,
+        message: "Search history cleared",
+      });
+    } catch (error) {
+      console.error("Clear service search history error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
       });
     }
   }
@@ -362,49 +502,6 @@ class ServiceController {
     }
   }
 
-  // advertisement pov
-  async getHomeServices(req, res) {
-    try {
-      const sections = await ServiceModel.getHomeSections();
-
-      res.json({
-        success: true,
-        data: sections,
-      });
-    } catch (err) {
-      res.status(500).json({
-        success: false,
-        message: err.message,
-      });
-    }
-  }
-
-  async getRelatedServices(req, res) {
-    try {
-      const { id } = req.params;
-
-      if (!id) {
-        return res.status(400).json({
-          success: false,
-          message: "Service ID required",
-        });
-      }
-
-      const services = await ServiceModel.getRelatedServices(id);
-
-      res.json({
-        success: true,
-        data: services,
-      });
-    } catch (err) {
-      console.log(err);
-      res.status(500).json({
-        success: false,
-        message: err.message,
-      });
-    }
-  }
-
   // Update services
   async updateService(req, res) {
     try {
@@ -517,9 +614,11 @@ class ServiceController {
 
   // ===============================================Feedback from user======================================
   async submitFeedback(req, res) {
+    let connection;
+
     try {
-      // const userId = req.user?.user_id;
-      const userId = 1;
+      const userId = req.user?.user_id;
+      // const userId = 1;
 
       if (!userId) {
         return res.status(401).json({
@@ -529,20 +628,27 @@ class ServiceController {
       }
 
       const {
-        parent_order_id,
+        service_order_id,
+
         rating,
         ease_rating,
         expert_rating,
+
         completion_time,
         confidence,
         reuse_intent,
+
         comment,
       } = req.body;
 
-      if (!parent_order_id || !rating) {
+      // =====================================
+      // Validation
+      // =====================================
+
+      if (!service_order_id || !rating) {
         return res.status(400).json({
           success: false,
-          message: "parent_order_id and rating required",
+          message: "service_order_id and rating required",
         });
       }
 
@@ -553,100 +659,524 @@ class ServiceController {
         });
       }
 
-      await db.beginTransaction();
+      connection = await db.getConnection();
 
-      //  Check order belongs to user & is delivered
-      const [[order]] = await db.execute(
-        `SELECT status FROM service_orders 
-       WHERE parent_order_id = ? AND user_id = ?
-       LIMIT 1`,
-        [parent_order_id, userId],
+      await connection.beginTransaction();
+
+      // =====================================
+      // Validate order ownership
+      // =====================================
+
+      const [[order]] = await connection.execute(
+        `
+      SELECT
+        id,
+        service_id,
+        status
+
+      FROM service_orders
+
+      WHERE id = ?
+      AND user_id = ?
+      `,
+        [service_order_id, userId],
       );
 
       if (!order) {
-        await db.rollback();
+        await connection.rollback();
+
         return res.status(404).json({
           success: false,
-          message: "Order not found",
+          message: "Service order not found",
         });
       }
 
+      // =====================================
+      // Only completed orders
+      // =====================================
+
       if (order.status !== "completed") {
-        await db.rollback();
+        await connection.rollback();
+
         return res.status(400).json({
           success: false,
           message: "Feedback allowed only after completion",
         });
       }
 
-      //  Prevent duplicate feedback
-      const [[existing]] = await db.execute(
-        `SELECT id FROM service_feedback 
-       WHERE parent_order_id = ? AND user_id = ?`,
-        [parent_order_id, userId],
+      // =====================================
+      // Prevent duplicate feedback
+      // =====================================
+
+      const [[existing]] = await connection.execute(
+        `
+        SELECT id
+
+        FROM service_feedback
+
+        WHERE service_order_id = ?
+        AND user_id = ?
+        `,
+        [service_order_id, userId],
       );
 
       if (existing) {
-        await db.rollback();
+        await connection.rollback();
+
         return res.status(400).json({
           success: false,
           message: "Feedback already submitted",
         });
       }
 
-      //  Insert feedback
-      await db.execute(
-        `INSERT INTO service_feedback
-      (parent_order_id, user_id, rating, ease_rating, expert_rating,
-       completion_time, confidence, reuse_intent, comment)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      // =====================================
+      // Insert feedback
+      // =====================================
+
+      await connection.execute(
+        `
+      INSERT INTO service_feedback
+      (
+        service_order_id,
+        user_id,
+
+        rating,
+        ease_rating,
+        expert_rating,
+
+        completion_time,
+        confidence,
+        reuse_intent,
+
+        comment
+      )
+      VALUES
+      (
+        ?, ?, ?, ?, ?, ?, ?, ?, ?
+      )
+      `,
         [
-          parent_order_id,
+          service_order_id,
           userId,
+
           rating,
           ease_rating,
           expert_rating,
+
           completion_time,
           confidence,
           reuse_intent,
+
           comment || null,
         ],
       );
 
-      // Get services
-      const [services] = await db.execute(
-        `SELECT DISTINCT service_id 
-              FROM service_orders 
-              WHERE parent_order_id = ?`,
-        [parent_order_id],
+      // =====================================
+      // Update service average rating
+      // =====================================
+
+      await connection.execute(
+        `
+      UPDATE services
+
+      SET rating = (
+        SELECT ROUND(
+          AVG(sf.rating),
+          1
+        )
+
+        FROM service_feedback sf
+
+        JOIN service_orders so
+          ON so.id = sf.service_order_id
+
+        WHERE so.service_id = ?
+      )
+
+      WHERE id = ?
+      `,
+        [order.service_id, order.service_id],
       );
 
-      // update rating for each service
-      for (let s of services) {
-        await db.execute(
-          `UPDATE services 
-         SET rating = (
-           SELECT ROUND(AVG(sf.rating), 1)
-           FROM service_feedback sf
-           WHERE sf.parent_order_id IN (
-             SELECT parent_order_id 
-             FROM service_orders 
-             WHERE service_id = ?
-           )
-         )
-         WHERE id = ?`,
-          [s.service_id, s.service_id],
-        );
-      }
-
-      await db.commit();
+      await connection.commit();
 
       res.json({
         success: true,
         message: "Feedback submitted successfully",
       });
     } catch (err) {
-      await db.rollback();
+      if (connection) {
+        await connection.rollback();
+      }
+
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    } finally {
+      if (connection) {
+        connection.release();
+      }
+    }
+  }
+
+  // ========================================================Home sections===========================================================
+  // advertisement pov
+  async getHomeSections(req, res) {
+    try {
+      const sections = await ServiceModel.getHomeSections();
+
+      res.json({
+        success: true,
+        data: sections,
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  async getRelatedServices(req, res) {
+    try {
+      const { serviceId } = req.params;
+
+      if (!serviceId) {
+        return res.status(400).json({
+          success: false,
+          message: "Service ID required",
+        });
+      }
+
+      const services = await ServiceModel.getRelatedServices(serviceId);
+
+      res.json({
+        success: true,
+        data: services,
+      });
+    } catch (err) {
+      console.log(err);
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  // ======================================Admin create home sections=======================
+
+  async createHomeSection(req, res) {
+    try {
+      const { title, section_key, section_type, layout_type, sort_order } =
+        req.body;
+
+      const id = await ServiceModel.createHomeSection({
+        title,
+        section_key,
+        section_type,
+        layout_type,
+        sort_order,
+      });
+
+      res.json({
+        success: true,
+        message: "Section created successfully",
+        data: { id },
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  async getAdminHomeSections(req, res) {
+    try {
+      const sections = await ServiceModel.getAdminHomeSections();
+
+      res.json({
+        success: true,
+        data: sections,
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  async updateHomeSection(req, res) {
+    try {
+      const { id } = req.params;
+
+      await ServiceModel.updateHomeSection(id, req.body);
+
+      res.json({
+        success: true,
+        message: "Section updated successfully",
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  async deleteHomeSection(req, res) {
+    try {
+      const { id } = req.params;
+
+      await ServiceModel.deleteHomeSection(id);
+
+      res.json({
+        success: true,
+        message: "Section deleted successfully",
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  // =============================================Admin add items to home sections===========================================
+  // body to be sent
+  // 1. For service item
+  //   {
+  //   "service_id": 12,
+  //   "sort_order": 1
+  // }
+  // 2. For banner item
+  //   {
+  //   "banner_id": 4,
+  //   "sort_order": 1
+  // }
+
+  async addSectionItem(req, res) {
+    try {
+      const { sectionId } = req.params;
+
+      const { service_id, banner_id, sort_order } = req.body;
+
+      if (!service_id && !banner_id) {
+        return res.status(400).json({
+          success: false,
+          message: "service_id or banner_id required",
+        });
+      }
+
+      const id = await ServiceModel.addSectionItem(sectionId, {
+        service_id,
+        banner_id,
+        sort_order,
+      });
+
+      res.json({
+        success: true,
+        message: "Item added successfully",
+        data: { id },
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  async getSectionItems(req, res) {
+    try {
+      const { sectionId } = req.params;
+
+      const items = await ServiceModel.getSectionItems(sectionId);
+
+      res.json({
+        success: true,
+        data: items,
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  async deleteSectionItem(req, res) {
+    try {
+      const { id } = req.params;
+
+      await ServiceModel.deleteSectionItem(id);
+
+      res.json({
+        success: true,
+        message: "Section item deleted",
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  // ===============================Admin related apis======================================================================
+  async addRelatedService(req, res) {
+    try {
+      const { service_id, related_service_id, relation_type, sort_order } =
+        req.body;
+
+      if (service_id == related_service_id) {
+        return res.status(400).json({
+          success: false,
+          message: "Service cannot relate to itself",
+        });
+      }
+
+      const allowedTypes = ["related", "value_added", "upsell"];
+
+      if (relation_type && !allowedTypes.includes(relation_type)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid relation type",
+        });
+      }
+
+      const id = await ServiceModel.addRelatedService({
+        service_id,
+        related_service_id,
+        relation_type,
+        sort_order,
+      });
+
+      res.json({
+        success: true,
+        message: "Related service added",
+        data: { id },
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  async getAdminRelatedServices(req, res) {
+    try {
+      const { serviceId } = req.params;
+
+      const rows = await ServiceModel.getAdminRelatedServices(serviceId);
+
+      res.json({
+        success: true,
+        data: rows,
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  async updateRelatedService(req, res) {
+    try {
+      const { id } = req.params;
+
+      const { sort_order, relation_type } = req.body;
+
+      const allowedTypes = ["related", "value_added", "upsell"];
+
+      if (relation_type && !allowedTypes.includes(relation_type)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid relation type",
+        });
+      }
+
+      await ServiceModel.updateRelatedService(id, {
+        sort_order,
+        relation_type,
+      });
+
+      res.json({
+        success: true,
+        message: "Related service updated successfully",
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  async deleteRelatedService(req, res) {
+    try {
+      const { id } = req.params;
+
+      await ServiceModel.deleteRelatedService(id);
+
+      res.json({
+        success: true,
+        message: "Related service removed successfully",
+      });
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  // =====================================Top picks===============================================================
+  async getTopPicks(req, res) {
+    try {
+      const limit = positiveInt(req.query.limit, 10, 50);
+
+      const services = await ServiceModel.getTopPicks(limit);
+
+      res.json({
+        success: true,
+        data: services,
+      });
+    } catch (err) {
+      console.error(err);
+
+      res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  // ============================================Value added===================================================
+  async getValueAddedServices(req, res) {
+    try {
+      const { serviceId } = req.params;
+
+      if (!serviceId) {
+        return res.status(400).json({
+          success: false,
+          message: "Service ID required",
+        });
+      }
+
+      const services = await ServiceModel.getValueAddedServices(serviceId);
+
+      res.json({
+        success: true,
+        data: services,
+      });
+    } catch (err) {
+      console.error(err);
+
       res.status(500).json({
         success: false,
         message: err.message,

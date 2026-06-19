@@ -80,11 +80,12 @@ class WalletModel {
     const [[expiry]] = await db.execute(
       `SELECT 
         SUM(coins) AS expiring_coins,
-        MIN(DATE_ADD(created_at, INTERVAL 1 MONTH)) AS expiry_date
+        MIN(expiry_date) AS expiry_date
      FROM wallet_transactions
      WHERE user_id = ?
      AND transaction_type = 'credit'
-     AND DATE_ADD(created_at, INTERVAL 1 MONTH) > NOW()`,
+     AND expiry_date IS NOT NULL
+     AND expiry_date > NOW()`,
       [userId],
     );
 
@@ -104,7 +105,7 @@ class WalletModel {
     } else if (type === "debit") {
       condition = "AND transaction_type = 'debit'";
     } else if (type === "expired") {
-      condition = "AND DATE_ADD(created_at, INTERVAL 1 MONTH) < NOW()";
+      condition = "AND expiry_date IS NOT NULL AND expiry_date < NOW()";
     }
 
     const pageNum = Math.max(1, parseInt(page) || 1);
@@ -120,9 +121,9 @@ class WalletModel {
       coins,
       category,
       created_at,
-      DATE_ADD(created_at, INTERVAL 1 MONTH) AS expiry_date,
+      expiry_date,
       CASE 
-        WHEN DATE_ADD(created_at, INTERVAL 1 MONTH) < NOW() 
+        WHEN expiry_date IS NOT NULL AND expiry_date < NOW()
         THEN 1 ELSE 0 
       END AS is_expired
      FROM wallet_transactions

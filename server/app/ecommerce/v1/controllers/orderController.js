@@ -10,6 +10,14 @@ const archiver = require("archiver");
 const {
   enqueueWhatsApp,
 } = require("../../../../services/whatsapp/waEnqueueService");
+const { runNonBlocking } = require("../../../../utils/nonBlocking");
+const { notifyUser } = require("../../../common/utils/notification");
+
+function positiveInt(value, fallback, max = 100) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(parsed, max);
+}
 
 //Helper function For invoice
 function escapeHTML(str = "") {
@@ -114,7 +122,7 @@ function amountToWords(amount) {
   return words + " Only";
 }
 const template = fs.readFileSync(
-  path.join(__dirname, "../../../../templates/invoice2.html"),
+  path.join(__dirname, "../../../../templates/invoice.html"),
   "utf8",
 );
 
@@ -274,8 +282,8 @@ class OrderController {
         });
       }
 
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
+      const page = positiveInt(req.query.page, 1, 10000);
+      const limit = positiveInt(req.query.limit, 10, 50);
 
       const search = req.query.search?.trim() || null;
 
@@ -377,8 +385,8 @@ class OrderController {
       const search = req.query.search?.trim() || null;
       const sort = req.query.sort || "recent";
 
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 20;
+      const page = positiveInt(req.query.page, 1, 10000);
+      const limit = positiveInt(req.query.limit, 20, 50);
 
       const data = await OrderModel.getBuyAgainProducts({
         userId,
@@ -418,29 +426,29 @@ class OrderController {
 
   // Cancellation Request
   async requestOrderCancellation(req, res) {
+    const userId = req.user?.user_id;
+    // const userId = 1;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized user",
+      });
+    }
+
+    const orderId = Number(req.params.orderId);
+    const { reason_id, comment } = req.body;
+
+    if (!reason_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Cancellation reason is required",
+      });
+    }
+
     const conn = await db.getConnection();
     try {
       await conn.beginTransaction();
-
-      const userId = req.user.user_id;
-      // const userId = 1;
-
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: "Unauthorized user",
-        });
-      }
-
-      const orderId = Number(req.params.orderId);
-      const { reason_id, comment } = req.body;
-
-      if (!reason_id) {
-        return res.status(400).json({
-          success: false,
-          message: "Cancellation reason is required",
-        });
-      }
 
       // 1 Check order ownership & status
       const [[order]] = await conn.execute(
@@ -453,6 +461,7 @@ class OrderController {
       );
 
       if (!order) {
+        await conn.rollback();
         return res.status(404).json({
           success: false,
           message: "Order not found",
@@ -460,6 +469,7 @@ class OrderController {
       }
 
       if (order.cancellation_status !== "none") {
+        await conn.rollback();
         return res.status(400).json({
           success: false,
           message: "Cancellation already requested",
@@ -467,6 +477,7 @@ class OrderController {
       }
 
       if (["shipped", "delivered"].includes(order.status)) {
+        await conn.rollback();
         return res.status(400).json({
           success: false,
           message: "Order cannot be cancelled at this stage",
@@ -504,18 +515,24 @@ class OrderController {
 
       await conn.commit();
 
-      // await NotificationModel.create({
-      //   userId,
-      //   type: "order",
-      //   title: "Order Cancelled ❌📦",
-      //   message: "Your order was cancelled as requested.",
-      //   reference_type: "order",
-      //   reference_id: orderId,
-      // });
+      notifyUser(
+        {
+          userId,
+          module: "ecommerce",
+          type: "order_cancellation_requested",
+          title: "Cancellation requested",
+          message: "Your order cancellation request has been submitted.",
+          icon: "x-circle",
+          reference_type: "order",
+          reference_id: orderId,
+          action_url: `/orders/order-details/${orderId}`,
+        },
+        "order cancellation notification",
+      );
 
-      //  Send WhatsApp
-      sendOrderPlacedWhatsApp(orderId).catch((err) =>
-        console.error("WA failed:", err),
+      runNonBlocking(
+        () => sendOrderPlacedWhatsApp(orderId),
+        "order cancellation WhatsApp",
       );
 
       return res.json({
@@ -537,8 +554,15 @@ class OrderController {
   // Cancellation Details
   async cancellationDetails(req, res) {
     try {
-      // const userId = req.user.user_id;
-      const userId = 1;
+      const userId = req.user.user_id;
+      // const userId = 1;
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
       const orderId = Number(req.params.orderId);
 
       const data = await OrderModel.getCancellationDetails({
@@ -564,8 +588,8 @@ class OrderController {
   async getInvoice(req, res) {
     try {
       const { orderId } = req.params;
-      // const userId = req.user?.user_id;
-      const userId = 1;
+      const userId = req.user?.user_id;
+      // const userId = 1;
 
       if (!userId) {
         return res.status(401).json({

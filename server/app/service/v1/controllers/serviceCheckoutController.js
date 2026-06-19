@@ -55,6 +55,8 @@ function calculateSummary({ bundles = [], individual_items = [] }) {
 class ServiceCheckoutController {
   // checkout from cart
   async addToCheckout(req, res) {
+    let conn;
+
     try {
       const userId = req.user?.user_id;
       const addressId = req.body?.address_id;
@@ -88,6 +90,9 @@ class ServiceCheckoutController {
       const createdOrders = [];
       const parentOrderId = crypto.randomUUID();
 
+      conn = await db.getConnection();
+      await conn.beginTransaction();
+
       //  1. Handle individual items
       for (let item of individual_items) {
         const order = await ServiceOrderModel.create({
@@ -100,7 +105,7 @@ class ServiceCheckoutController {
           parent_order_id: parentOrderId,
           bundle_id: null,
           status: "pending_payment",
-        });
+        }, conn);
 
         createdOrders.push(order);
       }
@@ -110,6 +115,7 @@ class ServiceCheckoutController {
         for (let item of bundle.items) {
           const order = await ServiceOrderModel.create({
             user_id: userId,
+            addressId,
             service_id: item.service_id,
             variant_id: item.variant_id,
             enquiry_id: null,
@@ -117,14 +123,16 @@ class ServiceCheckoutController {
             parent_order_id: parentOrderId,
             bundle_id: bundle.bundle_id,
             status: "pending_payment",
-          });
+          }, conn);
 
           createdOrders.push(order);
         }
       }
 
       //3. clear cart
-      await CartModel.clearCart(cart.id);
+      await CartModel.clearCart(cart.id, conn);
+
+      await conn.commit();
 
       res.json({
         success: true,
@@ -135,73 +143,27 @@ class ServiceCheckoutController {
         },
       });
     } catch (err) {
+      if (conn) {
+        await conn.rollback();
+      }
+
       console.log(err);
       res.status(500).json({
         success: false,
         message: err.message,
       });
+    } finally {
+      if (conn) {
+        conn.release();
+      }
     }
   }
-
-  // Bundle checkout
-  // async bundleCheckout(req, res) {
-  //   try {
-  //     const userId = req.user?.user_id;
-
-  //     if (!userId) {
-  //       return res.status(401).json({
-  //         success: false,
-  //         message: "Unauthorized user",
-  //       });
-  //     }
-
-  //     const { bundle_id, selected_items } = req.body;
-
-  //     const parentOrderId = crypto.randomUUID();
-  //     const createdOrders = [];
-
-  //     // fetch bundle items
-  //     const [items] = await db.execute(
-  //       `SELECT * FROM service_bundle_items WHERE bundle_id = ?`,
-  //       [bundle_id],
-  //     );
-
-  //     for (let item of items) {
-  //       // if custom → check selected
-  //       if (item.is_required === 0 && !selected_items.includes(item.id)) {
-  //         continue;
-  //       }
-
-  //       const order = await ServiceOrderModel.create({
-  //         user_id: userId,
-  //         service_id: item.service_id,
-  //         variant_id: item.variant_id,
-  //         enquiry_id: null,
-  //         price: item.price,
-  //         parent_order_id: parentOrderId,
-  //         status: "pending_payment",
-  //       });
-
-  //       createdOrders.push(order);
-  //     }
-
-  //     res.json({
-  //       success: true,
-  //       message: "Orders created successfully",
-  //       data: {
-  //         parent_order_id: parentOrderId,
-  //         orders: createdOrders,
-  //       },
-  //     });
-  //   } catch (err) {
-  //     res.status(500).json({ success: false, message: err.message });
-  //   }
-  // }
 
   // buy now
   async buyNow(req, res) {
     try {
       const userId = req.user?.user_id;
+      // const userId=1;
 
       if (!userId) {
         return res.status(401).json({
@@ -229,8 +191,8 @@ class ServiceCheckoutController {
 
       // get price from variant
       const [[variant]] = await db.execute(
-        `SELECT price FROM service_variants WHERE id = ?`,
-        [variant_id],
+        `SELECT price FROM service_variants WHERE id = ? AND service_id = ?`,
+        [variant_id, service_id],
       );
 
       if (!variant) {
@@ -273,6 +235,8 @@ class ServiceCheckoutController {
 
   // buy now bundle
   async buyNowBundle(req, res) {
+    let conn;
+
     try {
       const userId = req.user?.user_id;
 
@@ -324,6 +288,7 @@ class ServiceCheckoutController {
           sv.price AS individual_price
         FROM service_bundle_items bi
         JOIN service_variants sv ON sv.id = bi.variant_id
+          AND sv.service_id = bi.service_id
         WHERE bi.bundle_id = ?`,
         [bundle_id],
       );
@@ -367,6 +332,9 @@ class ServiceCheckoutController {
 
       const createdOrders = [];
 
+      conn = await db.getConnection();
+      await conn.beginTransaction();
+
       // 7 create orders
       for (let item of items) {
         // apply selection logic
@@ -396,10 +364,12 @@ class ServiceCheckoutController {
           parent_order_id: parentOrderId,
           bundle_id: bundle_id,
           status: "pending_payment",
-        });
+        }, conn);
 
         createdOrders.push(order);
       }
+
+      await conn.commit();
 
       res.json({
         success: true,
@@ -411,10 +381,18 @@ class ServiceCheckoutController {
         },
       });
     } catch (err) {
+      if (conn) {
+        await conn.rollback();
+      }
+
       res.status(500).json({
         success: false,
         message: err.message,
       });
+    } finally {
+      if (conn) {
+        conn.release();
+      }
     }
   }
 
@@ -479,7 +457,7 @@ class ServiceCheckoutController {
         });
       }
 
-      const [[variant]] = await db.execute(
+      const [rows] = await db.execute(
         `
       SELECT 
         sv.id,
@@ -487,31 +465,63 @@ class ServiceCheckoutController {
         sv.variant_name,
         sv.title,
         sv.image_url,
-        s.name AS service_name
+
+        s.name AS service_name,
+
+        sd.id AS document_id,
+        sd.document_name,
+        sd.is_mandatory
+
       FROM service_variants sv
       JOIN services s ON s.id = sv.service_id
-      WHERE sv.id = ?
+      LEFT JOIN service_documents sd ON sd.service_id = s.id
+
+      WHERE sv.id = ? AND sv.service_id = ?
       `,
-        [variant_id],
+        [variant_id, service_id],
       );
 
-      if (!variant) {
+      if (!rows.length) {
         return res.status(404).json({
           success: false,
           message: "Variant not found",
         });
       }
 
+      // base variant data
+      const firstRow = rows[0];
+
+      const documents = [];
+
+      rows.forEach((row) => {
+        if (row.document_id) {
+          const exists = documents.find((d) => d.id === row.document_id);
+
+          if (!exists) {
+            documents.push({
+              id: row.document_id,
+              document_name: row.document_name,
+              is_mandatory: row.is_mandatory,
+            });
+          }
+        }
+      });
+
       const items = [
         {
           service_id,
           variant_id,
-          service_name: variant.service_name,
-          variant_name: variant.variant_name,
-          image_url: getPublicUrl(variant.image_url),
-          title: variant.title,
-          price: parseFloat(variant.price),
+
+          service_name: firstRow.service_name,
+          variant_name: firstRow.variant_name,
+
+          image_url: getPublicUrl(firstRow.image_url),
+          title: firstRow.title,
+
+          price: parseFloat(firstRow.price),
           quantity: 1,
+
+          documents, // added here
         },
       ];
 
@@ -530,6 +540,7 @@ class ServiceCheckoutController {
       });
     } catch (err) {
       console.log(err);
+
       res.status(500).json({
         success: false,
         message: err.message,
@@ -580,6 +591,7 @@ class ServiceCheckoutController {
         FROM service_bundle_items bi
         JOIN services s ON s.id = bi.service_id
         JOIN service_variants sv ON sv.id = bi.variant_id
+          AND sv.service_id = bi.service_id
 
         WHERE bi.bundle_id = ?
         ORDER BY bi.sort_order`,

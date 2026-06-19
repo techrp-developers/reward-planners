@@ -1,7 +1,6 @@
 const db = require("../../../../config/database");
 const xpressService = require("../../../../services/ExpressBees/xpressbees_service");
 
-// Helper function
 const classifyService = (name) => {
   const lower = name.toLowerCase();
   if (lower.includes("air")) return "express";
@@ -21,9 +20,6 @@ const statusLabelMap = {
   pending: "Preparing Shipment",
 };
 
-// ==========================
-// STEP CONFIG
-// ==========================
 const TRACKING_STEPS = [
   { key: "processing", label: "Processing" },
   { key: "shipped", label: "Shipped" },
@@ -31,35 +27,23 @@ const TRACKING_STEPS = [
   { key: "delivered", label: "Delivered" },
 ];
 
-// ==========================
-// STATUS → STEP INDEX
-// ==========================
 function mapStatusToStep(status) {
   if (["pending", "booking_in_progress", "booked"].includes(status)) return 0;
   if (["picked_up", "in_transit"].includes(status)) return 1;
   if (status === "out_for_delivery") return 2;
   if (status === "delivered") return 3;
-
-  // For special cases fallback
   if (["ndr", "rto", "cancelled"].includes(status)) return 1;
-
   return 0;
 }
 
-// ==========================
-// SPECIAL STATE HANDLER
-// ==========================
 function getSpecialState(status, reason = null) {
   if (status === "ndr") {
     return {
       type: "ndr",
-      message:
-        reason ||
-        "Delivery attempt failed. Please confirm availability or update address.",
+      message: reason || "Delivery attempt failed. Please confirm availability or update address.",
       action_required: true,
     };
   }
-
   if (status === "rto") {
     return {
       type: "rto",
@@ -67,7 +51,6 @@ function getSpecialState(status, reason = null) {
       action_required: false,
     };
   }
-
   if (status === "cancelled") {
     return {
       type: "cancelled",
@@ -75,7 +58,6 @@ function getSpecialState(status, reason = null) {
       action_required: false,
     };
   }
-
   if (status === "booking_failed") {
     return {
       type: "booking_failed",
@@ -83,22 +65,20 @@ function getSpecialState(status, reason = null) {
       action_required: false,
     };
   }
-
   return null;
 }
 
 class LogisticsController {
-  // check serviceAbility
+
+  // ==========================
+  // CHECK SERVICEABILITY
+  // ==========================
   async checkServiceAbility(req, res) {
     try {
       const userId = req.user?.user_id;
-      // const userId = 1;
 
       if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: "Unauthorized user",
-        });
+        return res.status(401).json({ success: false, message: "Unauthorized" });
       }
 
       const {
@@ -110,7 +90,24 @@ class LogisticsController {
       } = req.body;
 
       if (!pincode) {
-        return res.json({ success: false, message: "Pincode required" });
+        return res.status(400).json({ success: false, message: "Pincode required" });
+      }
+
+      // ==========================
+      // INPUT VALIDATION
+      // ==========================
+      const parsedQuantity = parseInt(quantity);
+
+      if (isNaN(parsedQuantity) || parsedQuantity < 1) {
+        return res.status(400).json({ success: false, message: "Invalid quantity" });
+      }
+
+      if (!["buy_now", "cart"].includes(mode)) {
+        return res.status(400).json({ success: false, message: "Invalid mode" });
+      }
+
+      if (mode === "buy_now" && !variantId) {
+        return res.status(400).json({ success: false, message: "variantId required" });
       }
 
       let vendorGroups = {};
@@ -119,36 +116,26 @@ class LogisticsController {
       // BUY NOW MODE
       // =============================
       if (mode === "buy_now") {
-        if (!variantId) {
-          return res.json({ success: false, message: "variantId required" });
-        }
-
         const [[variant]] = await db.execute(
-          `
-        SELECT 
-          v.weight,
-          v.length,
-          v.breadth,
-          v.height,
-          v.sale_price,
-          p.vendor_id
-        FROM product_variants v
-        JOIN eproducts p ON v.product_id = p.product_id
-        WHERE v.variant_id = ?
-        `,
-          [variantId],
+          `SELECT 
+             v.weight, v.length, v.breadth, v.height, v.sale_price,
+             p.vendor_id
+           FROM product_variants v
+           JOIN eproducts p ON v.product_id = p.product_id
+           WHERE v.variant_id = ?`,
+          [variantId]
         );
 
         if (!variant) {
-          return res.json({ success: false, message: "Variant not found" });
+          return res.status(404).json({ success: false, message: "Variant not found" });
         }
 
         vendorGroups[variant.vendor_id] = {
-          totalWeightKg: quantity * Number(variant.weight),
-          totalAmount: quantity * Number(variant.sale_price),
+          totalWeightKg: parsedQuantity * Number(variant.weight),
+          totalAmount: parsedQuantity * Number(variant.sale_price),
           length: variant.length,
           breadth: variant.breadth,
-          height: quantity * variant.height,
+          height: parsedQuantity * variant.height,
         };
       }
 
@@ -157,25 +144,18 @@ class LogisticsController {
       // =============================
       if (mode === "cart") {
         const [rows] = await db.execute(
-          `
-        SELECT 
-          ci.quantity,
-          v.weight,
-          v.length,
-          v.breadth,
-          v.height,
-          v.sale_price,
-          p.vendor_id
-        FROM cart_items ci
-        JOIN product_variants v ON ci.variant_id = v.variant_id
-        JOIN eproducts p ON v.product_id = p.product_id
-        WHERE ci.user_id = ?
-        `,
-          [userId],
+          `SELECT 
+             ci.quantity, v.weight, v.length, v.breadth, v.height,
+             v.sale_price, p.vendor_id
+           FROM cart_items ci
+           JOIN product_variants v ON ci.variant_id = v.variant_id
+           JOIN eproducts p ON v.product_id = p.product_id
+           WHERE ci.user_id = ?`,
+          [userId]
         );
 
         if (!rows.length) {
-          return res.json({ success: false, message: "Cart empty" });
+          return res.status(400).json({ success: false, message: "Cart is empty" });
         }
 
         for (const row of rows) {
@@ -190,7 +170,6 @@ class LogisticsController {
           }
 
           const group = vendorGroups[row.vendor_id];
-
           group.totalWeightKg += row.quantity * Number(row.weight);
           group.totalAmount += row.quantity * Number(row.sale_price);
           group.length = Math.max(group.length, Number(row.length));
@@ -202,20 +181,16 @@ class LogisticsController {
       // =============================
       // CALL COURIER FOR EACH VENDOR
       // =============================
-      let finalOptions = [];
+      const finalOptions = [];
 
       for (const vendorId in vendorGroups) {
         const group = vendorGroups[vendorId];
 
         const [[vendorAddress]] = await db.execute(
-          `
-        SELECT pincode
-        FROM vendor_addresses
-        WHERE vendor_id = ?
-          AND type = 'shipping'
-        LIMIT 1
-        `,
-          [vendorId],
+          `SELECT pincode FROM vendor_addresses
+           WHERE vendor_id = ? AND type = 'shipping'
+           LIMIT 1`,
+          [vendorId]
         );
 
         if (!vendorAddress) continue;
@@ -236,7 +211,7 @@ class LogisticsController {
         if (!serviceResponse.status || !serviceResponse.data.length) continue;
 
         const sorted = serviceResponse.data.sort(
-          (a, b) => a.total_charges - b.total_charges,
+          (a, b) => a.total_charges - b.total_charges
         );
 
         finalOptions.push({
@@ -249,9 +224,7 @@ class LogisticsController {
             chargeable_weight: o.chargeable_weight,
             transit_days: o.transit_days || null,
             estimated_delivery_date: o.transit_days
-              ? new Date(
-                  Date.now() + o.transit_days * 24 * 60 * 60 * 1000,
-                ).toISOString()
+              ? new Date(Date.now() + o.transit_days * 24 * 60 * 60 * 1000).toISOString()
               : null,
           })),
         });
@@ -263,45 +236,43 @@ class LogisticsController {
         vendors: finalOptions,
       });
     } catch (err) {
-      console.error("Serviceability Error:", err.message);
-      return res.json({
-        success: false,
-        message: "Serviceability check failed",
-      });
+      console.error("[checkServiceAbility]", err.message);
+      return res.status(500).json({ success: false, message: "Serviceability check failed" });
     }
   }
 
-  // Track Order status
+  // ==========================
+  // TRACK ORDER
+  // ==========================
   async getTracking(req, res) {
     try {
       const userId = req.user?.user_id;
 
       if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: "Unauthorized user",
-        });
+        return res.status(401).json({ success: false, message: "Unauthorized" });
       }
 
-      const { orderId } = req.params;
+      // ==========================
+      // INPUT VALIDATION
+      // ==========================
+      const orderId = parseInt(req.params.orderId);
+
+      if (!orderId || isNaN(orderId)) {
+        return res.status(400).json({ success: false, message: "Invalid order ID" });
+      }
 
       // ==========================
-      // VALIDATE ORDER
+      // OWNERSHIP CHECK
       // ==========================
-      const [orders] = await db.query(
-        `SELECT order_id
-       FROM eorders
-       WHERE order_id = ?
-         AND user_id = ?
-       LIMIT 1`,
-        [orderId, userId],
+      const [[order]] = await db.query(
+        `SELECT order_id FROM eorders
+         WHERE order_id = ? AND user_id = ?
+         LIMIT 1`,
+        [orderId, userId]
       );
 
-      if (!orders.length) {
-        return res.status(404).json({
-          success: false,
-          message: "Order not found",
-        });
+      if (!order) {
+        return res.status(404).json({ success: false, message: "Order not found" });
       }
 
       // ==========================
@@ -309,67 +280,43 @@ class LogisticsController {
       // ==========================
       const [shipments] = await db.query(
         `SELECT
-        id,
-        vendor_id,
-        courier_name,
-        awb_number,
-        shipping_status,
-        ndr_reason,
-
-        booked_at,
-        picked_up_at,
-        in_transit_at,
-        out_for_delivery_at,
-        delivered_at,
-
-        expected_delivery_date
-      FROM order_shipments
-      WHERE order_id = ?`,
-        [orderId],
+           id, vendor_id, courier_name, awb_number, shipping_status, ndr_reason,
+           booked_at, picked_up_at, in_transit_at, out_for_delivery_at, delivered_at,
+           expected_delivery_date
+         FROM order_shipments
+         WHERE order_id = ?`,
+        [orderId]
       );
 
       const formattedShipments = shipments.map((s) => {
         const currentStep = mapStatusToStep(s.shipping_status);
 
-        // ==========================
-        // BUILD STEPS
-        // ==========================
         const steps = TRACKING_STEPS.map((step, index) => ({
           ...step,
           completed: index < currentStep,
           current: index === currentStep,
         }));
 
-        // ==========================
-        // TIMELINE
-        // ==========================
         const timeline = [
           { label: "Order Processed", time: s.booked_at },
           { label: "Picked Up", time: s.picked_up_at },
           { label: "In Transit", time: s.in_transit_at },
           { label: "Out for Delivery", time: s.out_for_delivery_at },
           { label: "Delivered", time: s.delivered_at },
-        ];
+        ].filter((t) => t.time !== null); // only include events that have happened
 
-        // ==========================
-        // SPECIAL STATE
-        // ==========================
         const specialState = getSpecialState(s.shipping_status, s.ndr_reason);
 
         return {
           shipment_id: s.id,
           courier: s.courier_name,
           awb: s.awb_number,
-
           status: s.shipping_status,
           status_label: statusLabelMap[s.shipping_status] || s.shipping_status,
-
           current_step: currentStep,
           steps,
           timeline,
-
           expected_delivery_date: s.expected_delivery_date,
-
           special_state: specialState,
         };
       });
@@ -380,58 +327,77 @@ class LogisticsController {
         shipments: formattedShipments,
       });
     } catch (err) {
-      console.error("Tracking API error:", err);
-
-      return res.status(500).json({
-        success: false,
-        message: "Tracking fetch failed",
-      });
+      console.error("[getTracking]", err.message);
+      return res.status(500).json({ success: false, message: "Tracking fetch failed" });
     }
   }
 
-  // Shipment cancellation
+  // ==========================
+  // CANCEL SHIPMENT
+  // ==========================
   async cancelShipmentHandler(req, res) {
     try {
-      // const userId = req.user?.user_id;
-      const userId = 1;
+      const userId = req.user?.user_id;
 
-      // if (!userId) {
-      //   return res.status(401).json({
-      //     success: false,
-      //     message: "Unauthorized user",
-      //   });
-      // }
-
-      const { shipmentId } = req.params;
-
-      // Authorization check
-      const [rows] = await db.query(
-        `SELECT os.order_id, o.user_id
-       FROM order_shipments os
-       JOIN eorders o ON os.order_id = o.order_id
-       WHERE os.id = ?
-         AND o.user_id = ?
-       LIMIT 1`,
-        [shipmentId, userId],
-      );
-
-      if (!rows.length) {
-        return res.status(404).json({ message: "Shipment not found" });
+      if (!userId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
       }
 
-      const { order_id } = rows[0];
+      // ==========================
+      // INPUT VALIDATION
+      // ==========================
+      const shipmentId = parseInt(req.params.shipmentId);
 
-      // Cancel
-      await xpressService.cancelShipment(shipmentId);
+      if (!shipmentId || isNaN(shipmentId)) {
+        return res.status(400).json({ success: false, message: "Invalid shipment ID" });
+      }
+
+      // ==========================
+      // OWNERSHIP CHECK
+      // ==========================
+      const [[shipmentOwner]] = await db.query(
+        `SELECT os.id
+         FROM order_shipments os
+         JOIN eorders o ON os.order_id = o.order_id
+         WHERE os.id = ? AND o.user_id = ?
+         LIMIT 1`,
+        [shipmentId, userId]
+      );
+
+      if (!shipmentOwner) {
+        // 404 not 403 — don't reveal the shipment exists to unauthorized users
+        return res.status(404).json({ success: false, message: "Shipment not found" });
+      }
+
+      // ==========================
+      // DELEGATE TO SERVICE
+      // ==========================
+      const orderId = await xpressService.cancelShipment(shipmentId);
 
       return res.json({
         success: true,
         message: "Shipment cancelled successfully",
-        order_id,
+        order_id: orderId,
       });
     } catch (err) {
-      console.error("Cancel shipment error:", err);
-      return res.status(400).json({ success: false, message: err.message });
+      console.error("[cancelShipmentHandler]", err.message);
+
+      // ==========================
+      // MAP KNOWN ERRORS — don't leak internal messages
+      // ==========================
+      if (err.message === "Shipment not found") {
+        return res.status(404).json({ success: false, message: "Shipment not found" });
+      }
+
+      if (err.message === "Cancellation not allowed at current shipment stage") {
+        return res.status(400).json({ success: false, message: err.message });
+      }
+
+      if (err.message === "Courier cancel failed") {
+        return res.status(502).json({ success: false, message: "Courier cancellation failed. Please try again." });
+      }
+
+      return res.status(500).json({ success: false, message: "Failed to cancel shipment" });
     }
   }
 }

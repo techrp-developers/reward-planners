@@ -1,24 +1,50 @@
 const db = require("../../../config/database");
+const bcrypt = require("bcryptjs");
 const fs = require("fs");
 const path = require("path");
-const crypto = require("crypto");
+
+// helper function
+const CDN_BASE_URL = "https://cdn.rewardplanners.com";
+function getPublicUrl(path) {
+  if (!path) return null;
+  return `${CDN_BASE_URL}/${path}`;
+}
 
 class authModel {
   /* ======================================================
      BASIC USER QUERIES
   ====================================================== */
+  // async findByEmail(email) {
+  //   const [rows] = await db.execute(
+  //     `SELECT
+  //       user_id,
+  //       name,
+  //       email,
+  //       password,
+  //       status,
+  //       is_verified,
+  //       // COALESCE(token_version, 0) AS token_version,
+  //       device_id,
+  //       device_name
+  //    FROM customer
+  //    WHERE email = ?`,
+  //     [email],
+  //   );
+
+  //   return rows[0];
+  // }
+
   async findByEmail(email) {
     const [rows] = await db.execute(
       `SELECT 
-       user_id,
-       name,
-       email,
-       password,
-       status,
-       is_verified,
-       token_version,
-       device_id,
-       device_name
+        user_id,
+        name,
+        email,
+        password,
+        status,
+        is_verified,
+        device_id,
+        device_name
      FROM customer
      WHERE email = ?`,
       [email],
@@ -37,9 +63,32 @@ class authModel {
     return rows[0];
   }
 
+  // async findById(userId) {
+  //   const [rows] = await db.execute(
+  //     ` SELECT
+  //       user_id,
+  //       name,
+  //       email,
+  //       status,
+  //       is_verified,
+  //       COALESCE(token_version, 0) AS token_version,
+  //       last_login_at
+  //      FROM customer
+  //      WHERE user_id = ?`,
+  //     [userId],
+  //   );
+  //   return rows[0];
+  // }
+
   async findById(userId) {
     const [rows] = await db.execute(
-      `SELECT user_id, name, email, status, is_verified, token_version,last_login_at
+      ` SELECT
+        user_id,
+        name,
+        email,
+        status,
+        is_verified,
+        last_login_at
        FROM customer
        WHERE user_id = ?`,
       [userId],
@@ -60,7 +109,7 @@ class authModel {
         email,
         contact AS phone
      FROM company_users
-     WHERE email = ?
+     WHERE email = ? AND status = 1
      LIMIT 1`,
       [email.toLowerCase()],
     );
@@ -78,6 +127,35 @@ class authModel {
       [email.toLowerCase(), otp, expiry],
     );
   }
+
+  async deleteOTPByEmail(email) {
+    await db.execute(`DELETE FROM email_otps WHERE email = ?`, [
+      email.toLowerCase(),
+    ]);
+  }
+
+  // async verifyOTP(email, otp) {
+  //   const [rows] = await db.execute(
+  //     `SELECT id, otp, attempt_count
+  //    FROM email_otps
+  //    WHERE email = ?
+  //    AND expiry > NOW()
+  //    ORDER BY id DESC
+  //    LIMIT 1`,
+  //     [email],
+  //   );
+
+  //   const otpRecord = rows[0];
+  //   if (!otpRecord) return null;
+
+  //   const isMatch = await bcrypt.compare(otp.toString(), otpRecord.otp);
+  //   if (!isMatch) return null;
+
+  //   return {
+  //     id: otpRecord.id,
+  //     attempt_count: otpRecord.attempt_count,
+  //   };
+  // }
 
   async verifyOTP(email, otp) {
     const [rows] = await db.execute(
@@ -124,24 +202,6 @@ class authModel {
      LIMIT 1`,
       [email],
     );
-  }
-
-  async saveVerifiedDevice(email, deviceName) {
-    const deviceId = crypto.randomUUID();
-
-    await db.execute(
-      `UPDATE customer
-     SET 
-       device_id = ?,
-       device_name = ?,
-       is_verified = 1,
-       updated_at = NOW()
-     WHERE email = ?
-     LIMIT 1`,
-      [deviceId, deviceName, email],
-    );
-
-    return deviceId;
   }
 
   async checkOTPVerified(email) {
@@ -194,53 +254,6 @@ class authModel {
     return result.insertId;
   }
 
-  /* ======================================================
-     EMAIL VERIFICATION
-  ====================================================== */
-
-  async findByVerificationToken() {
-    const [rows] = await db.execute(
-      `SELECT user_id, name, verification_token, verification_token_expiry
-       FROM customer
-       WHERE verification_token IS NOT NULL`,
-    );
-    return rows;
-  }
-
-  async markEmailVerified(userId) {
-    await db.execute(
-      `UPDATE customer
-       SET is_verified = 1,
-           verification_token = NULL,
-           verification_token_expiry = NULL
-       WHERE user_id = ?`,
-      [userId],
-    );
-  }
-
-  /* ======================================================
-     PASSWORD RESET
-  ====================================================== */
-
-  async saveResetToken(userId, hashedToken, expiryDate) {
-    await db.execute(
-      `UPDATE customer
-       SET reset_token = ?,
-           reset_token_expiry = ?
-       WHERE user_id = ?`,
-      [hashedToken, expiryDate, userId],
-    );
-  }
-
-  async findByResetToken() {
-    const [rows] = await db.execute(
-      `SELECT user_id, reset_token, reset_token_expiry
-       FROM customer
-       WHERE reset_token IS NOT NULL`,
-    );
-    return rows;
-  }
-
   async getUserPassword(conn, userId) {
     const [rows] = await conn.execute(
       `SELECT password FROM customer WHERE user_id = ?`,
@@ -250,39 +263,23 @@ class authModel {
     return rows[0];
   }
 
+  // async updatePassword(conn, userId, hashedPassword) {
+  //   await conn.execute(
+  //     `UPDATE customer
+  //      SET password = ?,
+  //          token_version = COALESCE(token_version, 0) + 1
+  //      WHERE user_id = ?`,
+  //     [hashedPassword, userId],
+  //   );
+  // }
+
   async updatePassword(conn, userId, hashedPassword) {
     await conn.execute(
       `UPDATE customer
-       SET password = ?,
-           reset_token = NULL,
-           reset_token_expiry = NULL
+       SET password = ?
        WHERE user_id = ?`,
       [hashedPassword, userId],
     );
-  }
-
-  async incrementTokenVersion(conn, userId) {
-    await conn.execute(
-      `UPDATE customer
-       SET token_version = token_version + 1
-       WHERE user_id = ?`,
-      [userId],
-    );
-  }
-  /* ======================================================
-     CHECK EXISTING DEVICE
-  ====================================================== */
-  async checkExistingDevice(userId, deviceInfo) {
-    const [rows] = await db.execute(
-      `SELECT id
-     FROM customer_refresh_tokens
-     WHERE user_id = ?
-     AND device_info = ?
-     LIMIT 1`,
-      [userId, deviceInfo],
-    );
-
-    return rows.length > 0;
   }
 
   /* ======================================================
@@ -299,39 +296,6 @@ class authModel {
     );
   }
 
-  /* ======================================================
-     REFRESH TOKEN MANAGEMENT
-  ====================================================== */
-
-  async storeRefreshToken(userId, token, expiresAt, deviceInfo, ipAddress) {
-    await db.execute(
-      `INSERT INTO customer_refresh_tokens
-       (user_id, token, expires_at, device_info, ip_address)
-       VALUES (?, ?, ?, ?, ?)`,
-      [userId, token, expiresAt, deviceInfo, ipAddress],
-    );
-  }
-
-  async findRefreshToken(userId, token) {
-    const [rows] = await db.execute(
-      `SELECT id
-       FROM customer_refresh_tokens
-       WHERE user_id = ?
-         AND token = ?
-         AND expires_at > NOW()`,
-      [userId, token],
-    );
-    return rows[0];
-  }
-
-  async deleteRefreshToken(userId, token) {
-    await db.execute(
-      `DELETE FROM customer_refresh_tokens
-       WHERE user_id = ? AND token = ?`,
-      [userId, token],
-    );
-  }
-
   async clearFcmToken(userId) {
     await db.execute(
       `UPDATE customer
@@ -341,40 +305,21 @@ class authModel {
     );
   }
 
+  // async incrementTokenVersion(userId) {
+  //   await db.execute(
+  //     `UPDATE customer
+  //      SET token_version = COALESCE(token_version, 0) + 1
+  //      WHERE user_id = ?`,
+  //     [userId],
+  //   );
+  // }
+
   async updateFcmToken(userId, fcmToken) {
     await db.execute(
       `UPDATE customer
      SET fcm_token = ?
      WHERE user_id = ?`,
       [fcmToken, userId],
-    );
-  }
-
-  async deleteAllUserRefreshTokens(conn, userId) {
-    await conn.execute(
-      `DELETE FROM customer_refresh_tokens
-       WHERE user_id = ?`,
-      [userId],
-    );
-  }
-
-  async cleanupExpiredRefreshTokens() {
-    await db.execute(
-      `DELETE FROM customer_refresh_tokens
-       WHERE expires_at <= NOW()`,
-    );
-  }
-
-  /* ======================================================
-    verification token management
-  ====================================================== */
-  async updateVerificationToken(userId, hashedToken, expiry) {
-    await db.execute(
-      `UPDATE customer
-     SET verification_token = ?,
-         verification_token_expiry = ?
-     WHERE user_id = ?`,
-      [hashedToken, expiry, userId],
     );
   }
 
@@ -387,8 +332,19 @@ class authModel {
       cu.name,
       cu.email,
       cu.phone,
+      cu.user_image,
+      cu.created_at,
 
       cw.balance AS reward_points,
+
+      comp.company_name,
+      comp.company_logo,
+
+      cu_emp.date_of_joining,
+      cu.company_id,
+      cu_emp.role,
+      cu_emp.dob,
+      cu_emp.department,
 
       ca.address_id,
       ca.address_type,
@@ -405,6 +361,12 @@ class authModel {
 
     LEFT JOIN customer_wallet cw
     ON cu.user_id = cw.user_id
+
+    LEFT JOIN companies comp
+    ON cu.company_id = comp.company_id
+
+    LEFT JOIN company_users cu_emp
+    ON cu.company_user_id = cu_emp.id
 
     LEFT JOIN customer_addresses ca
       ON cu.user_id = ca.user_id
@@ -432,8 +394,25 @@ class authModel {
       name: user.name,
       email: user.email,
       phone: user.phone,
-
+      userImage: user.user_image ? getPublicUrl(user.user_image) : null,
+      created_at: user.created_at,
       rewardPoints: user.reward_points ?? 0,
+
+      company: user.company_name
+        ? {
+            name: user.company_name,
+            logo: user.company_logo ? getPublicUrl(user.company_logo) : null,
+          }
+        : null,
+
+      employeeInfo: user.company_id
+        ? {
+            dateOfJoining: user.date_of_joining,
+            role: user.role,
+            date_of_birth: user.dob,
+            department: user.department,
+          }
+        : null,
 
       defaultAddress: user.address_id
         ? {
@@ -451,6 +430,50 @@ class authModel {
     };
   }
 
+  // Get employee birthday
+  async getTodayBirthdayEmployees(userId) {
+    const [rows] = await db.execute(
+      `
+    SELECT
+      cu_emp.id,
+      cu_emp.name,
+      cu_emp.email,
+      cu_emp.contact,
+      cu_emp.department,
+      cu_emp.role,
+      cu_emp.dob,
+      c.user_image
+    FROM customer c_logged
+
+    INNER JOIN company_users cu_logged
+      ON c_logged.company_user_id = cu_logged.id
+
+    INNER JOIN company_users cu_emp
+      ON cu_logged.company_id = cu_emp.company_id
+
+    LEFT JOIN customer c
+      ON c.company_user_id = cu_emp.id
+
+    WHERE c_logged.user_id = ?
+      AND MONTH(cu_emp.dob) = MONTH(CURDATE())
+      AND DAY(cu_emp.dob) = DAY(CURDATE())
+      AND cu_emp.status = 1
+    `,
+      [userId],
+    );
+
+    return rows.map((emp) => ({
+      employeeId: emp.id,
+      name: emp.name,
+      email: emp.email,
+      phone: emp.contact,
+      department: emp.department,
+      role: emp.role,
+      dob: emp.dob,
+      image: emp.user_image ? getPublicUrl(emp.user_image) : null,
+    }));
+  }
+
   // Delete Customer
   async deleteCustomerAccount(userId) {
     const connection = await db.getConnection();
@@ -461,8 +484,7 @@ class authModel {
       // Soft delete customer
       await connection.execute(
         `UPDATE customer
-       SET status = 0,
-           token_version = token_version + 1
+       SET status = 0
        WHERE user_id = ?`,
         [userId],
       );
@@ -489,12 +511,6 @@ class authModel {
         userId,
       ]);
 
-      // Remove refresh tokens
-      await connection.execute(
-        `DELETE FROM customer_refresh_tokens WHERE user_id = ?`,
-        [userId],
-      );
-
       await connection.commit();
     } catch (err) {
       await connection.rollback();
@@ -504,114 +520,25 @@ class authModel {
     }
   }
 
-  // sakshi edits
-
-  /* ======================================================
-   DEVICE CHANGE REQUEST MANAGEMENT
-====================================================== */
-
-  async createDeviceChangeRequest({
-    userId,
-    email,
-    oldDeviceId,
-    newDeviceId,
-    newDeviceName,
-    token,
-    ipAddress,
-    fcmToken,
-    userAgent,
-    expiresAt,
-  }) {
-    await db.execute(
-      `INSERT INTO customer_device_change_requests
-     (
-       user_id,
-       email,
-       old_device_id,
-       new_device_id,
-       new_device_name,
-       token,
-       ip_address,
-       fcm_token,
-       user_agent,
-       expires_at
-     )
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        userId,
-        email,
-        oldDeviceId,
-        newDeviceId,
-        newDeviceName,
-        token,
-        ipAddress,
-        fcmToken,
-        userAgent,
-        expiresAt,
-      ],
-    );
-  }
-
-  async getPendingDeviceRequest(token) {
-    const [rows] = await db.execute(
-      `SELECT *
-     FROM customer_device_change_requests
-     WHERE token = ?
-       AND status = 'pending'
-     LIMIT 1`,
-      [token],
+  // Get profile for update
+  async getProfile(conn, userId) {
+    const [rows] = await conn.execute(
+      `SELECT user_id, phone, user_image
+     FROM customer
+     WHERE user_id = ?`,
+      [userId],
     );
 
     return rows[0];
   }
 
-  async updateDeviceRequestStatus(token, status) {
-    await db.execute(
-      `UPDATE customer_device_change_requests
-     SET status = ?
-     WHERE token = ?
-     LIMIT 1`,
-      [status, token],
-    );
-  }
-
-  async updateCustomerDevice({
-    userId,
-    deviceId,
-    deviceName,
-    fcm_token,
-    ipAddress,
-  }) {
-    await db.execute(
+  // update profile
+  async updateProfile(conn, userId, data) {
+    await conn.execute(
       `UPDATE customer
-     SET 
-       device_id = ?,
-       device_name = ?,
-       is_verified = 1,
-       last_login_at = NOW(),
-       last_login_ip = ?,
-       fcm_token = ?,
-       updated_at = NOW()
-     WHERE user_id = ?
-     LIMIT 1`,
-      [deviceId, deviceName, ipAddress, fcm_token, userId],
-    );
-  }
-
-  async deleteUserRefreshTokensByUserId(userId) {
-    await db.execute(
-      `DELETE FROM customer_refresh_tokens
+     SET phone = ?, user_image = ?
      WHERE user_id = ?`,
-      [userId],
-    );
-  }
-  async deletePendingDeviceRequests(userId) {
-    await db.execute(
-      `UPDATE customer_device_change_requests
-     SET status = 'expired'
-     WHERE user_id = ?
-       AND status = 'pending'`,
-      [userId],
+      [data.phone, data.user_image, userId],
     );
   }
 }

@@ -3,6 +3,8 @@ const ServiceEnquiryModel = require("../models/serviceEnquiryModel");
 const {
   sendNewEnquiryEmail,
 } = require("../../../../services/mailBuilder/enquiryNotification");
+const { runNonBlocking } = require("../../../../utils/nonBlocking");
+const { notifyUser } = require("../../../common/utils/notification");
 
 class ServiceEnquiryController {
   // create user Enquiry
@@ -63,6 +65,22 @@ class ServiceEnquiryController {
         message: "Enquiry submitted successfully",
         data: result,
       });
+
+      notifyUser(
+        {
+          userId,
+          module: "service",
+          type: "service_enquiry_submitted",
+          title: "Enquiry submitted",
+          message: "Your service enquiry has been submitted. Our team will contact you soon.",
+          icon: "message-circle",
+          reference_type: "service_enquiry",
+          reference_id: result?.id || result?.insertId,
+          action_url: "/services/enquiries",
+          metadata: { service_id, bundle_id, variant_id },
+        },
+        "service enquiry notification",
+      );
     } catch (err) {
       res.status(500).json({ success: false, message: err.message });
     }
@@ -111,6 +129,51 @@ class ServiceEnquiryController {
     }
   }
 
+  // update Enquiry status
+  async updateEnquiryStatus(req, res) {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      const allowedStatuses = ["new", "contacted", "converted", "closed"];
+
+      if (!allowedStatuses.includes(status)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid status",
+        });
+      }
+
+      const [result] = await db.query(
+        `
+      UPDATE service_enquiries
+      SET status = ?
+      WHERE id = ?
+      `,
+        [status, id],
+      );
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Enquiry not found",
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: "Status updated successfully",
+      });
+    } catch (error) {
+      console.error("updateEnquiryStatus", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Something went wrong",
+      });
+    }
+  }
+
   // send enquiry notification
   async sendEnquiryNotification(req, res) {
     try {
@@ -124,12 +187,15 @@ class ServiceEnquiryController {
         });
       }
 
-      // send mail
-      await sendNewEnquiryEmail({ name, email, contact, subject, description });
+      runNonBlocking(
+        () =>
+          sendNewEnquiryEmail({ name, email, contact, subject, description }),
+        "service enquiry email",
+      );
 
       return res.status(200).json({
         success: true,
-        message: "Enquiry sent successfully",
+        message: "Enquiry submitted successfully",
       });
     } catch (error) {
       console.error("Enquiry Error:", error);

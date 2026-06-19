@@ -163,8 +163,8 @@ class ProductModel {
     const [result] = await connection.execute(
       `INSERT INTO eproducts 
      (vendor_id, category_id, subcategory_id, sub_subcategory_id, brand_name, manufacturer,product_name, gst_slab,hsn_sac_code,description, short_description,brand_description,
-      custom_category, custom_subcategory, custom_sub_subcategory,is_discount_eligible,is_returnable,return_window_days,delivery_sla_min_days,delivery_sla_max_days,shipping_class, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+      custom_category, custom_subcategory, custom_sub_subcategory,is_discount_eligible,is_returnable, is_replaceable,return_window_days,delivery_sla_min_days,delivery_sla_max_days,shipping_class, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
       [
         safe(vendorId),
         safe(data.category_id),
@@ -183,6 +183,7 @@ class ProductModel {
         custom_sub_subcategory,
         safe(data.is_discount_eligible),
         safe(data.is_returnable),
+        safe(data.is_replaceable),
         safe(data.return_window_days),
         safe(data.delivery_sla_min_days),
         safe(data.delivery_sla_max_days),
@@ -547,7 +548,6 @@ class ProductModel {
         v.variant_attributes,
         v.manufacturing_date,
         v.expiry_date,
-        v.reward_redemption_limit,
         v.created_at
       FROM product_variants v
       WHERE v.product_id = ?
@@ -598,6 +598,7 @@ class ProductModel {
       custom_sub_subcategory = ?,
       is_discount_eligible = ?,
       is_returnable = ?,
+      is_replaceable = ?, 
       return_window_days = ?,
       delivery_sla_min_days = ?,
       delivery_sla_max_days = ?,
@@ -620,6 +621,7 @@ class ProductModel {
         custom_sub_subcategory,
         safe(data.is_discount_eligible),
         safe(data.is_returnable),
+        safe(data.is_replaceable),
         safe(data.return_window_days),
         safe(data.delivery_sla_min_days),
         safe(data.delivery_sla_max_days),

@@ -706,17 +706,18 @@ class OrderModel {
   }
 
   async approveCancellation(orderId, conn) {
-    //  0 Validate Order
+    // ==========================
+    // 0. FETCH + LOCK ORDER
+    // ==========================
     const [[order]] = await conn.execute(
-      `
-      SELECT 
-      status, 
-      cancellation_status,
-      user_id,
-      reward_coins_used
-    FROM eorders
-    WHERE order_id = ?
-    `,
+      `SELECT
+       status,
+       cancellation_status,
+       user_id,
+       reward_coins_used
+     FROM eorders
+     WHERE order_id = ?
+     FOR UPDATE`,
       [orderId],
     );
 
@@ -730,318 +731,316 @@ class OrderModel {
       throw new Error("ORDER_ALREADY_CANCELLED");
     }
 
-    // 1 Get payment info
-    const [payments] = await conn.execute(
-      `
-     SELECT
-          payment_id,
-          razorpay_order_id,
-          razorpay_payment_id,
-          amount
-        FROM order_payments
-        WHERE order_id = ?
-        AND status = 'success'
-        LIMIT 1
-        FOR UPDATE
-    `,
+    // ==========================
+    // 1. GET PAYMENT INFO
+    // ==========================
+    const [[payment]] = await conn.execute(
+      `SELECT payment_id, razorpay_order_id, razorpay_payment_id, amount
+     FROM order_payments
+     WHERE order_id = ?
+       AND status = 'success'
+     LIMIT 1
+     FOR UPDATE`,
       [orderId],
     );
 
-    const payment = payments[0] || null;
-
-    // 2 Prevent duplicate refund
+    // ==========================
+    // 2. DUPLICATE REFUND CHECK
+    // Check order_refunds not order_payments
+    // ==========================
     if (payment) {
-      const [existingRefund] = await conn.execute(
-        `
-        SELECT payment_id
-        FROM order_payments
-        WHERE order_id = ?
-        AND status = 'refunded'
-        LIMIT 1
-        `,
+      const [[existingRefund]] = await conn.execute(
+        `SELECT refund_id FROM order_refunds
+       WHERE order_id = ?
+         AND refund_method = 'original'
+         AND status IN ('initiated', 'completed')
+       LIMIT 1`,
         [orderId],
       );
 
-      if (existingRefund.length) {
+      if (existingRefund) {
         throw new Error("REFUND_ALREADY_DONE");
       }
     }
 
-    // 3 Restore stock
-    const [items] = await conn.execute(
-      `
-    SELECT variant_id, quantity
-    FROM eorder_items
-    WHERE order_id = ?
-    `,
+    // ==========================
+    // 3. RESTORE STOCK — single JOIN query, no loop
+    // ==========================
+    await conn.execute(
+      `UPDATE product_variants pv
+     JOIN eorder_items oi ON pv.variant_id = oi.variant_id
+     SET pv.stock = pv.stock + oi.quantity
+     WHERE oi.order_id = ?`,
       [orderId],
     );
 
-    for (const item of items) {
-      await conn.execute(
-        `
-      UPDATE product_variants
-      SET stock = stock + ?
-      WHERE variant_id = ?
-      `,
-        [item.quantity, item.variant_id],
-      );
-    }
-
-    /* ===============================
-        3.5 REVERSE REWARD COINS
-      ================================ */
+    // ==========================
+    // 4. REVERSE REWARD COINS
+    // Check wallet_transactions for existing credit, not order_refunds
+    // ==========================
     if (order.reward_coins_used > 0) {
-      // prevent duplicate wallet refund
-      const [[walletRefundExists]] = await conn.execute(
-        `
-        SELECT 1 
-        FROM order_refunds
-        WHERE order_id = ? 
-          AND refund_method = 'wallet'
-        LIMIT 1
-        `,
+      const [[walletCreditExists]] = await conn.execute(
+        `SELECT 1
+       FROM wallet_transactions
+       WHERE reference_id = ?
+         AND transaction_type = 'credit'
+         AND reason_code = 'ADMIN_ADJUSTMENT'
+       LIMIT 1`,
         [orderId],
       );
 
-      if (!walletRefundExists) {
-        // 1. update wallet balance
+      if (!walletCreditExists) {
+        // Update wallet balance
         await conn.execute(
-          `
-            UPDATE customer_wallet
-            SET balance = balance + ?
-            WHERE user_id = ?
-          `,
+          `UPDATE customer_wallet
+         SET balance = balance + ?
+         WHERE user_id = ?`,
           [order.reward_coins_used, order.user_id],
         );
 
-        const EXPIRY_MONTHS = parseInt(
-          process.env.WALLET_EXPIRY_MONTHS || "3",
-          10,
-        );
-
         const expiryDate = new Date();
-        expiryDate.setMonth(expiryDate.getMonth() + EXPIRY_MONTHS);
-
-        // 2. wallet transaction entry
-        await conn.execute(
-          `
-          INSERT INTO wallet_transactions
-          (user_id, title, transaction_type, coins, category, reference_id, expiry_date)
-          VALUES (?, ?, 'credit', ?, 'refund', ?, ?)
-        `,
-          [
-            order.user_id,
-            "Coins refunded for cancelled order",
-            order.reward_coins_used,
-            orderId,
-            expiryDate,
-          ],
+        expiryDate.setMonth(
+          expiryDate.getMonth() +
+            parseInt(process.env.WALLET_EXPIRY_MONTHS || "3", 10),
         );
 
-        // 3. refund record (wallet)
+        // Wallet transaction log
         await conn.execute(
-          `
-          INSERT INTO order_refunds
-          (order_id, refund_amount, refund_method, status)
-          VALUES (?, ?, 'wallet', 'completed')
-          `,
+          `INSERT INTO wallet_transactions
+         (user_id, title, transaction_type, coins, category,
+          reference_id, expiry_date, reason_code)
+         VALUES (?, 'Coins refunded for cancelled order', 'credit', ?, 'order', ?, ?, 'ADMIN_ADJUSTMENT')`,
+          [order.user_id, order.reward_coins_used, orderId, expiryDate],
+        );
+
+        // Wallet refund record
+        await conn.execute(
+          `INSERT INTO order_refunds
+         (order_id, refund_amount, refund_method, status)
+         VALUES (?, ?, 'wallet', 'completed')`,
           [orderId, order.reward_coins_used],
         );
       }
     }
 
-    // 4 Cancel order
+    // ==========================
+    // 5. CANCEL ORDER
+    // ==========================
     await conn.execute(
-      `
-    UPDATE eorders
-    SET status = 'cancelled',
-        cancellation_status = 'approved'
-    WHERE order_id = ?
-    `,
+      `UPDATE eorders
+     SET status = 'cancelled',
+         cancellation_status = 'approved'
+     WHERE order_id = ?`,
       [orderId],
     );
 
-    // 5 Cancel vendor orders
+    // ==========================
+    // 6. UPDATE CANCELLATION REQUEST
+    // Was missing — request row stayed 'pending' after approval
+    // ==========================
     await conn.execute(
-      `
-    UPDATE vendor_orders
-    SET shipping_status = 'cancelled'
-    WHERE order_id = ?
-    `,
+      `UPDATE order_cancellation_requests
+     SET status = 'approved',
+         actioned_at = NOW()
+     WHERE order_id = ?`,
       [orderId],
     );
 
-    // 6. Cancel shipments
+    // ==========================
+    // 7. CANCEL VENDOR ORDERS
+    // ==========================
+    await conn.execute(
+      `UPDATE vendor_orders
+     SET shipping_status = 'cancelled'
+     WHERE order_id = ?`,
+      [orderId],
+    );
+
+    // ==========================
+    // 8. CANCEL SHIPMENTS IN DB
+    // Courier cancel happens AFTER commit (external API call)
+    // ==========================
+    await conn.execute(
+      `UPDATE order_shipments
+     SET shipping_status = 'cancelled',
+         cancelled_at = NOW()
+     WHERE order_id = ?`,
+      [orderId],
+    );
+
+    // ==========================
+    // 9. FETCH SHIPMENTS FOR COURIER CANCEL (after DB commit)
+    // Return AWBs so controller can cancel at courier post-commit
+    // ==========================
     const [shipments] = await conn.execute(
-      `
-      SELECT id, awb_number, shipping_status
-      FROM order_shipments
-      WHERE order_id = ?
-    `,
+      `SELECT id, awb_number, shipping_status
+     FROM order_shipments
+     WHERE order_id = ?
+       AND awb_number IS NOT NULL`,
       [orderId],
     );
 
-    for (const s of shipments) {
-      if (s.awb_number && ["booked", "picked_up"].includes(s.shipping_status)) {
-        try {
-          await xpressService.cancelShipmentExpressBees(s.awb_number);
-        } catch (e) {
-          console.error("Courier cancel failed", e);
-        }
-      }
-    }
+    const cancellableAwbs = shipments
+      .filter((s) => ["booked", "picked_up"].includes(s.shipping_status))
+      .map((s) => s.awb_number);
 
-    // 7 Cancel shipments
+    // ==========================
+    // 10. TIMELINE EVENT
+    // ==========================
     await conn.execute(
-      `
-    UPDATE order_shipments
-  SET shipping_status = 'cancelled',
-      cancelled_at = NOW()
-  WHERE order_id = ?
-    `,
+      `INSERT INTO order_cancellation_timeline (order_id, event)
+     VALUES (?, 'cancellation_confirmed')`,
       [orderId],
     );
 
-    // 8 Timeline event
-    await conn.execute(
-      `
-    INSERT INTO order_cancellation_timeline
-    (order_id, event)
-    VALUES (?, 'cancellation_confirmed')
-    `,
-      [orderId],
-    );
-
-    // 9 Create refund record
+    // ==========================
+    // 11. CREATE REFUND RECORD
+    // ==========================
     let refundId = null;
+
     if (payment) {
       const [result] = await conn.execute(
-        `
-      INSERT INTO order_refunds
-      (order_id, refund_amount, refund_method, status)
-      VALUES (?, ?, 'original', 'pending')
-      `,
+        `INSERT INTO order_refunds
+       (order_id, refund_amount, refund_method, status)
+       VALUES (?, ?, 'original', 'pending')`,
         [orderId, payment.amount],
       );
 
       refundId = result.insertId;
     }
 
-    return payment ? { ...payment, refundId } : null;
+    return payment
+      ? { ...payment, refundId, cancellableAwbs }
+      : { refundId: null, cancellableAwbs };
   }
 
   async rejectCancellation(orderId, conn) {
+    // ==========================
+    // LOCK ORDER FIRST
+    // ==========================
+    const [[order]] = await conn.execute(
+      `SELECT cancellation_status FROM eorders
+     WHERE order_id = ?
+     FOR UPDATE`,
+      [orderId],
+    );
+
+    if (!order) throw new Error("ORDER_NOT_FOUND");
+
+    if (order.cancellation_status !== "requested") {
+      throw new Error("INVALID_CANCELLATION_STATE");
+    }
+
     await conn.execute(
-      `
-    UPDATE eorders
-    SET cancellation_status = 'rejected'
-    WHERE order_id = ?
-    `,
+      `UPDATE eorders
+     SET cancellation_status = 'rejected'
+     WHERE order_id = ?`,
+      [orderId],
+    );
+
+    // ==========================
+    // UPDATE REQUEST ROW — was missing
+    // ==========================
+    await conn.execute(
+      `UPDATE order_cancellation_requests
+     SET status = 'rejected',
+         actioned_at = NOW()
+     WHERE order_id = ?`,
       [orderId],
     );
 
     await conn.execute(
-      `
-    INSERT INTO order_cancellation_timeline
-    (order_id, event)
-    VALUES (?, 'cancellation_rejected')
-    `,
+      `INSERT INTO order_cancellation_timeline (order_id, event)
+     VALUES (?, 'cancellation_rejected')`,
       [orderId],
     );
   }
 
   async processRefund(payment, orderId) {
     try {
-      // Idempotency check again
-      const [existing] = await db.execute(
-        `
-      SELECT refund_id
-      FROM order_refunds
-      WHERE order_id = ?
-      AND status = 'completed'
-      LIMIT 1
-      `,
+      // ==========================
+      // IDEMPOTENCY — check if razorpay_refund_id already set
+      // More reliable than checking status
+      // ==========================
+      const [[existing]] = await db.execute(
+        `SELECT refund_id FROM order_refunds
+       WHERE order_id = ?
+         AND refund_method = 'original'
+         AND razorpay_refund_id IS NOT NULL
+       LIMIT 1`,
         [orderId],
       );
 
-      if (existing.length) {
-        console.log("Refund already completed, skipping");
+      if (existing) {
+        console.log(
+          `[processRefund] Refund already completed for order ${orderId}, skipping`,
+        );
         return;
       }
 
-      //  Call Razorpay
+      // ==========================
+      // CALL RAZORPAY
+      // ==========================
       const refund = await razorpay.payments.refund(
         payment.razorpay_payment_id,
-        {
-          amount: Math.round(Number(payment.amount) * 100),
-        },
+        { amount: Math.round(Number(payment.amount) * 100) },
       );
 
-      //  Update refund table
+      // ==========================
+      // UPDATE order_refunds WITH REFUND ID
+      // ==========================
       await db.execute(
-        `
-      UPDATE order_refunds
-      SET status = 'completed'
-      WHERE order_id = ?
-      AND status = 'pending'
-      ORDER BY created_at DESC
-      LIMIT 1
-      `,
+        `UPDATE order_refunds
+       SET status = 'completed',
+           razorpay_refund_id = ?,
+           completed_at = NOW()
+       WHERE refund_id = ?`,
+        [refund.id, payment.refundId],
+      );
+
+      // ==========================
+      // UPDATE order_payments STATUS
+      // ==========================
+      await db.execute(
+        `UPDATE order_payments
+       SET status = 'refunded',
+           razorpay_refund_id = ?
+       WHERE order_id = ?
+         AND status = 'success'`,
+        [refund.id, orderId],
+      );
+
+      // ==========================
+      // TIMELINE
+      // ==========================
+      await db.execute(
+        `INSERT INTO order_cancellation_timeline (order_id, event)
+       VALUES (?, 'refund_completed')`,
         [orderId],
       );
 
-      // update payment status
-      await db.execute(
-        `
-      UPDATE order_payments
-      SET status = 'refunded'
-      WHERE order_id = ?
-      AND status = 'success'
-      `,
-        [orderId],
-      );
-
-      // Insert refund transaction log
-      await db.execute(
-        `
-      INSERT INTO order_payments
-      (
-        order_id,
-        razorpay_order_id,
-        razorpay_payment_id,
-        razorpay_refund_id,
-        amount,
-        status,
-        payment_method,
-        raw_webhook
-      )
-      VALUES (?, ?, ?, ?, ?, 'refunded', 'razorpay_refund', ?)
-      `,
-        [
-          orderId,
-          payment.razorpay_order_id,
-          payment.razorpay_payment_id,
-          refund.id,
-          payment.amount,
-          JSON.stringify(refund),
-        ],
-      );
+      console.log(`[processRefund] Refund completed for order ${orderId}`, {
+        razorpay_refund_id: refund.id,
+        amount: payment.amount,
+      });
     } catch (error) {
-      console.error("Refund failed:", error);
+      console.error(`[processRefund] Failed for order ${orderId}:`, error);
 
-      // mark failed
       await db.execute(
-        `
-      UPDATE order_refunds
-      SET status = 'failed'
-      WHERE order_id = ?
-      AND status = 'pending'
-      ORDER BY created_at DESC
-      LIMIT 1
-      `,
-        [orderId],
+        `UPDATE order_refunds
+       SET status = 'failed'
+       WHERE refund_id = ?`,
+        [payment.refundId],
       );
+
+      await db.execute(
+        `INSERT INTO order_cancellation_timeline (order_id, event, meta)
+       VALUES (?, 'refund_initiated', ?)`,
+        [orderId, JSON.stringify({ error: error.message })],
+      );
+
+      // Re-throw so controller can alert ops
+      throw error;
     }
   }
 }

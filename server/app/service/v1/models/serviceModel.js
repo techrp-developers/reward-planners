@@ -89,6 +89,8 @@ class ServiceModel {
     );
     const service = rows[0];
 
+    if (!service) return null;
+
     return {
       ...service,
       service_image: getPublicUrl(service.service_image),
@@ -175,6 +177,8 @@ class ServiceModel {
 
     const service = rows[0];
 
+    if (!service) return null;
+
     return {
       ...service,
       service_image: getPublicUrl(service.service_image),
@@ -183,158 +187,793 @@ class ServiceModel {
 
   // Get home sections
   async getHomeSections() {
-    const [rows] = await db.execute(`
-    SELECT 
-      s.id,
-      s.name,
-      s.service_image,
-      s.description,
-      s.show_enquiry,
-      s.price,
-      s.is_featured,
-      s.is_popular,
-      s.is_recommended,
-      s.section_type,
-      sv.id AS variant_id,
-      sv.price,
-      sv.image_url
+    // =========================================
+    // GET ACTIVE SECTIONS
+    // =========================================
 
-    FROM services s
-    LEFT JOIN service_variants sv ON sv.service_id = s.id
-    WHERE s.status = 1
-  `);
+    const [sections] = await db.execute(
+      `
+    SELECT
+      id,
+      title,
+      section_key,
+      section_type,
+      layout_type,
+      sort_order
 
-    // group into sections
-    const sections = {
-      quick_services: [],
-      popular: [],
-      recommended: [],
-      value_added: [],
-    };
+    FROM service_home_sections
 
-    rows.forEach((item) => {
-      const service = {
-        service_id: item.id,
-        variant_id: item.variant_id,
-        name: item.name,
-        description: item.description,
-        enquiry: item.show_enquiry,
-        price: Number(item.price),
-        image: item.image_url ? getPublicUrl(item.image_url) : null,
-      };
+    WHERE is_active = 1
 
-      if (item.is_featured) {
-        sections.quick_services.push(service);
+    ORDER BY sort_order ASC
+    `,
+    );
+
+    const finalSections = [];
+
+    // =========================================
+    // PROCESS EACH SECTION
+    // =========================================
+
+    for (const section of sections) {
+      // =====================================
+      // SERVICE ITEMS
+      // =====================================
+
+      if (section.section_type === "services") {
+        const [items] = await db.execute(
+          `
+        SELECT
+
+          shsi.id AS section_item_id,
+
+          s.id AS service_id,
+          s.name,
+          s.description,
+          s.rating,
+          s.total_orders,
+          s.show_enquiry,
+          s.service_image,
+
+          sv.id AS variant_id,
+          sv.price,
+          sv.original_price,
+          sv.title,
+          sv.image_url
+
+        FROM service_home_section_items shsi
+
+        JOIN services s
+          ON s.id = shsi.service_id
+
+        JOIN (
+          SELECT
+            service_id,
+            MIN(price) AS min_price
+          FROM service_variants
+          GROUP BY service_id
+        ) mv
+          ON mv.service_id = s.id
+
+        JOIN service_variants sv
+          ON sv.service_id = s.id
+          AND sv.price = mv.min_price
+
+        WHERE shsi.section_id = ?
+        AND s.status = 1
+
+        ORDER BY shsi.sort_order ASC
+        `,
+          [section.id],
+        );
+
+        finalSections.push({
+          section_id: section.id,
+
+          title: section.title,
+
+          section_key: section.section_key,
+
+          layout_type: section.layout_type,
+
+          section_type: section.section_type,
+
+          items: items.map((item) => ({
+            service_id: item.service_id,
+
+            variant_id: item.variant_id,
+
+            name: item.name,
+
+            title: item.title,
+
+            description: item.description,
+
+            enquiry: Boolean(item.show_enquiry),
+
+            rating: Number(item.rating || 0),
+
+            total_orders: Number(item.total_orders || 0),
+
+            price: Number(item.price),
+
+            mrp: Number(item.original_price || 0),
+
+            discount_percent: item.original_price
+              ? Math.round(
+                  ((item.original_price - item.price) / item.original_price) *
+                    100,
+                )
+              : 0,
+
+            coins: Math.floor(Number(item.price) * 0.1),
+
+            service_image: item.service_image
+              ? getPublicUrl(item.service_image)
+              : null,
+
+            variant_image: item.image_url ? getPublicUrl(item.image_url) : null,
+          })),
+        });
       }
 
-      if (item.is_popular) {
-        sections.popular.push(service);
-      }
+      // =====================================
+      // BANNER SECTION
+      // =====================================
 
-      if (item.is_recommended) {
-        sections.recommended.push(service);
-      }
+      if (section.section_type === "banners") {
+        const [items] = await db.execute(
+          `
+        SELECT
 
-      if (item.section_type === "value_added") {
-        sections.value_added.push(service);
-      }
-    });
+          shsi.id AS section_item_id,
 
-    return sections;
+          sb.id AS banner_id,
+          sb.title,
+          sb.image_url,
+          sb.redirect_type,
+          sb.redirect_id,
+          sb.redirect_url
+
+        FROM service_home_section_items shsi
+
+        JOIN service_banners sb
+          ON sb.id = shsi.banner_id
+
+        WHERE shsi.section_id = ?
+
+        ORDER BY shsi.sort_order ASC
+        `,
+          [section.id],
+        );
+
+        finalSections.push({
+          section_id: section.id,
+
+          title: section.title,
+
+          section_key: section.section_key,
+
+          layout_type: section.layout_type,
+
+          section_type: section.section_type,
+
+          items: items.map((item) => ({
+            banner_id: item.banner_id,
+
+            title: item.title,
+
+            image_url: item.image_url ? getPublicUrl(item.image_url) : null,
+
+            redirect_type: item.redirect_type,
+
+            redirect_id: item.redirect_id,
+
+            redirect_url: item.redirect_url,
+          })),
+        });
+      }
+    }
+
+    return finalSections;
   }
 
   // Related services
   async getRelatedServices(serviceId) {
-    // 1 Get category of current service
-    const [[service]] = await db.execute(
-      `SELECT category_id FROM services WHERE id = ?`,
+    // =========================================
+    // STEP 1
+    // GET MANUALLY MAPPED RELATED SERVICES
+    // =========================================
+
+    let [rows] = await db.execute(
+      `
+    SELECT
+
+      s.id AS service_id,
+      s.name,
+      s.description,
+      s.rating,
+      s.total_orders,
+      s.show_enquiry,
+      s.service_image,
+
+      sv.id AS variant_id,
+      sv.title,
+      sv.price,
+      sv.original_price,
+      sv.image_url
+
+    FROM service_related_services srs
+
+    JOIN services s
+      ON s.id = srs.related_service_id
+
+    JOIN (
+      SELECT
+        service_id,
+        MIN(price) AS min_price
+      FROM service_variants
+      GROUP BY service_id
+    ) mv
+      ON mv.service_id = s.id
+
+    JOIN service_variants sv
+      ON sv.service_id = s.id
+      AND sv.price = mv.min_price
+
+    WHERE srs.service_id = ?
+    AND srs.relation_type = 'related'
+    AND s.status = 1
+
+    ORDER BY srs.sort_order ASC
+
+    LIMIT 10
+    `,
       [serviceId],
     );
 
-    if (!service) return [];
+    // =========================================
+    // STEP 2
+    // FALLBACK TO SAME CATEGORY SERVICES
+    // =========================================
 
-    const categoryId = service.category_id;
+    if (!rows.length) {
+      const [[service]] = await db.execute(
+        `
+      SELECT category_id
+      FROM services
+      WHERE id = ?
+      `,
+        [serviceId],
+      );
 
-    // 2 Fetch related services
-    const [rows] = await db.execute(
-      `
-      SELECT 
-        s.id,
+      if (!service) {
+        return [];
+      }
+
+      [rows] = await db.execute(
+        `
+      SELECT
+
+        s.id AS service_id,
         s.name,
-        s.show_enquiry,
+        s.description,
+        s.rating,
         s.total_orders,
+        s.show_enquiry,
+        s.service_image,
 
         sv.id AS variant_id,
-        sv.price,
-        sv.original_price AS mrp,
         sv.title,
+        sv.price,
+        sv.original_price,
         sv.image_url
 
       FROM services s
 
       JOIN (
-        SELECT service_id, MIN(price) AS min_price
+        SELECT
+          service_id,
+          MIN(price) AS min_price
         FROM service_variants
         GROUP BY service_id
-      ) vmin ON vmin.service_id = s.id
+      ) mv
+        ON mv.service_id = s.id
 
-      JOIN service_variants sv 
-        ON sv.service_id = s.id 
-        AND sv.price = vmin.min_price
+      JOIN service_variants sv
+        ON sv.service_id = s.id
+        AND sv.price = mv.min_price
 
-      WHERE 
-        s.category_id = ?
-        AND s.id != ?
-        AND s.status = 1
+      WHERE s.category_id = ?
+      AND s.id != ?
+      AND s.status = 1
 
-      ORDER BY s.total_orders DESC, sv.price ASC
+      ORDER BY
+        s.total_orders DESC,
+        s.rating DESC
+
       LIMIT 10
-  `,
-      [categoryId, serviceId],
-    );
-
-    if (rows.length < 5) {
-      const [fallback] = await db.execute(
-        `
-      SELECT 
-        s.id,
-        s.name,
-        s.show_enquiry,
-        sv.id AS variant_id,
-        sv.price,
-        sv.original_price AS mrp,
-        sv.title,
-        sv.image_url
-
-      FROM services s
-      JOIN service_variants sv ON sv.service_id = s.id
-
-      WHERE s.status = 1 AND s.id != ?
-      ORDER BY s.total_orders DESC
-      LIMIT ?
-    `,
-        [serviceId, 10 - rows.length],
+      `,
+        [service.category_id, serviceId],
       );
-
-      rows.push(...fallback);
     }
 
-    return rows.map((r) => ({
-      service_id: r.id,
-      variant_id: r.variant_id,
-      name: r.name,
-      enquiry: r.show_enquiry,
-      title: r.title,
-      price: Number(r.price),
-      mrp: Number(r.mrp),
-      image_url: r.image_url ? getPublicUrl(r.image_url) : null,
+    // =========================================
+    // FINAL RESPONSE
+    // =========================================
 
-      // extra UI helpers
-      discount_percent: r.mrp
-        ? Math.round(((r.mrp - r.price) / r.mrp) * 100)
+    return rows.map((item) => ({
+      service_id: item.service_id,
+
+      variant_id: item.variant_id,
+
+      name: item.name,
+
+      title: item.title,
+
+      description: item.description,
+
+      enquiry: Boolean(item.show_enquiry),
+
+      rating: Number(item.rating || 0),
+
+      total_orders: Number(item.total_orders || 0),
+
+      price: Number(item.price),
+
+      mrp: Number(item.original_price || 0),
+
+      discount_percent: item.original_price
+        ? Math.round(
+            ((item.original_price - item.price) / item.original_price) * 100,
+          )
         : 0,
 
-      coins: Math.floor(Number(r.price) * 0.1), // optional
+      coins: Math.floor(Number(item.price) * 0.1),
+
+      service_image: item.service_image
+        ? getPublicUrl(item.service_image)
+        : null,
+
+      variant_image: item.image_url ? getPublicUrl(item.image_url) : null,
+    }));
+  }
+
+  // create home section
+  async createHomeSection(data) {
+    const [result] = await db.execute(
+      `
+    INSERT INTO service_home_sections
+    (
+      title,
+      section_key,
+      section_type,
+      layout_type,
+      sort_order
+    )
+    VALUES
+    (
+      ?, ?, ?, ?, ?
+    )
+    `,
+      [
+        data.title,
+        data.section_key,
+        data.section_type,
+        data.layout_type,
+        data.sort_order || 0,
+      ],
+    );
+
+    return result.insertId;
+  }
+
+  async updateHomeSection(id, data) {
+    await db.execute(
+      `
+    UPDATE service_home_sections
+    SET
+      title = ?,
+      section_key = ?,
+      section_type = ?,
+      layout_type = ?,
+      sort_order = ?,
+      is_active = ?
+    WHERE id = ?
+    `,
+      [
+        data.title,
+        data.section_key,
+        data.section_type,
+        data.layout_type,
+        data.sort_order,
+        data.is_active,
+        id,
+      ],
+    );
+  }
+
+  async deleteHomeSection(id) {
+    await db.execute(
+      `
+    DELETE FROM service_home_section_items
+    WHERE section_id = ?
+    `,
+      [id],
+    );
+
+    await db.execute(
+      `
+    DELETE FROM service_home_sections
+    WHERE id = ?
+    `,
+      [id],
+    );
+  }
+
+  // create section items
+  async addSectionItem(sectionId, data) {
+    const [result] = await db.execute(
+      `
+    INSERT INTO service_home_section_items
+    (
+      section_id,
+      service_id,
+      banner_id,
+      sort_order
+    )
+    VALUES
+    (
+      ?, ?, ?, ?
+    )
+    `,
+      [
+        sectionId,
+        data.service_id || null,
+        data.banner_id || null,
+        data.sort_order || 0,
+      ],
+    );
+
+    return result.insertId;
+  }
+
+  // Get section items
+  async getSectionItems(sectionId) {
+    const [rows] = await db.execute(
+      `
+    SELECT *
+    FROM service_home_section_items
+    WHERE section_id = ?
+    ORDER BY sort_order ASC
+    `,
+      [sectionId],
+    );
+
+    return rows;
+  }
+
+  //Delete section item
+  async deleteSectionItem(id) {
+    await db.execute(
+      `
+    DELETE FROM service_home_section_items
+    WHERE id = ?
+    `,
+      [id],
+    );
+  }
+
+  // show home sections to admin
+  async getAdminHomeSections() {
+    const [rows] = await db.execute(
+      `
+    SELECT *
+    FROM service_home_sections
+    ORDER BY sort_order ASC
+    `,
+    );
+
+    return rows;
+  }
+
+  // Related Apis
+  async addRelatedService(data) {
+    const [existing] = await db.execute(
+      `
+  SELECT id
+  FROM service_related_services
+  WHERE service_id = ?
+  AND related_service_id = ?
+  AND relation_type = ?
+  `,
+      [
+        data.service_id,
+        data.related_service_id,
+        data.relation_type || "related",
+      ],
+    );
+
+    if (existing.length) {
+      throw new Error("Related service already exists");
+    }
+
+    const [result] = await db.execute(
+      `
+   INSERT INTO service_related_services
+    (
+      service_id,
+      related_service_id,
+      relation_type,
+      sort_order
+    )
+    VALUES (?, ?, ?, ?)
+    `,
+      [
+        data.service_id,
+        data.related_service_id,
+        data.relation_type || "related",
+        data.sort_order || 0,
+      ],
+    );
+
+    return result.insertId;
+  }
+
+  async getAdminRelatedServices(serviceId) {
+    const [rows] = await db.execute(
+      `
+    SELECT
+
+      srs.id,
+      s.id AS related_service_id,
+      s.name,
+      s.status,
+      s.rating,
+      s.total_orders,
+      s.service_image,
+      srs.relation_type,
+      srs.sort_order
+
+    FROM service_related_services srs
+
+    JOIN services s
+      ON s.id = srs.related_service_id
+
+    WHERE srs.service_id = ?
+
+    ORDER BY srs.sort_order ASC
+    `,
+      [serviceId],
+    );
+
+    return rows;
+  }
+
+  async updateRelatedService(id, data) {
+    await db.execute(
+      `
+    UPDATE service_related_services
+    SET
+      sort_order = ?,
+      relation_type = ?
+    WHERE id = ?
+    `,
+      [data.sort_order, data.relation_type, id],
+    );
+  }
+
+  async deleteRelatedService(id) {
+    await db.execute(
+      `
+    DELETE FROM service_related_services
+    WHERE id = ?
+    `,
+      [id],
+    );
+  }
+
+  // Top picks
+  async getTopPicks(limit = 10) {
+    const [rows] = await db.execute(
+      `
+    SELECT
+
+      s.id AS service_id,
+      s.name,
+      s.description,
+      s.rating,
+      s.total_orders,
+      s.show_enquiry,
+      s.service_image,
+
+      sv.id AS variant_id,
+      sv.title,
+      sv.price,
+      sv.original_price,
+      sv.image_url
+
+    FROM services s
+
+    JOIN (
+      SELECT
+        service_id,
+        MIN(price) AS min_price
+      FROM service_variants
+      GROUP BY service_id
+    ) mv
+      ON mv.service_id = s.id
+
+    JOIN service_variants sv
+      ON sv.service_id = s.id
+      AND sv.price = mv.min_price
+
+    WHERE s.status = 1
+
+    ORDER BY
+      s.total_orders DESC,
+      s.rating DESC
+
+    LIMIT ?
+    `,
+      [limit],
+    );
+
+    return rows.map((item) => ({
+      service_id: item.service_id,
+
+      variant_id: item.variant_id,
+
+      name: item.name,
+
+      title: item.title,
+
+      description: item.description,
+
+      enquiry: Boolean(item.show_enquiry),
+
+      rating: Number(item.rating || 0),
+
+      total_orders: Number(item.total_orders || 0),
+
+      price: Number(item.price),
+
+      mrp: Number(item.original_price || 0),
+
+      discount_percent: item.original_price
+        ? Math.round(
+            ((item.original_price - item.price) / item.original_price) * 100,
+          )
+        : 0,
+
+      coins: Math.floor(Number(item.price) * 0.1),
+
+      service_image: item.service_image
+        ? getPublicUrl(item.service_image)
+        : null,
+
+      variant_image: item.image_url ? getPublicUrl(item.image_url) : null,
+    }));
+  }
+
+  // ==================================value added services===============================
+  // Value Added Services
+  async getValueAddedServices(serviceId) {
+    const [rows] = await db.execute(
+      `
+    SELECT
+      s.id AS service_id,
+      s.name,
+      s.description,
+      s.rating,
+      s.total_orders,
+      s.show_enquiry,
+      s.service_image,
+
+      sv.id AS variant_id,
+      sv.title,
+      sv.price,
+      sv.original_price,
+      sv.image_url,
+
+      srs.sort_order
+
+    FROM service_related_services srs
+
+    JOIN services s
+      ON s.id = srs.related_service_id
+
+    JOIN (
+      SELECT
+        service_id,
+        MIN(price) AS min_price
+      FROM service_variants
+      GROUP BY service_id
+    ) mv
+      ON mv.service_id = s.id
+
+    JOIN service_variants sv
+      ON sv.service_id = s.id
+      AND sv.price = mv.min_price
+
+    WHERE srs.service_id = ?
+    AND srs.relation_type = 'value_added'
+    AND s.status = 1
+
+    ORDER BY srs.sort_order ASC
+
+    LIMIT 10
+    `,
+      [serviceId],
+    );
+
+    return rows.map((item) => ({
+      service_id: item.service_id,
+
+      variant_id: item.variant_id,
+
+      name: item.name,
+
+      title: item.title,
+
+      description: item.description,
+
+      enquiry: Boolean(item.show_enquiry),
+
+      rating: Number(item.rating || 0),
+
+      total_orders: Number(item.total_orders || 0),
+
+      price: Number(item.price),
+
+      mrp: Number(item.original_price || 0),
+
+      discount_percent: item.original_price
+        ? Math.round(
+            ((item.original_price - item.price) / item.original_price) * 100,
+          )
+        : 0,
+
+      coins: Math.floor(Number(item.price) * 0.1),
+
+      service_image: item.service_image
+        ? getPublicUrl(item.service_image)
+        : null,
+
+      variant_image: item.image_url ? getPublicUrl(item.image_url) : null,
+    }));
+  }
+
+  // Get search suggestions
+  async getSearchSuggestions({ search, limit = 10 }) {
+    if (!search || search.length < 2) {
+      return [];
+    }
+
+    const keyword = `%${search}%`;
+
+    const [rows] = await db.execute(
+      `
+    SELECT
+      id,
+      name AS title,
+      service_image AS image,
+      'service' AS type
+    FROM services
+    WHERE status = 1
+      AND (
+        name LIKE ?
+        OR description LIKE ?
+      )
+    ORDER BY name ASC
+    LIMIT ?
+    `,
+      [keyword, keyword, limit],
+    );
+
+    return rows.map((service) => ({
+      ...service,
+      image: getPublicUrl(service.image),
     }));
   }
 }

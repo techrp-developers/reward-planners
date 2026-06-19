@@ -4,103 +4,30 @@ const db = require("../../../../config/database");
 const fs = require("fs");
 const path = require("path");
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
+const {
+  calculateReward,
+  resolveRedemption,
+  calculateRedeemableCoins,
+} = require("../utils/rewardCalculate");
 
-// Helper function
-// function calculateReward(price, product) {
-//   if (!product.can_earn_reward) return 0;
+function positiveInt(value, fallback, max = 100) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(parsed, max);
+}
 
-//   if (!product.reward_type) return 0;
-
-//   let reward = 0;
-
-//   if (product.reward_type === "percentage") {
-//     reward = (price * product.reward_value) / 100;
-
-//     if (product.max_reward) {
-//       reward = Math.min(reward, product.max_reward);
-//     }
-//   }
-
-//   if (product.reward_type === "fixed") {
-//     reward = product.reward_value;
-//   }
-
-//   return Math.floor(reward);
-// }
-function calculateReward(orderAmount, rules) {
-  if (!rules || !rules.length) return 0;
-
-  const now = new Date();
-
-  // 1. filter valid rules
-  const validRules = rules.filter((rule) => {
-    if (!rule.is_active) return false;
-
-    if (rule.start_date && new Date(rule.start_date) > now) return false;
-    if (rule.end_date && new Date(rule.end_date) < now) return false;
-
-    if (orderAmount < rule.min_order_amount) return false;
-    if (rule.max_order_amount && orderAmount > rule.max_order_amount)
-      return false;
-
-    return true;
-  });
-
-  if (!validRules.length) return 0;
-
-  // 2. split rules
-  const stackable = validRules.filter((r) => r.is_stackable);
-  const nonStackable = validRules.filter((r) => !r.is_stackable);
-
-  let applicable = [];
-
-  // 3. pick highest priority non-stackable
-  if (nonStackable.length) {
-    nonStackable.sort((a, b) => a.priority - b.priority);
-    applicable.push(nonStackable[0]);
-  }
-
-  // 4. add stackable
-  applicable.push(...stackable);
-
-  // 5. remove duplicates
-  const seen = new Set();
-  applicable = applicable.filter((r) => {
-    if (seen.has(r.reward_rule_id)) return false;
-    seen.add(r.reward_rule_id);
-    return true;
-  });
-
-  // 6. calculate reward
-  let total = 0;
-
-  for (const rule of applicable) {
-    if (!rule.can_earn_reward) continue;
-
-    let reward = 0;
-
-    if (rule.reward_type === "percentage") {
-      reward = (orderAmount * rule.reward_value) / 100;
-    } else {
-      reward = rule.reward_value;
-    }
-
-    if (rule.max_reward) {
-      reward = Math.min(reward, rule.max_reward);
-    }
-
-    total += Math.floor(reward);
-  }
-
-  return total;
+function nonNegativeInt(value, fallback = 0, max = 10000) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+  return Math.min(parsed, max);
 }
 
 class ProductController {
   // all the products
   async getAllProducts(req, res) {
     try {
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
+      const page = positiveInt(req.query.page, 1, 10000);
+      const limit = positiveInt(req.query.limit, 10, 50);
       const offset = (page - 1) * limit;
 
       const search = req.query.search || "";
@@ -131,11 +58,6 @@ class ProductController {
 
           const salePrice = product.sale_price ? Number(product.sale_price) : 0;
           const mrp = product.mrp ? Number(product.mrp) : 0;
-          const redeem_limit = product.reward_redemption_limit
-            ? Number(product.reward_redemption_limit)
-            : 0;
-          const redeem_coins = Math.floor((salePrice * redeem_limit) / 100);
-          const rp_price = salePrice - redeem_coins;
 
           let rewardCoins = 0;
           let canEarn = false;
@@ -154,6 +76,7 @@ class ProductController {
               product.category_id,
               product.subcategory_id,
               salePrice,
+              product.is_discount_eligible,
             );
 
             rewardCache[key] = rules;
@@ -163,6 +86,15 @@ class ProductController {
             rewardCoins = calculateReward(salePrice, rules);
             canEarn = rules.some((r) => r.can_earn_reward);
           }
+
+          /* ===============================
+              REDEMPTION (rule-based)
+            =============================== */
+          const redemption = resolveRedemption(salePrice, rules);
+          const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
+          const canRedeem = rules.some((r) => r.can_redeem_reward);
+          const redemptionEnabled = canRedeem && redeem_coins > 0;
+          const rp_price = salePrice - redeem_coins;
 
           const mrpDiscountPercent =
             mrp > 0 ? Math.round(((mrp - salePrice) / mrp) * 100) : 0;
@@ -178,11 +110,13 @@ class ProductController {
             image: mainImage,
             price: salePrice ? `₹${salePrice}` : null,
             originalPrice: product.mrp ? `₹${Number(product.mrp)}` : null,
-            rp_price: redeem_limit > 0 ? `₹${rp_price}` : 0,
-            redeem_coins: redeem_limit > 0 ? redeem_coins : 0,
+
+            rp_price: redemptionEnabled ? `₹${rp_price}` : null,
+            redeem_coins: redemptionEnabled ? redeem_coins : 0,
+
             discount: `${mrpDiscountPercent}%`,
-            rating: 4.6,
-            reviews: "18.9K",
+            rating: product.rating,
+            reviews: product.reviews,
 
             rewardCoins,
             rewardLabel:
@@ -224,8 +158,8 @@ class ProductController {
         });
       }
 
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
+      const page = positiveInt(req.query.page, 1, 10000);
+      const limit = positiveInt(req.query.limit, 10, 50);
       const offset = (page - 1) * limit;
 
       const search = req.query.search || "";
@@ -269,11 +203,9 @@ class ProductController {
 
           const salePrice = Number(product.sale_price) || 0;
           const mrp = Number(product.mrp) || 0;
-          const redeem_limit = product.reward_redemption_limit
-            ? Number(product.reward_redemption_limit)
-            : 0;
-          const redeem_coins = Math.floor((salePrice * redeem_limit) / 100);
-          const rp_price = salePrice - redeem_coins;
+
+          let rewardCoins = 0;
+          let canEarn = false;
 
           /* ===============================
               CACHE KEY
@@ -289,17 +221,27 @@ class ProductController {
               product.category_id,
               product.subcategory_id,
               salePrice,
+              product.is_discount_eligible,
             );
             rewardCache[key] = rules;
           }
-
-          let rewardCoins = 0;
-          let canEarn = false;
 
           if (rules.length) {
             rewardCoins = calculateReward(salePrice, rules);
             canEarn = rules.some((r) => r.can_earn_reward);
           }
+
+          /* ===============================
+                REDEMPTION (rule-based)
+              =============================== */
+          const redemption = resolveRedemption(salePrice, rules);
+          const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
+
+          const canRedeem = rules.some((r) => r.can_redeem_reward);
+
+          const redemptionEnabled = canRedeem && redeem_coins > 0;
+
+          const rp_price = salePrice - redeem_coins;
 
           const mrpDiscountPercent =
             mrp > 0 ? Math.round(((mrp - salePrice) / mrp) * 100) : 0;
@@ -316,8 +258,8 @@ class ProductController {
             price: salePrice ? `₹${salePrice}` : null,
             originalPrice: mrp ? `₹${mrp}` : null,
             discount: `${mrpDiscountPercent}%`,
-            rp_price: redeem_limit > 0 ? `₹${rp_price}` : 0,
-            redeem_coins: redeem_limit > 0 ? redeem_coins : 0,
+            rp_price: redemptionEnabled ? `₹${rp_price}` : 0,
+            redeem_coins: redemptionEnabled ? redeem_coins : 0,
             rating: product.avg_rating,
             reviews: product.rating_count,
 
@@ -361,8 +303,8 @@ class ProductController {
         });
       }
 
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
+      const page = positiveInt(req.query.page, 1, 10000);
+      const limit = positiveInt(req.query.limit, 10, 50);
       const offset = (page - 1) * limit;
 
       const search = req.query.search || "";
@@ -406,11 +348,8 @@ class ProductController {
           const salePrice = Number(product.sale_price) || 0;
           const mrp = Number(product.mrp) || 0;
 
-          const redeem_limit = product.reward_redemption_limit
-            ? Number(product.reward_redemption_limit)
-            : 0;
-          const redeem_coins = Math.floor((salePrice * redeem_limit) / 100);
-          const rp_price = salePrice - redeem_coins;
+          let rewardCoins = 0;
+          let canEarn = false;
 
           /* ===============================
        CACHE KEY
@@ -426,17 +365,28 @@ class ProductController {
               product.category_id,
               product.subcategory_id,
               salePrice,
+              product.is_discount_eligible,
             );
             rewardCache[key] = rules;
           }
-
-          let rewardCoins = 0;
-          let canEarn = false;
 
           if (rules.length) {
             rewardCoins = calculateReward(salePrice, rules);
             canEarn = rules.some((r) => r.can_earn_reward);
           }
+
+          /* ===============================
+              REDEMPTION (rule-based)
+            =============================== */
+          const redemption = resolveRedemption(salePrice, rules);
+
+          const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
+
+          const canRedeem = rules.some((r) => r.can_redeem_reward);
+
+          const redemptionEnabled = canRedeem && redeem_coins > 0;
+
+          const rp_price = salePrice - redeem_coins;
 
           const mrpDiscountPercent =
             mrp > 0 ? Math.round(((mrp - salePrice) / mrp) * 100) : 0;
@@ -453,8 +403,8 @@ class ProductController {
             price: salePrice ? `₹${salePrice}` : null,
             originalPrice: mrp ? `₹${mrp}` : null,
             discount: `${mrpDiscountPercent}%`,
-            rp_price: redeem_limit > 0 ? `₹${rp_price}` : 0,
-            redeem_coins: redeem_limit > 0 ? redeem_coins : 0,
+            rp_price: redemptionEnabled ? `₹${rp_price}` : 0,
+            redeem_coins: redemptionEnabled ? redeem_coins : 0,
 
             rating: product.avg_rating,
             reviews: product.rating_count,
@@ -470,6 +420,8 @@ class ProductController {
         }),
       );
 
+      const hasMore = page < Math.ceil(totalItems / limit);
+
       return res.json({
         success: true,
         subcategory_name,
@@ -477,6 +429,7 @@ class ProductController {
         total: totalItems,
         totalPages: Math.ceil(totalItems / limit),
         currentPage: page,
+        hasMore,
       });
     } catch (error) {
       console.error("Get products by subcategory error:", error);
@@ -526,25 +479,13 @@ class ProductController {
             const salePrice = Number(variant.sale_price) || 0;
             const mrp = Number(variant.mrp) || 0;
 
-            /* ===============================
-                REDEMPTION
-            =============================== */
-            const redeemPercent = Number(variant.reward_redemption_limit) || 0;
-            const redeemAmount = Math.round((salePrice * redeemPercent) / 100);
-            const finalPrice = salePrice - redeemAmount;
-
-            const mrpDiscountPercent =
-              mrp > 0 ? Math.round(((mrp - finalPrice) / mrp) * 100) : 0;
-
-            /* ===============================
-                  REWARD (FIXED)
-              =============================== */
             const rules = await RewardModel.getProductRewards(
               product.product_id,
               variant.variant_id,
               product.category_id,
               product.subcategory_id,
               salePrice,
+              product.is_discount_eligible,
             );
 
             let rewardCoins = 0;
@@ -555,17 +496,46 @@ class ProductController {
               canEarn = rules.some((r) => r.can_earn_reward);
             }
 
+            /* ===============================
+                REDEMPTION (rule-based)
+              =============================== */
+            const redemption = resolveRedemption(salePrice, rules);
+
+            const redeem_coins = calculateRedeemableCoins(
+              salePrice,
+              redemption,
+            );
+
+            const canRedeem = rules.some((r) => r.can_redeem_reward);
+
+            const redemptionEnabled = canRedeem && redeem_coins > 0;
+
+            const finalRedeemCoins = redemptionEnabled ? redeem_coins : 0;
+
+            const redemptionPercent =
+              redemption.type === "percentage"
+                ? Number(redemption.value)
+                : salePrice > 0
+                  ? Math.round((finalRedeemCoins / salePrice) * 100)
+                  : 0;
+
+            const finalPrice = salePrice - finalRedeemCoins;
+
+            const mrpDiscountPercent =
+              mrp > 0 ? Math.round(((mrp - salePrice) / mrp) * 100) : 0;
+
             return {
               ...variant,
               price: `₹${salePrice}`,
-              finalPrice: `₹${finalPrice}`,
+              finalPrice: redemptionEnabled ? `₹${finalPrice}` : null,
               discount: `${mrpDiscountPercent}%`,
               redemption: {
-                percent: redeemPercent,
-                amount: redeemAmount,
+                enabled: redemptionEnabled,
+                percent: redemptionPercent,
+                amount: finalRedeemCoins,
               },
-              rating: 4.6,
-              reviews: "18.9K",
+              rating: product.rating,
+              reviews: product.reviews,
 
               reward: {
                 enabled: canEarn && rewardCoins > 0,
@@ -652,7 +622,6 @@ class ProductController {
   //         p.brand_name,
   //         v.mrp,
   //         v.sale_price,
-  //         v.reward_redemption_limit,
 
   //         GROUP_CONCAT(
   //           DISTINCT CONCAT(
@@ -781,11 +750,15 @@ class ProductController {
         p.product_name,
         p.category_id,
         p.subcategory_id,
+        p.is_discount_eligible,
         p.brand_name,
         v.variant_id,
         v.sale_price,
         v.mrp,
-        v.reward_redemption_limit,
+
+        COALESCE(rev.avg_rating, 0) AS avg_rating,
+        COALESCE(rev.total_reviews, 0) AS total_reviews,
+
         MAX(rv.viewed_at) AS viewed_at,
 
         GROUP_CONCAT(
@@ -812,6 +785,17 @@ class ProductController {
           ORDER BY pv2.sale_price ASC, pv2.variant_id ASC
           LIMIT 1
         )
+
+      LEFT JOIN (
+        SELECT
+          product_id,
+          ROUND(AVG(rating), 1) AS avg_rating,
+          COUNT(*) AS total_reviews
+        FROM product_reviews
+        WHERE status = 'approved'
+        GROUP BY product_id
+      ) rev
+        ON p.product_id = rev.product_id
 
       LEFT JOIN product_images pi
         ON pi.product_id = p.product_id
@@ -840,12 +824,6 @@ class ProductController {
           const mrpDiscountPercent =
             mrp > 0 ? Math.round(((mrp - salePrice) / mrp) * 100) : 0;
 
-          const redeem_limit = row.reward_redemption_limit
-            ? Number(row.reward_redemption_limit)
-            : 0;
-          const redeem_coins = Math.floor((salePrice * redeem_limit) / 100);
-          const rp_price = salePrice - redeem_coins;
-
           // Parse image
           let image = null;
           if (row.images) {
@@ -868,6 +846,7 @@ class ProductController {
               row.category_id,
               row.subcategory_id,
               salePrice,
+              row.is_discount_eligible,
             );
 
             rewardCache[key] = rules;
@@ -881,6 +860,21 @@ class ProductController {
             canEarn = rules.some((r) => r.can_earn_reward);
           }
 
+          /* ===============================
+            REDEMPTION (rule-based)
+          =============================== */
+          const redemption = resolveRedemption(salePrice, rules);
+
+          const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
+
+          const canRedeem = rules.some((r) => r.can_redeem_reward);
+
+          const redemptionEnabled = canRedeem && redeem_coins > 0;
+
+          const finalRedeemCoins = redemptionEnabled ? redeem_coins : 0;
+
+          const rp_price = salePrice - finalRedeemCoins;
+
           return {
             product_id: row.product_id,
             product_name: row.product_name,
@@ -892,11 +886,12 @@ class ProductController {
             price: `₹${salePrice}`,
             originalPrice: `₹${mrp}`,
             discount: `${mrpDiscountPercent}%`,
-            rp_price: redeem_limit > 0 ? `₹${rp_price}` : 0,
-            redeem_coins: redeem_limit > 0 ? redeem_coins : 0,
+            rp_price: redemptionEnabled ? `₹${rp_price}` : 0,
 
-            rating: 4.6,
-            reviews: "18.9K",
+            redeem_coins: finalRedeemCoins,
+
+            rating: Number(row.avg_rating).toFixed(1),
+            reviews: Number(row.total_reviews),
 
             reward: {
               enabled: canEarn && rewardCoins > 0,
@@ -922,8 +917,8 @@ class ProductController {
     try {
       const userId = req.user?.user_id;
       // const userId = 1;
-      const limit = req.query.limit ? Number(req.query.limit) : 10;
-      const offset = req.query.offset ? Number(req.query.offset) : 0;
+      const limit = positiveInt(req.query.limit, 10, 50);
+      const offset = nonNegativeInt(req.query.offset);
 
       if (!userId) {
         return res.status(401).json({
@@ -956,8 +951,8 @@ class ProductController {
   // Get New Arrivals
   async getNewArrivals(req, res) {
     try {
-      const limit = req.query.limit ? Number(req.query.limit) : 10;
-      const offset = req.query.offset ? Number(req.query.offset) : 0;
+      const limit = positiveInt(req.query.limit, 10, 50);
+      const offset = nonNegativeInt(req.query.offset);
 
       const products = await ProductModel.getNewArrivals(limit, offset);
 
@@ -980,8 +975,8 @@ class ProductController {
   async getCustomersAlsoBought(req, res) {
     try {
       const productId = Number(req.params.productId);
-      const limit = req.query.limit ? Number(req.query.limit) : 10;
-      const offset = req.query.offset ? Number(req.query.offset) : 0;
+      const limit = positiveInt(req.query.limit, 10, 50);
+      const offset = nonNegativeInt(req.query.offset);
 
       if (!productId) {
         return res.status(400).json({
@@ -1015,9 +1010,9 @@ class ProductController {
   // Trending Products
   async getTrendingProducts(req, res) {
     try {
-      const limit = req.query.limit ? Number(req.query.limit) : 10;
-      const days = req.query.days ? Number(req.query.days) : 30;
-      const offset = req.query.offset ? Number(req.query.offset) : 0;
+      const limit = positiveInt(req.query.limit, 10, 50);
+      const days = positiveInt(req.query.days, 30, 365);
+      const offset = nonNegativeInt(req.query.offset);
 
       const products = await ProductModel.getTrendingProducts(
         limit,
@@ -1044,9 +1039,9 @@ class ProductController {
   // Best sellers
   async getBestSellers(req, res) {
     try {
-      const limit = req.query.limit ? Number(req.query.limit) : 10;
-      const days = req.query.days ? Number(req.query.days) : 30;
-      const offset = req.query.offset ? Number(req.query.offset) : 0;
+      const limit = positiveInt(req.query.limit, 10, 50);
+      const days = positiveInt(req.query.days, 30, 365);
+      const offset = nonNegativeInt(req.query.offset);
 
       const products = await ProductModel.getBestSellers(limit, offset, days);
 
@@ -1069,9 +1064,9 @@ class ProductController {
   // Most viewed products
   async getMostViewedProducts(req, res) {
     try {
-      const limit = req.query.limit ? Number(req.query.limit) : 10;
-      const days = req.query.days ? Number(req.query.days) : 30;
-      const offset = req.query.offset ? Number(req.query.offset) : 0;
+      const limit = positiveInt(req.query.limit, 10, 50);
+      const days = positiveInt(req.query.days, 30, 365);
+      const offset = nonNegativeInt(req.query.offset);
 
       const products = await ProductModel.getMostViewedProducts(
         limit,
@@ -1098,8 +1093,8 @@ class ProductController {
   // Top rated Products
   async getTopRatedProducts(req, res) {
     try {
-      const limit = req.query.limit ? Number(req.query.limit) : 10;
-      const offset = req.query.offset ? Number(req.query.offset) : 0;
+      const limit = positiveInt(req.query.limit, 10, 50);
+      const offset = nonNegativeInt(req.query.offset);
 
       const products = await ProductModel.getTopRatedProducts(limit, offset);
 
@@ -1215,8 +1210,8 @@ class ProductController {
   async getSimilarProducts(req, res) {
     try {
       const productId = Number(req.params.productId);
-      const limit = req.query.limit ? Number(req.query.limit) : 10;
-      const offset = req.query.offset ? Number(req.query.offset) : 0;
+      const limit = positiveInt(req.query.limit, 10, 50);
+      const offset = nonNegativeInt(req.query.offset);
 
       if (!productId) {
         return res.status(400).json({
@@ -1274,8 +1269,8 @@ class ProductController {
     try {
       const q = (req.query.q || "").trim();
 
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 20;
+      const page = positiveInt(req.query.page, 1, 10000);
+      const limit = positiveInt(req.query.limit, 20, 50);
       const offset = (page - 1) * limit;
 
       const { products, totalItems } = await ProductModel.loadProducts({
@@ -1284,42 +1279,68 @@ class ProductController {
         offset,
       });
 
-      const processedProducts = products.map((product) => {
-        const imagePath =
-          product.images && product.images.length
-            ? product.images[0].image_url
+      const processedProducts = await Promise.all(
+        products.map(async (product) => {
+          const imagePath =
+            product.images && product.images.length
+              ? product.images[0].image_url
+              : null;
+
+          const mainImage = imagePath
+            ? `${CDN_BASE_URL}/${imagePath}?v=${product.updated_at || Date.now()}`
             : null;
 
-        const mainImage = imagePath
-          ? `${CDN_BASE_URL}/${imagePath}?v=${product.updated_at || Date.now()}`
-          : null;
+          const salePrice = product.sale_price ? Number(product.sale_price) : 0;
 
-        const salePrice = product.sale_price ? Number(product.sale_price) : 0;
+          const mrp = product.mrp ? Number(product.mrp) : 0;
 
-        const discountPercent = product.reward_redemption_limit
-          ? Number(product.reward_redemption_limit)
-          : 0;
+          /* ===============================
+       REWARD RULES
+    =============================== */
+          const rules = await RewardModel.getProductRewards(
+            product.product_id,
+            product.variant_id,
+            product.category_id,
+            product.subcategory_id,
+            salePrice,
+            product.is_discount_eligible,
+          );
 
-        const discountAmount = Math.round((salePrice * discountPercent) / 100);
+          /* ===============================
+       REDEMPTION
+    =============================== */
+          const redemption = resolveRedemption(salePrice, rules);
 
-        const finalPrice = salePrice - discountAmount;
+          const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
 
-        const mrp = product.mrp ? Number(product.mrp) : 0;
+          const canRedeem = rules.some((r) => r.can_redeem_reward);
 
-        const mrpDiscountPercent =
-          mrp > 0 ? Math.round(((mrp - finalPrice) / mrp) * 100) : 0;
+          const redemptionEnabled = canRedeem && redeem_coins > 0;
 
-        return {
-          id: product.product_id,
-          title: product.product_name,
-          image: mainImage,
-          price: `₹${salePrice}`,
-          originalPrice: `₹${mrp}`,
-          discount: `${mrpDiscountPercent}%`,
-          pointsPrice: `₹${finalPrice}`,
-          points: discountAmount,
-        };
-      });
+          const finalRedeemCoins = redemptionEnabled ? redeem_coins : 0;
+
+          const finalPrice = salePrice - finalRedeemCoins;
+
+          const mrpDiscountPercent =
+            mrp > 0 ? Math.round(((mrp - salePrice) / mrp) * 100) : 0;
+
+          return {
+            id: product.product_id,
+            title: product.product_name,
+
+            image: mainImage,
+
+            price: `₹${salePrice}`,
+            originalPrice: `₹${mrp}`,
+
+            discount: `${mrpDiscountPercent}%`,
+
+            pointsPrice: redemptionEnabled ? `₹${finalPrice}` : null,
+
+            points: finalRedeemCoins,
+          };
+        }),
+      );
 
       return res.json({
         success: true,

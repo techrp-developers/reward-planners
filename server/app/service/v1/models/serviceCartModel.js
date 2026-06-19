@@ -192,8 +192,8 @@ class ServiceCartModel {
   }
 
   // clear cart
-  async clearCart(cartId) {
-    await db.execute(`DELETE FROM service_cart_items WHERE cart_id = ?`, [
+  async clearCart(cartId, conn = db) {
+    await conn.execute(`DELETE FROM service_cart_items WHERE cart_id = ?`, [
       cartId,
     ]);
   }

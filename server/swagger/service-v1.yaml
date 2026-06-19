@@ -1,0 +1,1644 @@
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+    ServiceCategoryCreate:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        status:
+          type: integer
+          description: Status flag (1 active, 0 inactive)
+        icon:
+          type: string
+          format: binary
+    ServiceCategoryUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        status:
+          type: integer
+        icon:
+          type: string
+          format: binary
+    ServiceCreate:
+      type: object
+      required:
+        - category_id
+        - name
+        - price
+      properties:
+        category_id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+          format: double
+        estimated_days:
+          type: integer
+        status:
+          type: integer
+        service_image:
+          type: string
+          format: binary
+    ServiceUpdate:
+      type: object
+      properties:
+        category_id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+          format: double
+        estimated_days:
+          type: integer
+        status:
+          type: integer
+        service_image:
+          type: string
+          format: binary
+    ServiceDocumentCreate:
+      type: object
+      required:
+        - service_id
+        - document_name
+      properties:
+        service_id:
+          type: integer
+        document_name:
+          type: string
+        is_mandatory:
+          type: boolean
+    EnquiryCreate:
+      type: object
+      properties:
+        service_id:
+          type: integer
+        bundle_id:
+          type: integer
+        variant_id:
+          type: integer
+        name:
+          type: string
+        city:
+          type: string
+        mobile:
+          type: string
+        email:
+          type: string
+          format: email
+        enquiry_data:
+          type: object
+          additionalProperties: true
+    EnquiryNotification:
+      type: object
+      required:
+        - name
+        - email
+        - contact
+        - subject
+        - description
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        contact:
+          type: string
+        subject:
+          type: string
+        description:
+          type: string
+    InsuranceStart:
+      type: object
+      required:
+        - insurance_type
+      properties:
+        insurance_type:
+          type: string
+    InsuranceSaveStep:
+      type: object
+      required:
+        - enquiry_id
+        - step
+        - section
+        - data
+      properties:
+        enquiry_id:
+          type: integer
+        step:
+          type: integer
+        section:
+          type: string
+        data:
+          type: object
+          additionalProperties: true
+    InsuranceComplete:
+      type: object
+      required:
+        - enquiry_id
+      properties:
+        enquiry_id:
+          type: integer
+    InsuranceSelectPlan:
+      type: object
+      required:
+        - enquiry_id
+        - plan
+      properties:
+        enquiry_id:
+          type: integer
+        plan:
+          type: object
+          properties:
+            planId:
+              type: string
+            selectedPremium:
+              type: number
+            details:
+              type: object
+              additionalProperties: true
+    CartAdd:
+      type: object
+      required:
+        - service_id
+        - variant_id
+      properties:
+        service_id:
+          type: integer
+        variant_id:
+          type: integer
+    CartAddBundle:
+      type: object
+      properties:
+        selected_items:
+          type: array
+          items:
+            type: integer
+    CheckoutCart:
+      type: object
+      required:
+        - address_id
+      properties:
+        address_id:
+          type: integer
+    BuyNow:
+      type: object
+      required:
+        - service_id
+        - variant_id
+        - address_id
+      properties:
+        service_id:
+          type: integer
+        variant_id:
+          type: integer
+        address_id:
+          type: integer
+    BuyNowBundle:
+      type: object
+      required:
+        - bundle_id
+        - address_id
+      properties:
+        bundle_id:
+          type: integer
+        selected_items:
+          type: array
+          items:
+            type: integer
+        address_id:
+          type: integer
+    VariantCreate:
+      type: object
+      required:
+        - service_id
+        - variant_name
+        - title
+        - short_description
+        - price
+      properties:
+        service_id:
+          type: integer
+        variant_name:
+          type: string
+        title:
+          type: string
+        short_description:
+          type: string
+        price:
+          type: number
+          format: double
+        service_variant_image:
+          type: string
+          format: binary
+    VariantUpdate:
+      type: object
+      properties:
+        service_id:
+          type: integer
+        variant_name:
+          type: string
+        title:
+          type: string
+        short_description:
+          type: string
+        price:
+          type: number
+          format: double
+        status:
+          type: integer
+        service_variant_image:
+          type: string
+          format: binary
+    VariantSectionCreate:
+      type: object
+      required:
+        - variant_id
+        - section_type
+        - content
+      properties:
+        variant_id:
+          type: integer
+        section_type:
+          type: string
+        title:
+          type: string
+        content:
+          type: string
+        sort_order:
+          type: integer
+    BundleCreate:
+      type: object
+      required:
+        - name
+        - bundle_price
+        - original_price
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        bundle_price:
+          type: number
+          format: double
+        original_price:
+          type: number
+          format: double
+        type:
+          type: string
+          description: fixed or custom
+        status:
+          type: integer
+        banner_image:
+          type: string
+          format: binary
+    BundleUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        bundle_price:
+          type: number
+        original_price:
+          type: number
+        type:
+          type: string
+        status:
+          type: integer
+        banner_image:
+          type: string
+          format: binary
+    BannerCreate:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+        subtitle:
+          type: string
+        redirect_type:
+          type: string
+        redirect_id:
+          type: integer
+        redirect_url:
+          type: string
+        sort_order:
+          type: integer
+        banner_image:
+          type: string
+          format: binary
+    BannerUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        subtitle:
+          type: string
+        redirect_type:
+          type: string
+        redirect_id:
+          type: integer
+        redirect_url:
+          type: string
+        sort_order:
+          type: integer
+        is_active:
+          type: integer
+        banner_image:
+          type: string
+          format: binary
+    DirectOrderCreate:
+      type: object
+      required:
+        - service_id
+      properties:
+        service_id:
+          type: integer
+        variant_id:
+          type: integer
+    RazorpayCreateOrder:
+      type: object
+      required:
+        - parent_order_id
+      properties:
+        parent_order_id:
+          type: string
+    RazorpayVerifyPayment:
+      type: object
+      required:
+        - razorpay_order_id
+        - razorpay_payment_id
+        - razorpay_signature
+      properties:
+        razorpay_order_id:
+          type: string
+        razorpay_payment_id:
+          type: string
+        razorpay_signature:
+          type: string
+    UploadDocument:
+      type: object
+      required:
+        - document_id
+      properties:
+        document_id:
+          type: integer
+        expiry_date:
+          type: string
+          format: date
+        document_number:
+          type: string
+        file:
+          type: string
+          format: binary
+    SubmitDocumentsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+    UpdateOrderStatus:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+    CancelOrderRequest:
+      type: object
+      required:
+        - service_order_id
+        - reason_id
+      properties:
+        service_order_id:
+          type: integer
+        reason_id:
+          type: integer
+        comment:
+          type: string
+    OrderHelpRequest:
+      type: object
+      required:
+        - service_order_id
+        - issue_id
+      properties:
+        service_order_id:
+          type: integer
+        issue_id:
+          type: integer
+        description:
+          type: string
+        files:
+          type: array
+          items:
+            type: string
+            format: binary
+paths:
+  /v1/category/all-categories:
+    get:
+      tags:
+        - Service Category
+      summary: List all active service categories
+      responses:
+        '200':
+          description: Category list retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      type: object
+        '500':
+          description: Server error
+  /v1/category/create-category:
+    post:
+      tags:
+        - Service Category
+      summary: Create a new service category
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ServiceCategoryCreate'
+      responses:
+        '201':
+          description: Category created
+        '400':
+          description: Validation error
+        '401':
+          description: Authentication required
+  /v1/category/find/{id}:
+    get:
+      tags:
+        - Service Category
+      summary: Get service category by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Category fetched
+        '404':
+          description: Category not found
+  /v1/category/update/{id}:
+    put:
+      tags:
+        - Service Category
+      summary: Update service category
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ServiceCategoryUpdate'
+      responses:
+        '200':
+          description: Category updated
+        '400':
+          description: Validation error
+        '401':
+          description: Authentication required
+        '404':
+          description: Category not found
+  /v1/category/remove/{id}:
+    delete:
+      tags:
+        - Service Category
+      summary: Delete a service category
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Category deleted
+        '401':
+          description: Authentication required
+  /v1/service/all-services:
+    get:
+      tags:
+        - Services
+      summary: List all services with optional filters
+      parameters:
+        - name: category_id
+          in: query
+          schema:
+            type: integer
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Service list retrieved
+  /v1/service/find/{id}:
+    get:
+      tags:
+        - Services
+      summary: Get service by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Service fetched
+        '404':
+          description: Service not found
+  /v1/service/by-category/{categoryId}:
+    get:
+      tags:
+        - Services
+      summary: List services by category id
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Services by category
+        '404':
+          description: Category or service not found
+  /v1/service/details/{id}:
+    get:
+      tags:
+        - Services
+      summary: Get aggregated service details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Service details retrieved
+  /v1/service/home:
+    get:
+      tags:
+        - Services
+      summary: Get home sections for services
+      responses:
+        '200':
+          description: Home sections retrieved
+  /v1/service/related/{serviceId}:
+    get:
+      tags:
+        - Services
+      summary: Get related services for a service
+      parameters:
+        - name: serviceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Related services retrieved
+  /v1/service/create-service:
+    post:
+      tags:
+        - Services
+      summary: Create a new service
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ServiceCreate'
+      responses:
+        '201':
+          description: Service created
+        '400':
+          description: Validation error
+  /v1/service/update/{id}:
+    put:
+      tags:
+        - Services
+      summary: Update an existing service
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ServiceUpdate'
+      responses:
+        '200':
+          description: Service updated
+        '401':
+          description: Authentication required
+        '404':
+          description: Service not found
+  /v1/service/remove/{id}:
+    delete:
+      tags:
+        - Services
+      summary: Delete a service
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Service removed
+  /v1/service/feedback:
+    post:
+      tags:
+        - Services
+      summary: Submit service feedback
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                service_id:
+                  type: integer
+                rating:
+                  type: integer
+                comment:
+                  type: string
+      responses:
+        '200':
+          description: Feedback submitted
+  /v1/service-document/create-document:
+    post:
+      tags:
+        - Service Documents
+      summary: Add required document for a service
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceDocumentCreate'
+      responses:
+        '201':
+          description: Document added
+  /v1/service-document/find/{serviceId}:
+    get:
+      tags:
+        - Service Documents
+      summary: Get documents required by service id
+      parameters:
+        - name: serviceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Documents returned
+  /v1/service-document/remove/{id}:
+    delete:
+      tags:
+        - Service Documents
+      summary: Delete a service document definition
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Document removed
+  /v1/service-enquiry:
+    post:
+      tags:
+        - Enquiries
+      summary: Create a service enquiry
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnquiryCreate'
+      responses:
+        '201':
+          description: Enquiry submitted
+    get:
+      tags:
+        - Enquiries
+      summary: Get all enquiries (admin/vendor)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Enquiries listed
+  /v1/service-enquiry/{id}:
+    get:
+      tags:
+        - Enquiries
+      summary: Get enquiry by id
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Enquiry fetched
+  /v1/service-enquiry/send-enquiry-notification:
+    post:
+      tags:
+        - Enquiries
+      summary: Send enquiry notification email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnquiryNotification'
+      responses:
+        '200':
+          description: Notification sent
+  /v1/insurance/start:
+    post:
+      tags:
+        - Insurance
+      summary: Start or resume an insurance enquiry
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InsuranceStart'
+      responses:
+        '200':
+          description: Enquiry started or resumed
+  /v1/insurance/save-step:
+    post:
+      tags:
+        - Insurance
+      summary: Save an insurance enquiry form step
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InsuranceSaveStep'
+      responses:
+        '200':
+          description: Step saved
+  /v1/insurance/{id}:
+    get:
+      tags:
+        - Insurance
+      summary: Get insurance enquiry by id
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Insurance enquiry returned
+  /v1/insurance/complete:
+    post:
+      tags:
+        - Insurance
+      summary: Complete an insurance enquiry
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InsuranceComplete'
+      responses:
+        '200':
+          description: Enquiry completed
+  /v1/insurance/select-plan:
+    post:
+      tags:
+        - Insurance
+      summary: Select insurance plan for enquiry
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InsuranceSelectPlan'
+      responses:
+        '200':
+          description: Plan selected
+  /v1/service-cart/add:
+    post:
+      tags:
+        - Cart
+      summary: Add a service variant to cart
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CartAdd'
+      responses:
+        '200':
+          description: Added to cart
+  /v1/service-cart/add-bundle/{bundleId}:
+    post:
+      tags:
+        - Cart
+      summary: Add a service bundle to cart
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: bundleId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CartAddBundle'
+      responses:
+        '200':
+          description: Bundle added to cart
+  /v1/service-cart/cart-items:
+    get:
+      tags:
+        - Cart
+      summary: Get current user cart items
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Cart returned
+  /v1/service-cart/item/{id}:
+    delete:
+      tags:
+        - Cart
+      summary: Remove an item from cart
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Item removed
+  /v1/service-cart/bundle/{bundleId}:
+    delete:
+      tags:
+        - Cart
+      summary: Remove a bundle from cart
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: bundleId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Bundle removed
+  /v1/service-cart/clear:
+    delete:
+      tags:
+        - Cart
+      summary: Clear the current user cart
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Cart cleared
+  /v1/service-checkout/checkout-preview:
+    get:
+      tags:
+        - Checkout
+      summary: Get checkout preview for cart
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Checkout preview returned
+  /v1/service-checkout/cart:
+    post:
+      tags:
+        - Checkout
+      summary: Create checkout orders from cart
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutCart'
+      responses:
+        '200':
+          description: Orders created from cart
+  /v1/service-checkout/buy-now-preview:
+    get:
+      tags:
+        - Checkout
+      summary: Get preview for direct buy now purchase
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: service_id
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: variant_id
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Buy now preview returned
+  /v1/service-checkout/buy-now:
+    post:
+      tags:
+        - Checkout
+      summary: Buy now for a single service variant
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BuyNow'
+      responses:
+        '200':
+          description: Buy now order created
+  /v1/service-checkout/buy-now-bundle-preview:
+    post:
+      tags:
+        - Checkout
+      summary: Get preview for bundle buy now purchase
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                bundle_id:
+                  type: integer
+                selected_items:
+                  type: array
+                  items:
+                    type: integer
+      responses:
+        '200':
+          description: Bundle preview returned
+  /v1/service-checkout/buy-now-bundle:
+    post:
+      tags:
+        - Checkout
+      summary: Buy now purchase for a bundle
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BuyNowBundle'
+      responses:
+        '200':
+          description: Bundle buy now order created
+  /v1/service-variant/create-variant:
+    post:
+      tags:
+        - Variants
+      summary: Create a service variant
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/VariantCreate'
+      responses:
+        '201':
+          description: Variant created
+  /v1/service-variant/update-variant/{id}:
+    put:
+      tags:
+        - Variants
+      summary: Update an existing variant
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/VariantUpdate'
+      responses:
+        '200':
+          description: Variant updated
+  /v1/service-variant/find/{serviceId}:
+    get:
+      tags:
+        - Variants
+      summary: List variants by service id
+      parameters:
+        - name: serviceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Variants returned
+  /v1/service-variant/remove/{id}:
+    delete:
+      tags:
+        - Variants
+      summary: Delete a service variant
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Variant deleted
+  /v1/service-variant/variant-section/{variantId}:
+    get:
+      tags:
+        - Variants
+      summary: Get variant section details
+      parameters:
+        - name: variantId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Variant sections returned
+    delete:
+      tags:
+        - Variants
+      summary: Delete a variant section
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: variantId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Variant section deleted
+  /v1/service-variant/variant-section:
+    post:
+      tags:
+        - Variants
+      summary: Add a variant section
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VariantSectionCreate'
+      responses:
+        '201':
+          description: Variant section created
+  /v1/service-bundle/:
+    get:
+      tags:
+        - Bundles
+      summary: Get active service bundles
+      responses:
+        '200':
+          description: Bundles retrieved
+  /v1/service-bundle/bundle-detail/{id}:
+    get:
+      tags:
+        - Bundles
+      summary: Get service bundle detail by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Bundle detail returned
+  /v1/service-bundle/create-bundle:
+    post:
+      tags:
+        - Bundles
+      summary: Create a service bundle
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BundleCreate'
+      responses:
+        '201':
+          description: Service bundle created
+  /v1/service-bundle/update-bundle/{id}:
+    put:
+      tags:
+        - Bundles
+      summary: Update a service bundle
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BundleUpdate'
+      responses:
+        '200':
+          description: Service bundle updated
+  /v1/service-bundle/delete-bundle/{id}:
+    delete:
+      tags:
+        - Bundles
+      summary: Delete a service bundle
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Service bundle deleted
+  /v1/service-banner/create:
+    post:
+      tags:
+        - Banners
+      summary: Create a service banner
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BannerCreate'
+      responses:
+        '200':
+          description: Banner created
+  /v1/service-banner/update/{id}:
+    put:
+      tags:
+        - Banners
+      summary: Update a service banner
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BannerUpdate'
+      responses:
+        '200':
+          description: Banner updated
+  /v1/service-banner/:
+    get:
+      tags:
+        - Banners
+      summary: Get active service banners
+      responses:
+        '200':
+          description: Banners returned
+  /v1/service-form/form/{serviceId}:
+    get:
+      tags:
+        - Forms
+      summary: Get enquiry form fields for a service
+      parameters:
+        - name: serviceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Form fields returned
+  /v1/service-orders/direct:
+    post:
+      tags:
+        - Orders
+      summary: Create a direct service order
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DirectOrderCreate'
+      responses:
+        '201':
+          description: Order created
+  /v1/service-orders/from-enquiry/{enquiryId}:
+    post:
+      tags:
+        - Orders
+      summary: Create an order from a service enquiry
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: enquiryId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Order created
+  /v1/service-orders/create-order:
+    post:
+      tags:
+        - Orders
+      summary: Create Razorpay order for service parent order
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RazorpayCreateOrder'
+      responses:
+        '200':
+          description: Razorpay order created
+  /v1/service-orders/verify-payment:
+    post:
+      tags:
+        - Orders
+      summary: Verify Razorpay payment and update service order status
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RazorpayVerifyPayment'
+      responses:
+        '200':
+          description: Payment verified
+  /v1/service-orders/my-orders:
+    get:
+      tags:
+        - Orders
+      summary: Get current user's service orders
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Orders returned
+  /v1/service-orders/order-details/{parentOrderId}:
+    get:
+      tags:
+        - Orders
+      summary: Get service order details by parent order id
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: parentOrderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Order details returned
+  /v1/service-orders/invoice-details/{parentId}:
+    get:
+      tags:
+        - Orders
+      summary: Get invoice details by parent order id
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: parentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Invoice details returned
+  /v1/service-orders/upload-document/{serviceOrderId}:
+    post:
+      tags:
+        - Orders
+      summary: Upload a document for a service order
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: serviceOrderId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UploadDocument'
+      responses:
+        '200':
+          description: Document uploaded
+  /v1/service-orders/submit-documents/{serviceOrderId}:
+    post:
+      tags:
+        - Orders
+      summary: Submit uploaded documents for a service order
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: serviceOrderId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Documents submitted
+  /v1/service-orders/status/{id}:
+    put:
+      tags:
+        - Orders
+      summary: Update order status
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOrderStatus'
+      responses:
+        '200':
+          description: Status updated
+  /v1/service-orders/cancellation-reasons:
+    get:
+      tags:
+        - Orders
+      summary: Get cancellation reasons for service orders
+      responses:
+        '200':
+          description: Cancellation reasons returned
+  /v1/service-orders/cancel-order-request:
+    post:
+      tags:
+        - Orders
+      summary: Request service order cancellation
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelOrderRequest'
+      responses:
+        '200':
+          description: Cancellation requested
+  /v1/service-orders/cancellation-details/{serviceOrderId}:
+    get:
+      tags:
+        - Orders
+      summary: Get cancellation details for a service order
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: serviceOrderId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Cancellation details returned
+  /v1/service-orders/issue-types:
+    get:
+      tags:
+        - Orders
+      summary: Get available service order issue types
+      responses:
+        '200':
+          description: Issue types returned
+  /v1/service-orders/order-help:
+    post:
+      tags:
+        - Orders
+      summary: Create a support request for a service order
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/OrderHelpRequest'
+      responses:
+        '200':
+          description: Support request submitted
+  /v1/service-orders/order-help/{serviceOrderId}:
+    get:
+      tags:
+        - Orders
+      summary: List support requests for a service order
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: serviceOrderId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Support requests returned
+  /v1/service-order-documents/required-documents/{orderId}:
+    get:
+      tags:
+        - Order Documents
+      summary: Get required service order documents for an order
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Required documents returned
+  /v1/service-order-documents/documents/{orderId}:
+    get:
+      tags:
+        - Order Documents
+      summary: Get service order document page for an order
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Document page returned
+  /v1/service-order-documents/parent-documents/{parentOrderId}:
+    get:
+      tags:
+        - Order Documents
+      summary: Get parent order document page for a parent order
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: parentOrderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Parent order document page returned

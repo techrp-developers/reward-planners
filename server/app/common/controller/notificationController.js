@@ -1,19 +1,15 @@
 const NotificationModel = require("../models/notificationModel");
-const db = require("../../../config/database");
-const fs = require("fs");
-const path = require("path");
-
 
 class NotificationController {
   /* ================================
-     GET NOTIFICATIONS
+     GET MY NOTIFICATIONS
   ================================= */
   async getMyNotifications(req, res) {
     try {
-      // const userId = req.user?.user_id;
-      const userId = 1; // temporary
+      const userId = req.user?.user_id || 1;
 
-      const notifications = await NotificationModel.getByUser(userId);
+      const notifications =
+        await NotificationModel.getByUser(userId);
 
       return res.json({
         success: true,
@@ -21,6 +17,7 @@ class NotificationController {
       });
     } catch (error) {
       console.error("Fetch Notifications Error:", error);
+
       return res.status(500).json({
         success: false,
         message: "Failed to fetch notifications",
@@ -29,16 +26,25 @@ class NotificationController {
   }
 
   /* ================================
-     MARK AS READ
+     MARK SINGLE READ
   ================================= */
   async markAsRead(req, res) {
     try {
-      // const userId = req.user?.user_id;
-      const userId = 1;
-
+      const userId = req.user?.user_id || 1;
       const { notification_id } = req.params;
 
-      await NotificationModel.markAsRead(notification_id, userId);
+      const updated =
+        await NotificationModel.markAsRead(
+          notification_id,
+          userId
+        );
+
+      if (!updated) {
+        return res.status(404).json({
+          success: false,
+          message: "Notification not found",
+        });
+      }
 
       return res.json({
         success: true,
@@ -46,9 +52,33 @@ class NotificationController {
       });
     } catch (error) {
       console.error("Mark Read Error:", error);
+
       return res.status(500).json({
         success: false,
         message: "Failed to mark as read",
+      });
+    }
+  }
+
+  /* ================================
+     MARK ALL READ
+  ================================= */
+  async markAllAsRead(req, res) {
+    try {
+      const userId = req.user?.user_id || 1;
+
+      await NotificationModel.markAllAsRead(userId);
+
+      return res.json({
+        success: true,
+        message: "All notifications marked as read",
+      });
+    } catch (error) {
+      console.error("Mark All Read Error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Failed to mark all notifications",
       });
     }
   }
@@ -58,9 +88,10 @@ class NotificationController {
   ================================= */
   async getUnreadBadge(req, res) {
     try {
-      const userId = 1;
+      const userId = req.user?.user_id || 1;
 
-      const count = await NotificationModel.getUnreadCount(userId);
+      const count =
+        await NotificationModel.getUnreadCount(userId);
 
       return res.json({
         success: true,
@@ -68,9 +99,45 @@ class NotificationController {
       });
     } catch (error) {
       console.error("Notification Badge Error:", error);
+
       return res.status(500).json({
         success: false,
         message: "Failed to fetch badge count",
+      });
+    }
+  }
+
+  /* ================================
+     DELETE NOTIFICATION
+  ================================= */
+  async deleteNotification(req, res) {
+    try {
+      const userId = req.user?.user_id || 1;
+      const { notification_id } = req.params;
+
+      const deleted =
+        await NotificationModel.delete(
+          notification_id,
+          userId
+        );
+
+      if (!deleted) {
+        return res.status(404).json({
+          success: false,
+          message: "Notification not found",
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: "Notification deleted",
+      });
+    } catch (error) {
+      console.error("Delete Notification Error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Failed to delete notification",
       });
     }
   }

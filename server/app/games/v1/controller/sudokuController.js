@@ -1,5 +1,6 @@
 const { getSudoku } = require("sudoku-gen");
 const db = require("../../../../config/database");
+const { notifyUser } = require("../../../common/utils/notification");
 
 exports.startGame = async (req, res) => {
   try {
@@ -142,6 +143,26 @@ exports.completeGame = async (req, res) => {
 
        WHERE user_id = ?`,
       [totalPoints, userId],
+    );
+
+    notifyUser(
+      {
+        userId,
+        module: "games",
+        type: "sudoku_completed",
+        title: "Sudoku completed",
+        message: `You earned ${totalPoints} points for completing a ${game.difficulty} Sudoku.`,
+        icon: "gamepad-2",
+        reference_type: "sudoku_game",
+        reference_id: game_id,
+        action_url: "/games/sudoku/leaderboard",
+        metadata: {
+          difficulty: game.difficulty,
+          completion_time,
+          points_earned: totalPoints,
+        },
+      },
+      "sudoku completed notification",
     );
 
     return res.json({

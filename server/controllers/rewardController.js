@@ -1,5 +1,4 @@
 const RewardModel = require("../models/rewardModel");
-const RewardService = require("../services/Reward/reward-service");
 const db = require("../config/database");
 
 class RewardController {
@@ -20,6 +19,9 @@ class RewardController {
         priority = 1,
         is_stackable = 0,
         expiry_days = 90,
+        redemption_type = null,
+        redemption_value = null,
+        max_redemption_amount = null,
       } = req.body;
 
       if (!reward_type || !reward_value || !source_type) {
@@ -31,15 +33,15 @@ class RewardController {
 
       const [result] = await db.execute(
         `INSERT INTO reward_rules 
-      (name, reward_type, reward_value, max_reward, min_order_amount, max_order_amount, source_type, description, start_date, end_date, priority, is_stackable, expiry_days)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (name, reward_type, reward_value, max_reward, min_order_amount, max_order_amount, source_type, description, start_date, end_date, priority, is_stackable, expiry_days,redemption_type, redemption_value, max_redemption_amount)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           name,
           reward_type,
           reward_value,
           max_reward || null,
           min_order_amount || 0,
-          max_order_amount || 0,
+          max_order_amount || null,
           source_type,
           description || null,
           start_date || null,
@@ -47,6 +49,9 @@ class RewardController {
           priority,
           is_stackable,
           expiry_days,
+          redemption_type,
+          redemption_value,
+          max_redemption_amount,
         ],
       );
 
@@ -131,6 +136,9 @@ class RewardController {
         priority,
         is_stackable,
         expiry_days,
+        redemption_type,
+        redemption_value,
+        max_redemption_amount,
       } = req.body;
 
       const [result] = await db.execute(
@@ -149,7 +157,10 @@ class RewardController {
         end_date = ?,
         priority = ?,
         is_stackable = ?,
-        expiry_days = ?
+        expiry_days = ?,
+        redemption_type = ?,
+        redemption_value = ?,
+        max_redemption_amount = ?
        WHERE reward_rule_id = ?`,
         [
           name,
@@ -166,6 +177,9 @@ class RewardController {
           priority,
           is_stackable,
           expiry_days,
+          redemption_type,
+          redemption_value,
+          max_redemption_amount,
           id,
         ],
       );
@@ -243,7 +257,7 @@ class RewardController {
 
       const targets = [
         variant_id ? 1 : 0,
-        product_id ? 1 : 0,
+        !variant_id && product_id ? 1 : 0,
         subcategory_id ? 1 : 0,
         category_id ? 1 : 0,
       ];
@@ -302,56 +316,6 @@ class RewardController {
         success: false,
         message: err.message,
       });
-    }
-  }
-
-  // APPLY REWARD (CALL THIS IN ORDER FLOW)
-  async applyReward(req, res) {
-    try {
-      const { user_id, product_id, variant_id, order_id, order_amount } =
-        req.body;
-
-      if (!user_id || !product_id || !order_id || !order_amount) {
-        return res.status(400).json({
-          success: false,
-          message: "Missing required fields",
-        });
-      }
-
-      // Fetch category + subcategory
-      const [product] = await db.execute(
-        `SELECT category_id, subcategory_id 
-       FROM eproducts 
-       WHERE product_id = ?`,
-        [product_id],
-      );
-
-      if (!product.length) {
-        return res.status(404).json({
-          success: false,
-          message: "Product not found",
-        });
-      }
-
-      const { category_id, subcategory_id } = product[0];
-
-      const result = await RewardService.processOrderReward({
-        user_id,
-        product_id,
-        variant_id,
-        order_id,
-        order_amount,
-        category_id,
-        subcategory_id,
-      });
-
-      return res.json({
-        success: true,
-        message: "Reward processed",
-        data: result,
-      });
-    } catch (err) {
-      return res.status(500).json({ success: false, message: err.message });
     }
   }
 }

@@ -69,4 +69,38 @@ router.post(
   orderController.rejectCancellation,
 );
 
+// ================================================Service======================================================
+// approve cancellation request
+router.post(
+  "/approve-service-cancellation/:serviceOrderId",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  orderController.approveServiceCancellation,
+);
+
+// reject service cancellation
+router.post(
+  "/reject-service-cancellation/:serviceOrderId",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  orderController.rejectServiceCancellation,
+);
+
+// ====================================================MPS service=================================================
+// approve cancellation request
+router.post(
+  "/approve-mps-service-cancellation/:serviceOrderId",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  orderController.approveMpsServiceCancellation,
+);
+
+// reject service cancellation
+router.post(
+  "/reject-mps-service-cancellation/:serviceOrderId",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  orderController.rejectMpsServiceCancellation,
+);
+
 module.exports = router;

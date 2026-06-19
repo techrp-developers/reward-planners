@@ -2,6 +2,13 @@ const FitnessModel = require("../models/fitnessModel");
 const FitnessService = require("../service/fitnessService");
 const db = require("../../../../config/database");
 
+const getErrorStatus = (err) => {
+  const badRequestMessages = ["Invalid", "Missing required fields"];
+  return badRequestMessages.some((message) => err.message?.startsWith(message))
+    ? 400
+    : 500;
+};
+
 class FitnessController {
   async getOnboardingStatus(req, res) {
     try {
@@ -22,7 +29,7 @@ class FitnessController {
         is_completed: status,
       });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(getErrorStatus(err)).json({ success: false, message: err.message });
     }
   }
 
@@ -44,7 +51,7 @@ class FitnessController {
 
       res.json({ message: "Goal set successfully" });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(getErrorStatus(err)).json({ success: false, message: err.message });
     }
   }
 
@@ -84,7 +91,7 @@ class FitnessController {
         message: "Profile updated",
       });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(getErrorStatus(err)).json({ success: false, message: err.message });
     }
   }
 
@@ -106,7 +113,7 @@ class FitnessController {
 
       res.json({ message: "Body profile updated" });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(getErrorStatus(err)).json({ success: false, message: err.message });
     }
   }
 

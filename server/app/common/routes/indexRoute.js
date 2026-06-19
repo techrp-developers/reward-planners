@@ -6,15 +6,17 @@ const supportRoutes = require("./supportRoute");
 const termRoutes = require("./termRoute");
 const authRoutes = require("./authRoute");
 const todoRoute = require("./todoRoutes");
-const notificationRoute = require("./notificationRoute");
-const walletRoute = require("./walletRoute");
+const notificationRoutes = require("./notificationRoute");
+const walletRoutes = require("./walletRoute");
+const globalRoutes = require("./globalRoute");
 
 router.use("/auth", authRoutes);
+router.use("/global", globalRoutes);
 router.use("/settings", settingRoutes);
 router.use("/support", supportRoutes);
 router.use("/terms", termRoutes);
 router.use("/todo", todoRoute);
-router.use("/notification", notificationRoute);
-router.use("/wallet", walletRoute);
+router.use("/notification", notificationRoutes);
+router.use("/wallet", walletRoutes);
 
 module.exports = router;

@@ -1,6 +1,14 @@
 const orderModel = require("../models/orderModel");
 const db = require("../config/database");
 const xpressService = require("../services/ExpressBees/xpressbees_service");
+const ServiceOrderModel = require("../app/service/v1/models/serviceOrderModel");
+const { sendOpsAlert } = require("../services/alertService");
+const Razorpay = require("razorpay");
+
+const razorpay = new Razorpay({
+  key_id: process.env.RAZOR_API_KEY,
+  key_secret: process.env.RAZOR_SECRET_KEY,
+});
 
 class OrderController {
   async getOrderList(req, res) {
@@ -203,7 +211,7 @@ class OrderController {
     }
   }
 
-  // Approve cancellation
+  // Approve order cancellation
   async approveCancellation(req, res) {
     const conn = await db.getConnection();
 
@@ -216,15 +224,156 @@ class OrderController {
 
       await conn.commit();
 
-      //  refund AFTER commit
+      // ==========================
+      // COURIER CANCELS — after commit, outside transaction
+      // ==========================
+      if (refundData?.cancellableAwbs?.length) {
+        for (const awb of refundData.cancellableAwbs) {
+          try {
+            await xpressService.cancelShipmentExpressBees(awb);
+          } catch (e) {
+            // Non-fatal — DB already cancelled, courier may already have it
+            console.warn(
+              `[approveCancellation] Courier cancel failed for AWB ${awb}:`,
+              e.message,
+            );
+          }
+        }
+      }
+
+      // ==========================
+      // REFUND — after commit
+      // ==========================
       if (refundData?.razorpay_payment_id) {
-        await orderModel.processRefund(refundData, orderId);
+        try {
+          await orderModel.processRefund(refundData, orderId);
+        } catch (err) {
+          // Refund failed — DB is in clean cancelled state
+          // but money not returned — ops must intervene
+          sendOpsAlert({
+            level: "critical",
+            category: "refund",
+            message: `Refund FAILED for cancelled order ${orderId} — MANUAL REFUND REQUIRED`,
+            meta: {
+              orderId,
+              razorpay_payment_id: refundData.razorpay_payment_id,
+              amount: refundData.amount,
+              error: err.message,
+            },
+          }).catch(() => {});
+        }
       }
 
       return res.json({
         success: true,
         message: "Cancellation approved successfully",
       });
+    } catch (error) {
+      await conn.rollback();
+
+      console.error("Approve cancellation error:", error);
+
+      if (error.message === "ORDER_NOT_FOUND") {
+        return res
+          .status(404)
+          .json({ success: false, message: "Order not found" });
+      }
+
+      if (error.message === "INVALID_CANCELLATION_STATE") {
+        return res
+          .status(400)
+          .json({ success: false, message: "No pending cancellation request" });
+      }
+
+      if (error.message === "ORDER_ALREADY_CANCELLED") {
+        return res
+          .status(400)
+          .json({ success: false, message: "Order already cancelled" });
+      }
+
+      if (error.message === "REFUND_ALREADY_DONE") {
+        return res
+          .status(400)
+          .json({ success: false, message: "Refund already processed" });
+      }
+
+      return res
+        .status(500)
+        .json({ success: false, message: "Unable to approve cancellation" });
+    } finally {
+      conn.release();
+    }
+  }
+
+  // Rejection order cancellation
+  async rejectCancellation(req, res) {
+    const conn = await db.getConnection();
+
+    try {
+      await conn.beginTransaction();
+
+      const orderId = Number(req.params.orderId);
+
+      await orderModel.rejectCancellation(orderId, conn);
+
+      await conn.commit();
+
+      return res.json({ success: true, message: "Cancellation rejected" });
+    } catch (error) {
+      await conn.rollback();
+
+      console.error("Reject cancellation error:", error);
+
+      if (error.message === "ORDER_NOT_FOUND") {
+        return res
+          .status(404)
+          .json({ success: false, message: "Order not found" });
+      }
+
+      if (error.message === "INVALID_CANCELLATION_STATE") {
+        return res
+          .status(400)
+          .json({ success: false, message: "No pending cancellation request" });
+      }
+
+      return res
+        .status(500)
+        .json({ success: false, message: "Unable to reject cancellation" });
+    } finally {
+      conn.release();
+    }
+  }
+
+  // ===========================================Service============================================================
+  // approve service cancellation
+  async approveServiceCancellation(req, res) {
+    const conn = await db.getConnection();
+
+    try {
+      await conn.beginTransaction();
+
+      const serviceOrderId = Number(req.params.serviceOrderId);
+
+      const refundData = await ServiceOrderModel.approveCancellation(
+        serviceOrderId,
+        conn,
+      );
+
+      await conn.commit();
+
+      res.json({
+        success: true,
+        message: "Cancellation approved successfully",
+      });
+
+      if (refundData?.payment_id) {
+        ServiceOrderModel.processRefund(refundData).catch((err) => {
+          console.error(
+            `[approveServiceCancellation] Refund failed for service_order_id=${refundData.service_order_id}:`,
+            err.message,
+          );
+        });
+      }
     } catch (error) {
       await conn.rollback();
 
@@ -239,16 +388,91 @@ class OrderController {
     }
   }
 
-  // 4 Reject cancellation
-  async rejectCancellation(req, res) {
+  // reject service cancellation
+  async rejectServiceCancellation(req, res) {
     const conn = await db.getConnection();
 
     try {
       await conn.beginTransaction();
 
-      const orderId = Number(req.params.orderId);
+      const serviceOrderId = Number(req.params.serviceOrderId);
 
-      await orderModel.rejectCancellation(orderId, conn);
+      await ServiceOrderModel.rejectCancellation(serviceOrderId, conn);
+
+      await conn.commit();
+
+      return res.json({
+        success: true,
+        message: "Cancellation rejected",
+      });
+    } catch (error) {
+      await conn.rollback();
+
+      console.error("Reject cancellation error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Unable to reject cancellation",
+      });
+    } finally {
+      conn.release();
+    }
+  }
+
+  // ===========================================MPS Service============================================================
+  // approve service cancellation
+  async approveMpsServiceCancellation(req, res) {
+    const conn = await db.getConnection();
+
+    try {
+      await conn.beginTransaction();
+
+      const serviceOrderId = Number(req.params.serviceOrderId);
+
+      const refundData = await ServiceOrderModel.approveMpsCancellation(
+        serviceOrderId,
+        conn,
+      );
+
+      await conn.commit();
+
+      res.json({
+        success: true,
+        message: "Cancellation approved successfully",
+      });
+
+      if (refundData?.payment_id) {
+        ServiceOrderModel.processMpsRefund(refundData).catch((err) => {
+          console.error(
+            `[approveMpsServiceCancellation] Refund failed for service_order_id=${refundData.service_order_id}:`,
+            err.message,
+          );
+        });
+      }
+    } catch (error) {
+      await conn.rollback();
+
+      console.error("Approve cancellation error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Unable to approve cancellation",
+      });
+    } finally {
+      conn.release();
+    }
+  }
+
+  // reject service cancellation
+  async rejectMpsServiceCancellation(req, res) {
+    const conn = await db.getConnection();
+
+    try {
+      await conn.beginTransaction();
+
+      const serviceOrderId = Number(req.params.serviceOrderId);
+
+      await ServiceOrderModel.rejectMpsCancellation(serviceOrderId, conn);
 
       await conn.commit();
 

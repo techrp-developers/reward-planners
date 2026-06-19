@@ -6,7 +6,7 @@ const maxRequests = Number(process.env.BBPS_FETCH_BILL_RATE_MAX || 15);
 const requestStore = new Map();
 
 const fetchBillRateLimit = (req, res, next) => {
-  const key = req.user?._id?.toString() || getClientIP(req);
+  const key = req.user?.user_id ? `user_${req.user.user_id}` : getClientIP(req);
   const now = Date.now();
 
   const item = requestStore.get(key) || { count: 0, windowStart: now };

@@ -1,14 +1,19 @@
 const jwt = require("jsonwebtoken");
 
-const JWT_SECRET =
-  process.env.JWT_SECRET || "REWARD_PLANNERS_SECRET_2025_CHANGE_THIS";
+const getJwtSecret = () => {
+  if (!process.env.JWT_SECRET) {
+    throw new Error("JWT_SECRET is missing from environment configuration");
+  }
+
+  return process.env.JWT_SECRET;
+};
 
 exports.generateToken = (payload) => {
-  return jwt.sign(payload, JWT_SECRET, {
+  return jwt.sign(payload, getJwtSecret(), {
     expiresIn: "24h",
   });
 };
 
 exports.verifyToken = (token) => {
-  return jwt.verify(token, JWT_SECRET);
+  return jwt.verify(token, getJwtSecret());
 };

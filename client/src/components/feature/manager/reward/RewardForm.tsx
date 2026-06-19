@@ -15,12 +15,19 @@ const RewardForm: React.FC = () => {
     reward_value: "",
     max_reward: "",
     min_order_amount: "",
-    max_order_amount: "", // <--- 1. ADDED TO STATE
+    max_order_amount: "",
+
+    redemption_type: "",
+    redemption_value: "",
+    max_redemption_amount: "",
+
     source_type: "product",
     is_active: 1,
+
     description: "",
     start_date: "",
     end_date: "",
+
     priority: 1,
     is_stackable: 0,
     expiry_days: 90,
@@ -35,8 +42,15 @@ const RewardForm: React.FC = () => {
       setLoading(true);
       const res = await api.get(`/reward/get-rule/${id}`);
       if (res.data.success) {
-        // Ensure max_order_amount is mapped correctly from API
-        setForm({ ...res.data?.data });
+        setForm({
+          ...res.data.data,
+
+          redemption_type: res.data.data.redemption_type || "",
+
+          redemption_value: res.data.data.redemption_value || "",
+
+          max_redemption_amount: res.data.data.max_redemption_amount || "",
+        });
       }
     } catch (err) {
       console.error(err);
@@ -52,21 +66,55 @@ const RewardForm: React.FC = () => {
     >,
   ) => {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+
+    if (name === "redemption_type" && value === "") {
+      setForm((prev) => ({
+        ...prev,
+        redemption_type: "",
+        redemption_value: "",
+        max_redemption_amount: "",
+      }));
+      return;
+    }
+
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       setLoading(true);
+
+      if (form.redemption_type && !form.redemption_value) {
+        throw new Error("Please enter redemption value");
+      }
+
       const payload = {
         ...form,
+
         reward_value: Number(form.reward_value),
+
         max_reward: form.max_reward ? Number(form.max_reward) : null,
+
         min_order_amount: Number(form.min_order_amount),
+
         max_order_amount: form.max_order_amount
           ? Number(form.max_order_amount)
-          : null, // <--- 2. ADDED TO PAYLOAD
+          : null,
+
+        redemption_type: form.redemption_type || null,
+
+        redemption_value: form.redemption_value
+          ? Number(form.redemption_value)
+          : null,
+
+        max_redemption_amount: form.max_redemption_amount
+          ? Number(form.max_redemption_amount)
+          : null,
+
         priority: Number(form.priority),
         is_stackable: Number(form.is_stackable),
         expiry_days: Number(form.expiry_days),
@@ -118,7 +166,33 @@ const RewardForm: React.FC = () => {
             </div>
           </div>
 
-          {/* SECTION: CONFIG (Updated to 2x2 layout) */}
+          {/* SECTION: RANGE */}
+          <h3>Range</h3>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Min Order Amount</label>
+              <input
+                type="number"
+                name="min_order_amount"
+                value={form.min_order_amount}
+                onChange={handleChange}
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Max Order Amount</label>
+              <input
+                type="number"
+                name="max_order_amount"
+                value={form.max_order_amount}
+                onChange={handleChange}
+                placeholder="Optional"
+              />
+            </div>
+          </div>
+
+          {/* SECTION: Reward Config */}
           <h3>Reward Configuration</h3>
           <div className="form-row">
             <div className="form-group">
@@ -143,29 +217,57 @@ const RewardForm: React.FC = () => {
             </div>
           </div>
 
+          {/* SECTION: REDEMPTION */}
+          <h3>Redemption Configuration</h3>
+
           <div className="form-row">
             <div className="form-group">
-              <label>Min Order Amount</label>
-              <input
-                type="number"
-                name="min_order_amount"
-                value={form.min_order_amount}
+              <label>Redemption Type</label>
+
+              <select
+                name="redemption_type"
+                value={form.redemption_type}
                 onChange={handleChange}
-                required
-              />
+              >
+                <option value="">No Redemption</option>
+                <option value="percentage">Percentage (%)</option>
+                <option value="fixed">Fixed (₹)</option>
+              </select>
             </div>
-            <div className="form-group">
-              <label>Max Order Amount</label> {/* <--- 3. ADDED TO UI */}
-              <input
-                type="number"
-                name="max_order_amount"
-                value={form.max_order_amount}
-                onChange={handleChange}
-                placeholder="Optional"
-              />
-            </div>
+
+            {form.redemption_type && (
+              <div className="form-group">
+                <label>Redemption Value</label>
+
+                <input
+                  type="number"
+                  name="redemption_value"
+                  value={form.redemption_value}
+                  onChange={handleChange}
+                  placeholder="Required"
+                />
+              </div>
+            )}
           </div>
 
+          {form.redemption_type && (
+            <div className="form-row">
+              <div className="form-group">
+                <label>Max Redemption Amount</label>
+
+                <input
+                  type="number"
+                  name="max_redemption_amount"
+                  value={form.max_redemption_amount}
+                  onChange={handleChange}
+                  placeholder="Optional"
+                />
+              </div>
+
+              <div className="form-group"></div>
+            </div>
+          )}
+          
           {/* SECTION: ADVANCED */}
           <h3>Advanced Settings</h3>
           <div className="form-group">

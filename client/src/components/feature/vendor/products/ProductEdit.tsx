@@ -148,6 +148,7 @@ interface ProductData {
   removedVideo?: boolean;
   isDiscountEligible: 1 | 0;
   isReturnable: 1 | 0;
+  isReplaceable: 1 | 0;
   returnWindowDays: string;
 
   deliveryMinDays: string;
@@ -172,6 +173,7 @@ const initialProductData: ProductData = {
   removedImages: [],
   isDiscountEligible: 1,
   isReturnable: 1,
+  isReplaceable: 1,
   returnWindowDays: "",
 
   deliveryMinDays: "1",
@@ -627,6 +629,7 @@ export default function EditProductPage() {
         subSubCategoryId: p.sub_subcategory_id || null,
         isDiscountEligible: p.is_discount_eligible ?? 1,
         isReturnable: p.is_returnable ?? 1,
+        isReplaceable: p.is_replaceable ?? 1,
         returnWindowDays: p.return_window_days
           ? String(p.return_window_days)
           : "",
@@ -796,6 +799,8 @@ export default function EditProductPage() {
       );
 
       formData.append("is_returnable", String(product.isReturnable));
+
+      formData.append("is_replaceable", String(product.isReplaceable));
 
       if (product.isReturnable === 1) {
         formData.append("return_window_days", product.returnWindowDays);
@@ -1384,11 +1389,34 @@ export default function EditProductPage() {
                       setProduct((prev) => ({
                         ...prev,
                         isReturnable: val,
+                        isReplaceable: val === 0 ? 0 : prev.isReplaceable,
                         returnWindowDays:
                           val === 0 ? "" : prev.returnWindowDays,
                       }));
                     }}
                     className="w-full p-3 border rounded-lg"
+                  >
+                    <option value={1}>Yes</option>
+                    <option value={0}>No</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block mb-1 text-sm font-medium text-gray-700">
+                    Replaceable
+                  </label>
+
+                  <select
+                    name="isReplaceable"
+                    value={product.isReplaceable}
+                    disabled={product.isReturnable === 0}
+                    onChange={(e) =>
+                      setProduct((prev) => ({
+                        ...prev,
+                        isReplaceable: Number(e.target.value) as 1 | 0,
+                      }))
+                    }
+                    className="w-full p-3 border rounded-lg disabled:bg-gray-100 disabled:cursor-not-allowed"
                   >
                     <option value={1}>Yes</option>
                     <option value={0}>No</option>
@@ -1630,7 +1658,10 @@ export default function EditProductPage() {
               type="submit"
               disabled={isSubmitting}
               className="flex items-center justify-center w-full px-6 py-3 text-lg font-bold text-white rounded-full transition-all duration-300 cursor-pointer hover:opacity-90 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
-              style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)", boxShadow: "0 8px 24px rgba(133,43,175,0.3)" }}
+              style={{
+                background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
+                boxShadow: "0 8px 24px rgba(133,43,175,0.3)",
+              }}
             >
               {isSubmitting ? (
                 <>

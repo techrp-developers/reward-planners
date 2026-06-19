@@ -11,10 +11,19 @@ async function sendTemplateMessage({
 }) {
   const baseUrl = process.env.INTERAKT_BASE_URL;
   const apiKey = process.env.INTERAKT_API_KEY;
+  const phoneNumber = String(phone || "").replace("+91", "").replace("+", "");
+
+  if (!baseUrl || !apiKey) {
+    throw new Error("INTERAKT_CONFIG_MISSING");
+  }
+
+  if (!phoneNumber) {
+    throw new Error("INTERAKT_PHONE_MISSING");
+  }
 
   const payload = {
     countryCode: "+91",
-    phoneNumber: phone.replace("+91", "").replace("+", ""),
+    phoneNumber,
     type: "Template",
     ...(callbackData ? { callbackData } : {}),
     template: {

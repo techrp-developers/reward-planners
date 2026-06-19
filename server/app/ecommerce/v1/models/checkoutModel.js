@@ -4,47 +4,17 @@ const path = require("path");
 const AddressModel = require("../../../common/models/addressModel");
 const xpressService = require("../../../../services/ExpressBees/xpressbees_service");
 const RewardModel = require("../../../../models/rewardModel");
+const { generateOrderRef } = require("../utils/orderRef");
+const {
+  calculateReward,
+  resolveRedemption,
+  calculateRedeemableCoins,
+} = require("../utils/rewardCalculate");
 
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
 function getPublicUrl(path) {
   if (!path) return null;
   return `${CDN_BASE_URL}/${path}`;
-}
-
-function calculateReward(amount, rules = []) {
-  let total = 0;
-
-  for (let rule of rules) {
-    if (!rule.can_earn_reward) continue;
-
-    let reward = 0;
-
-    if (rule.reward_type === "percentage") {
-      reward = (amount * rule.reward_value) / 100;
-
-      if (rule.max_reward) {
-        reward = Math.min(reward, rule.max_reward);
-      }
-    }
-
-    if (rule.reward_type === "fixed") {
-      reward = rule.reward_value;
-    }
-
-    total += reward;
-
-    // stop if not stackable
-    if (!rule.is_stackable) break;
-  }
-
-  return Math.floor(total);
-}
-
-function generateOrderRef() {
-  const date = new Date();
-  const ymd = date.toISOString().slice(0, 10).replace(/-/g, "");
-  const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
-  return `ORD-${ymd}-${rand}`;
 }
 
 function formatDate(date) {
@@ -54,173 +24,6 @@ function formatDate(date) {
     day: "numeric",
     month: "short",
   });
-}
-
-async function generateInvoices(orderId, conn) {
-  try {
-    // 1 Fetch order items with vendor
-    const [items] = await conn.query(
-      `
-      SELECT 
-        oi.product_id,
-        oi.variant_id,
-        oi.quantity,
-        oi.price,
-        p.product_name,
-        p.vendor_id,
-        p.gst_slab,
-        p.hsn_sac_code,
-        v.sku
-      FROM eorder_items oi
-      JOIN eproducts p ON oi.product_id = p.product_id
-      JOIN product_variants v ON oi.variant_id = v.variant_id
-      WHERE oi.order_id = ?
-      `,
-      [orderId],
-    );
-
-    if (!items.length) {
-      return;
-    }
-
-    // 2 Group items by vendor
-    const vendorMap = {};
-
-    for (const item of items) {
-      if (!vendorMap[item.vendor_id]) {
-        vendorMap[item.vendor_id] = [];
-      }
-      vendorMap[item.vendor_id].push(item);
-    }
-
-    // 3 Create invoice per vendor
-    for (const vendorId of Object.keys(vendorMap)) {
-      // Prevent duplicates
-      const [[existing]] = await conn.query(
-        `SELECT invoice_id FROM invoices 
-         WHERE order_id = ? AND vendor_id = ? 
-         LIMIT 1`,
-        [orderId, vendorId],
-      );
-
-      if (existing) continue;
-
-      const vendorItems = vendorMap[vendorId];
-      const invoiceNumber = `INV-${orderId}-${vendorId}`;
-
-      let subtotal = 0;
-      let taxTotal = 0;
-
-      // Calculate totals
-      for (const item of vendorItems) {
-        const lineSubtotal = Number(item.price) * Number(item.quantity);
-        const gstRate = Number(item.gst_slab || 0);
-        const taxAmount = lineSubtotal * (gstRate / 100);
-
-        subtotal += lineSubtotal;
-        taxTotal += taxAmount;
-      }
-
-      // 4 Fetch shipping charges for vendor
-      const [[shipment]] = await conn.query(
-        `
-        SELECT shipping_charges
-        FROM order_shipments
-        WHERE order_id = ? AND vendor_id = ?
-        LIMIT 1
-        `,
-        [orderId, vendorId],
-      );
-
-      const shippingCharges = Number(shipment?.shipping_charges || 0);
-
-      const grandTotal = subtotal + taxTotal + shippingCharges;
-
-      // 5 Create invoice
-      const [invResult] = await conn.query(
-        `
-        INSERT INTO invoices
-        (
-          invoice_number,
-          order_id,
-          vendor_id,
-          user_id,
-          subtotal,
-          tax_total,
-          shipping_amount,
-          grand_total
-        )
-        SELECT ?, o.order_id, ?, o.user_id, ?, ?, ?, ?
-        FROM eorders o
-        WHERE o.order_id = ?
-        `,
-        [
-          invoiceNumber,
-          vendorId,
-          subtotal,
-          taxTotal,
-          shippingCharges,
-          grandTotal,
-          orderId,
-        ],
-      );
-
-      const invoiceId = invResult.insertId;
-
-      // 6 Insert invoice items
-      for (const item of vendorItems) {
-        const lineSubtotal = Number(item.price) * Number(item.quantity);
-        const gstRate = Number(item.gst_slab || 0);
-
-        const totalTax = lineSubtotal * (gstRate / 100);
-
-        const cgst = totalTax / 2;
-        const sgst = totalTax / 2;
-        const igst = 0;
-
-        const lineTotal = lineSubtotal + totalTax;
-
-        await conn.query(
-          `
-            INSERT INTO invoice_items
-            (
-              invoice_id,
-              product_id,
-              variant_id,
-              product_name,
-              sku,
-              quantity,
-              unit_price,
-              tax_rate,
-              hsn_code,
-              cgst_amount,
-              sgst_amount,
-              igst_amount,
-              line_total
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `,
-          [
-            invoiceId,
-            item.product_id,
-            item.variant_id,
-            item.product_name,
-            item.sku,
-            item.quantity,
-            item.price,
-            gstRate,
-            item.hsn_sac_code,
-            cgst,
-            sgst,
-            igst,
-            lineTotal,
-          ],
-        );
-      }
-    }
-  } catch (err) {
-    throw err;
-  }
 }
 
 class CheckoutModel {
@@ -274,10 +77,10 @@ class CheckoutModel {
           v.length,
           v.breadth,
           v.height,
-          v.reward_redemption_limit,
           p.vendor_id,
           p.category_id,
-          p.subcategory_id
+          p.subcategory_id,
+          p.is_discount_eligible
 
         FROM cart_items ci
         JOIN product_variants v ON ci.variant_id = v.variant_id
@@ -290,6 +93,12 @@ class CheckoutModel {
       );
 
       if (!cartItems.length) throw new Error("CART_EMPTY");
+
+      cartItems.sort((a, b) => {
+        const totalA = Number(a.sale_price) * a.quantity;
+        const totalB = Number(b.sale_price) * b.quantity;
+        return totalA - totalB;
+      });
 
       // 2 Validate stock
       for (const item of cartItems) {
@@ -322,7 +131,7 @@ class CheckoutModel {
         const itemTotal = Number(item.sale_price) * item.quantity;
         productTotal += itemTotal;
 
-        const key = `${item.product_id}_${item.variant_id}_${item.category_id}_${item.subcategory_id}_${item.sale_price}`;
+        const key = `${item.product_id}_${item.variant_id}_${item.category_id}_${item.subcategory_id}_${itemTotal}`;
 
         let rules = rewardCache[key];
 
@@ -332,17 +141,18 @@ class CheckoutModel {
             item.variant_id,
             item.category_id,
             item.subcategory_id,
-            item.sale_price,
+            itemTotal,
+            item.is_discount_eligible,
           );
           rewardCache[key] = rules;
         }
 
-        /* ---------- REDEEM ---------- */
+        /* ---------- REDEEM (rule-based) ---------- */
         let redeemable = 0;
-        const limit = Number(item.reward_redemption_limit || 0);
 
-        if (useRewards && limit > 0 && remainingWallet > 0) {
-          const maxAllowed = Math.floor((itemTotal * limit) / 100);
+        if (useRewards && remainingWallet > 0) {
+          const redemption = resolveRedemption(itemTotal, rules);
+          const maxAllowed = calculateRedeemableCoins(itemTotal, redemption);
 
           redeemable = Math.min(remainingWallet, maxAllowed, itemTotal);
 
@@ -367,6 +177,7 @@ class CheckoutModel {
           rewardEarn,
         };
       }
+
       totalRedeemed = Math.min(totalRedeemed, productTotal);
 
       // 4 Group Items by Vendor(Shipping)
@@ -508,30 +319,52 @@ class CheckoutModel {
         throw new Error("PRICE_MISMATCH");
       }
 
+      // ===============================
+      // ORDER EXPIRY
+      // ===============================
+      const expiresAt = new Date();
+      expiresAt.setMinutes(expiresAt.getMinutes() + 15);
+
       // 7 Create order
-      const orderRef = generateOrderRef();
+      let orderId;
+      let refAttempts = 0;
 
-      const [orderRes] = await conn.execute(
-        `
-        INSERT INTO eorders (user_id,company_id, total_amount,order_ref,address_id, product_total, reward_discount, reward_coins_used,reward_earned, reward_coins_earned, shipping_total)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      while (refAttempts < 3) {
+        try {
+          const orderRef = generateOrderRef();
+
+          const [orderRes] = await conn.execute(
+            `
+        INSERT INTO eorders (user_id,company_id, total_amount,order_ref,address_id, product_total, reward_discount, reward_coins_used,reward_earned, reward_coins_earned, shipping_total,status,expires_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
-        [
-          userId,
-          companyId,
-          finalTotal,
-          orderRef,
-          addressId,
-          productTotal,
-          totalRedeemed,
-          totalRedeemed,
-          totalRewardEarn,
-          totalRewardEarn,
-          shippingTotal,
-        ],
-      );
+            [
+              userId,
+              companyId,
+              finalTotal,
+              orderRef,
+              addressId,
+              productTotal,
+              totalRedeemed,
+              totalRedeemed,
+              totalRewardEarn,
+              totalRewardEarn,
+              shippingTotal,
+              "pending_payment",
+              expiresAt,
+            ],
+          );
 
-      const orderId = orderRes.insertId;
+          orderId = orderRes.insertId;
+          break;
+        } catch (err) {
+          if (err.code === "ER_DUP_ENTRY" && refAttempts < 2) {
+            refAttempts++;
+            continue;
+          }
+          throw err;
+        }
+      }
 
       // 8 create vendor Order
       const vendorOrders = {};
@@ -624,71 +457,7 @@ class CheckoutModel {
         );
       }
 
-      // =====================
-      //  WALLET DEDUCTION
-      // =====================
-      const EXPIRY_MONTHS = parseInt(
-        process.env.WALLET_EXPIRY_MONTHS || "3",
-        10,
-      );
-      const expiryDate = new Date();
-      expiryDate.setMonth(expiryDate.getMonth() + EXPIRY_MONTHS);
-
-      if (useRewards && totalRedeemed > 0) {
-        if (walletBalance < totalRedeemed) {
-          throw new Error("INSUFFICIENT_REWARDS");
-        }
-
-        await conn.execute(
-          `UPDATE customer_wallet 
-         SET balance = balance - ? 
-         WHERE user_id = ?`,
-          [totalRedeemed, userId],
-        );
-
-        await conn.execute(
-          `INSERT INTO wallet_transactions
-         (user_id, title, transaction_type, coins, category, reference_id, description)
-         VALUES (?, ?, 'debit', ?, 'order', ?, ?)`,
-          [
-            userId,
-            "Coins used for order",
-            totalRedeemed,
-            orderId,
-            `Used ${totalRedeemed} coins for order`,
-          ],
-        );
-      }
-
-      if (totalRewardEarn > 0) {
-        const [insertResult] = await conn.execute(
-          `INSERT IGNORE INTO wallet_transactions
-       (user_id, title, transaction_type, coins, category, reference_id, description, expiry_date)
-       VALUES (?, ?, 'credit', ?, 'order', ?, ?, ?)`,
-          [
-            userId,
-            "Coins earned from order",
-            totalRewardEarn,
-            orderId,
-            `Earned ${totalRewardEarn} coins from order`,
-            expiryDate,
-          ],
-        );
-
-        if (insertResult.affectedRows > 0) {
-          await conn.execute(
-            `UPDATE customer_wallet
-         SET balance = balance + ?
-         WHERE user_id = ?`,
-            [totalRewardEarn, userId],
-          );
-        }
-      }
-
-      // 11 Invoice generation
-      await generateInvoices(orderId, conn);
-
-      // 12 Clear cart
+      // 11 Clear cart
       await conn.execute(`DELETE FROM cart_items WHERE user_id = ?`, [userId]);
 
       await conn.commit();
@@ -748,11 +517,11 @@ class CheckoutModel {
         v.length,
         v.breadth,
         v.height,
-        v.reward_redemption_limit,
 
         p.vendor_id,
         p.category_id,
-        p.subcategory_id
+        p.subcategory_id,
+        p.is_discount_eligible
 
       FROM product_variants v
       JOIN eproducts p ON v.product_id = p.product_id
@@ -776,23 +545,23 @@ class CheckoutModel {
         variantId,
         item.category_id,
         item.subcategory_id,
-        item.sale_price,
+        itemTotal,
+        item.is_discount_eligible,
       );
 
       let redeemable = 0;
-      const limit = Number(item.reward_redemption_limit || 0);
 
-      if (useRewards && limit > 0 && walletBalance > 0) {
-        const maxAllowed = Math.floor((itemTotal * limit) / 100);
+      if (useRewards && walletBalance > 0) {
+        const redemption = resolveRedemption(itemTotal, rules);
+        const maxAllowed = calculateRedeemableCoins(itemTotal, redemption);
+
         redeemable = Math.min(walletBalance, maxAllowed, itemTotal);
         walletBalance -= redeemable;
       }
 
       const finalItemTotal = itemTotal - redeemable;
 
-      // ===============================
-      // 4. EARNING
-      // ===============================
+      // 4.EARNING
       let rewardEarn = 0;
       if (rules.length) {
         rewardEarn = calculateReward(finalItemTotal, rules);
@@ -878,34 +647,54 @@ class CheckoutModel {
       }
 
       // ===============================
+      // ORDER EXPIRY
+      // ===============================
+      const expiresAt = new Date();
+      expiresAt.setMinutes(expiresAt.getMinutes() + 15);
+
+      // ===============================
       // 6. CREATE ORDER
       // ===============================
-      const orderRef = generateOrderRef();
+      let orderId;
+      let refAttempts = 0;
 
-      const [orderRes] = await conn.execute(
-        `
-      INSERT INTO eorders
-      (user_id, company_id, total_amount, order_ref, address_id,
-       product_total, reward_discount, reward_coins_used,
-       reward_earned, reward_coins_earned, shipping_total)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-        [
-          userId,
-          companyId,
-          finalTotal,
-          orderRef,
-          addressId,
-          itemTotal,
-          redeemable,
-          redeemable,
-          rewardEarn,
-          rewardEarn,
-          shippingCharge,
-        ],
-      );
+      while (refAttempts < 3) {
+        try {
+          const orderRef = generateOrderRef();
 
-      const orderId = orderRes.insertId;
+          const [orderRes] = await conn.execute(
+            `INSERT INTO eorders
+            (user_id, company_id, total_amount, order_ref, address_id,
+              product_total, reward_discount, reward_coins_used,
+              reward_earned, reward_coins_earned, shipping_total, status, expires_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              userId,
+              companyId,
+              finalTotal,
+              orderRef,
+              addressId,
+              itemTotal,
+              redeemable,
+              redeemable,
+              rewardEarn,
+              rewardEarn,
+              shippingCharge,
+              "pending_payment",
+              expiresAt,
+            ],
+          );
+
+          orderId = orderRes.insertId;
+          break;
+        } catch (err) {
+          if (err.code === "ER_DUP_ENTRY" && refAttempts < 2) {
+            refAttempts++;
+            continue;
+          }
+          throw err;
+        }
+      }
 
       // ===============================
       // 7. VENDOR ORDER
@@ -947,7 +736,7 @@ class CheckoutModel {
       );
 
       // ===============================
-      // 8.5 ORDER SHIPMENT
+      // 9. ORDER SHIPMENT
       // ===============================
       await conn.execute(
         `
@@ -978,67 +767,7 @@ class CheckoutModel {
       );
 
       // ===============================
-      // 9. WALLET DEBIT
-      // ===============================
-      const EXPIRY_MONTHS = parseInt(
-        process.env.WALLET_EXPIRY_MONTHS || "3",
-        10,
-      );
-
-      const expiryDate = new Date();
-      expiryDate.setMonth(expiryDate.getMonth() + EXPIRY_MONTHS);
-
-      if (useRewards && redeemable > 0) {
-        await conn.execute(
-          `UPDATE customer_wallet SET balance = balance - ? WHERE user_id = ?`,
-          [redeemable, userId],
-        );
-
-        await conn.execute(
-          `INSERT INTO wallet_transactions
-         (user_id, title, transaction_type, coins, category, reference_id, description)
-         VALUES (?, ?, 'debit', ?, 'order', ?, ?)`,
-          [
-            userId,
-            "Coins used for order",
-            redeemable,
-            orderId,
-            `Used ${redeemable} coins`,
-          ],
-        );
-      }
-
-      // ===============================
-      // 10. WALLET CREDIT (SAFE)
-      // ===============================
-      if (rewardEarn > 0) {
-        const [insertResult] = await conn.execute(
-          `INSERT IGNORE INTO wallet_transactions
-         (user_id, title, transaction_type, coins, category, reference_id, description,expiry_date)
-         VALUES (?, ?, 'credit', ?, 'order', ?, ?, ?)`,
-          [
-            userId,
-            "Coins earned from order",
-            rewardEarn,
-            orderId,
-            `Earned ${rewardEarn} coins`,
-            expiryDate,
-          ],
-        );
-
-        if (insertResult.affectedRows > 0) {
-          await conn.execute(
-            `UPDATE customer_wallet SET balance = balance + ? WHERE user_id = ?`,
-            [rewardEarn, userId],
-          );
-        }
-      }
-
-      // 10.5 Invoice generation
-      await generateInvoices(orderId, conn);
-
-      // ===============================
-      // 11. STOCK
+      // 10. STOCK
       // ===============================
       const [updateRes] = await conn.execute(
         `UPDATE product_variants
@@ -1061,6 +790,7 @@ class CheckoutModel {
     }
   }
 
+  // Get checkout details
   async getCheckoutCart(userId, useRewards = true) {
     // ===============================
     // 1. WALLET
@@ -1073,7 +803,7 @@ class CheckoutModel {
     const walletBalance = Number(wallet?.balance || 0);
 
     // ===============================
-    // 2. CART + REWARD JOIN (FIXED)
+    // 2. CART + PRODUCT JOIN
     // ===============================
     const [rows] = await db.execute(
       `
@@ -1086,12 +816,15 @@ class CheckoutModel {
       p.vendor_id,
       p.category_id,
       p.subcategory_id,
+      p.is_returnable,
+      p.is_replaceable,
+      p.return_window_days,
+      p.is_discount_eligible,
 
       v.variant_id,
       v.mrp,
       v.sale_price,
       v.stock,
-      v.reward_redemption_limit,
       v.weight,
       v.length,
       v.breadth,
@@ -1100,12 +833,9 @@ class CheckoutModel {
       GROUP_CONCAT(DISTINCT pi.image_url ORDER BY pi.sort_order ASC) AS images
 
     FROM cart_items ci
-
     JOIN eproducts p ON ci.product_id = p.product_id
     JOIN product_variants v ON ci.variant_id = v.variant_id
-
-    LEFT JOIN product_images pi 
-      ON p.product_id = pi.product_id
+    LEFT JOIN product_images pi ON p.product_id = pi.product_id
 
     WHERE ci.user_id = ?
     GROUP BY ci.cart_item_id
@@ -1141,6 +871,11 @@ class CheckoutModel {
         title: row.product_name,
         image: getPublicUrl(imagePath),
 
+        is_discount_eligible: row.is_discount_eligible,
+        is_returnable: row.is_returnable,
+        return_window: row.return_window_days,
+        is_replaceable: row.is_replaceable,
+
         mrp: Number(row.mrp),
         price: Number(row.sale_price),
         quantity: Number(row.quantity),
@@ -1149,7 +884,8 @@ class CheckoutModel {
         redeemable: 0,
         rewardEarn: 0,
 
-        reward_redemption_limit: Number(row.reward_redemption_limit || 0),
+        // delivery date — populated after shipping calc
+        estimated_delivery_date: null,
 
         weight: Number(row.weight || 0),
         length: Number(row.length || 0),
@@ -1158,26 +894,20 @@ class CheckoutModel {
       };
     });
 
-    /* ===============================
-        REWARD ENGINE (UNIFIED)
-      =============================== */
-
+    // ===============================
+    // 4. REWARD ENGINE
+    // ===============================
     items.sort((a, b) => a.itemTotal - b.itemTotal);
 
     const rewardCache = {};
-
     let remainingWallet = useRewards ? walletBalance : 0;
     let totalRedeemed = 0;
     let totalRewardEarn = 0;
 
-    /* ===============================
-     5. REWARD ENGINE
-  =============================== */
     for (let item of items) {
-      const price = item.price;
       const itemTotal = item.itemTotal;
 
-      const key = `${item.product_id}_${item.variant_id}_${item.category_id}_${item.subcategory_id}_${price}`;
+      const key = `${item.product_id}_${item.variant_id}_${item.category_id}_${item.subcategory_id}_${itemTotal}`;
 
       let rules = rewardCache[key];
 
@@ -1187,30 +917,25 @@ class CheckoutModel {
           item.variant_id,
           item.category_id,
           item.subcategory_id,
-          price,
+          itemTotal,
+          item.is_discount_eligible,
         );
         rewardCache[key] = rules;
       }
 
-      /* ===============================
-       REDEMPTION FIRST
-    =============================== */
-      const redemptionLimit = item.reward_redemption_limit;
-
-      if (useRewards && redemptionLimit > 0 && remainingWallet > 0) {
-        const maxAllowed = Math.floor((itemTotal * redemptionLimit) / 100);
+      // Redemption (rule-based)
+      if (useRewards && remainingWallet > 0) {
+        const redemption = resolveRedemption(itemTotal, rules);
+        const maxAllowed = calculateRedeemableCoins(itemTotal, redemption);
 
         const usable = Math.min(remainingWallet, maxAllowed, itemTotal);
 
         item.redeemable = usable;
-
         remainingWallet -= usable;
         totalRedeemed += usable;
       }
 
-      /* ===============================
-       EARNING AFTER REDEMPTION
-    =============================== */
+      // Earning (on amount actually paid, after redemption)
       let rewardEarn = 0;
 
       if (rules.length) {
@@ -1222,16 +947,13 @@ class CheckoutModel {
       totalRewardEarn += rewardEarn;
     }
 
-    /* ===============================
-     SAFETY CAP
-  =============================== */
     totalRedeemed = Math.min(totalRedeemed, totalAmount);
 
     // ===============================
-    // 6. SHIPPING (UNCHANGED)
+    // 5. FETCH DEFAULT ADDRESS
     // ===============================
     const [addressRows] = await db.execute(
-      `SELECT zipcode FROM customer_addresses 
+      `SELECT zipcode FROM customer_addresses
      WHERE user_id = ? AND is_default = 1 LIMIT 1`,
       [userId],
     );
@@ -1240,6 +962,9 @@ class CheckoutModel {
 
     const destinationPincode = addressRows[0].zipcode;
 
+    // ===============================
+    // 6. GROUP ITEMS BY VENDOR
+    // ===============================
     const vendorGroups = {};
 
     for (const item of items) {
@@ -1256,24 +981,28 @@ class CheckoutModel {
       }
 
       const group = vendorGroups[vendorId];
-
       group.totalWeightKg += item.quantity * item.weight;
       group.totalAmount += item.itemTotal;
-
       group.length = Math.max(group.length, item.length);
       group.breadth = Math.max(group.breadth, item.breadth);
       group.height += item.height * item.quantity;
     }
 
+    // ===============================
+    // 7. SHIPPING + EDD PER VENDOR
+    // ===============================
     let shippingTotal = 0;
     const shippingBreakdown = [];
     const eddList = [];
+
+    // Map of vendorId → EDD so we can stamp it onto each item
+    const vendorEDDMap = {};
 
     for (const vendorId in vendorGroups) {
       const vendor = vendorGroups[vendorId];
 
       const [[vendorAddress]] = await db.execute(
-        `SELECT pincode FROM vendor_addresses 
+        `SELECT pincode FROM vendor_addresses
        WHERE vendor_id = ? AND type = 'shipping' LIMIT 1`,
         [vendorId],
       );
@@ -1301,11 +1030,26 @@ class CheckoutModel {
 
       shippingTotal += Number(courier.total_charges);
 
-      const edd = courier.estimated_delivery_date
-        ? new Date(courier.estimated_delivery_date)
-        : new Date(Date.now() + courier.estimated_delivery_days * 86400000);
+      // ==========================
+      // CALCULATE EDD
+      // ==========================
+      let edd;
+
+      if (courier.estimated_delivery_date) {
+        edd = new Date(courier.estimated_delivery_date);
+      } else if (courier.estimated_delivery_days) {
+        edd = new Date(Date.now() + courier.estimated_delivery_days * 86400000);
+      } else {
+        // fallback: 5 days
+        edd = new Date(Date.now() + 5 * 86400000);
+      }
 
       eddList.push(edd);
+
+      // ==========================
+      // STORE EDD PER VENDOR
+      // ==========================
+      vendorEDDMap[Number(vendorId)] = edd;
 
       shippingBreakdown.push({
         vendor_id: Number(vendorId),
@@ -1315,16 +1059,23 @@ class CheckoutModel {
       });
     }
 
+    // ==========================
+    // STAMP EDD ONTO EACH ITEM
+    // ==========================
+    for (const item of items) {
+      item.estimated_delivery_date = vendorEDDMap[item.vendor_id] || null;
+    }
+
     const overallEDD = eddList.length ? eddList.sort((a, b) => b - a)[0] : null;
 
     // ===============================
-    // 7. FINAL TOTAL
+    // 8. FINAL TOTAL
     // ===============================
     const finalProductTotal = totalAmount - totalRedeemed;
     const payableAmount = finalProductTotal + shippingTotal;
 
     // ===============================
-    // 8. RESPONSE
+    // 9. RESPONSE
     // ===============================
     return {
       items,
@@ -1349,6 +1100,7 @@ class CheckoutModel {
     };
   }
 
+  // buy now details
   async getBuyNowCheckout({
     productId,
     variantId,
@@ -1377,12 +1129,14 @@ class CheckoutModel {
       p.vendor_id,
       p.category_id,
       p.subcategory_id,
-
+      p.is_returnable,
+      p.is_replaceable,
+      p.return_window_days,
+      p.is_discount_eligible,
       v.variant_id,
       v.mrp,
       v.sale_price,
       v.stock,
-      v.reward_redemption_limit,
       v.weight,
       v.length,
       v.breadth,
@@ -1419,7 +1173,8 @@ class CheckoutModel {
       row.variant_id,
       row.category_id,
       row.subcategory_id,
-      salePrice,
+      itemTotal,
+      row.is_discount_eligible,
     );
 
     let remainingWallet = useRewards ? walletBalance : 0;
@@ -1427,12 +1182,11 @@ class CheckoutModel {
     let redeemable = 0;
 
     /* ===============================
-     4. REDEMPTION (variant based)
+     4. REDEMPTION (rule-based)
   =============================== */
-    const redemptionLimit = Number(row.reward_redemption_limit || 0);
-
-    if (useRewards && redemptionLimit > 0 && remainingWallet > 0) {
-      const maxAllowed = Math.floor((itemTotal * redemptionLimit) / 100);
+    if (useRewards && remainingWallet > 0) {
+      const redemption = resolveRedemption(itemTotal, rules);
+      const maxAllowed = calculateRedeemableCoins(itemTotal, redemption);
 
       redeemable = Math.min(remainingWallet, maxAllowed, itemTotal);
 
@@ -1519,6 +1273,10 @@ class CheckoutModel {
         title: row.product_name,
         image: getPublicUrl(imagePath),
 
+        is_returnable: row.is_returnable,
+        return_window: row.return_window_days,
+        is_replaceable: row.is_replaceable,
+
         price: salePrice,
         quantity,
 
@@ -1528,6 +1286,7 @@ class CheckoutModel {
         rewardEarn,
 
         stock: row.stock,
+        estimated_delivery_date: expectedDeliveryDate,
       },
 
       wallet: {
