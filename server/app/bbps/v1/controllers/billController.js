@@ -568,7 +568,7 @@ class BillController {
         data,
       });
     } catch (error) {
-      const statusCode = error.response?.status || 502;
+      const statusCode = error.statusCode || error.response?.status || 502;
       console.error("[BBPS][recharge-plans] error", {
         statusCode,
         provider: error.response?.data || error.message,

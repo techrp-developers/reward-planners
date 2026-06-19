@@ -1,4 +1,5 @@
 const axios = require("axios");
+const { createHash } = require("crypto");
 const headerUtil = require("../utils/header");
 const retry = require("../utils/retry");
 const {
@@ -168,7 +169,61 @@ exports.getRechargePlans = async ({ mobile, operatorCode, circleId }) => {
     timeout: FETCH_BILL_TIMEOUT_MS,
   });
 
-  return response.data;
+  const providerResponse = response.data || {};
+
+  if (Number(providerResponse.status) !== 0) {
+    const error = new Error(
+      providerResponse.message || "EKO failed to return recharge plans",
+    );
+    error.statusCode = 502;
+    error.details = providerResponse;
+    throw error;
+  }
+
+  const planGroups = Array.isArray(providerResponse.dependent_params)
+    ? providerResponse.dependent_params
+    : [];
+  const rawPlans = planGroups.flatMap((group) =>
+    Array.isArray(group?.value) ? group.value : [],
+  );
+  const uniquePlans = new Map();
+
+  for (const plan of rawPlans) {
+    const amount = String(plan?.amount || "").trim();
+    const validity = String(plan?.validity || "").trim();
+    const description = String(plan?.plan_description || "").trim();
+
+    if (!/^\d+(?:\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) {
+      continue;
+    }
+
+    const fingerprint = `${operatorCode}|${circleId}|${amount}|${validity}|${description}`;
+
+    if (!uniquePlans.has(fingerprint)) {
+      uniquePlans.set(fingerprint, {
+        planId: createHash("sha256")
+          .update(fingerprint)
+          .digest("hex")
+          .slice(0, 20),
+        amount,
+        validity: validity || null,
+        description: description || null,
+      });
+    }
+  }
+
+  return {
+    status: providerResponse.status,
+    responseTypeId: providerResponse.response_type_id,
+    message: providerResponse.message,
+    operatorId: String(operatorCode),
+    circleId: String(circleId),
+    mobile,
+    count: uniquePlans.size,
+    plans: Array.from(uniquePlans.values()).sort(
+      (first, second) => Number(first.amount) - Number(second.amount),
+    ),
+  };
 };
 
 exports.getFetchBillReadiness = async (req, operatorId) => {
