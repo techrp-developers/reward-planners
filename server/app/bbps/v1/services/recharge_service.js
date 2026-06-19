@@ -1,10 +1,14 @@
 const axios = require("axios");
 
+exports.isConfigured = () => Boolean(process.env.RECHARGE_API_URL?.trim());
+
 exports.recharge = async ({ mobile, operator_id, amount }) => {
   const rechargeUrl = process.env.RECHARGE_API_URL;
 
   if (!rechargeUrl) {
-    throw new Error("Recharge provider is not configured");
+    const error = new Error("Recharge provider is not configured");
+    error.retryable = false;
+    throw error;
   }
 
   try {

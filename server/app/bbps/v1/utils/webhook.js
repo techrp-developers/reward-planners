@@ -16,9 +16,27 @@ async function processEvent(req) {
       await conn.beginTransaction();
 
       const payment = body.payload.payment.entity;
-      const transactionId = payment.notes.transaction_id;
+      const [[rpOrder]] = await conn.execute(
+        `SELECT ref_id, amount
+         FROM razorpay_orders
+         WHERE razorpay_order_id = ? AND module = 'bbps'
+         FOR UPDATE`,
+        [payment.order_id],
+      );
 
-      const txn = await TransactionModel.getByIdForUpdate(transactionId, conn);
+      if (!rpOrder) {
+        await conn.rollback();
+        return;
+      }
+
+      if (Number(payment.amount) !== Math.round(Number(rpOrder.amount) * 100)) {
+        throw new Error("Captured Razorpay payment amount mismatch");
+      }
+
+      const txn = await TransactionModel.getByIdForUpdate(
+        rpOrder.ref_id,
+        conn,
+      );
 
       if (!txn) {
         await conn.rollback();
@@ -35,8 +53,8 @@ async function processEvent(req) {
       await conn.execute(
         `UPDATE razorpay_orders
          SET status = 'success', razorpay_payment_id = ?, raw_response = ?
-         WHERE ref_id = ? AND module = 'bbps'`,
-        [payment.id, JSON.stringify(body), txn.id],
+         WHERE razorpay_order_id = ? AND module = 'bbps'`,
+        [payment.id, JSON.stringify(body), payment.order_id],
       );
 
       try {

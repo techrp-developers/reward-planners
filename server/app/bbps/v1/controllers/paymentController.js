@@ -3,6 +3,7 @@ const TransactionModel = require("../models/transactionModel");
 const BillFetchModel = require("../models/billFetchModel");
 const razorpay = require("../services/razorpay_service");
 const ekoService = require("../services/eko_service");
+const rechargeService = require("../services/recharge_service");
 const { processTransaction } = require("../services/paymentProcessor");
 const db = require("../../../../config/database");
 const { notifyUser } = require("../../../common/utils/notification");
@@ -118,6 +119,14 @@ class PaymentController {
         billFetchId = fetchedBill.id;
         providerBillRefId = fetchedBill.provider_ref_id;
       } else {
+        if (!rechargeService.isConfigured()) {
+          await conn.rollback();
+          return res.status(503).json({
+            success: false,
+            message: "Recharge provider is not configured",
+          });
+        }
+
         amount = Number(req.body.amount);
         utilityAccountNo = String(req.body.utility_acc_no || "").trim();
       }
