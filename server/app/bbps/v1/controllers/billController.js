@@ -1,5 +1,7 @@
 const ekoService = require("../services/eko_service");
 const TransactionModel = require("../models/transactionModel");
+const BillFetchModel = require("../models/billFetchModel");
+const db = require("../../../../config/database");
 
 /**
  * @typedef {Object} FrontendFetchBillPayload
@@ -25,7 +27,15 @@ const pickFirstValue = (sources, keys) => {
     for (const key of keys) {
       const value = source[key];
 
-      if (value !== undefined && value !== null && value !== "") {
+      const normalizedString =
+        typeof value === "string" ? value.trim().toLowerCase() : "";
+
+      if (
+        value !== undefined &&
+        value !== null &&
+        value !== "" &&
+        !["null", "undefined"].includes(normalizedString)
+      ) {
         return value;
       }
     }
@@ -685,10 +695,27 @@ class BillController {
         utility_acc_no: normalizedRequest.providerPayload.utility_acc_no,
       });
 
+      const billFetchId = await BillFetchModel.create({
+        user_id: userId,
+        operator_id: operatorId,
+        utility_acc_no: normalizedRequest.providerPayload.utility_acc_no,
+        cycle_number: normalizedRequest.providerPayload.cycle_number,
+        confirmation_mobile_no:
+          normalizedRequest.providerPayload.confirmation_mobile_no,
+        sender_name: normalizedRequest.providerPayload.sender_name,
+        amount: normalized.bill.amount,
+        provider_ref_id:
+          data?.data?.bbpstrxnrefid || data?.client_ref_id || null,
+        provider_response: data,
+      });
+
       return res.status(200).json({
         success: true,
         message: "Bill details fetched successfully",
-        data: normalized,
+        data: {
+          ...normalized,
+          billFetchId,
+        },
       });
     } catch (e) {
       const statusCode = e.statusCode || e.response?.status || 500;
@@ -746,7 +773,7 @@ class BillController {
         });
       }
 
-      if (txn.user_id !== userId) {
+      if (Number(txn.user_id) !== Number(userId)) {
         return res.status(403).json({ message: "Unauthorized" });
       }
 
@@ -769,7 +796,10 @@ class BillController {
 
       if (txn.bbps_status === "PAID") {
         finalStatus = "SUCCESS";
-      } else if (txn.bbps_status === "FAILED_FINAL") {
+      } else if (
+        txn.bbps_status === "FAILED_FINAL" ||
+        txn.bbps_status === "PAYMENT_FAILED"
+      ) {
         finalStatus = "FAILED";
       } else if (txn.bbps_status === "FAILED_RETRY") {
         finalStatus = "RETRYING";

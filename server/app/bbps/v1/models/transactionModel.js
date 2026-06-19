@@ -5,16 +5,23 @@ class TransactionModel {
   async create(data, conn = db) {
     const sql = `
     INSERT INTO bbps_transactions 
-    (user_id, operator_id, utility_acc_no, cycle_number, amount, bbps_status,fetch_bill)
-    VALUES (?, ?, ?, ?, ?, 'INIT', ?)
+    (user_id, operator_id, utility_acc_no, cycle_number, confirmation_mobile_no,
+     sender_name, amount, bbps_status, fetch_bill, bill_fetch_id,
+     provider_client_ref_id, provider_bill_ref_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'INIT', ?, ?, ?, ?)
   `;
     const [res] = await conn.execute(sql, [
       data.user_id,
       data.operator_id,
       data.utility_acc_no?.trim(),
       data.cycle_number,
+      data.confirmation_mobile_no || null,
+      data.sender_name || null,
       data.amount,
       data.fetch_bill,
+      data.bill_fetch_id || null,
+      data.provider_client_ref_id || null,
+      data.provider_bill_ref_id || null,
     ]);
 
     return res.insertId;

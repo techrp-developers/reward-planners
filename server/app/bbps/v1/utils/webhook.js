@@ -1,7 +1,6 @@
 const db = require("../../../../config/database");
 const TransactionModel = require("../models/transactionModel");
-const ekoService = require("../services/eko_service");
-const rechargeService = require("../services/recharge_service");
+const { processTransaction } = require("../services/paymentProcessor");
 const { notifyUser } = require("../../../common/utils/notification");
 
 async function processEvent(req) {
@@ -33,25 +32,15 @@ async function processEvent(req) {
         return;
       }
 
-      try {
-        let result;
+      await conn.execute(
+        `UPDATE razorpay_orders
+         SET status = 'success', razorpay_payment_id = ?, raw_response = ?
+         WHERE ref_id = ? AND module = 'bbps'`,
+        [payment.id, JSON.stringify(body), txn.id],
+      );
 
-        if (txn.fetch_bill === 1) {
-          //  BBPS FLOW
-          result = await ekoService.payBill({
-            utility_acc_no: txn.utility_acc_no.trim(),
-            operator_id: txn.operator_id,
-            amount: txn.amount,
-            cycle_number: txn.cycle_number,
-          });
-        } else {
-          //  RECHARGE FLOW
-          result = await rechargeService.recharge({
-            mobile: txn.utility_acc_no.trim(),
-            operator_id: txn.operator_id,
-            amount: txn.amount,
-          });
-        }
+      try {
+        const result = await processTransaction(txn, req);
 
         await TransactionModel.updateStatus(txn.id, "PAID", result, conn);
 
@@ -73,10 +62,14 @@ async function processEvent(req) {
           "bbps webhook success notification",
         );
       } catch (err) {
+        const failureStatus =
+          err.retryable === false ? "FAILED_FINAL" : "FAILED_RETRY";
+        const willRetry = failureStatus === "FAILED_RETRY";
+
         await TransactionModel.updateStatus(
           txn.id,
-          "FAILED_RETRY",
-          err.message,
+          failureStatus,
+          err.providerResponse || err.message,
           conn,
         );
 
@@ -86,10 +79,14 @@ async function processEvent(req) {
           {
             userId: txn.user_id,
             module: "bbps",
-            type: "bbps_payment_retry",
-            title: "Bill payment pending",
-            message: "Your payment was captured, but bill processing will be retried automatically.",
-            icon: "clock",
+            type: willRetry
+              ? "bbps_payment_retry"
+              : "bbps_payment_failed",
+            title: willRetry ? "Bill payment pending" : "Bill payment failed",
+            message: willRetry
+              ? "Your payment was captured, but bill processing will be retried automatically."
+              : "Your payment was captured, but the provider rejected the bill payment.",
+            icon: willRetry ? "clock" : "x-circle",
             reference_type: "bbps_transaction",
             reference_id: txn.id,
             action_url: `/bbps/transactions/${txn.id}`,
@@ -136,13 +133,12 @@ async function processEvent(req) {
 
       await conn.execute(
         `UPDATE razorpay_orders
-          SET status='failed',
-              raw_response=?
+          SET raw_response=?
           WHERE razorpay_order_id=?`,
         [JSON.stringify(body), razorpayOrderId],
       );
 
-      await TransactionModel.updateStatus(txn.id, "FAILED_RETRY", body, conn);
+      await TransactionModel.updateStatus(txn.id, "PAYMENT_FAILED", body, conn);
 
       await conn.commit();
 

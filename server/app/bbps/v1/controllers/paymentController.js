@@ -1,8 +1,9 @@
 const crypto = require("crypto");
 const TransactionModel = require("../models/transactionModel");
+const BillFetchModel = require("../models/billFetchModel");
 const razorpay = require("../services/razorpay_service");
 const ekoService = require("../services/eko_service");
-const rechargeService = require("../services/recharge_service");
+const { processTransaction } = require("../services/paymentProcessor");
 const db = require("../../../../config/database");
 const { notifyUser } = require("../../../common/utils/notification");
 
@@ -25,24 +26,13 @@ class PaymentController {
         });
       }
 
-      const { operator_id, utility_acc_no, cycle_number } = req.body;
-      const amount = Number(req.body.amount);
-      const utilityAccountNo =
-        typeof utility_acc_no === "string" ? utility_acc_no.trim() : "";
+      const { operator_id, bill_fetch_id } = req.body;
 
-      if (!Number.isFinite(amount) || amount <= 0 || amount > 5000) {
+      if (!operator_id) {
         await conn.rollback();
         return res.status(400).json({
           success: false,
-          message: "Invalid amount",
-        });
-      }
-
-      if (!operator_id || !utilityAccountNo) {
-        await conn.rollback();
-        return res.status(400).json({
-          success: false,
-          message: "Missing required fields",
+          message: "operator_id is required",
         });
       }
 
@@ -58,13 +48,97 @@ class PaymentController {
       }
 
       const operatorRecord =
-        operator?.data?.data?.[0] || operator?.data || operator;
+        (operator?.operator_id || operator?.fetchBill !== undefined)
+          ? operator
+          : operator?.data?.data?.[0] || operator?.data?.[0] || null;
 
-      const fetchBillFlag =
+      const rawFetchBillFlag =
         operatorRecord?.fetchBill ??
         operatorRecord?.fetch_bill ??
-        operatorRecord?.fetchbill ??
-        1;
+        operatorRecord?.fetchbill;
+
+      if (rawFetchBillFlag === undefined || rawFetchBillFlag === null) {
+        await conn.rollback();
+        return res.status(502).json({
+          success: false,
+          message: "Operator response did not specify the payment flow",
+        });
+      }
+
+      const fetchBillFlag = ["1", "true", "yes"].includes(
+        String(rawFetchBillFlag).trim().toLowerCase(),
+      )
+        ? 1
+        : 0;
+
+      let amount;
+      let utilityAccountNo;
+      let cycleNumber = req.body.cycle_number || null;
+      let confirmationMobileNo = req.body.confirmation_mobile_no || null;
+      let senderName = req.body.sender_name || null;
+      let billFetchId = null;
+      let providerBillRefId = null;
+
+      if (fetchBillFlag === 1) {
+        if (!bill_fetch_id) {
+          await conn.rollback();
+          return res.status(400).json({
+            success: false,
+            message: "bill_fetch_id is required for BBPS payments",
+          });
+        }
+
+        const fetchedBill = await BillFetchModel.getValidByIdForUpdate(
+          bill_fetch_id,
+          userId,
+          conn,
+        );
+
+        if (!fetchedBill) {
+          await conn.rollback();
+          return res.status(400).json({
+            success: false,
+            message: "Fetched bill is invalid, expired, or already used",
+          });
+        }
+
+        if (String(fetchedBill.operator_id) !== String(operator_id)) {
+          await conn.rollback();
+          return res.status(400).json({
+            success: false,
+            message: "Fetched bill does not belong to this operator",
+          });
+        }
+
+        amount = Number(fetchedBill.amount);
+        utilityAccountNo = String(fetchedBill.utility_acc_no).trim();
+        cycleNumber = fetchedBill.cycle_number;
+        confirmationMobileNo = fetchedBill.confirmation_mobile_no;
+        senderName = fetchedBill.sender_name;
+        billFetchId = fetchedBill.id;
+        providerBillRefId = fetchedBill.provider_ref_id;
+      } else {
+        amount = Number(req.body.amount);
+        utilityAccountNo = String(req.body.utility_acc_no || "").trim();
+      }
+
+      if (
+        !utilityAccountNo ||
+        !Number.isFinite(amount) ||
+        amount <= 0 ||
+        amount > 5000
+      ) {
+        await conn.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Invalid account or amount",
+        });
+      }
+
+      const providerClientRefId =
+        fetchBillFlag === 1
+          ? `${Date.now()}${crypto.randomInt(100, 1000)}`
+          : null;
 
       // 1. create transaction
       const transaction_id = await TransactionModel.create(
@@ -72,12 +146,21 @@ class PaymentController {
           user_id: userId,
           operator_id,
           utility_acc_no: utilityAccountNo,
-          cycle_number,
+          cycle_number: cycleNumber,
+          confirmation_mobile_no: confirmationMobileNo,
+          sender_name: senderName,
           amount,
           fetch_bill: fetchBillFlag,
+          bill_fetch_id: billFetchId,
+          provider_client_ref_id: providerClientRefId,
+          provider_bill_ref_id: providerBillRefId,
         },
         conn,
       );
+
+      if (billFetchId) {
+        await BillFetchModel.markConsumed(billFetchId, conn);
+      }
 
       // 2. create razorpay order
       const razorpayOrder = await razorpay.orders.create({
@@ -203,18 +286,25 @@ class PaymentController {
 
       // IDEMPOTENCY CHECK
       if (rpOrder.status === "success") {
+        const existingTxn = await TransactionModel.getByIdForUpdate(
+          rpOrder.ref_id,
+          conn,
+        );
+
+        if (!existingTxn || Number(existingTxn.user_id) !== Number(userId)) {
+          await conn.rollback();
+          return res.status(403).json({
+            success: false,
+            message: "Unauthorized transaction",
+          });
+        }
+
         await conn.rollback();
         return res.json({
-          success: true,
-          message: "Already processed",
-        });
-      }
-
-      if (rpOrder.status === "failed") {
-        await conn.rollback();
-        return res.status(400).json({
-          success: false,
-          message: "Payment already failed",
+          success: existingTxn.bbps_status === "PAID",
+          message: "Payment was already verified",
+          transaction_id: existingTxn.id,
+          status: existingTxn.bbps_status,
         });
       }
 
@@ -285,31 +375,7 @@ class PaymentController {
       });
 
       try {
-        let result;
-
-        if (txn.fetch_bill === 1) {
-          //  BBPS FLOW
-          result = await ekoService.payBill(
-            {
-              utility_acc_no: txn.utility_acc_no.trim(),
-              operator_id: txn.operator_id,
-              amount: txn.amount,
-              cycle_number: txn.cycle_number,
-            },
-            req,
-          );
-        } else {
-          //  RECHARGE FLOW
-          result = await rechargeService.recharge({
-            mobile: txn.utility_acc_no.trim(),
-            operator_id: txn.operator_id,
-            amount: txn.amount,
-          });
-
-          if (!result || result.status !== "SUCCESS") {
-            throw new Error("Recharge failed");
-          }
-        }
+        const result = await processTransaction(txn, req);
         //  Success → mark PAID
         await TransactionModel.updateStatus(txn.id, "PAID", result, conn);
 
@@ -339,11 +405,14 @@ class PaymentController {
       } catch (err) {
         console.error("BBPS Error:", err);
 
-        //  MARK FOR RETRY (NOT FINAL FAILURE)
+        const failureStatus =
+          err.retryable === false ? "FAILED_FINAL" : "FAILED_RETRY";
+        const willRetry = failureStatus === "FAILED_RETRY";
+
         await TransactionModel.updateStatus(
           txn.id,
-          "FAILED_RETRY",
-          err.message,
+          failureStatus,
+          err.providerResponse || err.message,
           conn,
         );
 
@@ -353,10 +422,14 @@ class PaymentController {
           {
             userId,
             module: "bbps",
-            type: "bbps_payment_retry",
-            title: "Bill payment pending",
-            message: "Your payment was captured, but bill processing will be retried automatically.",
-            icon: "clock",
+            type: willRetry
+              ? "bbps_payment_retry"
+              : "bbps_payment_failed",
+            title: willRetry ? "Bill payment pending" : "Bill payment failed",
+            message: willRetry
+              ? "Your payment was captured, but bill processing will be retried automatically."
+              : "Your payment was captured, but the provider rejected the bill payment.",
+            icon: willRetry ? "clock" : "x-circle",
             reference_type: "bbps_transaction",
             reference_id: txn.id,
             action_url: `/bbps/transactions/${txn.id}`,
@@ -366,9 +439,13 @@ class PaymentController {
           "bbps retry notification",
         );
 
-        return res.status(500).json({
+        return res.status(err.retryable === false ? 422 : 202).json({
           success: false,
-          message: "Payment successful, bill will be retried automatically",
+          message:
+            err.retryable === false
+              ? "Payment was captured, but the provider rejected the transaction"
+              : "Payment was captured and bill processing will be retried automatically",
+          transaction_id: txn.id,
         });
       }
     } catch (err) {
@@ -435,26 +512,15 @@ class PaymentController {
         });
       }
 
-      let result;
-
-      if (Number(txn.fetch_bill) === 1) {
-        result = await ekoService.payBill({
-          utility_acc_no: txn.utility_acc_no.trim(),
-          operator_id: txn.operator_id,
-          amount: txn.amount,
-          cycle_number: txn.cycle_number,
+      if (txn.bbps_status !== "FAILED_RETRY") {
+        await conn.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Transaction is not eligible for retry",
         });
-      } else {
-        result = await rechargeService.recharge({
-          mobile: txn.utility_acc_no.trim(),
-          operator_id: txn.operator_id,
-          amount: txn.amount,
-        });
-
-        if (!result || result.status !== "SUCCESS") {
-          throw new Error("Recharge failed");
-        }
       }
+
+      const result = await processTransaction(txn, req);
 
       await TransactionModel.updateStatus(txn.id, "PAID", result, conn);
 
@@ -479,11 +545,14 @@ class PaymentController {
     } catch (err) {
       await conn.rollback();
 
-      if (txn && txn.retry_count + 1 >= txn.max_retry) {
+      if (
+        txn &&
+        (err.retryable === false || txn.retry_count + 1 >= txn.max_retry)
+      ) {
         await TransactionModel.updateStatus(
           txn.id,
           "FAILED_FINAL",
-          err.message,
+          err.providerResponse || err.message,
         );
       } else {
         await TransactionModel.incrementRetry(transaction_id);

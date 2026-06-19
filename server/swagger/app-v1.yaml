@@ -167,17 +167,20 @@ components:
     BBPSCreateOrderRequest:
       type: object
       required:
-        - amount
         - operator_id
-        - utility_acc_no
       properties:
+        bill_fetch_id:
+          type: integer
+          description: Required for fetch-bill operators; returned by the fetch-bill endpoint.
         amount:
           type: number
           format: double
+          description: Required only for recharge operators. Ignored for fetch-bill operators.
         operator_id:
           type: integer
         utility_acc_no:
           type: string
+          description: Required only for recharge operators.
         cycle_number:
           type: string
     BBPSVerifyPaymentRequest:
@@ -215,6 +218,12 @@ components:
         operator_id:
           type: integer
         consumer_number:
+          type: string
+        confirmation_mobile_no:
+          type: string
+        sender_name:
+          type: string
+        cycle_number:
           type: string
         bill_unit:
           type: string
@@ -1744,7 +1753,7 @@ paths:
         '200':
           description: Bill details returned
       security: []
-  /v1/bills/status/{transaction_id}:
+  /v1/bills/check-status/{transaction_id}:
     parameters:
       - name: transaction_id
         in: path

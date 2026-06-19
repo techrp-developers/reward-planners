@@ -353,7 +353,7 @@ exports.payBill = async (body, req) => {
   const payload = {
     ...body,
     user_code: process.env.EKO_USER_CODE,
-    client_ref_id: Date.now(),
+    client_ref_id: body.client_ref_id || Date.now().toString(),
     hc_channel: "0",
     source_ip: sourceIp,
   };
