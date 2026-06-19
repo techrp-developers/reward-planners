@@ -27,6 +27,29 @@ const ensureTrailingSlash = (url = "") => {
 
 const BASE = ensureTrailingSlash(resolveBaseUrl() || "");
 const ekoUrl = (path) => `${BASE}${path}`;
+const resolveRechargeBaseUrl = () => {
+  if (process.env.EKO_RECHARGE_BASE_URL) {
+    return process.env.EKO_RECHARGE_BASE_URL.trim();
+  }
+
+  const providerEnvironment = (process.env.EKO_ENV || "production")
+    .trim()
+    .toLowerCase();
+
+  if (["uat", "staging", "test"].includes(providerEnvironment)) {
+    return (
+      process.env.EKO_RECHARGE_BASE_URL_UAT ||
+      "https://staging.eko.in:25004/ekoapi/v3/"
+    );
+  }
+
+  return (
+    process.env.EKO_RECHARGE_BASE_URL_PROD ||
+    "https://api.eko.in:25002/ekoicici/v3/"
+  );
+};
+const RECHARGE_BASE = ensureTrailingSlash(resolveRechargeBaseUrl());
+const ekoRechargeUrl = (path) => `${RECHARGE_BASE}${path}`;
 const configuredFetchBillTimeout = Number(
   process.env.EKO_FETCH_BILL_TIMEOUT_MS || 30000,
 );
@@ -126,6 +149,26 @@ exports.getOperatorDetails = async (id) => {
     headers,
   });
   return res.data;
+};
+
+exports.getRechargePlans = async ({ mobile, operatorCode, circleId }) => {
+  const headers = await headerUtil.fetchHeaders();
+  const path = `customer/payment/bbps/recharge/${encodeURIComponent(
+    mobile,
+  )}/operator/plans`;
+
+  const response = await axios.get(ekoRechargeUrl(path), {
+    headers,
+    params: {
+      initiator_id: process.env.EKO_INITIATOR_ID,
+      user_code: process.env.EKO_USER_CODE,
+      phone_operator_code: operatorCode,
+      circleid: circleId,
+    },
+    timeout: FETCH_BILL_TIMEOUT_MS,
+  });
+
+  return response.data;
 };
 
 exports.getFetchBillReadiness = async (req, operatorId) => {

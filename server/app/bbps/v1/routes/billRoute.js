@@ -17,6 +17,8 @@ router.get("/operators-grouped", BillController.getGroupedOperators);
 // Operator details
 router.get("/operator/:id", BillController.getOperatorDetails);
 
+router.get("/recharge/plans", auth, BillController.getRechargePlans);
+
 // fetch bill readiness
 router.get(
   "/fetch-bill-check",

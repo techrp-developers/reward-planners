@@ -536,6 +536,52 @@ class BillController {
     }
   }
 
+  async getRechargePlans(req, res) {
+    try {
+      const mobile = String(req.query.mobile || "").trim();
+      const operatorCode = String(req.query.operator_id || "").trim();
+      const circleId = String(req.query.circle_id || "").trim();
+
+      if (!/^[1-9][0-9]{9}$/.test(mobile)) {
+        return res.status(400).json({
+          success: false,
+          message: "A valid 10-digit mobile number is required",
+        });
+      }
+
+      if (!/^\d+$/.test(operatorCode) || !/^\d+$/.test(circleId)) {
+        return res.status(400).json({
+          success: false,
+          message: "operator_id and circle_id are required",
+        });
+      }
+
+      const data = await ekoService.getRechargePlans({
+        mobile,
+        operatorCode,
+        circleId,
+      });
+
+      return res.json({
+        success: true,
+        message: "Recharge plans fetched successfully",
+        data,
+      });
+    } catch (error) {
+      const statusCode = error.response?.status || 502;
+      console.error("[BBPS][recharge-plans] error", {
+        statusCode,
+        provider: error.response?.data || error.message,
+      });
+
+      return res.status(statusCode).json({
+        success: false,
+        message:
+          error.response?.data?.message || "Failed to fetch recharge plans",
+      });
+    }
+  }
+
   async checkCustomerNumber(req, res) {
     try {
       const operatorId = String(req.body?.operator_id || "").trim();
