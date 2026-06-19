@@ -536,6 +536,19 @@ class BillController {
     }
   }
 
+  async getLocations(req, res) {
+    try {
+      const data = await ekoService.getLocations();
+      return res.json(data);
+    } catch (error) {
+      console.error("[BBPS][locations] error", error.response?.data || error.message);
+      return res.status(error.response?.status || 502).json({
+        success: false,
+        message: "Failed to fetch BBPS locations",
+      });
+    }
+  }
+
   async getRechargePlans(req, res) {
     try {
       const mobile = String(req.query.mobile || "").trim();
@@ -549,10 +562,13 @@ class BillController {
         });
       }
 
-      if (!/^\d+$/.test(operatorCode) || !/^\d+$/.test(circleId)) {
+      if (
+        (operatorCode && !/^\d+$/.test(operatorCode)) ||
+        (circleId && !/^\d+$/.test(circleId))
+      ) {
         return res.status(400).json({
           success: false,
-          message: "operator_id and circle_id are required",
+          message: "operator_id and circle_id must be numeric when provided",
         });
       }
 

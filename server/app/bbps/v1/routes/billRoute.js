@@ -8,6 +8,9 @@ const fetchBillRateLimit = require("../middlewares/fetchBillRateLimit");
 // Categories
 router.get("/categories", BillController.getCategories);
 
+// BBPS operator locations / telecom circles
+router.get("/locations", BillController.getLocations);
+
 // Operators
 router.get("/operators", BillController.getOperators);
 

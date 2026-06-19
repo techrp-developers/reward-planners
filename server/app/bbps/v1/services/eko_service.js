@@ -158,14 +158,22 @@ exports.getRechargePlans = async ({ mobile, operatorCode, circleId }) => {
     mobile,
   )}/operator/plans`;
 
+  const params = {
+    initiator_id: process.env.EKO_INITIATOR_ID,
+    user_code: process.env.EKO_USER_CODE,
+  };
+
+  if (operatorCode) {
+    params.phone_operator_code = operatorCode;
+  }
+
+  if (circleId) {
+    params.circleid = circleId;
+  }
+
   const response = await axios.get(ekoRechargeUrl(path), {
     headers,
-    params: {
-      initiator_id: process.env.EKO_INITIATOR_ID,
-      user_code: process.env.EKO_USER_CODE,
-      phone_operator_code: operatorCode,
-      circleid: circleId,
-    },
+    params,
     timeout: FETCH_BILL_TIMEOUT_MS,
   });
 
@@ -216,8 +224,8 @@ exports.getRechargePlans = async ({ mobile, operatorCode, circleId }) => {
     status: providerResponse.status,
     responseTypeId: providerResponse.response_type_id,
     message: providerResponse.message,
-    operatorId: String(operatorCode),
-    circleId: String(circleId),
+    operatorId: operatorCode ? String(operatorCode) : null,
+    circleId: circleId ? String(circleId) : null,
     mobile,
     count: uniquePlans.size,
     plans: Array.from(uniquePlans.values()).sort(
