@@ -203,5 +203,64 @@ class GlobalController {
       });
     }
   }
+
+  // IOS update campaign
+  async iosUpdateCampaign(req, res) {
+    try {
+      const employees = await GlobalModel.getCampaignRecipients();
+
+      runNonBlocking(async () => {
+        let queued = 0;
+        let failed = 0;
+        let skipped = 0;
+
+        for (const employee of employees) {
+          if (!employee.contact) {
+            skipped += 1;
+            continue;
+          }
+
+          const waResult = await enqueueWhatsApp({
+            eventName: "reward_planners_ios_launch",
+            ctx: {
+              phone: employee.contact,
+              company_id: employee.company_id,
+              customer_name: employee.name || "Employee",
+              contact: employee.contact,
+            },
+          });
+
+          if (waResult.ok) {
+            queued += 1;
+          } else {
+            failed += 1;
+            console.warn("[IOS_UPDATE_CAMPAIGN_WA] WhatsApp not queued:", {
+              employee_id: employee.id,
+              phone: employee.contact,
+              result: waResult,
+            });
+          }
+        }
+
+        console.info("[IOS_UPDATE_CAMPAIGN_WA] Completed", {
+          total: employees.length,
+          queued,
+          failed,
+          skipped,
+        });
+      }, "iOS update campaign WhatsApp");
+
+      return res.json({
+        success: true,
+        message: "iOS update campaign queued",
+        total: employees.length,
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
 }
 module.exports = new GlobalController();

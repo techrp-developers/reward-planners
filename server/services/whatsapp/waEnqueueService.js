@@ -233,6 +233,9 @@ function buildBodyValues(templateKey, ctx) {
     case "reward_planners_launch_invitation":
       return [name];
 
+    case "reward_planners_ios_launch":
+      return [name];
+
     case "create_account_notification":
       return [name];
 
