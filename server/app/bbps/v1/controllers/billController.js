@@ -55,25 +55,34 @@ const normalizeFetchBillResponse = (providerResponse, requestPayload) => {
   const customerName = pickFirstValue(sources, [
     "customer_name",
     "customerName",
+    "customername",
+    "utilitycustomername",
     "name",
     "consumer_name",
+    "consumername",
     "biller_name",
   ]);
   const amount = pickFirstValue(sources, [
     "amount",
     "bill_amount",
     "billAmount",
+    "billamount",
     "due_amount",
+    "dueamount",
     "total_amount",
   ]);
   const dueDate = pickFirstValue(sources, [
     "due_date",
     "dueDate",
+    "duedate",
+    "billDueDate",
     "bill_due_date",
+    "billduedate",
   ]);
   const billNumber = pickFirstValue(sources, [
     "bill_number",
     "billNumber",
+    "billnumber",
     "bill_no",
     "reference_id",
     "referenceId",
@@ -81,6 +90,7 @@ const normalizeFetchBillResponse = (providerResponse, requestPayload) => {
   const billDate = pickFirstValue(sources, [
     "bill_date",
     "billDate",
+    "billdate",
     "billing_date",
   ]);
 
@@ -396,10 +406,25 @@ const hasProviderBillData = (providerResponse) => {
   for (const source of sources) {
     if (!source || typeof source !== "object") continue;
 
-    const amount = source.amount || source.bill_amount || source.billAmount;
+    const amount = pickFirstValue([source], [
+      "amount",
+      "bill_amount",
+      "billAmount",
+      "billamount",
+      "due_amount",
+      "dueamount",
+      "total_amount",
+    ]);
 
-    const customerName =
-      source.customer_name || source.consumer_name || source.name;
+    const customerName = pickFirstValue([source], [
+      "customer_name",
+      "customerName",
+      "customername",
+      "utilitycustomername",
+      "consumer_name",
+      "consumername",
+      "name",
+    ]);
 
     //  STRICT CHECK
     if (hasValue(amount) && hasValue(customerName)) {

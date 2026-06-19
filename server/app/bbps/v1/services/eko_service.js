@@ -1,5 +1,4 @@
 const axios = require("axios");
-const { randomUUID } = require("crypto");
 const headerUtil = require("../utils/header");
 const retry = require("../utils/retry");
 const {
@@ -28,6 +27,13 @@ const ensureTrailingSlash = (url = "") => {
 
 const BASE = ensureTrailingSlash(resolveBaseUrl() || "");
 const ekoUrl = (path) => `${BASE}${path}`;
+const configuredFetchBillTimeout = Number(
+  process.env.EKO_FETCH_BILL_TIMEOUT_MS || 30000,
+);
+const FETCH_BILL_TIMEOUT_MS =
+  Number.isFinite(configuredFetchBillTimeout) && configuredFetchBillTimeout > 0
+    ? configuredFetchBillTimeout
+    : 30000;
 
 // 0. Get Locations
 exports.getLocations = async () => {
@@ -236,7 +242,7 @@ exports.fetchBill = async (body, req) => {
       operator_id,
       ...dynamicParams,
       user_code: process.env.EKO_USER_CODE,
-      client_ref_id: randomUUID(),
+      client_ref_id: Date.now().toString(),
       hc_channel: "0",
       source_ip: sourceIp,
     };
@@ -258,20 +264,28 @@ exports.fetchBill = async (body, req) => {
       ),
     });
 
-    const res = await retry(() =>
-      axios.post(
-        ekoUrl(
-          `billpayments/fetchbill?initiator_id=${process.env.EKO_INITIATOR_ID}`,
+    const res = await retry(
+      () =>
+        axios.post(
+          ekoUrl(
+            `billpayments/fetchbill?initiator_id=${process.env.EKO_INITIATOR_ID}`,
+          ),
+          payload,
+          { headers, timeout: FETCH_BILL_TIMEOUT_MS },
         ),
-        payload,
-        { headers, timeout: 15000 },
-      ),
+      1,
     );
 
     console.info("[BBPS][provider][fetch-bill] response", {
       status: res.status,
       success: res.data?.success,
       message: res.data?.message,
+      responseKeys:
+        res.data && typeof res.data === "object" ? Object.keys(res.data) : [],
+      dataKeys:
+        res.data?.data && typeof res.data.data === "object"
+          ? Object.keys(res.data.data)
+          : [],
     });
 
     if (res.data && typeof res.data === "object" && !Array.isArray(res.data)) {
@@ -283,7 +297,10 @@ exports.fetchBill = async (body, req) => {
 
     return res.data;
   } catch (error) {
-    const statusCode = error.response?.status || 500;
+    const isTimeout =
+      error.code === "ECONNABORTED" ||
+      /timeout/i.test(String(error.message || ""));
+    const statusCode = isTimeout ? 504 : error.response?.status || 500;
     const providerData = error.response?.data;
     const hasHtmlBody =
       typeof providerData === "string" && /<\s*html/i.test(providerData);
@@ -296,7 +313,9 @@ exports.fetchBill = async (body, req) => {
       error.message;
 
     const normalizedError = new Error(
-      statusCode === 401
+      isTimeout
+        ? `BBPS provider timed out after ${FETCH_BILL_TIMEOUT_MS}ms`
+        : statusCode === 401
         ? "Provider authorization failed"
         : statusCode === 403
           ? "Provider access forbidden"
