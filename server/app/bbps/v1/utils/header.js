@@ -3,60 +3,33 @@ const crypto = require("crypto");
 //  Generate timestamp
 const getTimestamp = () => Date.now().toString();
 
-// const getAccessKeySigningKey = () => {
-//   const accessKey = (process.env.EKO_ACCESS_KEY || "").trim();
-
-//   if (!accessKey) {
-//     throw new Error("EKO_ACCESS_KEY is missing");
-//   }
-
-//   // EKO requirement: use base64(access_key) as HMAC key material.
-//   return Buffer.from(accessKey, "utf8").toString("base64");
-// };
-
-const getAccessKey = () => {
+const getAccessKeySigningKey = () => {
   const accessKey = (process.env.EKO_ACCESS_KEY || "").trim();
 
   if (!accessKey) {
     throw new Error("EKO_ACCESS_KEY is missing");
   }
 
-  return accessKey;
+  // EKO uses base64(access_key) as the HMAC key material.
+  return Buffer.from(accessKey, "utf8").toString("base64");
 };
 
 //  Generate secret key: base64(HMAC_SHA256(timestamp, base64(access_key)))
-// const generateSecretKey = (timestamp) => {
-//   const signingKey = getAccessKeySigningKey();
-//   return crypto
-//     .createHmac("sha256", signingKey)
-//     .update(timestamp)
-//     .digest("base64");
-// };
-
 const generateSecretKey = (timestamp) => {
-  const accessKey = getAccessKey();
+  const signingKey = getAccessKeySigningKey();
 
   return crypto
-    .createHmac("sha256", accessKey)
+    .createHmac("sha256", signingKey)
     .update(timestamp)
     .digest("base64");
 };
 
 // Generate request hash (for payBill)
-// const generateRequestHash = (payloadString) => {
-//   const signingKey = getAccessKeySigningKey();
-
-//   return crypto
-//     .createHmac("sha256", signingKey)
-//     .update(payloadString)
-//     .digest("base64");
-// };
-
 const generateRequestHash = (payloadString) => {
-  const accessKey = getAccessKey();
+  const signingKey = getAccessKeySigningKey();
 
   return crypto
-    .createHmac("sha256", accessKey)
+    .createHmac("sha256", signingKey)
     .update(payloadString)
     .digest("base64");
 };

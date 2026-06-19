@@ -9,13 +9,17 @@ const {
 } = require("../utils/network");
 
 const resolveBaseUrl = () => {
-  // if (process.env.EKO_BASE_URL) {
-  //   return process.env.EKO_BASE_URL;
-  // }
+  if (process.env.EKO_BASE_URL) {
+    return process.env.EKO_BASE_URL.trim();
+  }
 
-  // const isProduction = process.env.NODE_ENV === "production";
-  // return isProduction ? process.env.EKO_BASE_URL_PROD : process.env.EKO_BASE_URL_UAT;
-  return process.env.EKO_BASE_URL_PROD;
+  const providerEnvironment = (process.env.EKO_ENV || "production")
+    .trim()
+    .toLowerCase();
+
+  return ["uat", "staging", "test"].includes(providerEnvironment)
+    ? process.env.EKO_BASE_URL_UAT
+    : process.env.EKO_BASE_URL_PROD;
 };
 
 const ensureTrailingSlash = (url = "") => {
@@ -122,6 +126,8 @@ exports.getFetchBillReadiness = async (req, operatorId) => {
   const sourceIpDetails = await getBbpsSourceIPDetails(req);
   const coreConfig = {
     baseUrlConfigured: Boolean(BASE),
+    providerEnvironment: (process.env.EKO_ENV || "production").toLowerCase(),
+    providerBaseUrl: BASE || null,
     developerKeyConfigured: Boolean(process.env.EKO_DEVELOPER_KEY),
     accessKeyConfigured: Boolean(process.env.EKO_ACCESS_KEY),
     userCodeConfigured: Boolean(process.env.EKO_USER_CODE),
@@ -268,6 +274,13 @@ exports.fetchBill = async (body, req) => {
       message: res.data?.message,
     });
 
+    if (res.data && typeof res.data === "object" && !Array.isArray(res.data)) {
+      return {
+        ...res.data,
+        client_ref_id: res.data.client_ref_id || payload.client_ref_id,
+      };
+    }
+
     return res.data;
   } catch (error) {
     const statusCode = error.response?.status || 500;
@@ -294,6 +307,7 @@ exports.fetchBill = async (body, req) => {
       providerData && typeof providerData === "object"
         ? providerData
         : undefined;
+    normalizedError.providerMessage = providerMessage;
 
     console.error("[BBPS][provider][fetch-bill] error", {
       statusCode,

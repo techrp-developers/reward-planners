@@ -104,6 +104,11 @@ const normalizeFetchBillResponse = (providerResponse, requestPayload) => {
 const extractOperatorRecord = (operatorData) => {
   if (!operatorData) return null;
 
+  // Operator-detail responses keep the operator at the root and parameters in data.
+  if (typeof operatorData === "object" && operatorData.operator_id) {
+    return operatorData;
+  }
+
   // EKO MOST COMMON FORMAT
   if (Array.isArray(operatorData?.data) && operatorData.data.length > 0) {
     return operatorData.data[0];
@@ -120,11 +125,6 @@ const extractOperatorRecord = (operatorData) => {
   // Sometimes direct array
   if (Array.isArray(operatorData) && operatorData.length > 0) {
     return operatorData[0];
-  }
-
-  // Already a clean operator object (has operator_id)
-  if (typeof operatorData === "object" && operatorData.operator_id) {
-    return operatorData;
   }
 
   return null;
@@ -367,8 +367,7 @@ const isProviderValidationError = (providerResponse) => {
   return (
     providerResponse.response_type_id === -1 ||
     providerResponse.status === 97 ||
-    Boolean(providerResponse.invalid_params) ||
-    /no key for response/i.test(String(providerResponse.message || ""))
+    Boolean(providerResponse.invalid_params)
   );
 };
 
@@ -621,20 +620,27 @@ class BillController {
 
       console.info("[BBPS][fetch-bill] provider-response", {
         operator_id: operatorId,
+        client_ref_id: data?.client_ref_id,
         success: data?.success,
         message: data?.message,
       });
 
-      if (isProviderValidationError(data)) {
-        const providerMessage = /no key for response/i.test(
-          String(data?.message || ""),
-        )
-          ? "Provider returned an invalid fetch bill response. Please verify operator input mapping and EKO configuration."
-          : data?.message || "Provider validation failed";
+      if (/no key for response/i.test(String(data?.message || ""))) {
+        return res.status(502).json({
+          success: false,
+          message:
+            "EKO could not map the biller's response. Contact EKO support with the client_ref_id.",
+          data: {
+            message: data.message,
+            client_ref_id: data.client_ref_id,
+          },
+        });
+      }
 
+      if (isProviderValidationError(data)) {
         return res.status(400).json({
           success: false,
-          message: providerMessage,
+          message: data?.message || "Provider validation failed",
           data,
         });
       }
@@ -671,6 +677,7 @@ class BillController {
       console.error("[BBPS][fetch-bill] error", {
         statusCode,
         message,
+        providerMessage: e.providerMessage,
         provider: safeDetails || e.response?.data || e.response?.status,
       });
 
