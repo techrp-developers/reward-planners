@@ -391,6 +391,19 @@ const isProviderValidationError = (providerResponse) => {
   );
 };
 
+const getProviderFailureReason = (providerResponse) => {
+  const reason = pickFirstValue(
+    [providerResponse?.data, providerResponse],
+    ["reason", "error", "message"],
+  );
+
+  if (!hasValue(reason)) {
+    return "The biller did not return bill details";
+  }
+
+  return typeof reason === "string" ? reason : JSON.stringify(reason);
+};
+
 const hasProviderBillData = (providerResponse) => {
   if (!providerResponse || typeof providerResponse !== "object") {
     return false;
@@ -718,6 +731,10 @@ class BillController {
         client_ref_id: data?.client_ref_id,
         success: data?.success,
         message: data?.message,
+        reason: data?.data?.reason,
+        status: data?.status,
+        response_type_id: data?.response_type_id,
+        response_status_id: data?.response_status_id,
       });
 
       if (/no key for response/i.test(String(data?.message || ""))) {
@@ -741,11 +758,18 @@ class BillController {
       }
 
       if (!hasProviderBillData(data)) {
-        return res.status(502).json({
+        const providerReason = getProviderFailureReason(data);
+
+        return res.status(422).json({
           success: false,
-          message:
-            "Provider response did not contain bill data. Please verify operator required fields and EKO mapping.",
-          data,
+          message: data?.message || "Unable to fetch bill",
+          data: {
+            reason: providerReason,
+            client_ref_id: data?.client_ref_id,
+            status: data?.status,
+            response_type_id: data?.response_type_id,
+            response_status_id: data?.response_status_id,
+          },
         });
       }
 

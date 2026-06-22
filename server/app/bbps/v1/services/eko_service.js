@@ -421,6 +421,10 @@ exports.fetchBill = async (body, req) => {
       status: res.status,
       success: res.data?.success,
       message: res.data?.message,
+      reason: res.data?.data?.reason,
+      providerStatus: res.data?.status,
+      responseTypeId: res.data?.response_type_id,
+      responseStatusId: res.data?.response_status_id,
       responseKeys:
         res.data && typeof res.data === "object" ? Object.keys(res.data) : [],
       dataKeys:
