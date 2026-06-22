@@ -52,7 +52,7 @@ class FitnessService {
     }
 
     // -------------------------------
-    // 1. Get goal
+    // 1. Get goal (read-only, no concurrency concern)
     // -------------------------------
     const goal = await FitnessModel.getGoal(customerId);
 
@@ -72,101 +72,109 @@ class FitnessService {
     const profile = profileRows[0];
 
     // -------------------------------
-    // 2. STEP DELTA VALIDATION
-    // -------------------------------
-    const streakData = await FitnessModel.getStreak(customerId);
-
-    const existingSteps = await FitnessModel.getStepsByDate(customerId, date);
-    const previousSteps = existingSteps?.steps || 0;
-    const stepDiff = steps - previousSteps;
-
-    if (existingSteps) {
-
-      //  Case 1: Same or lower steps → ignore
-      if (steps <= previousSteps) {
-        return {
-          message: "No new steps to process",
-          goalAchieved: Math.max(previousSteps, steps) >= goal.daily_steps,
-          reward: 0,
-          currentStreak: streakData?.current_streak || 0,
-        };
-      }
-
-      //  Case 2: Unrealistic jump (anti-cheat)
-      if (stepDiff > 20000) {
-        throw new Error("Suspicious step increase detected");
-      }
-
-      if (stepDiff > 5000 && active_minutes < 5) {
-        throw new Error("Invalid activity pattern");
-      }
-    } else if (steps > 20000) {
-      throw new Error("Suspicious step increase detected");
-    }
-
-    // -------------------------------
-    // 3. SAVE STEPS (ALWAYS if valid)
-    // -------------------------------
-    await FitnessModel.upsertSteps({
-      customer_id: customerId,
-      step_date: date,
-      steps,
-      distance_km,
-      calories,
-      active_minutes,
-    });
-
-    // -------------------------------
-    // 4. CHECK GOAL (AFTER SAVE)
-    // -------------------------------
-    let goalAchieved = false;
-
-    if (steps >= goal.daily_steps) {
-      goalAchieved = true;
-    } else {
-      return {
-        message: "Steps synced",
-        goalAchieved: false,
-        reward: 0,
-      };
-    }
-
-    // -------------------------------
-    // 5. STREAK LOGIC
-    // -------------------------------
-    let currentStreak = 1;
-    let longestStreak = 1;
-
-    const syncDate = new Date(date);
-    const yesterday = new Date(syncDate);
-    yesterday.setDate(syncDate.getDate() - 1);
-
-    if (streakData) {
-      const lastDate = new Date(streakData.last_goal_completed_date);
-
-      const lastDateStr = formatDate(lastDate);
-      const todayStr = formatDate(syncDate);
-      const yesterdayStr = formatDate(yesterday);
-
-      if (lastDateStr === yesterdayStr) {
-        currentStreak = streakData.current_streak + 1;
-      } else if (lastDateStr === todayStr) {
-        // already processed today → don't increase
-        currentStreak = streakData.current_streak;
-      } else {
-        currentStreak = 1;
-      }
-
-      longestStreak = Math.max(streakData.longest_streak, currentStreak);
-    }
-
-    // -------------------------------
-    // 6. TRANSACTION START
+    // 2. TRANSACTION START — step save, streak update, and reward/wallet
+    //    writes all happen atomically so a failure can't leave steps saved
+    //    without their matching streak/coin credit (or vice versa). The
+    //    FOR UPDATE locks also serialize concurrent syncs for the same user
+    //    so two near-simultaneous requests can't both read a stale streak
+    //    and double-increment or double-reward.
     // -------------------------------
     const conn = await db.getConnection();
     await conn.beginTransaction();
 
     try {
+      // -------------------------------
+      // STEP DELTA VALIDATION (locked read)
+      // -------------------------------
+      const streakData = await FitnessModel.getStreakForUpdate(customerId, conn);
+      const existingSteps = await FitnessModel.getStepsByDateForUpdate(customerId, date, conn);
+      const previousSteps = existingSteps?.steps || 0;
+      const stepDiff = steps - previousSteps;
+
+      if (existingSteps) {
+        //  Case 1: Same or lower steps → ignore
+        if (steps <= previousSteps) {
+          await conn.commit();
+          return {
+            message: "No new steps to process",
+            goalAchieved: Math.max(previousSteps, steps) >= goal.daily_steps,
+            reward: 0,
+            currentStreak: streakData?.current_streak || 0,
+          };
+        }
+
+        //  Case 2: Unrealistic jump (anti-cheat)
+        if (stepDiff > 20000) {
+          throw new Error("Suspicious step increase detected");
+        }
+
+        if (stepDiff > 5000 && active_minutes < 5) {
+          throw new Error("Invalid activity pattern");
+        }
+      } else if (steps > 20000) {
+        throw new Error("Suspicious step increase detected");
+      }
+
+      // -------------------------------
+      // SAVE STEPS (ALWAYS if valid, inside the same transaction)
+      // -------------------------------
+      await FitnessModel.upsertSteps(
+        {
+          customer_id: customerId,
+          step_date: date,
+          steps,
+          distance_km,
+          calories,
+          active_minutes,
+        },
+        conn,
+      );
+
+      // -------------------------------
+      // CHECK GOAL (AFTER SAVE)
+      // -------------------------------
+      let goalAchieved = false;
+
+      if (steps >= goal.daily_steps) {
+        goalAchieved = true;
+      } else {
+        await conn.commit();
+        return {
+          message: "Steps synced",
+          goalAchieved: false,
+          reward: 0,
+        };
+      }
+
+      // -------------------------------
+      // STREAK LOGIC
+      // -------------------------------
+      let currentStreak = 1;
+      let longestStreak = 1;
+
+      const syncDate = new Date(date);
+      const yesterday = new Date(syncDate);
+      yesterday.setDate(syncDate.getDate() - 1);
+
+      if (streakData) {
+        const lastDate = new Date(streakData.last_goal_completed_date);
+
+        const lastDateStr = formatDate(lastDate);
+        const todayStr = formatDate(syncDate);
+        const yesterdayStr = formatDate(yesterday);
+
+        if (lastDateStr === yesterdayStr) {
+          currentStreak = streakData.current_streak + 1;
+        } else if (lastDateStr === todayStr) {
+          // already processed today → don't increase
+          currentStreak = streakData.current_streak;
+        } else {
+          currentStreak = 1;
+        }
+
+        longestStreak = Math.max(streakData.longest_streak, currentStreak);
+      }
+
       let totalReward = 0;
       let unlockedAchievements = [];
 
@@ -257,12 +265,12 @@ class FitnessService {
       // ACHIEVEMENTS
       // -------------------------------
       // Total lifetime steps
-      const totalSteps = await FitnessModel.getLifetimeSteps(customerId);
+      const totalSteps = await FitnessModel.getLifetimeSteps(customerId, conn);
 
-      const allAchievements = await FitnessModel.getAllAchievements();
+      const allAchievements = await FitnessModel.getAllAchievements(conn);
 
       const userAchievements =
-        await FitnessModel.getUserAchievements(customerId);
+        await FitnessModel.getUserAchievements(customerId, conn);
 
       for (const achievement of allAchievements) {
         // already unlocked

@@ -1,7 +1,7 @@
 const db = require("../../../../config/database");
 
 class FitnessModel {
-  async upsertSteps(data) {
+  async upsertSteps(data, conn = db) {
     const {
       customer_id,
       step_date,
@@ -22,7 +22,7 @@ class FitnessModel {
         active_minutes = VALUES(active_minutes)
     `;
 
-    await db.execute(query, [
+    await conn.execute(query, [
       customer_id,
       step_date,
       steps,
@@ -30,6 +30,34 @@ class FitnessModel {
       calories,
       active_minutes,
     ]);
+  }
+
+  // Locks the row for the duration of the caller's transaction so concurrent
+  // syncs for the same user/date can't race on the same step-delta read.
+  async getStepsByDateForUpdate(customerId, date, conn) {
+    const [rows] = await conn.execute(
+      `SELECT steps, distance_km, calories, active_minutes
+       FROM fitness_steps
+       WHERE user_id = ? AND step_date = ?
+       FOR UPDATE`,
+      [customerId, date],
+    );
+
+    return rows[0];
+  }
+
+  // Locks the streak row for the duration of the caller's transaction so
+  // concurrent syncs for the same user can't both read-then-increment it.
+  async getStreakForUpdate(customerId, conn) {
+    const [rows] = await conn.execute(
+      `SELECT current_streak, longest_streak, last_goal_completed_date
+       FROM fitness_streaks
+       WHERE user_id = ?
+       FOR UPDATE`,
+      [customerId],
+    );
+
+    return rows[0];
   }
 
   async getTodaySteps(customerId, date) {
@@ -76,8 +104,8 @@ class FitnessModel {
     );
   }
 
-  async getUserAchievements(customerId) {
-    const [rows] = await db.execute(
+  async getUserAchievements(customerId, conn = db) {
+    const [rows] = await conn.execute(
       `SELECT achievement_id FROM fitness_user_achievements WHERE user_id = ?`,
       [customerId],
     );
@@ -92,8 +120,8 @@ class FitnessModel {
     );
   }
 
-  async getAllAchievements() {
-    const [rows] = await db.execute(`SELECT * FROM fitness_achievements`);
+  async getAllAchievements(conn = db) {
+    const [rows] = await conn.execute(`SELECT * FROM fitness_achievements`);
     return rows;
   }
 
@@ -184,8 +212,8 @@ class FitnessModel {
     return rows[0];
   }
 
-  async getLifetimeSteps(customerId) {
-    const [rows] = await db.execute(
+  async getLifetimeSteps(customerId, conn = db) {
+    const [rows] = await conn.execute(
       `
       SELECT COALESCE(SUM(steps), 0) AS total_steps
       FROM fitness_steps
