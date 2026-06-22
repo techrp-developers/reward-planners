@@ -79,6 +79,8 @@ const processTransaction = async (txn, req) => {
     mobile: String(txn.utility_acc_no || "").trim(),
     operator_id: txn.operator_id,
     amount: txn.amount,
+    plan_id: txn.recharge_plan_id,
+    circle_id: txn.recharge_circle_id,
   });
 
   if (!result || String(result.status).toUpperCase() !== "SUCCESS") {

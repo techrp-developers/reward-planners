@@ -5,7 +5,6 @@ const auth = require("../../../common/middlewares/auth");
 const drainMode = require("../../../../middleware/drainMode");
 const {
   paymentLimiter,
-  generalLimiter,
 } = require("../../../common/middlewares/rateLimiter");
 
 // create payment
@@ -18,9 +17,14 @@ router.post(
 );
 
 // verify payment
-router.post("/verify-payment", auth, paymentLimiter, PaymentController.verifyPayment);
+router.post(
+  "/verify-payment",
+  auth,
+  paymentLimiter,
+  PaymentController.verifyPayment,
+);
 
 // retry Transaction
-router.post("/retry", auth, generalLimiter, PaymentController.retryTransaction);
+router.post("/retry", auth, paymentLimiter, PaymentController.retryTransaction);
 
 module.exports = router;

@@ -15,7 +15,7 @@ const makeKeyGenerator = () => (req) => {
   if (req.user?.user_id) {
     return `user_${req.user.user_id}`;
   }
-  return ipKeyGenerator(req); // IPv6-safe fallback
+  return ipKeyGenerator(req.ip); // IPv6-safe fallback
 };
 
 // ==========================
@@ -94,6 +94,19 @@ const generalLimiter = rateLimit({
   },
 });
 
+const providerReadLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: makeKeyGenerator(),
+  handler: (req, res) =>
+    res.status(429).json({
+      success: false,
+      message: "Too many provider requests. Please try again shortly.",
+    }),
+});
+
 // ==========================
 // STEP SYNC
 // 60 syncs per 15 min
@@ -117,5 +130,6 @@ module.exports = {
   checkoutLimiter,
   authLimiter,
   generalLimiter,
+  providerReadLimiter,
   stepSyncLimiter,
 };

@@ -1,5 +1,6 @@
 const cron = require("node-cron");
 const TransactionModel = require("../../app/bbps/v1/models/transactionModel");
+const RefundModel = require("../../app/bbps/v1/models/refundModel");
 const {
   processTransaction,
 } = require("../../app/bbps/v1/services/paymentProcessor");
@@ -37,19 +38,29 @@ cron.schedule("*/5 * * * *", async () => {
 
       console.error(`❌ Retry failed: ${txn.id}`, err.message);
 
-      // increment retry OUTSIDE transaction
-      if (
-        freshTxn &&
-        (err.retryable === false ||
-          freshTxn.retry_count + 1 >= freshTxn.max_retry)
-      ) {
-        await TransactionModel.updateStatus(
-          txn.id,
-          "FAILED_FINAL",
-          err.providerResponse || err.message,
-        );
-      } else {
-        await TransactionModel.incrementRetry(txn.id);
+      if (freshTxn) {
+        await conn.beginTransaction();
+
+        if (err.retryable === false) {
+          await TransactionModel.updateStatus(
+            txn.id,
+            "FAILED_FINAL",
+            err.providerResponse || err.message,
+            conn,
+          );
+          await RefundModel.queueForTransaction(txn.id, conn);
+        } else if (freshTxn.retry_count + 1 >= freshTxn.max_retry) {
+          await TransactionModel.updateStatus(
+            txn.id,
+            "RECONCILIATION_REQUIRED",
+            err.providerResponse || err.message,
+            conn,
+          );
+        } else {
+          await TransactionModel.incrementRetry(txn.id, conn);
+        }
+
+        await conn.commit();
       }
     } finally {
       conn.release();

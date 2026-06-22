@@ -172,15 +172,17 @@ components:
         bill_fetch_id:
           type: integer
           description: Required for fetch-bill operators; returned by the fetch-bill endpoint.
-        amount:
-          type: number
-          format: double
-          description: Required only for recharge operators. Ignored for fetch-bill operators.
         operator_id:
           type: integer
         utility_acc_no:
           type: string
           description: Required only for recharge operators.
+        plan_id:
+          type: string
+          description: Required for recharge operators; returned by the recharge plans endpoint. The server derives the payable amount from this plan.
+        circle_id:
+          type: string
+          description: Telecom circle used when fetching the selected recharge plan.
         cycle_number:
           type: string
     BBPSVerifyPaymentRequest:

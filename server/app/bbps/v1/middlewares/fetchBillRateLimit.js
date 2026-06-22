@@ -1,32 +1,63 @@
+const db = require("../../../../config/database");
 const { getClientIP } = require("../utils/network");
 
-const windowMs = Number(process.env.BBPS_FETCH_BILL_RATE_WINDOW_MS || 60 * 1000);
-const maxRequests = Number(process.env.BBPS_FETCH_BILL_RATE_MAX || 15);
+const configuredWindowMs = Number(
+  process.env.BBPS_FETCH_BILL_RATE_WINDOW_MS || 60000,
+);
+const configuredMaxRequests = Number(
+  process.env.BBPS_FETCH_BILL_RATE_MAX || 15,
+);
+const windowMs =
+  Number.isFinite(configuredWindowMs) && configuredWindowMs > 0
+    ? configuredWindowMs
+    : 60000;
+const maxRequests =
+  Number.isInteger(configuredMaxRequests) && configuredMaxRequests > 0
+    ? configuredMaxRequests
+    : 15;
 
-const requestStore = new Map();
+const fetchBillRateLimit = async (req, res, next) => {
+  const identity = req.user?.user_id
+    ? `user_${req.user.user_id}`
+    : `ip_${getClientIP(req)}`;
+  const windowId = Math.floor(Date.now() / windowMs);
+  const rateKey = `fetch_bill:${identity}:${windowId}`;
 
-const fetchBillRateLimit = (req, res, next) => {
-  const key = req.user?.user_id ? `user_${req.user.user_id}` : getClientIP(req);
-  const now = Date.now();
+  try {
+    await db.execute(
+      `INSERT INTO bbps_rate_limits
+       (rate_key, window_started_at, request_count)
+       VALUES (?, NOW(), 1)
+       ON DUPLICATE KEY UPDATE request_count = request_count + 1`,
+      [rateKey],
+    );
 
-  const item = requestStore.get(key) || { count: 0, windowStart: now };
+    const [[rate]] = await db.execute(
+      `SELECT request_count FROM bbps_rate_limits WHERE rate_key = ?`,
+      [rateKey],
+    );
 
-  if (now - item.windowStart >= windowMs) {
-    item.count = 0;
-    item.windowStart = now;
-  }
+    if (Math.random() < 0.01) {
+      db.execute(
+        `DELETE FROM bbps_rate_limits WHERE updated_at < NOW() - INTERVAL 1 DAY`,
+      ).catch(() => {});
+    }
 
-  item.count += 1;
-  requestStore.set(key, item);
+    if (Number(rate?.request_count || 0) > maxRequests) {
+      return res.status(429).json({
+        success: false,
+        message: "Too many fetch bill requests. Please try again shortly.",
+      });
+    }
 
-  if (item.count > maxRequests) {
-    return res.status(429).json({
+    return next();
+  } catch (error) {
+    console.error("[BBPS][rate-limit] error", error.message);
+    return res.status(503).json({
       success: false,
-      message: "Too many fetch bill requests. Please try again shortly.",
+      message: "Unable to validate request rate. Please try again.",
     });
   }
-
-  return next();
 };
 
 module.exports = fetchBillRateLimit;

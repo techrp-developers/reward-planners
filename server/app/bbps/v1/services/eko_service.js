@@ -58,54 +58,87 @@ const FETCH_BILL_TIMEOUT_MS =
   Number.isFinite(configuredFetchBillTimeout) && configuredFetchBillTimeout > 0
     ? configuredFetchBillTimeout
     : 30000;
+const configuredCatalogCacheTtl = Number(
+  process.env.EKO_CATALOG_CACHE_TTL_MS || 5 * 60 * 1000,
+);
+const CATALOG_CACHE_TTL_MS =
+  Number.isFinite(configuredCatalogCacheTtl) && configuredCatalogCacheTtl > 0
+    ? configuredCatalogCacheTtl
+    : 5 * 60 * 1000;
+const catalogCache = new Map();
+
+const withCatalogCache = async (key, loader) => {
+  const cached = catalogCache.get(key);
+
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.value;
+  }
+
+  const pending = Promise.resolve().then(loader);
+  catalogCache.set(key, {
+    value: pending,
+    expiresAt: Date.now() + CATALOG_CACHE_TTL_MS,
+  });
+
+  try {
+    return await pending;
+  } catch (error) {
+    catalogCache.delete(key);
+    throw error;
+  }
+};
 
 // 0. Get Locations
 exports.getLocations = async () => {
-  const headers = await headerUtil.fetchHeaders();
-  const res = await axios.get(ekoUrl("billpayments/operators_location"), {
-    headers,
+  return withCatalogCache("locations", async () => {
+    const headers = await headerUtil.fetchHeaders();
+    const res = await axios.get(ekoUrl("billpayments/operators_location"), {
+      headers,
+    });
+    return res.data;
   });
-  return res.data;
 };
 
 // 1. Categories
 exports.getCategories = async () => {
-  const headers = await headerUtil.fetchHeaders();
-  const res = await axios.get(ekoUrl("billpayments/operators_category"), {
-    headers,
+  return withCatalogCache("categories", async () => {
+    const headers = await headerUtil.fetchHeaders();
+    const res = await axios.get(ekoUrl("billpayments/operators_category"), {
+      headers,
+    });
+    return res.data;
   });
-  return res.data;
 };
 
 // 2. Operators
 exports.getOperators = async (category_id) => {
-  const headers = await headerUtil.fetchHeaders();
+  const data = await withCatalogCache("operators", async () => {
+    const headers = await headerUtil.fetchHeaders();
+    const res = await axios.get(ekoUrl("billpayments/operators"), { headers });
+    return res.data;
+  });
 
-  const res = await axios.get(ekoUrl("billpayments/operators"), { headers });
-
-  let operators = res.data?.data || [];
+  let operators = data?.data || [];
 
   if (category_id) {
     operators = operators.filter((op) => op.operator_category == category_id);
   }
 
   return {
-    ...res.data,
+    ...data,
     data: operators,
   };
 };
 
 // 2.5 Grouped operators
 exports.getOperatorsGrouped = async (category_id, search = "") => {
-  const headers = await headerUtil.fetchHeaders();
-
-  const [operatorsRes, locationRes] = await Promise.all([
-    axios.get(ekoUrl("billpayments/operators"), { headers }),
-    axios.get(ekoUrl("billpayments/operators_location"), { headers }),
+  const [operatorsResponse, locationResponse] = await Promise.all([
+    exports.getOperators(),
+    exports.getLocations(),
   ]);
 
-  let operators = operatorsRes.data?.data || [];
-  const locations = locationRes.data?.data || [];
+  let operators = operatorsResponse?.data || [];
+  const locations = locationResponse?.data || [];
 
   //  STEP 1: FILTER BY CATEGORY_ID
   operators = operators.filter((op) => op.operator_category == category_id);
@@ -145,11 +178,13 @@ exports.getOperatorsGrouped = async (category_id, search = "") => {
 
 // 3. Operator details
 exports.getOperatorDetails = async (id) => {
-  const headers = await headerUtil.fetchHeaders();
-  const res = await axios.get(ekoUrl(`billpayments/operators/${id}`), {
-    headers,
+  return withCatalogCache(`operator:${id}`, async () => {
+    const headers = await headerUtil.fetchHeaders();
+    const res = await axios.get(ekoUrl(`billpayments/operators/${id}`), {
+      headers,
+    });
+    return res.data;
   });
-  return res.data;
 };
 
 exports.getRechargePlans = async ({ mobile, operatorCode, circleId }) => {
@@ -464,14 +499,16 @@ exports.payBill = async (body, req) => {
     source_ip: sourceIp,
   };
 
-  const res = await retry(() =>
-    axios.post(
-      ekoUrl(
-        `billpayments/paybill?initiator_id=${process.env.EKO_INITIATOR_ID}`,
+  const res = await retry(
+    () =>
+      axios.post(
+        ekoUrl(
+          `billpayments/paybill?initiator_id=${process.env.EKO_INITIATOR_ID}`,
+        ),
+        payload,
+        { headers, timeout: 10000 },
       ),
-      payload,
-      { headers, timeout: 10000 },
-    ),
+    0,
   );
 
   return res.data;

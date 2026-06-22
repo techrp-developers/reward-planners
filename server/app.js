@@ -10,6 +10,7 @@ const swaggerSpec = require("./config/swagger");
 require("dotenv").config();
 require("./services/ExpressBees/cron/shipmentCron");
 require("./services/Bbps/retryCron");
+require("./services/Bbps/refundCron");
 require("./services/Razorpay/retryCron");
 require("./services/Maintenance/maintenanceCron");
 require("./services/Razorpay/orderExpiryCron");
@@ -32,6 +33,11 @@ const gamesRoute = require("./app/games/v1/routes/indexRoute");
 const mpsRoute = require("./mps-connect/common/routes/indexRoute");
 
 const app = express();
+
+const trustProxyHops = Number(process.env.TRUST_PROXY_HOPS);
+if (Number.isInteger(trustProxyHops) && trustProxyHops > 0) {
+  app.set("trust proxy", trustProxyHops);
+}
 
 // Middleware
 app.use(

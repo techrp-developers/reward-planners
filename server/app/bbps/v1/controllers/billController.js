@@ -477,12 +477,10 @@ class BillController {
       res.json(data);
     } catch (e) {
       console.error("EKO ERROR:", e.response?.data || e.message);
-      if (e.response?.status === 500) {
-        return res.status(503).json({
-          success: false,
-          message: "Service temporarily unavailable. Please try again.",
-        });
-      }
+      return res.status(e.response?.status || 502).json({
+        success: false,
+        message: "Service temporarily unavailable. Please try again.",
+      });
     }
   }
 
@@ -850,6 +848,11 @@ class BillController {
       );
 
       const rpOrder = rpOrderRows[0] || null;
+      const [[refund]] = await db.execute(
+        `SELECT status, razorpay_refund_id, retry_count, last_error
+         FROM bbps_refunds WHERE transaction_id = ?`,
+        [transaction_id],
+      );
 
       // =========================
       // 3. MAP STATUS FOR FRONTEND
@@ -858,6 +861,15 @@ class BillController {
 
       if (txn.bbps_status === "PAID") {
         finalStatus = "SUCCESS";
+      } else if (refund?.status === "completed") {
+        finalStatus = "REFUNDED";
+      } else if (["pending", "processing", "failed"].includes(refund?.status)) {
+        finalStatus = "REFUND_PENDING";
+      } else if (
+        refund?.status === "manual_review" ||
+        txn.bbps_status === "RECONCILIATION_REQUIRED"
+      ) {
+        finalStatus = "RECONCILIATION_REQUIRED";
       } else if (
         txn.bbps_status === "FAILED_FINAL" ||
         txn.bbps_status === "PAYMENT_FAILED"
@@ -891,6 +903,16 @@ class BillController {
             ? {
                 order_id: rpOrder.razorpay_order_id,
                 payment_id: rpOrder.razorpay_payment_id,
+              }
+            : null,
+
+          refund: refund
+            ? {
+                status: refund.status,
+                refund_id: refund.razorpay_refund_id,
+                retry_count: refund.retry_count,
+                error:
+                  refund.status === "manual_review" ? refund.last_error : null,
               }
             : null,
 
