@@ -1,5 +1,4 @@
 const ekoService = require("./eko_service");
-const rechargeService = require("./recharge_service");
 
 const removeEmptyFields = (payload) =>
   Object.fromEntries(
@@ -31,60 +30,39 @@ const isEkoPaymentSuccessful = (result) => {
 };
 
 const processTransaction = async (txn, req) => {
-  if (Number(txn.fetch_bill) === 1) {
-    let result;
+  let result;
 
-    try {
-      result = await ekoService.payBill(
-        removeEmptyFields({
-          utility_acc_no: String(txn.utility_acc_no || "").trim(),
-          operator_id: txn.operator_id,
-          amount: txn.amount,
-          cycle_number: txn.cycle_number,
-          confirmation_mobile_no: txn.confirmation_mobile_no,
-          sender_name: txn.sender_name,
-          client_ref_id: txn.provider_client_ref_id,
-          bbpstrxnrefid: txn.provider_bill_ref_id,
-        }),
-        req,
-      );
-    } catch (error) {
-      const statusCode = error.response?.status || error.statusCode;
+  try {
+    result = await ekoService.payBill(
+      removeEmptyFields({
+        utility_acc_no: String(txn.utility_acc_no || "").trim(),
+        operator_id: txn.operator_id,
+        amount: txn.amount,
+        cycle_number: txn.cycle_number,
+        confirmation_mobile_no: txn.confirmation_mobile_no,
+        sender_name: txn.sender_name,
+        client_ref_id: txn.provider_client_ref_id,
+        bbpstrxnrefid: txn.provider_bill_ref_id,
+      }),
+      req,
+    );
+  } catch (error) {
+    const statusCode = error.response?.status || error.statusCode;
 
-      if (
-        statusCode >= 400 &&
-        statusCode < 500 &&
-        statusCode !== 408 &&
-        statusCode !== 429
-      ) {
-        error.retryable = false;
-      }
-
-      throw error;
-    }
-
-    if (!isEkoPaymentSuccessful(result)) {
-      const error = new Error(
-        result?.message || "EKO rejected the bill payment",
-      );
+    if (
+      statusCode >= 400 &&
+      statusCode < 500 &&
+      statusCode !== 408 &&
+      statusCode !== 429
+    ) {
       error.retryable = false;
-      error.providerResponse = result;
-      throw error;
     }
 
-    return result;
+    throw error;
   }
 
-  const result = await rechargeService.recharge({
-    mobile: String(txn.utility_acc_no || "").trim(),
-    operator_id: txn.operator_id,
-    amount: txn.amount,
-    plan_id: txn.recharge_plan_id,
-    circle_id: txn.recharge_circle_id,
-  });
-
-  if (!result || String(result.status).toUpperCase() !== "SUCCESS") {
-    const error = new Error(result?.message || "Recharge failed");
+  if (!isEkoPaymentSuccessful(result)) {
+    const error = new Error(result?.message || "EKO rejected the payment");
     error.retryable = false;
     error.providerResponse = result;
     throw error;

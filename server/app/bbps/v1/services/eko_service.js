@@ -493,10 +493,14 @@ exports.payBill = async (body, req) => {
 
   const payload = {
     ...body,
+    initiator_id: process.env.EKO_INITIATOR_ID,
     user_code: process.env.EKO_USER_CODE,
     client_ref_id: body.client_ref_id || Date.now().toString(),
     hc_channel: "0",
     source_ip: sourceIp,
+    ...(process.env.EKO_LATLONG
+      ? { latlong: process.env.EKO_LATLONG.trim() }
+      : {}),
   };
 
   const res = await retry(

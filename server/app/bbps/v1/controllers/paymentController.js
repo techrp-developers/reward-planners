@@ -4,7 +4,6 @@ const BillFetchModel = require("../models/billFetchModel");
 const RefundModel = require("../models/refundModel");
 const razorpay = require("../services/razorpay_service");
 const ekoService = require("../services/eko_service");
-const rechargeService = require("../services/recharge_service");
 const { processTransaction } = require("../services/paymentProcessor");
 const db = require("../../../../config/database");
 const { notifyUser } = require("../../../common/utils/notification");
@@ -123,21 +122,19 @@ class PaymentController {
         billFetchId = fetchedBill.id;
         providerBillRefId = fetchedBill.provider_ref_id;
       } else {
-        if (!rechargeService.isConfigured()) {
-          await conn.rollback();
-          return res.status(503).json({
-            success: false,
-            message: "Recharge provider is not configured",
-          });
-        }
-
         utilityAccountNo = String(req.body.utility_acc_no || "").trim();
+        senderName = String(req.body.sender_name || "").trim();
 
-        if (!/^[1-9][0-9]{9}$/.test(utilityAccountNo) || !plan_id) {
+        if (
+          !/^[1-9][0-9]{9}$/.test(utilityAccountNo) ||
+          !plan_id ||
+          !senderName
+        ) {
           await conn.rollback();
           return res.status(400).json({
             success: false,
-            message: "A valid mobile number and plan_id are required",
+            message:
+              "A valid mobile number, plan_id, and sender_name are required",
           });
         }
 
@@ -159,6 +156,7 @@ class PaymentController {
         }
 
         amount = Number(selectedPlan.amount);
+        confirmationMobileNo = utilityAccountNo;
         rechargePlanId = selectedPlan.planId;
         rechargeCircleId = circle_id ? String(circle_id) : null;
       }
@@ -176,10 +174,7 @@ class PaymentController {
         });
       }
 
-      const providerClientRefId =
-        fetchBillFlag === 1
-          ? `${Date.now()}${crypto.randomInt(100, 1000)}`
-          : null;
+      const providerClientRefId = `${Date.now()}${crypto.randomInt(100, 1000)}`;
 
       // 1. create transaction
       const transaction_id = await TransactionModel.create(

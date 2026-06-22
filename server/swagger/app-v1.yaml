@@ -177,6 +177,9 @@ components:
         utility_acc_no:
           type: string
           description: Required only for recharge operators.
+        sender_name:
+          type: string
+          description: Required for recharge operators and sent to EKO as the payer name.
         plan_id:
           type: string
           description: Required for recharge operators; returned by the recharge plans endpoint. The server derives the payable amount from this plan.
