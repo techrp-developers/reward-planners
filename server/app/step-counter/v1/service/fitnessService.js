@@ -14,6 +14,25 @@ const formatHourLabel = (hour) => {
   return `${displayHour}${period}`;
 };
 
+// 4-week ramp toward the BMI-based recommended target, scaled to that
+// target instead of hardcoded absolute values — otherwise the ramp can
+// collide with or undercut the final target for lower BMI categories
+// (e.g. underweight's 5000 recommended_steps used to duplicate week 1).
+const buildWeeklyPlan = (recommendedSteps) => {
+  const ratios = [0.7, 0.8, 0.9, 1];
+  const steps = ratios.map((r) => Math.round((recommendedSteps * r) / 500) * 500);
+
+  for (let i = 1; i < steps.length; i++) {
+    if (steps[i] <= steps[i - 1]) steps[i] = steps[i - 1] + 500;
+  }
+
+  // Week 4 should land on the actual recommended target, not a rounded
+  // approximation, as long as that still keeps the ramp increasing.
+  steps[steps.length - 1] = Math.max(recommendedSteps, steps[steps.length - 2] + 500);
+
+  return steps.map((value, i) => ({ week: i + 1, steps: value }));
+};
+
 const toFiniteNumber = (value) => {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
@@ -751,18 +770,20 @@ class FitnessService {
       recommended_steps = 9000;
     }
 
+    const dailyRewardCoins = (await FitnessModel.getRewardConfig("goal_daily")) ?? FALLBACK_GOAL_COINS;
+
     return {
       bmi,
       category,
       recommended_steps,
       recommended_minutes,
       goal: goalLabel,
-      weekly_plan: [
-        { week: 1, steps: 5000 },
-        { week: 2, steps: 6000 },
-        { week: 3, steps: 7000 },
-        { week: 4, steps: recommended_steps },
-      ],
+      // Flat regardless of which weekly_plan option is chosen — the actual
+      // syncSteps reward (fitness_reward_config.goal_daily) doesn't scale
+      // with the step target, so the preview shouldn't invent a number that
+      // doesn't match what the user will actually receive.
+      daily_reward_coins: dailyRewardCoins,
+      weekly_plan: buildWeeklyPlan(recommended_steps),
     };
   }
 
