@@ -21,7 +21,7 @@ const assertNumberInRange = (value, label, min, max) => {
 
 // Used only if the fitness_reward_config row is missing/disabled — keeps the
 // goal reward working even if the config table is empty.
-const FALLBACK_GOAL_COINS = 50;
+const FALLBACK_GOAL_COINS = 5;
 
 class FitnessService {
   async syncSteps(customerId, payload) {
