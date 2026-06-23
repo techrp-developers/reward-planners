@@ -44,7 +44,7 @@ class FitnessService {
       throw new Error("Only today's steps can be synced");
     }
 
-    const steps = assertNumberInRange(rawSteps, "step count", 0, 40000);
+    const steps = assertNumberInRange(rawSteps, "step count", 0, 30000);
     const distance_km = assertNumberInRange(rawDistance ?? 0, "distance", 0, 100);
     const calories = assertNumberInRange(rawCalories ?? 0, "calories", 0, 10000);
     const active_minutes = assertNumberInRange(
@@ -58,6 +58,21 @@ class FitnessService {
     // Anti cheat
     // -------------------------------
     if (steps > 5000 && active_minutes < 5) {
+      throw new Error("Invalid activity pattern");
+    }
+
+    // Cross-field plausibility: distance/calories must be in the range a real
+    // device would report for this many steps (avg stride ~0.4-1.5m, ~0.02-0.08
+    // kcal/step). Catches a direct API caller sending an inflated distance or
+    // calorie count alongside a low/unrelated step count.
+    if (steps > 0) {
+      if (distance_km > 0 && (distance_km < steps * 0.0004 || distance_km > steps * 0.0015)) {
+        throw new Error("Invalid activity pattern");
+      }
+      if (calories > 0 && (calories < steps * 0.02 || calories > steps * 0.08)) {
+        throw new Error("Invalid activity pattern");
+      }
+    } else if (distance_km > 0 || calories > 0) {
       throw new Error("Invalid activity pattern");
     }
 
@@ -114,14 +129,14 @@ class FitnessService {
         }
 
         //  Case 2: Unrealistic jump (anti-cheat)
-        if (stepDiff > 20000) {
+        if (stepDiff > 15000) {
           throw new Error("Suspicious step increase detected");
         }
 
         if (stepDiff > 5000 && active_minutes < 5) {
           throw new Error("Invalid activity pattern");
         }
-      } else if (steps > 20000) {
+      } else if (steps > 15000) {
         throw new Error("Suspicious step increase detected");
       }
 
@@ -507,7 +522,7 @@ class FitnessService {
 
   // select goal
   async selectGoal(customerId, daily_steps) {
-    const dailySteps = assertNumberInRange(daily_steps, "daily steps", 1000, 40000);
+    const dailySteps = assertNumberInRange(daily_steps, "daily steps", 1000, 30000);
 
     await db.execute(
       `INSERT INTO fitness_goals (user_id, daily_steps, start_date)
