@@ -1,13 +1,7 @@
 const FitnessModel = require("../models/fitnessModel");
 const FitnessService = require("../service/fitnessService");
 const db = require("../../../../config/database");
-
-const getErrorStatus = (err) => {
-  const badRequestMessages = ["Invalid", "Missing required fields"];
-  return badRequestMessages.some((message) => err.message?.startsWith(message))
-    ? 400
-    : 500;
-};
+const { getErrorStatus, getSafeErrorMessage } = require("../utils/errorResponse");
 
 class FitnessController {
   async getOnboardingStatus(req, res) {
@@ -29,7 +23,7 @@ class FitnessController {
         is_completed: status,
       });
     } catch (err) {
-      res.status(getErrorStatus(err)).json({ success: false, message: err.message });
+      res.status(getErrorStatus(err)).json({ success: false, message: getSafeErrorMessage(err) });
     }
   }
 
@@ -51,7 +45,7 @@ class FitnessController {
 
       res.json({ message: "Goal set successfully" });
     } catch (err) {
-      res.status(getErrorStatus(err)).json({ success: false, message: err.message });
+      res.status(getErrorStatus(err)).json({ success: false, message: getSafeErrorMessage(err) });
     }
   }
 
@@ -91,7 +85,7 @@ class FitnessController {
         message: "Profile updated",
       });
     } catch (err) {
-      res.status(getErrorStatus(err)).json({ success: false, message: err.message });
+      res.status(getErrorStatus(err)).json({ success: false, message: getSafeErrorMessage(err) });
     }
   }
 
@@ -113,7 +107,7 @@ class FitnessController {
 
       res.json({ message: "Body profile updated" });
     } catch (err) {
-      res.status(getErrorStatus(err)).json({ success: false, message: err.message });
+      res.status(getErrorStatus(err)).json({ success: false, message: getSafeErrorMessage(err) });
     }
   }
 
@@ -133,7 +127,7 @@ class FitnessController {
 
       res.json(data);
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(getErrorStatus(err)).json({ error: getSafeErrorMessage(err) });
     }
   }
 
@@ -153,7 +147,7 @@ class FitnessController {
 
       res.json(data);
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(getErrorStatus(err)).json({ error: getSafeErrorMessage(err) });
     }
   }
 }

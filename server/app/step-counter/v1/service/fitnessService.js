@@ -29,8 +29,18 @@ class FitnessService {
       date,
     } = payload || {};
 
-    const today = formatDate(new Date());
-    if (!date || date !== today) {
+    // Allow today, yesterday, or tomorrow (server-local) — any two real-world
+    // timezones can differ by at most one calendar day, so this tolerates
+    // device/server timezone mismatch instead of rejecting legitimate syncs
+    // made near midnight.
+    const now = new Date();
+    const serverYesterday = new Date(now);
+    serverYesterday.setDate(now.getDate() - 1);
+    const serverTomorrow = new Date(now);
+    serverTomorrow.setDate(now.getDate() + 1);
+
+    const allowedDates = [serverYesterday, now, serverTomorrow].map(formatDate);
+    if (!date || !allowedDates.includes(date)) {
       throw new Error("Only today's steps can be synced");
     }
 
