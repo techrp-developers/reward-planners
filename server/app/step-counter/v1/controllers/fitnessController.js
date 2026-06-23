@@ -127,7 +127,7 @@ class FitnessController {
 
       res.json(data);
     } catch (err) {
-      res.status(getErrorStatus(err)).json({ error: getSafeErrorMessage(err) });
+      res.status(getErrorStatus(err)).json({ success: false, message: getSafeErrorMessage(err) });
     }
   }
 
@@ -147,7 +147,7 @@ class FitnessController {
 
       res.json(data);
     } catch (err) {
-      res.status(getErrorStatus(err)).json({ error: getSafeErrorMessage(err) });
+      res.status(getErrorStatus(err)).json({ success: false, message: getSafeErrorMessage(err) });
     }
   }
 }

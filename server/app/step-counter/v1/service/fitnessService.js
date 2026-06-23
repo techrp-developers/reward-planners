@@ -772,12 +772,21 @@ class FitnessService {
 
     const dailyRewardCoins = (await FitnessModel.getRewardConfig("goal_daily")) ?? FALLBACK_GOAL_COINS;
 
+    // The actually-saved goal (if any), distinct from the BMI-based
+    // recommendation above — these can differ if the user's weight changed
+    // since they last picked a target. Lets the UI show "your current plan"
+    // separately from "here's what we'd recommend now".
+    const existingGoal = await FitnessModel.getGoal(customerId);
+
     return {
       bmi,
       category,
       recommended_steps,
       recommended_minutes,
       goal: goalLabel,
+      current_goal: existingGoal
+        ? { daily_steps: existingGoal.daily_steps, start_date: formatDate(existingGoal.start_date) }
+        : null,
       // Flat regardless of which weekly_plan option is chosen — the actual
       // syncSteps reward (fitness_reward_config.goal_daily) doesn't scale
       // with the step target, so the preview shouldn't invent a number that
