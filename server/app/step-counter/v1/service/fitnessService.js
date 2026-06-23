@@ -19,6 +19,10 @@ const assertNumberInRange = (value, label, min, max) => {
   return number;
 };
 
+// Used only if the fitness_reward_config row is missing/disabled — keeps the
+// goal reward working even if the config table is empty.
+const FALLBACK_GOAL_COINS = 50;
+
 class FitnessService {
   async syncSteps(customerId, payload) {
     const {
@@ -240,7 +244,8 @@ class FitnessService {
       if (!alreadyGoalRewarded) {
         showGoalPopup = true;
 
-        const goalCoins = 50;
+        const configuredGoalCoins = await FitnessModel.getRewardConfig("goal_daily", conn);
+        const goalCoins = configuredGoalCoins ?? FALLBACK_GOAL_COINS;
 
         try {
           await FitnessModel.insertRewardLog(
@@ -259,9 +264,13 @@ class FitnessService {
       }
 
       // -------------------------------
-      // STREAK BONUS
+      // STREAK BONUS — milestones are config-driven (fitness_streak_bonus_config)
+      // so new milestones (e.g. day 21, 30) can be added without a deploy.
       // -------------------------------
-      if (currentStreak === 7 || currentStreak === 14) {
+      const streakBonusConfig = await FitnessModel.getStreakBonusConfig(conn);
+      const streakBonus = streakBonusConfig.find((b) => b.streak_days === currentStreak);
+
+      if (streakBonus) {
         const alreadyStreakRewarded = await FitnessModel.hasReward(
           customerId,
           date,
@@ -271,7 +280,7 @@ class FitnessService {
         );
 
         if (!alreadyStreakRewarded) {
-          const streakCoins = currentStreak === 7 ? 100 : 200;
+          const streakCoins = streakBonus.coins;
 
           await FitnessModel.insertRewardLog(
             customerId,

@@ -201,6 +201,25 @@ class FitnessModel {
     await conn.execute(query, [customerId, date, type, referenceId, coins]);
   }
 
+  // Reward economy config — lets coin amounts be tuned via the DB instead of
+  // a code deploy. Returns null if the key is missing/disabled so the caller
+  // can fall back to a safe default.
+  async getRewardConfig(configKey, conn = db) {
+    const [rows] = await conn.execute(
+      `SELECT coins FROM fitness_reward_config WHERE config_key = ? AND is_active = 1`,
+      [configKey],
+    );
+    return rows[0] ? Number(rows[0].coins) : null;
+  }
+
+  // All active streak-bonus milestones, e.g. [{ streak_days: 7, coins: 100 }, ...]
+  async getStreakBonusConfig(conn = db) {
+    const [rows] = await conn.execute(
+      `SELECT streak_days, coins FROM fitness_streak_bonus_config WHERE is_active = 1 ORDER BY streak_days ASC`,
+    );
+    return rows.map((r) => ({ streak_days: Number(r.streak_days), coins: Number(r.coins) }));
+  }
+
   async getStepsByDate(customerId, date) {
     const [rows] = await db.execute(
       `SELECT steps, distance_km, calories, active_minutes
