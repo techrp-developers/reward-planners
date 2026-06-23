@@ -220,6 +220,26 @@ class FitnessModel {
     return rows.map((r) => ({ streak_days: Number(r.streak_days), coins: Number(r.coins) }));
   }
 
+  // Adds `steps` to the running total for this user/date/hour bucket —
+  // used to build a real (if approximate) hourly chart instead of a
+  // fabricated percentage split.
+  async accumulateHourlySteps(customerId, date, hour, steps, conn) {
+    await conn.execute(
+      `INSERT INTO fitness_hourly_steps (user_id, step_date, hour, steps)
+       VALUES (?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE steps = steps + VALUES(steps)`,
+      [customerId, date, hour, steps],
+    );
+  }
+
+  async getHourlySteps(customerId, date, conn = db) {
+    const [rows] = await conn.execute(
+      `SELECT hour, steps FROM fitness_hourly_steps WHERE user_id = ? AND step_date = ? ORDER BY hour ASC`,
+      [customerId, date],
+    );
+    return rows.map((r) => ({ hour: Number(r.hour), steps: Number(r.steps) }));
+  }
+
   async getStepsByDate(customerId, date) {
     const [rows] = await db.execute(
       `SELECT steps, distance_km, calories, active_minutes

@@ -6,6 +6,14 @@ const formatDate = (date) => {
   return new Date(date).toLocaleDateString("en-CA"); // YYYY-MM-DD
 };
 
+// 0-23 -> "12AM", "6AM", "12PM", "3PM", etc. — matches the format the
+// frontend's StatisticsGraph already parses (^(\d{1,2})(AM|PM)$).
+const formatHourLabel = (hour) => {
+  const period = hour < 12 ? "AM" : "PM";
+  const displayHour = hour % 12 === 0 ? 12 : hour % 12;
+  return `${displayHour}${period}`;
+};
+
 const toFiniteNumber = (value) => {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
@@ -158,6 +166,10 @@ class FitnessService {
         },
         conn,
       );
+
+      // Attribute this sync's new steps to the current server-hour, building
+      // a real (if approximate) hourly breakdown for getTodayHourlyStats.
+      await FitnessModel.accumulateHourlySteps(customerId, date, now.getHours(), stepDiff, conn);
 
       // -------------------------------
       // CHECK GOAL (AFTER SAVE)
@@ -1111,45 +1123,14 @@ class FitnessService {
   }
 
   async getTodayHourlyStats(customerId) {
-    const today = new Date().toLocaleDateString("en-CA");
+    const today = formatDate(new Date());
 
-    const [rows] = await db.execute(
-      `
-    SELECT steps
-    FROM fitness_steps
-    WHERE user_id = ?
-    AND step_date = ?
-    `,
-      [customerId, today],
-    );
+    const rows = await FitnessModel.getHourlySteps(customerId, today);
 
-    const totalSteps = rows[0]?.steps || 0;
-
-    // Simulated hourly distribution
-    const hourlyData = [
-      {
-        time: "6AM",
-        steps: Math.floor(totalSteps * 0.1),
-      },
-      {
-        time: "9AM",
-        steps: Math.floor(totalSteps * 0.15),
-      },
-      {
-        time: "12PM",
-        steps: Math.floor(totalSteps * 0.25),
-      },
-      {
-        time: "3PM",
-        steps: Math.floor(totalSteps * 0.2),
-      },
-      {
-        time: "6PM",
-        steps: Math.floor(totalSteps * 0.3),
-      },
-    ];
-
-    return hourlyData;
+    return rows.map((r) => ({
+      time: formatHourLabel(r.hour),
+      steps: r.steps,
+    }));
   }
 }
 
