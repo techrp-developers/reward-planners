@@ -68,6 +68,24 @@ class FitnessModel {
     return rows[0];
   }
 
+  // Most recently-touched fitness_steps row among a set of candidate dates,
+  // but only if it was actually updated recently (used to resolve "today"
+  // tolerantly across a device/server timezone mismatch — see
+  // resolveEffectiveDate in fitnessService.js). The recency filter matters:
+  // without it, a user who simply hasn't synced yet today would see
+  // yesterday's leftover row mislabeled as "today" indefinitely instead of 0.
+  async getRecentlyUpdatedStepsForDates(customerId, dates, recencyMinutes, conn = db) {
+    const placeholders = dates.map(() => "?").join(", ");
+    const [rows] = await conn.execute(
+      `SELECT * FROM fitness_steps
+       WHERE user_id = ? AND step_date IN (${placeholders})
+       AND updated_at >= DATE_SUB(NOW(), INTERVAL ? MINUTE)
+       ORDER BY updated_at DESC LIMIT 1`,
+      [customerId, ...dates, recencyMinutes],
+    );
+    return rows[0];
+  }
+
   async getGoal(customerId) {
     const [rows] = await db.execute(
       `SELECT * FROM fitness_goals WHERE user_id = ? ORDER BY goal_id DESC LIMIT 1`,
