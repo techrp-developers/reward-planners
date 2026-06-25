@@ -142,11 +142,13 @@ async function generateInvoices(orderId, conn) {
     // 1 Fetch order items with vendor
     const [items] = await conn.query(
       `
-      SELECT 
+      SELECT
         oi.product_id,
         oi.variant_id,
         oi.quantity,
         oi.price,
+        oi.reward_discount,
+        oi.final_price,
         p.product_name,
         p.vendor_id,
         p.gst_slab,
@@ -191,15 +193,26 @@ async function generateInvoices(orderId, conn) {
 
       let subtotal = 0;
       let taxTotal = 0;
+      let rewardDiscountTotal = 0;
 
       // Calculate totals
+      // NOTE: oi.price is the GST-inclusive MRP, and oi.final_price is the
+      // line amount actually payable after reward-coin redemption (also
+      // GST-inclusive). GST is extracted from final_price rather than added
+      // on top, so it is not double-counted.
       for (const item of vendorItems) {
-        const lineSubtotal = Number(item.price) * Number(item.quantity);
+        const lineNet =
+          item.final_price != null
+            ? Number(item.final_price)
+            : Number(item.price) * Number(item.quantity) -
+              Number(item.reward_discount || 0);
         const gstRate = Number(item.gst_slab || 0);
-        const taxAmount = lineSubtotal * (gstRate / 100);
+        const lineBase = lineNet / (1 + gstRate / 100);
+        const taxAmount = lineNet - lineBase;
 
-        subtotal += lineSubtotal;
+        subtotal += lineBase;
         taxTotal += taxAmount;
+        rewardDiscountTotal += Number(item.reward_discount || 0);
       }
 
       // 4 Fetch shipping charges for vendor
@@ -229,9 +242,10 @@ async function generateInvoices(orderId, conn) {
           subtotal,
           tax_total,
           shipping_amount,
+          reward_discount,
           grand_total
         )
-        SELECT ?, o.order_id, ?, o.user_id, ?, ?, ?, ?
+        SELECT ?, o.order_id, ?, o.user_id, ?, ?, ?, ?, ?
         FROM eorders o
         WHERE o.order_id = ?
         `,
@@ -241,6 +255,7 @@ async function generateInvoices(orderId, conn) {
           subtotal,
           taxTotal,
           shippingCharges,
+          rewardDiscountTotal,
           grandTotal,
           orderId,
         ],
@@ -250,16 +265,21 @@ async function generateInvoices(orderId, conn) {
 
       // 6 Insert invoice items
       for (const item of vendorItems) {
-        const lineSubtotal = Number(item.price) * Number(item.quantity);
+        const lineNet =
+          item.final_price != null
+            ? Number(item.final_price)
+            : Number(item.price) * Number(item.quantity) -
+              Number(item.reward_discount || 0);
         const gstRate = Number(item.gst_slab || 0);
 
-        const totalTax = lineSubtotal * (gstRate / 100);
+        const lineBase = lineNet / (1 + gstRate / 100);
+        const totalTax = lineNet - lineBase;
 
         const cgst = totalTax / 2;
         const sgst = totalTax / 2;
         const igst = 0;
 
-        const lineTotal = lineSubtotal + totalTax;
+        const lineTotal = lineNet;
 
         await conn.query(
           `

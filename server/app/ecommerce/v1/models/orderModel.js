@@ -765,6 +765,7 @@ class orderModel {
       i.subtotal,
       i.tax_total,
       i.shipping_amount,
+      i.reward_discount,
       i.grand_total,
       i.invoice_date,
 
@@ -782,6 +783,7 @@ class orderModel {
       s.state_name,
 
       ca.contact_name,
+      ca.contact_phone AS customer_phone,
       ca.address1,
       ca.address2,
       ca.city AS customer_city,

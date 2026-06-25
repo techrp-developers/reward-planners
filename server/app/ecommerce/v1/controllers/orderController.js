@@ -203,6 +203,11 @@ function buildInvoiceHTML(invoice = {}, items = []) {
     escapeHTML(invoice.contact_name || ""),
   );
 
+  html = html.replace(
+    /{{customer_phone}}/g,
+    escapeHTML(invoice.customer_phone || ""),
+  );
+
   const customerAddress = `
 ${escapeHTML(invoice.address1 || "")} ${escapeHTML(invoice.address2 || "")}<br>
 ${escapeHTML(invoice.customer_city || "")} ${escapeHTML(invoice.zipcode || "")}
@@ -223,7 +228,21 @@ ${escapeHTML(invoice.customer_city || "")} ${escapeHTML(invoice.zipcode || "")}
   html = html.replace(/{{subtotal}}/g, money(invoice.subtotal));
   html = html.replace(/{{tax_total}}/g, money(invoice.tax_total));
   html = html.replace(/{{shipping_amount}}/g, money(invoice.shipping_amount));
+  html = html.replace(
+    /{{reward_discount}}/g,
+    money(invoice.reward_discount),
+  );
   html = html.replace(/{{grand_total}}/g, money(invoice.grand_total));
+
+  const rewardDiscountRow =
+    Number(invoice.reward_discount || 0) > 0
+      ? `<div class="total-row">
+<span>Reward Coins Discount</span>
+<span>-₹{{reward_discount}}</span>
+</div>`.replace(/{{reward_discount}}/g, money(invoice.reward_discount))
+      : "";
+
+  html = html.replace(/{{reward_discount_row}}/g, rewardDiscountRow);
 
   // amount to words
   const amountWords = amountToWords(Number(invoice.grand_total || 0));
