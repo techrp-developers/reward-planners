@@ -139,6 +139,13 @@ async function buildXpressBookingPayload(orderId, vendorId) {
 
 async function generateInvoices(orderId, conn) {
   try {
+    const result = {
+      orderId,
+      created: [],
+      skippedExisting: [],
+      noItems: false,
+    };
+
     // 1 Fetch order items with vendor
     const [items] = await conn.query(
       `
@@ -163,7 +170,8 @@ async function generateInvoices(orderId, conn) {
     );
 
     if (!items.length) {
-      return;
+      result.noItems = true;
+      return result;
     }
 
     // 2 Group items by vendor
@@ -186,7 +194,13 @@ async function generateInvoices(orderId, conn) {
         [orderId, vendorId],
       );
 
-      if (existing) continue;
+      if (existing) {
+        result.skippedExisting.push({
+          vendorId: Number(vendorId),
+          invoiceId: existing.invoice_id,
+        });
+        continue;
+      }
 
       const vendorItems = vendorMap[vendorId];
       const invoiceNumber = `INV-${orderId}-${vendorId}`;
@@ -195,23 +209,12 @@ async function generateInvoices(orderId, conn) {
       let taxTotal = 0;
       let rewardDiscountTotal = 0;
 
-      // Calculate totals
-      // NOTE: oi.price is the GST-inclusive MRP, and oi.final_price is the
-      // line amount actually payable after reward-coin redemption (also
-      // GST-inclusive). GST is extracted from final_price rather than added
-      // on top, so it is not double-counted.
+      // Calculate totals without GST split. Subtotal is before reward
+      // discount, and reward discount is shown as a separate deduction.
       for (const item of vendorItems) {
-        const lineNet =
-          item.final_price != null
-            ? Number(item.final_price)
-            : Number(item.price) * Number(item.quantity) -
-              Number(item.reward_discount || 0);
-        const gstRate = Number(item.gst_slab || 0);
-        const lineBase = lineNet / (1 + gstRate / 100);
-        const taxAmount = lineNet - lineBase;
+        const lineSubtotal = Number(item.price) * Number(item.quantity);
 
-        subtotal += lineBase;
-        taxTotal += taxAmount;
+        subtotal += lineSubtotal;
         rewardDiscountTotal += Number(item.reward_discount || 0);
       }
 
@@ -228,7 +231,8 @@ async function generateInvoices(orderId, conn) {
 
       const shippingCharges = Number(shipment?.shipping_charges || 0);
 
-      const grandTotal = subtotal + taxTotal + shippingCharges;
+      const grandTotal =
+        subtotal - rewardDiscountTotal + taxTotal + shippingCharges;
 
       // 5 Create invoice
       const [invResult] = await conn.query(
@@ -263,23 +267,22 @@ async function generateInvoices(orderId, conn) {
 
       const invoiceId = invResult.insertId;
 
+      if (!invoiceId) {
+        throw new Error(
+          `Invoice insert failed for order ${orderId}, vendor ${vendorId}`,
+        );
+      }
+
+      result.created.push({
+        vendorId: Number(vendorId),
+        invoiceId,
+        invoiceNumber,
+      });
+
       // 6 Insert invoice items
       for (const item of vendorItems) {
-        const lineNet =
-          item.final_price != null
-            ? Number(item.final_price)
-            : Number(item.price) * Number(item.quantity) -
-              Number(item.reward_discount || 0);
-        const gstRate = Number(item.gst_slab || 0);
-
-        const lineBase = lineNet / (1 + gstRate / 100);
-        const totalTax = lineNet - lineBase;
-
-        const cgst = totalTax / 2;
-        const sgst = totalTax / 2;
-        const igst = 0;
-
-        const lineTotal = lineNet;
+        const unitPrice = Number(item.price);
+        const lineTotal = unitPrice * Number(item.quantity);
 
         await conn.query(
           `
@@ -308,17 +311,19 @@ async function generateInvoices(orderId, conn) {
             item.product_name,
             item.sku,
             item.quantity,
-            item.price,
-            gstRate,
+            unitPrice,
+            0,
             item.hsn_sac_code,
-            cgst,
-            sgst,
-            igst,
+            0,
+            0,
+            0,
             lineTotal,
           ],
         );
       }
     }
+
+    return result;
   } catch (err) {
     throw err;
   }
@@ -1142,4 +1147,7 @@ async function processEvent(req) {
   }
 }
 
-module.exports = { processEvent, processShipmentsAfterPayment };
+module.exports = {
+  processEvent,
+  processShipmentsAfterPayment,
+};

@@ -157,7 +157,8 @@ function buildInvoiceHTML(invoice = {}, items = []) {
         </tr>
         `,
     )
-    .join("");
+    .join("")
+    .replace(/\n\s*.*GST\s+[^<\n]*%/g, "");
 
   let html = template;
 
@@ -226,7 +227,6 @@ ${escapeHTML(invoice.customer_city || "")} ${escapeHTML(invoice.zipcode || "")}
   // ------------------------
 
   html = html.replace(/{{subtotal}}/g, money(invoice.subtotal));
-  html = html.replace(/{{tax_total}}/g, money(invoice.tax_total));
   html = html.replace(/{{shipping_amount}}/g, money(invoice.shipping_amount));
   html = html.replace(
     /{{reward_discount}}/g,
@@ -608,7 +608,6 @@ class OrderController {
     try {
       const { orderId } = req.params;
       const userId = req.user?.user_id;
-      // const userId = 1;
 
       if (!userId) {
         return res.status(401).json({
@@ -648,9 +647,10 @@ class OrderController {
         res.set({
           "Content-Type": "application/pdf",
           "Content-Disposition": `attachment; filename="${invoice.invoice_number}.pdf"`,
+          "Content-Length": pdf.length,
         });
 
-        return res.send(pdf);
+        return res.end(pdf);
       }
 
       //  Multiple invoices->Zip
