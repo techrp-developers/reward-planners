@@ -10,6 +10,33 @@ function getPublicUrl(path) {
   return `${CDN_BASE_URL}/${path}`;
 }
 
+function parseSelectedItemIds(selectedItems) {
+  if (!selectedItems) return [];
+
+  const values = Array.isArray(selectedItems) ? selectedItems : [selectedItems];
+
+  return values
+    .flatMap((value) => {
+      if (typeof value === "number") return [value];
+      if (typeof value !== "string") return [];
+
+      const trimmed = value.trim();
+
+      if (!trimmed) return [];
+
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (err) {
+        // Fall through to comma-separated parsing.
+      }
+
+      return trimmed.split(",");
+    })
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value) && value > 0);
+}
+
 //calculate summary utility function
 function calculateSummary({ bundles = [], individual_items = [] }) {
   // 1 Individual items total
@@ -300,15 +327,20 @@ class ServiceCheckoutController {
         });
       }
 
+      const itemIds = new Set(items.map((i) => Number(i.id)));
+      const selectedItemIds = parseSelectedItemIds(selected_items).filter((id) =>
+        itemIds.has(id),
+      );
+
       // 3 Required items
       const requiredItems = items
         .filter((i) => i.is_required === 1)
-        .map((i) => i.id);
+        .map((i) => Number(i.id));
 
       // 4 Selection set (required always included)
       const selectedSet = new Set([
         ...requiredItems,
-        ...(selected_items || []),
+        ...selectedItemIds,
       ]);
 
       // 5 validation
@@ -317,7 +349,7 @@ class ServiceCheckoutController {
       if (
         bundle.type === "custom" &&
         hasOptional &&
-        (!selected_items || selected_items.length === 0)
+        selectedItemIds.length === 0
       ) {
         return res.status(400).json({
           success: false,
@@ -605,14 +637,19 @@ class ServiceCheckoutController {
         });
       }
 
+      const itemIds = new Set(items.map((i) => Number(i.id)));
+      const selectedItemIds = parseSelectedItemIds(selected_items).filter((id) =>
+        itemIds.has(id),
+      );
+
       // 3 Prepare selection sets
       const requiredItems = items
         .filter((i) => i.is_required === 1)
-        .map((i) => i.id);
+        .map((i) => Number(i.id));
 
       const selectedSet = new Set([
         ...requiredItems,
-        ...(selected_items || []),
+        ...selectedItemIds,
       ]);
 
       // 4 Validate selection (only for custom bundles)
@@ -621,7 +658,7 @@ class ServiceCheckoutController {
       if (
         bundle.type === "custom" &&
         hasOptional &&
-        (!selected_items || selected_items.length === 0)
+        selectedItemIds.length === 0
       ) {
         return res.status(400).json({
           success: false,
