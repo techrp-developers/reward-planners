@@ -65,6 +65,9 @@ class ServiceCartModel {
         ci.price,
         ci.bundle_id,
 
+        sb.name AS bundle_name,
+        sb.description AS bundle_description,
+
         s.name AS service_name,
         sv.variant_name,
         sv.id as variant_id,
@@ -79,6 +82,7 @@ class ServiceCartModel {
       FROM service_cart_items ci
       JOIN services s ON s.id = ci.service_id
       JOIN service_variants sv ON sv.id = ci.variant_id
+      LEFT JOIN service_bundles sb ON sb.id = ci.bundle_id
       LEFT JOIN service_documents sd ON sd.service_id = s.id
 
       WHERE ci.cart_id = ?
@@ -99,6 +103,8 @@ class ServiceCartModel {
           quantity: item.quantity,
           price: Number(item.price),
           bundle_id: item.bundle_id,
+          bundle_name: item.bundle_name,
+          bundle_description: item.bundle_description,
 
           service_name: item.service_name,
           variant_name: item.variant_name,
@@ -134,6 +140,8 @@ class ServiceCartModel {
         if (!bundles[item.bundle_id]) {
           bundles[item.bundle_id] = {
             bundle_id: item.bundle_id,
+            bundle_name: item.bundle_name,
+            bundle_description: item.bundle_description,
             items: [],
             bundle_total: 0,
           };
