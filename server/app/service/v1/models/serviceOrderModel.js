@@ -77,6 +77,7 @@ class ServiceOrderModel {
       so.order_ref,
       so.price,
       so.status,
+      so.payment_status,
       so.created_at,
       so.parent_order_id,
       so.bundle_id,
@@ -230,7 +231,10 @@ class ServiceOrderModel {
 
       if (
         order.statuses.some(
-          (s) => s === "in_progress" || s === "documents_pending",
+          (s) =>
+            s === "in_progress" ||
+            s === "documents_pending" ||
+            s === "documents_uploaded",
         )
       ) {
         finalStatus = "in_progress";
@@ -273,7 +277,10 @@ class ServiceOrderModel {
       all: result.length,
 
       in_progress: result.filter(
-        (x) => x.status === "in_progress" || x.status === "documents_pending",
+        (x) =>
+          x.status === "in_progress" ||
+          x.status === "documents_pending" ||
+          x.status === "documents_uploaded",
       ).length,
 
       completed: result.filter((x) => x.status === "completed").length,
