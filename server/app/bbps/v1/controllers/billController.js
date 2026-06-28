@@ -514,10 +514,10 @@ class BillController {
     try {
       const { category_id, search } = req.query;
 
-      if (!category_id) {
+      if (!category_id && !search) {
         return res.status(400).json({
           success: false,
-          message: "category_id is required",
+          message: "category_id or search is required",
         });
       }
 
@@ -534,6 +534,207 @@ class BillController {
         success: false,
         message: "Failed to fetch grouped operators",
         error: error.message,
+      });
+    }
+  }
+
+  // Search operators across ALL categories
+  async searchOperators(req, res) {
+    try {
+      const q = String(req.query.q || req.query.search || "").trim();
+
+      if (!q) {
+        return res.json({ success: true, data: [] });
+      }
+
+      const data = await ekoService.searchOperators(q);
+
+      return res.json({
+        success: true,
+        data,
+      });
+    } catch (error) {
+      console.error("[BBPS][operators-search] error", error.message);
+
+      return res.status(500).json({
+        success: false,
+        message: "Failed to search operators",
+      });
+    }
+  }
+
+  async saveSearchHistory(req, res) {
+    try {
+      const userId = req.user?.user_id;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      const keyword = (req.body.keyword || "").trim();
+
+      if (!keyword) {
+        return res.json({
+          success: true,
+        });
+      }
+
+      await db.execute(
+        `INSERT INTO bbps_search_history
+       (user_id, keyword)
+       VALUES (?, ?)
+       ON DUPLICATE KEY UPDATE
+       created_at = CURRENT_TIMESTAMP`,
+        [userId, keyword],
+      );
+
+      return res.json({
+        success: true,
+      });
+    } catch (error) {
+      console.error("Save BBPS search history error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  }
+
+  async getSearchHistory(req, res) {
+    try {
+      const userId = req.user?.user_id;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      const [rows] = await db.execute(
+        `SELECT keyword
+       FROM bbps_search_history
+       WHERE user_id = ?
+       ORDER BY created_at DESC
+       LIMIT 10`,
+        [userId],
+      );
+
+      return res.json({
+        success: true,
+        history: rows.map((row) => row.keyword),
+      });
+    } catch (error) {
+      console.error("Get BBPS search history error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  }
+
+  async clearSearchHistory(req, res) {
+    try {
+      const userId = req.user?.user_id;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      await db.execute(
+        `DELETE FROM bbps_search_history
+       WHERE user_id = ?`,
+        [userId],
+      );
+
+      return res.json({
+        success: true,
+        message: "Search history cleared",
+      });
+    } catch (error) {
+      console.error("Clear BBPS search history error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  }
+
+  // Order history for the logged-in user
+  async getOrderHistory(req, res) {
+    try {
+      const userId = req.user?.user_id;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+      const limit = Math.min(
+        Math.max(parseInt(req.query.limit, 10) || 10, 1),
+        50,
+      );
+      const status = req.query.status || null;
+      const search = req.query.search?.trim() || null;
+      const fromDate = req.query.from_date || null;
+      const toDate = req.query.to_date || null;
+      const timeFilter = req.query.time_filter || null;
+
+      const result = await TransactionModel.getUserOrders({
+        userId,
+        status,
+        search,
+        fromDate,
+        toDate,
+        timeFilter,
+        page,
+        limit,
+      });
+
+      let operatorMap = {};
+
+      try {
+        const operatorsData = await ekoService.getOperators();
+        (operatorsData?.data || []).forEach((op) => {
+          operatorMap[op.operator_id] = op.name;
+        });
+      } catch (error) {
+        console.error(
+          "[BBPS][order-history] operator lookup failed",
+          error.message,
+        );
+      }
+
+      const orders = result.orders.map((order) => ({
+        ...order,
+        operator_name: operatorMap[order.operator_id] || null,
+      }));
+
+      return res.json({
+        success: true,
+        orders,
+        total: result.total,
+        totalPages: result.totalPages,
+        currentPage: result.currentPage,
+      });
+    } catch (error) {
+      console.error("[BBPS][order-history] error", error.message);
+
+      return res.status(500).json({
+        success: false,
+        message: "Failed to fetch order history",
       });
     }
   }

@@ -140,8 +140,10 @@ exports.getOperatorsGrouped = async (category_id, search = "") => {
   let operators = operatorsResponse?.data || [];
   const locations = locationResponse?.data || [];
 
-  //  STEP 1: FILTER BY CATEGORY_ID
-  operators = operators.filter((op) => op.operator_category == category_id);
+  //  STEP 1: FILTER BY CATEGORY_ID (optional - omit to search across all operators)
+  if (category_id) {
+    operators = operators.filter((op) => op.operator_category == category_id);
+  }
 
   //  STEP 2: SEARCH (optional)
   if (search) {
@@ -174,6 +176,27 @@ exports.getOperatorsGrouped = async (category_id, search = "") => {
   });
 
   return grouped;
+};
+
+// 2.6 Search operators across ALL categories (no category_id scoping)
+exports.searchOperators = async (keyword = "") => {
+  const term = String(keyword || "").trim().toLowerCase();
+
+  if (!term) {
+    return [];
+  }
+
+  const data = await exports.getOperators();
+  const operators = data?.data || [];
+
+  return operators
+    .filter((op) => op.name?.toLowerCase().includes(term))
+    .map((op) => ({
+      operator_id: op.operator_id,
+      name: op.name,
+      operator_category: op.operator_category,
+      location_id: op.location_id,
+    }));
 };
 
 // 3. Operator details

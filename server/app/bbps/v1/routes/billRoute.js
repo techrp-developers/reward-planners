@@ -18,6 +18,13 @@ router.get("/locations", providerReadLimiter, BillController.getLocations);
 // Operators
 router.get("/operators", providerReadLimiter, BillController.getOperators);
 
+// Search operators across ALL categories
+router.get(
+  "/operators/search",
+  providerReadLimiter,
+  BillController.searchOperators,
+);
+
 // Grouped operators
 router.get(
   "/operators-grouped",
@@ -31,6 +38,11 @@ router.get(
   providerReadLimiter,
   BillController.getOperatorDetails,
 );
+
+// Operator search history
+router.post("/search-history", auth, BillController.saveSearchHistory);
+router.get("/search-history", auth, BillController.getSearchHistory);
+router.delete("/search-history", auth, BillController.clearSearchHistory);
 
 router.get(
   "/recharge/plans",
@@ -70,6 +82,14 @@ router.get(
   auth,
   generalLimiter,
   BillController.checkStatus,
+);
+
+// Order history
+router.get(
+  "/order-history",
+  auth,
+  generalLimiter,
+  BillController.getOrderHistory,
 );
 
 module.exports = router;
