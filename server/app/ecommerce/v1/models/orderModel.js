@@ -3,6 +3,11 @@ const fs = require("fs");
 const path = require("path");
 
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
+
+// Orders are created before Razorpay payment so stock can be reserved. Hide
+// only active payment attempts; cancelled orders remain visible in history.
+const CUSTOMER_VISIBLE_ORDER_CONDITION = "o.status <> 'pending_payment'";
+
 function getPublicUrl(path) {
   if (!path) return null;
   return `${CDN_BASE_URL}/${path}`;
@@ -82,7 +87,10 @@ class orderModel {
   }) {
     const offset = (page - 1) * limit;
 
-    const conditions = ["o.user_id = ?"];
+    const conditions = [
+      "o.user_id = ?",
+      CUSTOMER_VISIBLE_ORDER_CONDITION,
+    ];
     const params = [userId];
 
     if (orderId) {
@@ -283,8 +291,9 @@ class orderModel {
     LEFT JOIN countries c
       ON ca.country_id = c.country_id
 
-    WHERE o.order_id = ? 
+    WHERE o.order_id = ?
       AND o.user_id = ?
+      AND ${CUSTOMER_VISIBLE_ORDER_CONDITION}
     `,
       [orderId, userId],
     );
