@@ -45,23 +45,79 @@ async function getXpressToken() {
   return tokenPromise;
 }
 
+function isInvalidTokenResponse(response) {
+  const message = response?.data?.message;
+
+  return (
+    response?.status === 401 ||
+    response?.status === 403 ||
+    (typeof message === "string" &&
+      /missing or invalid token|invalid token|token.*expired|unauthori[sz]ed/i.test(
+        message,
+      ))
+  );
+}
+
+function clearCachedToken(token) {
+  // Do not clear a newer token refreshed by another concurrent request.
+  if (cachedToken === token) {
+    cachedToken = null;
+    tokenExpiry = null;
+  }
+}
+
+async function requestWithXpressToken(config) {
+  let token = await getXpressToken();
+
+  const sendRequest = (authToken) =>
+    axios({
+      ...config,
+      headers: {
+        ...config.headers,
+        Authorization: `Bearer ${authToken}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+  try {
+    const response = await sendRequest(token);
+
+    // Some courier API errors are returned with HTTP 200.
+    if (!isInvalidTokenResponse(response)) {
+      return response;
+    }
+  } catch (error) {
+    if (!isInvalidTokenResponse(error.response)) {
+      throw error;
+    }
+  }
+
+  clearCachedToken(token);
+  console.warn("XpressBees token rejected; refreshing and retrying request");
+  token = await getXpressToken();
+
+  // Retry only once so invalid credentials cannot create an infinite loop.
+  const response = await sendRequest(token);
+
+  if (isInvalidTokenResponse(response)) {
+    const error = new Error(response.data?.message || "XpressBees auth failed");
+    error.response = response;
+    throw error;
+  }
+
+  return response;
+}
+
 // ==========================
 // BOOK SHIPMENT
 // ==========================
 async function bookShipment(payload) {
   try {
-    const token = await getXpressToken();
-
-    const response = await axios.post(
-      "https://shipment.xpressbees.com/api/shipments2",
-      payload,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      },
-    );
+    const response = await requestWithXpressToken({
+      method: "post",
+      url: "https://shipment.xpressbees.com/api/shipments2",
+      data: payload,
+    });
 
     return response.data;
   } catch (error) {
@@ -78,18 +134,11 @@ async function bookShipment(payload) {
 // ==========================
 async function checkServiceability(payload) {
   try {
-    const token = await getXpressToken();
-
-    const response = await axios.post(
-      "https://shipment.xpressbees.com/api/courier/serviceability",
-      payload,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      },
-    );
+    const response = await requestWithXpressToken({
+      method: "post",
+      url: "https://shipment.xpressbees.com/api/courier/serviceability",
+      data: payload,
+    });
 
     return response.data;
   } catch (error) {
@@ -107,18 +156,11 @@ async function checkServiceability(payload) {
 
 async function createNDRException(actions) {
   try {
-    const token = await getXpressToken();
-
-    const response = await axios.post(
-      "https://shipment.xpressbees.com/api/ndr/create",
-      actions,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      },
-    );
+    const response = await requestWithXpressToken({
+      method: "post",
+      url: "https://shipment.xpressbees.com/api/ndr/create",
+      data: actions,
+    });
 
     return response.data;
   } catch (error) {
@@ -317,17 +359,10 @@ async function resolveNDR({ shipmentId, action, new_address_id, notes }) {
 // ==========================
 async function trackShipment(awbNumber) {
   try {
-    const token = await getXpressToken();
-
-    const response = await axios.get(
-      `https://shipment.xpressbees.com/api/shipments2/track/${awbNumber}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      },
-    );
+    const response = await requestWithXpressToken({
+      method: "get",
+      url: `https://shipment.xpressbees.com/api/shipments2/track/${awbNumber}`,
+    });
 
     return response.data;
   } catch (error) {
@@ -348,18 +383,11 @@ async function trackShipment(awbNumber) {
 // ==========================
 async function cancelShipmentExpressBees(awb) {
   try {
-    const token = await getXpressToken();
-
-    const response = await axios.post(
-      "https://shipment.xpressbees.com/api/shipments2/cancel",
-      { awb },
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      },
-    );
+    const response = await requestWithXpressToken({
+      method: "post",
+      url: "https://shipment.xpressbees.com/api/shipments2/cancel",
+      data: { awb },
+    });
 
     return response.data;
   } catch (error) {
