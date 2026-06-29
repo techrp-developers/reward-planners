@@ -12,23 +12,14 @@ const { cronPing, checkCronHealth } = require("../../../services/cronMonitor");
 // STATUS MAPPING
 // =====================
 const XPRESS_STATUS_MAP = {
-  // Shipment created, but not yet picked up by the courier
-  "pending pickup": "booked",
-  "out for pickup": "booked",
-  "pickup not done": "booked",
-  "pickup done": "booked",
-  "data received": "booked",
-
   // Picked up
   "shipment picked up": "picked_up",
   "picked up": "picked_up",
-  picked: "picked_up",
 
   // In transit
   "in transit": "in_transit",
   "out of delivery area": "in_transit",
   "shipment in transit": "in_transit",
-  "reached at destination": "in_transit",
   "reached at destination hub": "in_transit",
   "reached at hub": "in_transit",
   dispatched: "in_transit",
@@ -62,7 +53,6 @@ const XPRESS_STATUS_MAP = {
   "return to origin": "rto",
   "returned to origin": "rto",
   "return initiated": "rto",
-  "return delivered": "rto",
 };
 
 // ==========================
@@ -72,14 +62,13 @@ const XPRESS_STATUS_MAP = {
 const XPRESS_FALLBACK_PATTERNS = [
   // Order matters — most specific first
   { test: (s) => s.startsWith("delivery attempted"), result: "ndr" },
-  { test: (s) => s.startsWith("rto"), result: "rto" },
-  { test: (s) => s.includes("return to origin"), result: "rto" },
-  { test: (s) => s.includes("return delivered"), result: "rto" },
-  { test: (s) => s.includes("returned"), result: "rto" },
   { test: (s) => s.includes("out for delivery"), result: "out_for_delivery" },
   { test: (s) => s.includes("in transit"), result: "in_transit" },
   { test: (s) => s.includes("picked"), result: "picked_up" },
   { test: (s) => s.includes("delivered"), result: "delivered" },
+  { test: (s) => s.startsWith("rto"), result: "rto" },
+  { test: (s) => s.includes("return to origin"), result: "rto" },
+  { test: (s) => s.includes("returned"), result: "rto" },
   // NDR patterns — intentionally NO generic "failed" match here
   { test: (s) => s.includes("ndr"), result: "ndr" },
   { test: (s) => s.includes("not available"), result: "ndr" },
@@ -123,7 +112,6 @@ async function syncOrderStatus(orderId) {
 
   const statuses = shipments.map((s) => s.shipping_status);
   const userId = shipments[0].user_id;
-  const transitStatuses = ["picked_up", "in_transit", "out_for_delivery"];
 
   let finalStatus = null;
 
@@ -134,30 +122,20 @@ async function syncOrderStatus(orderId) {
     finalStatus = "delivered";
   } else if (statuses.some((s) => s === "ndr")) {
     finalStatus = "delivery_failed";
+  } else if (statuses.some((s) => s === "pending")) {
+    finalStatus = "processing";
   } else if (statuses.every((s) => s === "rto")) {
     finalStatus = "rto";
   } else if (
-    statuses.some((s) => transitStatuses.includes(s) || s === "delivered") &&
     statuses.some((s) =>
-      ["pending", "booking_in_progress", "booking_failed", "booked"].includes(
-        s,
-      ),
-    )
+      ["in_transit", "picked_up", "out_for_delivery"].includes(s),
+    ) &&
+    statuses.some((s) => s === "booked")
   ) {
     finalStatus = "partially_shipped";
-  } else if (statuses.some((s) => transitStatuses.includes(s))) {
-    finalStatus = statuses.every((s) => transitStatuses.includes(s))
-      ? "shipped"
-      : "partially_shipped";
-  } else if (statuses.some((s) => ["delivered", "rto"].includes(s))) {
-    finalStatus = "partially_shipped";
-  } else if (
-    statuses.some((s) =>
-      ["pending", "booking_in_progress", "booking_failed", "booked"].includes(
-        s,
-      ),
-    )
-  ) {
+  } else if (statuses.some((s) => s === "booked")) {
+    finalStatus = "processing";
+  } else if (statuses.every((s) => s === "booking_failed")) {
     finalStatus = "processing";
   }
 
@@ -205,38 +183,15 @@ async function updateShipmentTracking(shipment) {
       return;
     }
 
-    if (!response.data) {
+    if (!response.data || !response.data.current_status) {
       return;
     }
 
-    // Persist every successful response, including statuses we do not yet map.
-    await db.query(
-      `UPDATE order_shipments SET last_tracking_payload = ? WHERE id = ?`,
-      [JSON.stringify(response.data), shipment.id],
-    );
-
-    // The current XpressBees response uses `data.status`. The other values are
-    // fallbacks for older/newer payload variants.
-    const rawStatus =
-      response.data.current_status ||
-      response.data.status ||
-      response.data.history?.[0]?.message;
-
-    if (!rawStatus) {
-      console.warn(
-        `[tracking] XpressBees response has no status for AWB ${shipment.awb_number}`,
-      );
-      return;
-    }
-
-    const newStatus = mapXpressStatus(rawStatus);
+    const newStatus = mapXpressStatus(response.data.current_status);
 
     if (!newStatus) return;
 
-    if (newStatus === shipment.shipping_status) {
-      await syncOrderStatus(shipment.order_id);
-      return;
-    }
+    if (newStatus === shipment.shipping_status) return;
 
     // =====================
     // FETCH USER
@@ -266,7 +221,7 @@ async function updateShipmentTracking(shipment) {
     // =====================
     // UPDATE SHIPMENT FIRST
     // =====================
-    const updateFields = ["shipping_status = ?"];
+    const updateFields = ["shipping_status = ?", "last_tracking_payload = ?"];
 
     if (timeColumn) {
       updateFields.splice(1, 0, `${timeColumn} = NOW()`);
@@ -278,7 +233,7 @@ async function updateShipmentTracking(shipment) {
       SET ${updateFields.join(", ")}
       WHERE id = ?
     `,
-      [newStatus, shipment.id],
+      [newStatus, JSON.stringify(response.data), shipment.id],
     );
 
     // =====================
@@ -292,8 +247,8 @@ async function updateShipmentTracking(shipment) {
       [
         shipment.id,
         newStatus,
-        rawStatus,
-        rawStatus,
+        response.data.current_status,
+        response.data.current_status,
       ],
     );
 
@@ -356,7 +311,7 @@ async function updateShipmentTracking(shipment) {
               ndr_count = ndr_count + 1
           WHERE id = ?
         `,
-          [rawStatus, shipment.id],
+          [response.data.current_status, shipment.id],
         );
 
         await db.query(
@@ -367,8 +322,8 @@ async function updateShipmentTracking(shipment) {
         `,
           [
             shipment.id,
-            rawStatus,
-            rawStatus,
+            response.data.current_status,
+            response.data.current_status,
           ],
         );
 
