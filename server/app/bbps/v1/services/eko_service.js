@@ -67,6 +67,45 @@ const CATALOG_CACHE_TTL_MS =
     : 5 * 60 * 1000;
 const catalogCache = new Map();
 
+const normalizeProviderError = (error, fallbackMessage) => {
+  const isTimeout =
+    error.code === "ECONNABORTED" ||
+    /timeout/i.test(String(error.message || ""));
+  const statusCode = isTimeout ? 504 : error.response?.status || error.statusCode || 500;
+  const providerData = error.response?.data;
+  const hasHtmlBody =
+    typeof providerData === "string" && /<\s*html/i.test(providerData);
+  const providerMessage =
+    (typeof providerData === "object" &&
+      (providerData?.message || providerData?.error)) ||
+    (typeof providerData === "string" && !hasHtmlBody ? providerData : null) ||
+    error.providerMessage ||
+    error.message;
+
+  const normalizedError = new Error(
+    isTimeout
+      ? `BBPS provider timed out after ${FETCH_BILL_TIMEOUT_MS}ms`
+      : statusCode === 401
+      ? "Provider authorization failed"
+      : statusCode === 403
+        ? "Provider access forbidden"
+        : providerMessage || fallbackMessage || "Provider request failed",
+  );
+
+  normalizedError.statusCode = statusCode;
+  normalizedError.details =
+    providerData && typeof providerData === "object" ? providerData : undefined;
+  normalizedError.providerMessage = providerMessage;
+  normalizedError.providerResponse = {
+    statusCode,
+    message: normalizedError.message,
+    providerMessage,
+    providerBodyType: hasHtmlBody ? "html" : typeof providerData,
+  };
+
+  return normalizedError;
+};
+
 const withCatalogCache = async (key, loader) => {
   const cached = catalogCache.get(key);
 
@@ -465,44 +504,15 @@ exports.fetchBill = async (body, req) => {
 
     return res.data;
   } catch (error) {
-    const isTimeout =
-      error.code === "ECONNABORTED" ||
-      /timeout/i.test(String(error.message || ""));
-    const statusCode = isTimeout ? 504 : error.response?.status || 500;
-    const providerData = error.response?.data;
-    const hasHtmlBody =
-      typeof providerData === "string" && /<\s*html/i.test(providerData);
-    const providerMessage =
-      (typeof providerData === "object" &&
-        (providerData?.message || providerData?.error)) ||
-      (typeof providerData === "string" && !hasHtmlBody
-        ? providerData
-        : null) ||
-      error.message;
-
-    const normalizedError = new Error(
-      isTimeout
-        ? `BBPS provider timed out after ${FETCH_BILL_TIMEOUT_MS}ms`
-        : statusCode === 401
-        ? "Provider authorization failed"
-        : statusCode === 403
-          ? "Provider access forbidden"
-          : providerMessage || "Provider request failed",
+    const normalizedError = normalizeProviderError(
+      error,
+      "Provider request failed",
     );
-    normalizedError.statusCode = statusCode;
-    normalizedError.details =
-      providerData && typeof providerData === "object"
-        ? providerData
-        : undefined;
-    normalizedError.providerMessage = providerMessage;
 
     console.error("[BBPS][provider][fetch-bill] error", {
-      statusCode,
+      statusCode: normalizedError.statusCode,
       message: normalizedError.message,
-      providerMessage:
-        typeof providerData === "object"
-          ? providerData?.message || providerData?.error
-          : providerMessage,
+      providerMessage: normalizedError.providerMessage,
     });
 
     throw normalizedError;
@@ -511,6 +521,18 @@ exports.fetchBill = async (body, req) => {
 
 // 5. Pay bill
 exports.payBill = async (body, req) => {
+  if (
+    !BASE ||
+    !process.env.EKO_DEVELOPER_KEY ||
+    !process.env.EKO_ACCESS_KEY ||
+    !process.env.EKO_USER_CODE ||
+    !process.env.EKO_INITIATOR_ID
+  ) {
+    const envErr = new Error("Missing BBPS provider environment configuration");
+    envErr.statusCode = 500;
+    throw envErr;
+  }
+
   const headers = await headerUtil.payHeaders(
     body.utility_acc_no,
     body.amount,
@@ -530,17 +552,50 @@ exports.payBill = async (body, req) => {
       : {}),
   };
 
-  const res = await retry(
-    () =>
-      axios.post(
-        ekoUrl(
-          `billpayments/paybill?initiator_id=${process.env.EKO_INITIATOR_ID}`,
-        ),
-        payload,
-        { headers, timeout: 10000 },
-      ),
-    0,
+  const endpoint = ekoUrl(
+    `billpayments/paybill?initiator_id=${process.env.EKO_INITIATOR_ID}`,
   );
 
-  return res.data;
+  console.info("[BBPS][provider][pay-bill] request-meta", {
+    operator_id: payload.operator_id,
+    client_ref_id: payload.client_ref_id,
+    source_ip: payload.source_ip,
+    endpoint,
+  });
+
+  try {
+    const res = await retry(
+      () =>
+        axios.post(endpoint, payload, {
+          headers,
+          timeout: FETCH_BILL_TIMEOUT_MS,
+        }),
+      0,
+    );
+
+    console.info("[BBPS][provider][pay-bill] response", {
+      status: res.status,
+      success: res.data?.success,
+      message: res.data?.message,
+      providerStatus: res.data?.status,
+      responseTypeId: res.data?.response_type_id,
+      responseStatusId: res.data?.response_status_id,
+    });
+
+    return res.data;
+  } catch (error) {
+    const normalizedError = normalizeProviderError(
+      error,
+      "Provider payment request failed",
+    );
+
+    console.error("[BBPS][provider][pay-bill] error", {
+      statusCode: normalizedError.statusCode,
+      message: normalizedError.message,
+      providerMessage: normalizedError.providerMessage,
+      providerBodyType: normalizedError.providerResponse.providerBodyType,
+    });
+
+    throw normalizedError;
+  }
 };

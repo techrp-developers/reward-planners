@@ -58,6 +58,13 @@ const processTransaction = async (txn, req) => {
       error.retryable = false;
     }
 
+    if (!error.providerResponse) {
+      error.providerResponse = {
+        statusCode,
+        message: error.message || "EKO payment request failed",
+      };
+    }
+
     throw error;
   }
 

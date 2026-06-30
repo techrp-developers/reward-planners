@@ -451,7 +451,13 @@ class PaymentController {
           result,
         });
       } catch (err) {
-        console.error("BBPS Error:", err);
+        console.error("[BBPS][verify-payment][provider] error", {
+          transaction_id: txn.id,
+          statusCode: err.statusCode || err.response?.status || 500,
+          message: err.message,
+          retryable: err.retryable !== false,
+          providerResponse: err.providerResponse,
+        });
 
         const failureStatus =
           err.retryable === false ? "FAILED_FINAL" : "FAILED_RETRY";
@@ -502,7 +508,10 @@ class PaymentController {
       }
     } catch (err) {
       await conn.rollback();
-      console.error("verifyPayment error:", err);
+      console.error("[BBPS][verify-payment] error", {
+        statusCode: err.statusCode || err.response?.status || 500,
+        message: err.message,
+      });
 
       return res.status(500).json({
         success: false,
