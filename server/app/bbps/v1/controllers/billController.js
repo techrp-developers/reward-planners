@@ -543,7 +543,7 @@ class BillController {
     try {
       const q = String(req.query.q || req.query.search || "").trim();
 
-      if (!q) {
+      if (q.length < 2) {
         return res.json({ success: true, data: [] });
       }
 

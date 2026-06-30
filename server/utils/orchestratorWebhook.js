@@ -17,7 +17,12 @@ async function handleWebhook(req, res) {
       .update(rawBody)
       .digest("hex");
 
-    if (expected !== signature) {
+    const expectedBuffer = Buffer.from(expected, "hex");
+    const receivedBuffer = Buffer.from(signature || "", "hex");
+    if (
+      expectedBuffer.length !== receivedBuffer.length ||
+      !crypto.timingSafeEqual(expectedBuffer, receivedBuffer)
+    ) {
       return res.status(400).send("Invalid signature");
     }
 
