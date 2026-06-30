@@ -5,6 +5,7 @@ const {
   shouldIgnoreCapturedEvent,
   shouldIgnoreFailedEvent,
 } = require("../utils/paymentState");
+const { formatPayBillAmount } = require("../utils/header");
 
 test("EKO business responses are classified conservatively", () => {
   assert.equal(isEkoPaymentSuccessful({ status: 0 }), true);
@@ -15,6 +16,12 @@ test("EKO business responses are classified conservatively", () => {
     false,
   );
   assert.equal(isEkoPaymentSuccessful({}), false);
+});
+
+test("EKO paybill amount formatting is stable for request hash", () => {
+  assert.equal(formatPayBillAmount("77.00"), "77");
+  assert.equal(formatPayBillAmount(77), "77");
+  assert.equal(formatPayBillAmount("77.50"), "77.5");
 });
 
 test("duplicate captured events never re-run terminal provider states", () => {

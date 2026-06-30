@@ -533,19 +533,20 @@ exports.payBill = async (body, req) => {
     throw envErr;
   }
 
+  const formattedAmount = headerUtil.formatPayBillAmount(body.amount);
   const headers = await headerUtil.payHeaders(
     body.utility_acc_no,
-    body.amount,
+    formattedAmount,
     process.env.EKO_USER_CODE,
   );
   const sourceIp = await getBbpsSourceIP(req);
 
   const payload = {
     ...body,
-    initiator_id: process.env.EKO_INITIATOR_ID,
+    amount: formattedAmount,
     user_code: process.env.EKO_USER_CODE,
     client_ref_id: body.client_ref_id || Date.now().toString(),
-    hc_channel: "0",
+    hc_channel: 0,
     source_ip: sourceIp,
     ...(process.env.EKO_LATLONG
       ? { latlong: process.env.EKO_LATLONG.trim() }
@@ -558,8 +559,11 @@ exports.payBill = async (body, req) => {
 
   console.info("[BBPS][provider][pay-bill] request-meta", {
     operator_id: payload.operator_id,
+    amount: payload.amount,
     client_ref_id: payload.client_ref_id,
     source_ip: payload.source_ip,
+    initiator_id_location: "query",
+    hc_channel: payload.hc_channel,
     endpoint,
   });
 
