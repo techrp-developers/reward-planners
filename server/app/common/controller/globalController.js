@@ -7,6 +7,8 @@ const {
 const { notifyUser } = require("../utils/notification");
 const { runNonBlocking } = require("../../../utils/nonBlocking");
 
+const LAUNCH_CAMPAIGN_COMPANY_ID = 5;
+
 class GlobalController {
   // get balance
   async getGlobalSuggestions(req, res) {
@@ -148,7 +150,9 @@ class GlobalController {
   // Launch event message
   async sendLaunchCampaign(req, res) {
     try {
-      const employees = await GlobalModel.getCampaignRecipients();
+      const employees = await GlobalModel.getEmployeesForCampaign(
+        LAUNCH_CAMPAIGN_COMPANY_ID,
+      );
 
       runNonBlocking(async () => {
         let queued = 0;
@@ -162,7 +166,7 @@ class GlobalController {
           }
 
           const waResult = await enqueueWhatsApp({
-            eventName: "reward_planners_launch_invitation",
+            eventName: "reward_planners_launch_inamdar",
             ctx: {
               phone: employee.contact,
               company_id: employee.company_id,
@@ -184,6 +188,7 @@ class GlobalController {
         }
 
         console.info("[LAUNCH_CAMPAIGN_WA] Completed", {
+          company_id: LAUNCH_CAMPAIGN_COMPANY_ID,
           total: employees.length,
           queued,
           failed,
@@ -194,6 +199,7 @@ class GlobalController {
       return res.json({
         success: true,
         message: "Launch campaign queued",
+        company_id: LAUNCH_CAMPAIGN_COMPANY_ID,
         total: employees.length,
       });
     } catch (err) {
