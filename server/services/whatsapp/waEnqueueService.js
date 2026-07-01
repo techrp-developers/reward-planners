@@ -1,20 +1,5 @@
 const pool = require("../../config/database");
-
-function normalizePhone(phone) {
-  if (!phone) return null;
-  let p = String(phone).trim();
-  p = p.replace(/\s+/g, "");
-
-  if (p.startsWith("0")) p = p.slice(1);
-
-  // already +91?
-  if (!p.startsWith("+91")) {
-    if (p.length === 10) p = "+91" + p;
-    else if (!p.startsWith("+")) p = "+91" + p;
-  }
-
-  return p;
-}
+const { normalizeIndianMobile } = require("./phone");
 
 function safeJsonParse(maybeJson, fallback = null) {
   if (maybeJson == null) return fallback;
@@ -62,8 +47,8 @@ async function enqueueWhatsApp({ eventName, ctx }) {
   }
 
   // ctx must include: phone, company_id, etc.
-  const phone_full = normalizePhone(ctx.phone);
-  if (!phone_full) return { ok: false, reason: "MISSING_PHONE" };
+  const phone_full = normalizeIndianMobile(ctx.phone);
+  if (!phone_full) return { ok: false, reason: "INVALID_PHONE" };
 
   try {
     // 1) Find matching Rule (company rules first, then global)
@@ -230,6 +215,8 @@ function buildBodyValues(templateKey, ctx) {
     case "rewardpointsupdate":
       return [name, String(points), String(balance)];
 
+    case "reward_planners_launch_inamdar":
+    case "reward_planners_launch":
     case "reward_planners_launch_invitation":
       return [name];
 
