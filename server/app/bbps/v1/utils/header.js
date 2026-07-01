@@ -34,6 +34,13 @@ const generateRequestHash = (payloadString) => {
     .digest("base64");
 };
 
+const buildPayBillHashPayload = (
+  timestamp,
+  utilityAccNo,
+  amount,
+  userCode,
+) => `${timestamp}${utilityAccNo}${amount}${userCode}`;
+
 const formatPayBillAmount = (amount) => {
   const normalizedAmount = String(amount || "").trim();
 
@@ -74,8 +81,12 @@ exports.payHeaders = async (utility_acc_no, amount, user_code) => {
   const secret_key = generateSecretKey(timestamp);
   const formattedAmount = formatPayBillAmount(amount);
 
-  //  VERY IMPORTANT: payload string format
-  const payloadString = `${utility_acc_no}|${formattedAmount}|${user_code}`;
+  const payloadString = buildPayBillHashPayload(
+    timestamp,
+    utility_acc_no,
+    formattedAmount,
+    user_code,
+  );
 
   const request_hash = generateRequestHash(payloadString);
 
@@ -88,3 +99,4 @@ exports.payHeaders = async (utility_acc_no, amount, user_code) => {
 };
 
 exports.formatPayBillAmount = formatPayBillAmount;
+exports.buildPayBillHashPayload = buildPayBillHashPayload;
