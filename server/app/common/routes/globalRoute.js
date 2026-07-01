@@ -23,16 +23,16 @@ router.post(
 // campaign launch event
 router.post(
   "/campaigns/launch-event",
-  // authenticateToken,
-  // authorizeRoles("vendor_manager", "admin"),
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
   GlobalController.sendLaunchCampaign,
 );
 
 // IOS available
 router.post(
   "/campaign-ios-update",
-  // authenticateToken,
-  // authorizeRoles("vendor_manager", "admin"),
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
   GlobalController.iosUpdateCampaign,
 );
 
