@@ -70,6 +70,12 @@ const XPRESS_STATUS_MAP = {
   "returned to origin": "rto",
   "return initiated": "rto",
   "return delivered": "rto",
+
+  // cancelled
+  cancelled: "cancelled",
+  canceled: "cancelled",
+  "shipment cancelled": "cancelled",
+  "shipment canceled": "cancelled",
 };
 
 // ==========================
@@ -362,12 +368,7 @@ async function updateShipmentTracking(shipment) {
       INSERT INTO shipment_events (shipment_id, status, raw_status, description)
       VALUES (?, ?, ?, ?)
     `,
-      [
-        shipment.id,
-        newStatus,
-        rawStatus,
-        rawStatus,
-      ],
+      [shipment.id, newStatus, rawStatus, rawStatus],
     );
 
     // =====================
@@ -438,11 +439,7 @@ async function updateShipmentTracking(shipment) {
           (shipment_id, reason, courier_status)
           VALUES (?, ?, ?)
         `,
-          [
-            shipment.id,
-            rawStatus,
-            rawStatus,
-          ],
+          [shipment.id, rawStatus, rawStatus],
         );
 
         if (userId) {
@@ -711,4 +708,3 @@ cron.schedule("*/15 * * * *", async () => {
     console.error("Courier cancellation retry cron failed:", error);
   }
 });
-
