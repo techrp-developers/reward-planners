@@ -1026,9 +1026,10 @@ class CheckoutModel {
       [userId],
     );
 
-    if (!addressRows.length) throw new Error("INVALID_ADDRESS");
+    // if (!addressRows.length) throw new Error("INVALID_ADDRESS");
 
-    const destinationPincode = addressRows[0].zipcode;
+    const destinationPincode = addressRows[0]?.zipcode || null;
+    const addressRequired = !destinationPincode;
 
     // ===============================
     // 6. GROUP ITEMS BY VENDOR
@@ -1062,79 +1063,81 @@ class CheckoutModel {
     let shippingTotal = 0;
     const shippingBreakdown = [];
     const eddList = [];
-
-    // Map of vendorId → EDD so we can stamp it onto each item
     const vendorEDDMap = {};
+    // Shipping cannot be calculated until the user selects an address.
+    if (!addressRequired) {
+      for (const vendorId in vendorGroups) {
+        const vendor = vendorGroups[vendorId];
 
-    for (const vendorId in vendorGroups) {
-      const vendor = vendorGroups[vendorId];
+        const [[vendorAddress]] = await db.execute(
+          `SELECT pincode
+       FROM vendor_addresses
+       WHERE vendor_id = ? AND type = 'shipping'
+       LIMIT 1`,
+          [vendorId],
+        );
 
-      const [[vendorAddress]] = await db.execute(
-        `SELECT pincode FROM vendor_addresses
-       WHERE vendor_id = ? AND type = 'shipping' LIMIT 1`,
-        [vendorId],
-      );
+        if (!vendorAddress?.pincode) continue;
 
-      if (!vendorAddress) continue;
+        const serviceResponse = await xpressService.checkServiceability({
+          origin: vendorAddress.pincode,
+          destination: destinationPincode,
+          payment_type: "prepaid",
+          order_amount: vendor.totalAmount.toString(),
+          weight: Math.round(vendor.totalWeightKg * 1000).toString(),
+          length: Math.round(vendor.length).toString(),
+          breadth: Math.round(vendor.breadth).toString(),
+          height: Math.round(vendor.height).toString(),
+        });
 
-      const serviceResponse = await xpressService.checkServiceability({
-        origin: vendorAddress.pincode,
-        destination: destinationPincode,
-        payment_type: "prepaid",
-        order_amount: vendor.totalAmount.toString(),
-        weight: Math.round(vendor.totalWeightKg * 1000).toString(),
-        length: Math.round(vendor.length).toString(),
-        breadth: Math.round(vendor.breadth).toString(),
-        height: Math.round(vendor.height).toString(),
-      });
+        const courierOptions = Array.isArray(serviceResponse?.data)
+          ? serviceResponse.data
+          : [];
 
-      if (!serviceResponse.status || !serviceResponse.data.length) continue;
+        if (!serviceResponse?.status || courierOptions.length === 0) {
+          continue;
+        }
 
-      const courier = serviceResponse.data
-        .filter((o) => o.total_charges > 0)
-        .sort((a, b) => a.total_charges - b.total_charges)[0];
+        const courier = courierOptions
+          .filter((option) => Number(option.total_charges) > 0)
+          .sort((a, b) => Number(a.total_charges) - Number(b.total_charges))[0];
 
-      if (!courier) continue;
+        if (!courier) continue;
 
-      shippingTotal += Number(courier.total_charges);
+        const shippingCharge = Number(courier.total_charges);
+        shippingTotal += shippingCharge;
 
-      // ==========================
-      // CALCULATE EDD
-      // ==========================
-      let edd;
+        let edd;
 
-      if (courier.estimated_delivery_date) {
-        edd = new Date(courier.estimated_delivery_date);
-      } else if (courier.estimated_delivery_days) {
-        edd = new Date(Date.now() + courier.estimated_delivery_days * 86400000);
-      } else {
-        // fallback: 5 days
-        edd = new Date(Date.now() + 5 * 86400000);
+        if (courier.estimated_delivery_date) {
+          edd = new Date(courier.estimated_delivery_date);
+        } else if (courier.estimated_delivery_days) {
+          edd = new Date(
+            Date.now() + Number(courier.estimated_delivery_days) * 86400000,
+          );
+        } else {
+          edd = new Date(Date.now() + 5 * 86400000);
+        }
+
+        eddList.push(edd);
+        vendorEDDMap[Number(vendorId)] = edd;
+
+        shippingBreakdown.push({
+          vendor_id: Number(vendorId),
+          courier_name: courier.name,
+          shipping_charges: shippingCharge,
+          estimated_delivery_date: edd,
+        });
       }
-
-      eddList.push(edd);
-
-      // ==========================
-      // STORE EDD PER VENDOR
-      // ==========================
-      vendorEDDMap[Number(vendorId)] = edd;
-
-      shippingBreakdown.push({
-        vendor_id: Number(vendorId),
-        courier_name: courier.name,
-        shipping_charges: Number(courier.total_charges),
-        estimated_delivery_date: edd,
-      });
     }
 
-    // ==========================
-    // STAMP EDD ONTO EACH ITEM
-    // ==========================
     for (const item of items) {
       item.estimated_delivery_date = vendorEDDMap[item.vendor_id] || null;
     }
 
-    const overallEDD = eddList.length ? eddList.sort((a, b) => b - a)[0] : null;
+    const overallEDD = eddList.length
+      ? eddList.sort((a, b) => b.getTime() - a.getTime())[0]
+      : null;
 
     // ===============================
     // 8. FINAL TOTAL
@@ -1163,8 +1166,10 @@ class CheckoutModel {
       totalDiscount: totalRedeemed,
       shippingTotal,
       payableAmount,
-      shippingBreakdown,
       estimated_delivery_date: overallEDD,
+      addressRequired,
+      shippingCalculated: !addressRequired,
+      shippingBreakdown,
     };
   }
 
@@ -1283,49 +1288,61 @@ class CheckoutModel {
       [userId],
     );
 
-    if (!addressRows.length) throw new Error("INVALID_ADDRESS");
+    const destinationPincode = addressRows[0]?.zipcode || null;
+    const addressRequired = !destinationPincode;
 
-    const destinationPincode = addressRows[0].zipcode;
-
-    const [[vendorAddress]] = await db.execute(
-      `SELECT pincode FROM vendor_addresses
-     WHERE vendor_id = ? AND type = 'shipping' LIMIT 1`,
-      [row.vendor_id],
-    );
-
-    if (!vendorAddress) throw new Error("VENDOR_ADDRESS_MISSING");
-
-    const serviceResponse = await xpressService.checkServiceability({
-      origin: vendorAddress.pincode,
-      destination: destinationPincode,
-      payment_type: "prepaid",
-      order_amount: itemTotal.toString(),
-      weight: Math.round(quantity * Number(row.weight) * 1000).toString(),
-      length: Math.round(row.length).toString(),
-      breadth: Math.round(row.breadth).toString(),
-      height: Math.round(quantity * Number(row.height)).toString(),
-    });
-
-    if (!serviceResponse.status || !serviceResponse.data.length) {
-      throw new Error("NOT_SERVICEABLE");
-    }
-
-    const courier = serviceResponse.data
-      .filter((o) => o.total_charges > 0)
-      .sort((a, b) => a.total_charges - b.total_charges)[0];
-
-    if (!courier) throw new Error("NOT_SERVICEABLE");
-
-    const shippingCharge = Number(courier.total_charges);
-
+    let shippingCharge = 0;
     let expectedDeliveryDate = null;
+    let shippingBreakdown = [];
 
-    if (courier.estimated_delivery_date) {
-      expectedDeliveryDate = courier.estimated_delivery_date;
-    } else if (courier.estimated_delivery_days) {
-      const date = new Date();
-      date.setDate(date.getDate() + Number(courier.estimated_delivery_days));
-      expectedDeliveryDate = date.toISOString().split("T")[0];
+    if (!addressRequired) {
+      const [[vendorAddress]] = await db.execute(
+        `SELECT pincode FROM vendor_addresses
+     WHERE vendor_id = ? AND type = 'shipping' LIMIT 1`,
+        [row.vendor_id],
+      );
+
+      if (!vendorAddress) throw new Error("VENDOR_ADDRESS_MISSING");
+
+      const serviceResponse = await xpressService.checkServiceability({
+        origin: vendorAddress.pincode,
+        destination: destinationPincode,
+        payment_type: "prepaid",
+        order_amount: itemTotal.toString(),
+        weight: Math.round(quantity * Number(row.weight) * 1000).toString(),
+        length: Math.round(row.length).toString(),
+        breadth: Math.round(row.breadth).toString(),
+        height: Math.round(quantity * Number(row.height)).toString(),
+      });
+
+      if (!serviceResponse.status || !serviceResponse.data?.length) {
+        throw new Error("NOT_SERVICEABLE");
+      }
+
+      const courier = serviceResponse.data
+        .filter((o) => Number(o.total_charges) > 0)
+        .sort((a, b) => Number(a.total_charges) - Number(b.total_charges))[0];
+
+      if (!courier) throw new Error("NOT_SERVICEABLE");
+
+      shippingCharge = Number(courier.total_charges);
+
+      if (courier.estimated_delivery_date) {
+        expectedDeliveryDate = courier.estimated_delivery_date;
+      } else if (courier.estimated_delivery_days) {
+        const date = new Date();
+        date.setDate(date.getDate() + Number(courier.estimated_delivery_days));
+        expectedDeliveryDate = date.toISOString().split("T")[0];
+      }
+
+      shippingBreakdown = [
+        {
+          vendor_id: row.vendor_id,
+          courier_name: courier.name,
+          shipping_charges: shippingCharge,
+          estimated_delivery_date: expectedDeliveryDate,
+        },
+      ];
     }
 
     // ===============================
@@ -1372,16 +1389,9 @@ class CheckoutModel {
       totalDiscount: totalRedeemed,
       shippingTotal: shippingCharge,
       payableAmount,
-
-      shippingBreakdown: [
-        {
-          vendor_id: row.vendor_id,
-          courier_name: courier.name,
-          shipping_charges: shippingCharge,
-          estimated_delivery_date: expectedDeliveryDate,
-        },
-      ],
-
+      addressRequired,
+      shippingCalculated: !addressRequired,
+      shippingBreakdown,
       estimated_delivery_date: expectedDeliveryDate,
     };
   }
