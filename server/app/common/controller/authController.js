@@ -21,7 +21,7 @@ const { notifyUser } = require("../utils/notification");
 const { uploadToR2 } = require("../../../utils/r2upload");
 const { deleteFromR2 } = require("../../../utils/r2delete");
 
-const ACCESS_EXPIRES = "15m";
+const ACCESS_EXPIRES = "1h";
 const REFRESH_EXPIRES_DAYS = 7;
 
 function generateOTP() {
