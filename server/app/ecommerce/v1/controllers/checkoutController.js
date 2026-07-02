@@ -91,6 +91,15 @@ class CheckoutController {
         });
       }
 
+      if (
+        ["WALLET_BALANCE_CHANGED", "CHECKOUT_CHANGED"].includes(error.message)
+      ) {
+        return res.status(409).json({
+          success: false,
+          message: "Checkout changed. Please review your cart and try again.",
+        });
+      }
+
       if (error.message === "INVALID_ADDRESS") {
         return res.status(400).json({
           success: false,
@@ -215,6 +224,15 @@ class CheckoutController {
         return res.status(400).json({
           success: false,
           message: "Not enough reward coins",
+        });
+      }
+
+      if (
+        ["WALLET_BALANCE_CHANGED", "CHECKOUT_CHANGED"].includes(error.message)
+      ) {
+        return res.status(409).json({
+          success: false,
+          message: "Price, stock, or wallet balance changed. Please try again.",
         });
       }
 

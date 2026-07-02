@@ -3,6 +3,9 @@ const fs = require("fs");
 const path = require("path");
 const AddressModel = require("../../../common/models/addressModel");
 const xpressService = require("../../../../services/ExpressBees/xpressbees_service");
+const {
+  reserveWalletCoins,
+} = require("../../../../services/rewards/ecommerceWalletService");
 const RewardModel = require("../../../../models/rewardModel");
 const { generateOrderRef } = require("../utils/orderRef");
 const {
@@ -39,8 +42,6 @@ class CheckoutModel {
     const conn = await db.getConnection();
 
     try {
-      await conn.beginTransaction();
-
       // ===============================
       // ENSURE WALLET EXISTS
       // ===============================
@@ -56,7 +57,7 @@ class CheckoutModel {
       // 0. WALLET (LOCK)
       // ===============================
       const [[wallet]] = await conn.execute(
-        `SELECT balance FROM customer_wallet WHERE user_id = ? FOR UPDATE`,
+        `SELECT balance FROM customer_wallet WHERE user_id = ?`,
         [userId],
       );
 
@@ -86,8 +87,7 @@ class CheckoutModel {
         JOIN product_variants v ON ci.variant_id = v.variant_id
         JOIN eproducts p ON v.product_id = p.product_id
 
-        WHERE ci.user_id = ?  
-        FOR UPDATE
+        WHERE ci.user_id = ?
         `,
         [userId],
       );
@@ -308,6 +308,40 @@ class CheckoutModel {
 
       const finalTotal = productTotal - totalRedeemed + shippingTotal;
 
+      // External serviceability calls are complete. Start the transaction now
+      // and revalidate mutable checkout state while holding short-lived locks.
+      await conn.beginTransaction();
+
+      const [[lockedWallet]] = await conn.execute(
+        `SELECT balance FROM customer_wallet WHERE user_id = ? FOR UPDATE`,
+        [userId],
+      );
+      if (totalRedeemed > Number(lockedWallet?.balance || 0)) {
+        throw new Error("WALLET_BALANCE_CHANGED");
+      }
+
+      const [lockedCart] = await conn.execute(
+        `SELECT ci.variant_id, ci.quantity, v.sale_price, v.stock
+         FROM cart_items ci
+         JOIN product_variants v ON v.variant_id = ci.variant_id
+         WHERE ci.user_id = ? FOR UPDATE`,
+        [userId],
+      );
+      const cartUnchanged =
+        lockedCart.length === cartItems.length &&
+        cartItems.every((item) => {
+          const current = lockedCart.find(
+            (row) => Number(row.variant_id) === Number(item.variant_id),
+          );
+          return (
+            current &&
+            Number(current.quantity) === Number(item.quantity) &&
+            Number(current.sale_price) === Number(item.sale_price) &&
+            Number(current.stock) >= Number(item.quantity)
+          );
+        });
+      if (!cartUnchanged) throw new Error("CHECKOUT_CHANGED");
+
       /* ===============================
        VALIDATION (ANTI-TAMPER)
     =============================== */
@@ -356,6 +390,12 @@ class CheckoutModel {
           );
 
           orderId = orderRes.insertId;
+
+          await reserveWalletCoins(conn, {
+            orderId,
+            userId,
+            coins: totalRedeemed,
+          });
           break;
         } catch (err) {
           if (err.code === "ER_DUP_ENTRY" && refAttempts < 2) {
@@ -485,8 +525,6 @@ class CheckoutModel {
     const conn = await db.getConnection();
 
     try {
-      await conn.beginTransaction();
-
       // ===============================
       // 1. ENSURE WALLET EXISTS
       // ===============================
@@ -498,7 +536,7 @@ class CheckoutModel {
       );
 
       const [[wallet]] = await conn.execute(
-        `SELECT balance FROM customer_wallet WHERE user_id = ? FOR UPDATE`,
+        `SELECT balance FROM customer_wallet WHERE user_id = ?`,
         [userId],
       );
 
@@ -635,6 +673,30 @@ class CheckoutModel {
 
       const finalTotal = finalItemTotal + shippingCharge;
 
+      await conn.beginTransaction();
+
+      const [[lockedWallet]] = await conn.execute(
+        `SELECT balance FROM customer_wallet WHERE user_id = ? FOR UPDATE`,
+        [userId],
+      );
+      if (redeemable > Number(lockedWallet?.balance || 0)) {
+        throw new Error("WALLET_BALANCE_CHANGED");
+      }
+
+      const [[lockedItem]] = await conn.execute(
+        `SELECT sale_price, stock
+         FROM product_variants
+         WHERE variant_id = ? AND product_id = ? FOR UPDATE`,
+        [variantId, productId],
+      );
+      if (
+        !lockedItem ||
+        Number(lockedItem.sale_price) !== Number(item.sale_price) ||
+        Number(lockedItem.stock) < Number(quantity)
+      ) {
+        throw new Error("CHECKOUT_CHANGED");
+      }
+
       /* ===============================
        VALIDATION (ANTI-TAMPER)
     =============================== */
@@ -686,6 +748,12 @@ class CheckoutModel {
           );
 
           orderId = orderRes.insertId;
+
+          await reserveWalletCoins(conn, {
+            orderId,
+            userId,
+            coins: redeemable,
+          });
           break;
         } catch (err) {
           if (err.code === "ER_DUP_ENTRY" && refAttempts < 2) {
@@ -1360,6 +1428,7 @@ class CheckoutModel {
       ON ca.country_id = c.country_id
     WHERE o.order_id = ?
       AND o.user_id = ?
+      AND o.paid_at IS NOT NULL
     `,
       [orderId, userId],
     );

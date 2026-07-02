@@ -3,6 +3,7 @@ const db = require("../config/database");
 const xpressService = require("../services/ExpressBees/xpressbees_service");
 const ServiceOrderModel = require("../app/service/v1/models/serviceOrderModel");
 const { sendOpsAlert } = require("../services/alertService");
+const EcommerceRefundService = require("../services/Razorpay/ecommerceRefundService");
 const Razorpay = require("razorpay");
 
 const razorpay = new Razorpay({
@@ -227,15 +228,41 @@ class OrderController {
       // ==========================
       // COURIER CANCELS — after commit, outside transaction
       // ==========================
-      if (refundData?.cancellableAwbs?.length) {
-        for (const awb of refundData.cancellableAwbs) {
+      if (refundData?.cancellableShipments?.length) {
+        for (const shipment of refundData.cancellableShipments) {
           try {
-            await xpressService.cancelShipmentExpressBees(awb);
+            const cancelResult =
+              await xpressService.cancelShipmentExpressBees(
+                shipment.awb_number,
+              );
+            if (!cancelResult?.status) {
+              throw new Error(
+                cancelResult?.error?.message ||
+                  cancelResult?.error ||
+                  "Courier cancellation rejected",
+              );
+            }
+            await db.query(
+              `UPDATE order_shipments
+               SET cancel_sync_status = 'completed',
+                   cancel_sync_attempts = cancel_sync_attempts + 1,
+                   cancel_sync_last_error = NULL
+               WHERE id = ?`,
+              [shipment.id],
+            );
           } catch (e) {
             // Non-fatal — DB already cancelled, courier may already have it
             console.warn(
-              `[approveCancellation] Courier cancel failed for AWB ${awb}:`,
+              `[approveCancellation] Courier cancel failed for AWB ${shipment.awb_number}:`,
               e.message,
+            );
+            await db.query(
+              `UPDATE order_shipments
+               SET cancel_sync_status = 'failed',
+                   cancel_sync_attempts = cancel_sync_attempts + 1,
+                   cancel_sync_last_error = ?
+               WHERE id = ?`,
+              [e.message, shipment.id],
             );
           }
         }
@@ -246,7 +273,12 @@ class OrderController {
       // ==========================
       if (refundData?.razorpay_payment_id) {
         try {
-          await orderModel.processRefund(refundData, orderId);
+          await EcommerceRefundService.processRefund({
+            orderId,
+            paymentId: refundData.payment_id,
+            amount: refundData.amount,
+            refundKey: `order_${orderId}_cancel_refund`,
+          });
         } catch (err) {
           // Refund failed — DB is in clean cancelled state
           // but money not returned — ops must intervene
@@ -289,6 +321,13 @@ class OrderController {
         return res
           .status(400)
           .json({ success: false, message: "Order already cancelled" });
+      }
+
+      if (error.message === "CANCELLATION_NOT_ALLOWED") {
+        return res.status(400).json({
+          success: false,
+          message: "Order has already entered shipment and cannot be cancelled",
+        });
       }
 
       if (error.message === "REFUND_ALREADY_DONE") {

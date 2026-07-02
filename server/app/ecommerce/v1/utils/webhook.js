@@ -10,6 +10,10 @@ const {
 const { runNonBlocking } = require("../../../../utils/nonBlocking");
 const { notifyUser } = require("../../../common/utils/notification");
 const RefundService = require("../controllers/paymentController");
+const {
+  consumeWalletReservation,
+} = require("../../../../services/rewards/ecommerceWalletService");
+const { acceptsFirstPaymentCapture } = require("./lifecyclePolicy");
 
 // booking payload
 async function buildXpressBookingPayload(orderId, vendorId) {
@@ -73,6 +77,8 @@ async function buildXpressBookingPayload(orderId, vendorId) {
     SELECT 
       oi.quantity,
       oi.price,
+      oi.final_price,
+      oi.reward_discount,
       p.product_name,
       v.sku
     FROM eorder_items oi
@@ -93,15 +99,19 @@ async function buildXpressBookingPayload(orderId, vendorId) {
 
   // Calculate vendor subtotal
   const vendorSubtotal = items.reduce(
-    (sum, i) => sum + Number(i.price) * Number(i.quantity),
+    (sum, i) => sum + Number(i.final_price),
+    0,
+  );
+  const vendorDiscount = items.reduce(
+    (sum, i) => sum + Number(i.reward_discount || 0),
     0,
   );
 
   return {
-    order_number: order.order_ref,
+    order_number: `${order.order_ref}-V${vendorId}`,
     unique_order_number: "yes",
     shipping_charges: shipment.shipping_charges,
-    discount: 0,
+    discount: vendorDiscount,
     cod_charges: 0,
     payment_type: "prepaid",
     order_amount: vendorSubtotal + Number(shipment.shipping_charges),
@@ -381,6 +391,7 @@ async function processShipmentsAfterPayment(orderId) {
     }
 
     for (const shipment of shipments) {
+      let attemptedCourierId = shipment.courier_id || null;
       try {
         // 1 Skip if already booked
         if (shipment.shipment_id || shipment.awb_number) {
@@ -391,7 +402,8 @@ async function processShipmentsAfterPayment(orderId) {
         const [lock] = await conn.query(
           `
             UPDATE order_shipments
-            SET booking_in_progress = 1
+            SET booking_in_progress = 1,
+                booking_last_attempt_at = NOW()
             WHERE id = ?
             AND shipping_status IN ('pending', 'booking_failed')
             AND booking_in_progress = 0
@@ -410,7 +422,7 @@ async function processShipmentsAfterPayment(orderId) {
         const attempted = JSON.parse(shipment.attempted_couriers || "[]");
 
         const remainingCouriers = allCouriers.filter(
-          (c) => !attempted.includes(c.id),
+          (c) => !attempted.map(String).includes(String(c.id)),
         );
 
         if (remainingCouriers.length === 0) {
@@ -418,7 +430,10 @@ async function processShipmentsAfterPayment(orderId) {
             `
             UPDATE order_shipments
             SET shipping_status = 'booking_failed',
-                booking_in_progress = 0
+                booking_in_progress = 0,
+                booking_attempts = 5,
+                booking_last_attempt_at = NOW(),
+                last_booking_error = 'No untried courier remains'
             WHERE id = ?
             `,
             [shipment.id],
@@ -434,6 +449,7 @@ async function processShipmentsAfterPayment(orderId) {
         if (!nextCourier) {
           throw new Error("No valid courier found");
         }
+        attemptedCourierId = nextCourier.id;
 
         // 3 Build payload
         const payload = await buildXpressBookingPayload(
@@ -485,6 +501,11 @@ async function processShipmentsAfterPayment(orderId) {
             shipment.id,
           ],
         );
+        await conn.query(
+          `UPDATE vendor_orders SET shipping_status = 'processing'
+           WHERE vendor_order_id = ?`,
+          [shipment.vendor_order_id],
+        );
       } catch (err) {
         console.error(`Shipment booking failed for ${shipment.id}`, err);
         //   HANDLE FAILURE + RELEASE LOCK
@@ -506,7 +527,7 @@ async function processShipmentsAfterPayment(orderId) {
               END
           WHERE id = ?
           `,
-          [err.message, shipment.courier_id || null, shipment.id],
+          [err.message, attemptedCourierId, shipment.id],
         );
       }
     }
@@ -534,7 +555,8 @@ async function processShipmentsAfterPayment(orderId) {
       await conn.query(
         `
         UPDATE eorders
-        SET shipment_sync_status = 'completed'
+        SET shipment_sync_status = 'completed',
+            status = CASE WHEN status = 'paid' THEN 'processing' ELSE status END
         WHERE order_id = ?
       `,
         [orderId],
@@ -667,25 +689,51 @@ async function processEvent(req) {
       await conn.beginTransaction();
       transactionStarted = true;
 
-      const [rows] = await conn.query(
-        `SELECT order_id, status
+      let [rows] = await conn.query(
+        `SELECT payment_id, order_id, amount, status
          FROM order_payments
          WHERE razorpay_order_id = ?
-         FOR UPDATE`,
+         LIMIT 1`,
         [payment.order_id],
       );
 
       if (!rows.length) {
-        await conn.commit();
-        return;
+        const notedOrderId = Number(payment.notes?.order_id);
+        const [[recoverableOrder]] = await conn.query(
+          `SELECT order_id, total_amount
+           FROM eorders WHERE order_id = ? FOR UPDATE`,
+          [notedOrderId || 0],
+        );
+
+        if (
+          !recoverableOrder ||
+          Number(payment.amount) !==
+            Math.round(Number(recoverableOrder.total_amount) * 100)
+        ) {
+          throw new Error(`PAYMENT_ROW_NOT_FOUND:${payment.order_id}`);
+        }
+
+        const [recovered] = await conn.query(
+          `INSERT INTO order_payments
+            (order_id, razorpay_order_id, amount, status)
+           VALUES (?, ?, ?, 'created')`,
+          [
+            recoverableOrder.order_id,
+            payment.order_id,
+            recoverableOrder.total_amount,
+          ],
+        );
+        rows = [
+          {
+            payment_id: recovered.insertId,
+            order_id: recoverableOrder.order_id,
+            amount: recoverableOrder.total_amount,
+            status: "created",
+          },
+        ];
       }
 
-      const { order_id, status } = rows[0];
-
-      if (status === "success") {
-        await conn.commit();
-        return;
-      }
+      const { payment_id, order_id, amount, status } = rows[0];
 
       const [[eorder]] = await conn.query(
         `SELECT status FROM eorders WHERE order_id = ? FOR UPDATE`,
@@ -714,7 +762,16 @@ async function processEvent(req) {
         return;
       }
 
-      if (eorder.status === "cancelled") {
+      const [[lockedPayment]] = await conn.query(
+        `SELECT status FROM order_payments WHERE payment_id = ? FOR UPDATE`,
+        [payment_id],
+      );
+      if (lockedPayment?.status === "success") {
+        await conn.commit();
+        return;
+      }
+
+      if (!acceptsFirstPaymentCapture(eorder.status)) {
         // ==========================
         // OPS ALERT — payment captured on cancelled order
         // Money is in — auto-refund will trigger but ops should know
@@ -749,7 +806,10 @@ async function processEvent(req) {
 
         RefundService.processRefund({
           orderId: order_id,
-          amount: payment.amount / 100,
+          paymentId: payment_id,
+          razorpayPaymentId: payment.id,
+          amount: Number(amount),
+          refundKey: `payment_${payment_id}_duplicate_refund`,
         }).catch((err) => {
           // ==========================
           // OPS ALERT — auto-refund failed
@@ -775,6 +835,36 @@ async function processEvent(req) {
 
         return;
       }
+
+      if (
+        Number(payment.amount) !== Math.round(Number(amount) * 100) ||
+        payment.currency !== "INR"
+      ) {
+        await conn.query(
+          `UPDATE order_payments
+           SET razorpay_payment_id = ?, status = 'success', payment_method = ?,
+               raw_webhook = ?
+           WHERE payment_id = ?`,
+          [payment.id, payment.method, JSON.stringify(body), payment_id],
+        );
+        await conn.commit();
+        await RefundService.processRefund({
+          orderId: order_id,
+          paymentId: payment_id,
+          razorpayPaymentId: payment.id,
+          amount: Number(payment.amount) / 100,
+          refundKey: `payment_${payment_id}_amount_mismatch_refund`,
+        });
+        return;
+      }
+
+      await conn.query(
+        `UPDATE order_payments
+         SET razorpay_payment_id = ?, status = 'success', payment_method = ?,
+             raw_webhook = ?
+         WHERE payment_id = ?`,
+        [payment.id, payment.method, JSON.stringify(body), payment_id],
+      );
 
       // 5 Update order status
       await conn.query(
@@ -811,124 +901,11 @@ async function processEvent(req) {
       const redeemedCoins = Number(orderInfo.reward_coins_used || 0);
       const earnedCoins = Number(orderInfo.reward_coins_earned || 0);
 
-      // ensure wallet exists
-      await conn.query(
-        `
-        INSERT INTO customer_wallet (user_id, balance)
-        VALUES (?, 0)
-        ON DUPLICATE KEY UPDATE balance = balance
-        `,
-        [userId],
-      );
-
-      // ==========================
-      // DEBIT USED COINS
-      // ==========================
-
-      if (redeemedCoins > 0) {
-        const [debitTxn] = await conn.query(
-          `
-          INSERT IGNORE INTO wallet_transactions
-          (
-            user_id,
-            title,
-            transaction_type,
-            coins,
-            category,
-            reference_id,
-            description,
-            reason_code
-          )
-          VALUES
-          (?, ?, 'debit', ?, 'order', ?, ?, 'REDEEM')
-          `,
-          [
-            userId,
-            "Coins used for order",
-            redeemedCoins,
-            order_id,
-            `Used ${redeemedCoins} coins`,
-          ],
-        );
-
-        // Only process if transaction was actually inserted
-        if (debitTxn.affectedRows > 0) {
-          const [[wallet]] = await conn.query(
-            `
-            SELECT balance
-            FROM customer_wallet
-            WHERE user_id = ?
-            FOR UPDATE
-            `,
-            [userId],
-          );
-
-          const currentBalance = Number(wallet?.balance || 0);
-
-          if (redeemedCoins <= currentBalance) {
-            await conn.query(
-              `
-                UPDATE customer_wallet
-                SET balance = balance - ?
-                WHERE user_id = ?
-                `,
-              [redeemedCoins, userId],
-            );
-          } else {
-            console.error(`Wallet balance mismatch for paid order ${order_id}`);
-          }
-        }
-      }
-
-      // ==========================
-      // CREDIT EARNED COINS
-      // ==========================
-
-      if (earnedCoins > 0) {
-        const expiryDate = new Date();
-        expiryDate.setMonth(
-          expiryDate.getMonth() +
-            parseInt(process.env.WALLET_EXPIRY_MONTHS || "3", 10),
-        );
-
-        const [creditTxn] = await conn.query(
-          `
-          INSERT IGNORE INTO wallet_transactions
-          (
-            user_id,
-            title,
-            transaction_type,
-            coins,
-            category,
-            reference_id,
-            description,
-            expiry_date,
-            reason_code
-          )
-          VALUES
-          (?, ?, 'credit', ?, 'order', ?, ?, ?, 'ORDER_REWARD')
-          `,
-          [
-            userId,
-            "Coins earned from order",
-            earnedCoins,
-            order_id,
-            `Earned ${earnedCoins} coins`,
-            expiryDate,
-          ],
-        );
-
-        if (creditTxn.affectedRows > 0) {
-          await conn.query(
-            `
-            UPDATE customer_wallet
-            SET balance = balance + ?
-            WHERE user_id = ?
-            `,
-            [earnedCoins, userId],
-          );
-        }
-      }
+      await consumeWalletReservation(conn, {
+        orderId: order_id,
+        userId,
+        coins: redeemedCoins,
+      });
 
       // ==========================
       // GENERATE INVOICE
@@ -965,24 +942,6 @@ async function processEvent(req) {
         },
         "ecommerce order paid notification",
       );
-
-      if (earnedCoins > 0) {
-        notifyUser(
-          {
-            userId,
-            module: "wallet",
-            type: "order_reward_earned",
-            title: "Coins earned",
-            message: `You earned ${earnedCoins} reward coins from your order.`,
-            icon: "wallet",
-            reference_type: "order",
-            reference_id: order_id,
-            action_url: "/wallet",
-            metadata: { coins: earnedCoins, order_id },
-          },
-          "order reward notification",
-        );
-      }
 
       processShipmentsAfterPayment(order_id).catch((err) => {
         // ==========================
@@ -1031,11 +990,11 @@ async function processEvent(req) {
       await conn.beginTransaction();
       transactionStarted = true;
 
-      const [[existingPayment]] = await conn.query(
+      let [[existingPayment]] = await conn.query(
         `SELECT payment_id, status, order_id
          FROM order_payments
          WHERE razorpay_order_id = ?
-         FOR UPDATE`,
+         LIMIT 1`,
         [payment.order_id],
       );
 
@@ -1061,6 +1020,16 @@ async function processEvent(req) {
         await conn.commit();
         return;
       }
+
+      await conn.query(
+        `SELECT order_id FROM eorders WHERE order_id = ? FOR UPDATE`,
+        [existingPayment.order_id],
+      );
+      [[existingPayment]] = await conn.query(
+        `SELECT payment_id, status, order_id
+         FROM order_payments WHERE payment_id = ? FOR UPDATE`,
+        [existingPayment.payment_id],
+      );
 
       if (existingPayment.status === "success") {
         // ==========================

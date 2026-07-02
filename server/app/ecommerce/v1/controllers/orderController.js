@@ -12,6 +12,7 @@ const {
 } = require("../../../../services/whatsapp/waEnqueueService");
 const { runNonBlocking } = require("../../../../utils/nonBlocking");
 const { notifyUser } = require("../../../common/utils/notification");
+const { canRequestCancellation } = require("../utils/lifecyclePolicy");
 
 function positiveInt(value, fallback, max = 100) {
   const parsed = Number.parseInt(value, 10);
@@ -495,7 +496,7 @@ class OrderController {
         });
       }
 
-      if (["shipped", "delivered"].includes(order.status)) {
+      if (!canRequestCancellation(order.status)) {
         await conn.rollback();
         return res.status(400).json({
           success: false,

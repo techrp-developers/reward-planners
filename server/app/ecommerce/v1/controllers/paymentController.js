@@ -6,6 +6,7 @@ const {
   expirePendingOrder,
 } = require("../../../../services/Razorpay/orderExpiryService");
 const { notifyUser } = require("../../../common/utils/notification");
+const EcommerceRefundService = require("../../../../services/Razorpay/ecommerceRefundService");
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZOR_API_KEY,
@@ -95,6 +96,11 @@ class PaymentController {
 
       if (existing) {
         await conn.rollback();
+        if (!existing.razorpay_order_id) {
+          return res.status(409).json({
+            message: "Payment order is being prepared. Please retry.",
+          });
+        }
         return res.status(200).json({
           key: process.env.RAZOR_API_KEY,
           orderId: existing.razorpay_order_id,
@@ -105,9 +111,16 @@ class PaymentController {
 
       // ==========================
       // CREATE RAZORPAY ORDER
-      // Done inside the transaction window so no second request
-      // can sneak past the existing check before we insert
+      // Claim the payment attempt in DB, release row locks, then call the
+      // external gateway. Concurrent requests see the pending claim.
       // ==========================
+      const [claim] = await conn.query(
+        `INSERT INTO order_payments (order_id, amount, status)
+         VALUES (?, ?, 'pending')`,
+        [orderId, amount],
+      );
+      await conn.commit();
+
       let razorpayOrder;
 
       try {
@@ -122,7 +135,10 @@ class PaymentController {
           },
         });
       } catch (razorpayErr) {
-        await conn.rollback();
+        await db.query(
+          `UPDATE order_payments SET status = 'failed' WHERE payment_id = ?`,
+          [claim.insertId],
+        );
         console.error(
           "[createOrder] Razorpay order creation failed:",
           razorpayErr,
@@ -131,6 +147,20 @@ class PaymentController {
           .status(502)
           .json({ message: "Payment gateway error. Please try again." });
       }
+
+      await db.query(
+        `UPDATE order_payments
+         SET razorpay_order_id = ?, status = 'created'
+         WHERE payment_id = ?`,
+        [razorpayOrder.id, claim.insertId],
+      );
+
+      return res.status(200).json({
+        key: process.env.RAZOR_API_KEY,
+        orderId: razorpayOrder.id,
+        amount: razorpayOrder.amount,
+        currency: razorpayOrder.currency,
+      });
 
       // ==========================
       // INSERT INTO order_payments
@@ -225,7 +255,12 @@ class PaymentController {
         .update(body)
         .digest("hex");
 
-      if (expectedSignature !== razorpay_signature) {
+      const expectedBuffer = Buffer.from(expectedSignature, "hex");
+      const receivedBuffer = Buffer.from(razorpay_signature, "hex");
+      if (
+        expectedBuffer.length !== receivedBuffer.length ||
+        !crypto.timingSafeEqual(expectedBuffer, receivedBuffer)
+      ) {
         return res.status(400).json({ status: "invalid signature" });
       }
 
@@ -264,7 +299,7 @@ class PaymentController {
       // Case C: Order paid but payment row not yet updated — webhook in flight
       // Case D: Neither paid nor cancelled — still waiting
       // ==========================
-      if (payment.status === "success" && order.status === "paid") {
+      if (payment.status === "success" && order.status !== "cancelled") {
         return res.json({
           status: "success",
           orderId: payment.order_id,
@@ -339,7 +374,22 @@ class PaymentController {
     shipmentId = null,
     vendorOrderId = null,
     amount,
+    paymentId = null,
+    razorpayPaymentId = null,
+    refundKey = null,
   }) {
+    return EcommerceRefundService.processRefund({
+      orderId,
+      shipmentId,
+      vendorOrderId,
+      amount,
+      paymentId,
+      razorpayPaymentId,
+      refundKey,
+    });
+
+    /* Legacy implementation retained below temporarily for compatibility
+       context; it is unreachable and can be removed after deployment. */
     const conn = await db.getConnection();
 
     try {

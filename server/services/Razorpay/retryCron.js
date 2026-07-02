@@ -2,6 +2,9 @@ const cron = require("node-cron");
 const db = require("../../config/database");
 const ServiceOrderModel = require("../../app/service/v1/models/serviceOrderModel");
 const { cronPing, checkCronHealth } = require("../../services/cronMonitor");
+const {
+  retryPendingRefunds: retryEcommerceRefunds,
+} = require("./ecommerceRefundService");
 
 async function retryFailedRefunds() {
   console.log("💰 [retryFailedRefunds] Running...");
@@ -86,7 +89,10 @@ async function retryMpsFailedRefunds() {
 }
 
 cron.schedule("*/10 * * * *", async function () {
-  retryFailedRefunds();
-  retryMpsFailedRefunds();
+  await Promise.allSettled([
+    retryFailedRefunds(),
+    retryMpsFailedRefunds(),
+    retryEcommerceRefunds(),
+  ]);
   await cronPing("service_order_retry_cron");
 });

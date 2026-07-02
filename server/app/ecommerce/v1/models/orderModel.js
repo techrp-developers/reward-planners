@@ -204,7 +204,9 @@ class orderModel {
     const [[summary]] = await db.execute(
       `
       SELECT
-        COALESCE(SUM(o.reward_coins_earned), 0) AS totalCoinsEarned,
+        COALESCE(SUM(CASE WHEN o.status = 'delivered'
+                          THEN o.reward_coins_earned ELSE 0 END), 0)
+          AS totalCoinsEarned,
         COALESCE(SUM(o.reward_discount), 0) AS totalSavings
       FROM eorders o
       ${whereClause}
@@ -238,7 +240,8 @@ class orderModel {
         created_at: o.created_at,
 
         reward: {
-          earned: Number(o.reward_coins_earned || 0),
+          earned:
+            o.status === "delivered" ? Number(o.reward_coins_earned || 0) : 0,
           used: Number(o.reward_coins_used || 0),
           discount: Number(o.reward_discount || 0),
         },
