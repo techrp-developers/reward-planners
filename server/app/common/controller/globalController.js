@@ -7,7 +7,7 @@ const {
 const { notifyUser } = require("../utils/notification");
 const { runNonBlocking } = require("../../../utils/nonBlocking");
 
-const LAUNCH_CAMPAIGN_COMPANY_ID = 5;
+const LAUNCH_CAMPAIGN_COMPANY_ID = 6;
 
 class GlobalController {
   // get balance
@@ -166,7 +166,7 @@ class GlobalController {
           }
 
           const waResult = await enqueueWhatsApp({
-            eventName: "reward_planners_launch_inamdar",
+            eventName: "reward_planners_launch_ddm",
             ctx: {
               phone: employee.contact,
               company_id: employee.company_id,

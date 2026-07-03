@@ -216,6 +216,7 @@ function buildBodyValues(templateKey, ctx) {
       return [name, String(points), String(balance)];
 
     case "reward_planners_launch_inamdar":
+    case "reward_planners_launch_ddm":
     case "reward_planners_launch":
     case "reward_planners_launch_invitation":
       return [name];
