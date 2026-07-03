@@ -32,6 +32,38 @@ function normalizeEmail(email) {
   return typeof email === "string" ? email.trim().toLowerCase() : "";
 }
 
+function sendActivationOtpNotifications({ email, employee, otp }) {
+  setImmediate(() => {
+    sendOtpMail({
+      email,
+      name: employee.name,
+      otp,
+    }).catch((error) => {
+      console.error("Activation OTP email failed:", error);
+    });
+
+    if (!employee.phone) return;
+
+    enqueueWhatsApp({
+      eventName: "onbord_verify",
+      ctx: {
+        phone: employee.phone,
+        company_id: employee.company_id ?? null,
+        customer_name: employee.name || "User",
+        otp,
+      },
+    })
+      .then((result) => {
+        if (!result.ok) {
+          console.warn("Activation OTP WhatsApp not queued:", result);
+        }
+      })
+      .catch((error) => {
+        console.error("Activation OTP WhatsApp enqueue failed:", error);
+      });
+  });
+}
+
 // helper function
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
 function getPublicUrl(path) {
@@ -132,9 +164,9 @@ class AuthController {
 
       await AuthModel.storeActivationOTP(normalizedEmail, otp);
 
-      await sendOtpMail({
+      sendActivationOtpNotifications({
         email: normalizedEmail,
-        name: employee.name,
+        employee,
         otp,
       });
 
@@ -187,9 +219,9 @@ class AuthController {
 
       await AuthModel.storeActivationOTP(normalizedEmail, otp);
 
-      await sendOtpMail({
+      sendActivationOtpNotifications({
         email: normalizedEmail,
-        name: employee.name,
+        employee,
         otp,
       });
 
