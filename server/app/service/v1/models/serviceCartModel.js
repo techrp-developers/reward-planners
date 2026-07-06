@@ -66,8 +66,16 @@ class ServiceCartModel {
         ci.bundle_id,
 
         bi.id AS bundle_item_id,
+        bi.price AS bundle_price,
+        sv.price AS individual_price,
         sb.name AS bundle_name,
         sb.description AS bundle_description,
+        sb.type AS bundle_type,
+        (
+          SELECT COUNT(*)
+          FROM service_bundle_items all_bi
+          WHERE all_bi.bundle_id = ci.bundle_id
+        ) AS bundle_item_count,
 
         s.name AS service_name,
         sv.variant_name,
@@ -108,8 +116,15 @@ class ServiceCartModel {
           price: Number(item.price),
           bundle_id: item.bundle_id,
           bundle_item_id: item.bundle_item_id,
+          bundle_price:
+            item.bundle_price === null ? null : Number(item.bundle_price),
+          individual_price: Number(item.individual_price),
           bundle_name: item.bundle_name,
           bundle_description: item.bundle_description,
+          bundle_type: item.bundle_type,
+          bundle_item_count: item.bundle_item_count
+            ? Number(item.bundle_item_count)
+            : 0,
 
           service_name: item.service_name,
           variant_name: item.variant_name,
@@ -147,16 +162,41 @@ class ServiceCartModel {
             bundle_id: item.bundle_id,
             bundle_name: item.bundle_name,
             bundle_description: item.bundle_description,
+            bundle_type: item.bundle_type,
+            bundle_item_count: item.bundle_item_count
+              ? Number(item.bundle_item_count)
+              : 0,
             items: [],
             bundle_total: 0,
+            is_bundle_applied: false,
           };
         }
 
         bundles[item.bundle_id].items.push(item);
-        bundles[item.bundle_id].bundle_total += Number(item.price);
       } else {
         individual_items.push(item);
       }
+    });
+
+    Object.values(bundles).forEach((bundle) => {
+      const isFullBundleSelected =
+        bundle.bundle_item_count > 0 &&
+        bundle.items.length === bundle.bundle_item_count;
+      const shouldApplyBundlePrice =
+        bundle.bundle_type === "fixed" ||
+        (bundle.bundle_type === "custom" && isFullBundleSelected);
+
+      bundle.is_bundle_applied = shouldApplyBundlePrice;
+      bundle.bundle_total = 0;
+
+      bundle.items.forEach((item) => {
+        const price = shouldApplyBundlePrice
+          ? item.bundle_price
+          : item.individual_price;
+
+        item.price = Number(price);
+        bundle.bundle_total += item.price * (item.quantity || 1);
+      });
     });
 
     return {
