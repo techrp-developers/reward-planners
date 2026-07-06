@@ -20,10 +20,10 @@ const makeKeyGenerator = () => (req) => {
 
 // ==========================
 // PAYMENT — strictest
-// 10 attempts per 15 min
+// 10 attempts per 10 min
 // ==========================
 const paymentLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: 10 * 60 * 1000,
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
@@ -42,10 +42,10 @@ const paymentLimiter = rateLimit({
 
 // ==========================
 // CHECKOUT — moderate
-// 20 per 15 min
+// 20 per 10 min
 // ==========================
 const checkoutLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: 10 * 60 * 1000,
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
@@ -60,11 +60,11 @@ const checkoutLimiter = rateLimit({
 
 // ==========================
 // AUTH / OTP
-// 8 attempts per 15 min
+// 15 attempts per 5 min
 // ==========================
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 30,
+  windowMs: 5 * 60 * 1000,
+  max: 15,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: makeKeyGenerator(),
@@ -109,10 +109,10 @@ const providerReadLimiter = rateLimit({
 
 // ==========================
 // STEP SYNC
-// 60 syncs per 15 min
+// 60 syncs per 10 min
 // ==========================
 const stepSyncLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: 10 * 60 * 1000,
   max: 60,
   standardHeaders: true,
   legacyHeaders: false,
