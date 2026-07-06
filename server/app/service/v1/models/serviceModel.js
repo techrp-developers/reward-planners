@@ -251,6 +251,7 @@ class ServiceModel {
             service_id,
             MIN(price) AS min_price
           FROM service_variants
+          WHERE status = 1
           GROUP BY service_id
         ) mv
           ON mv.service_id = s.id
@@ -258,6 +259,7 @@ class ServiceModel {
         JOIN service_variants sv
           ON sv.service_id = s.id
           AND sv.price = mv.min_price
+          AND sv.status = 1
 
         WHERE shsi.section_id = ?
         AND s.status = 1
@@ -413,6 +415,7 @@ class ServiceModel {
         service_id,
         MIN(price) AS min_price
       FROM service_variants
+      WHERE status = 1
       GROUP BY service_id
     ) mv
       ON mv.service_id = s.id
@@ -420,6 +423,7 @@ class ServiceModel {
     JOIN service_variants sv
       ON sv.service_id = s.id
       AND sv.price = mv.min_price
+      AND sv.status = 1
 
     WHERE srs.service_id = ?
     AND srs.relation_type = 'related'
@@ -476,6 +480,7 @@ class ServiceModel {
           service_id,
           MIN(price) AS min_price
         FROM service_variants
+        WHERE status = 1
         GROUP BY service_id
       ) mv
         ON mv.service_id = s.id
@@ -483,6 +488,7 @@ class ServiceModel {
       JOIN service_variants sv
         ON sv.service_id = s.id
         AND sv.price = mv.min_price
+        AND sv.status = 1
 
       WHERE s.category_id = ?
       AND s.id != ?
@@ -800,6 +806,7 @@ class ServiceModel {
         service_id,
         MIN(price) AS min_price
       FROM service_variants
+      WHERE status = 1
       GROUP BY service_id
     ) mv
       ON mv.service_id = s.id
@@ -807,6 +814,7 @@ class ServiceModel {
     JOIN service_variants sv
       ON sv.service_id = s.id
       AND sv.price = mv.min_price
+      AND sv.status = 1
 
     WHERE s.status = 1
 
@@ -888,6 +896,7 @@ class ServiceModel {
         service_id,
         MIN(price) AS min_price
       FROM service_variants
+      WHERE status = 1
       GROUP BY service_id
     ) mv
       ON mv.service_id = s.id
@@ -895,6 +904,7 @@ class ServiceModel {
     JOIN service_variants sv
       ON sv.service_id = s.id
       AND sv.price = mv.min_price
+      AND sv.status = 1
 
     WHERE srs.service_id = ?
     AND srs.relation_type = 'value_added'
