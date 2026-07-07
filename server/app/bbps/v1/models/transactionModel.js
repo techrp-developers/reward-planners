@@ -171,6 +171,7 @@ class TransactionModel {
         t.amount,
         t.bbps_status,
         t.provider_client_ref_id,
+        t.recharge_circle_id,
         t.created_at,
         ro.status AS payment_status,
         ro.razorpay_order_id,
