@@ -373,24 +373,39 @@ const authController = {
     });
   },
 
-  /* ============================================================
+/* ============================================================
        LOGIN USER (Loads correct vendor_id)
      ============================================================ */
   login: async (req, res, forcedRole = null) => {
     try {
-      const { email, password } = req.body;
-      const normalizedEmail = normalizeEmail(email);
+      const { email, phone, identifier, login, password } = req.body;
 
-      if (!normalizedEmail || !password) {
+      const rawIdentifier = String(
+        identifier || login || email || phone || "",
+      ).trim();
+
+      const normalizedEmail = rawIdentifier.includes("@")
+        ? normalizeEmail(rawIdentifier)
+        : null;
+
+      const normalizedPhone = !rawIdentifier.includes("@")
+        ? rawIdentifier.replace(/\D/g, "").replace(/^91/, "")
+        : null;
+
+      if ((!normalizedEmail && !normalizedPhone) || !password) {
         return res.status(400).json({
           success: false,
-          message: "Email and password are required",
+          message: "Email or phone number and password are required",
         });
       }
 
-      const [rows] = await db.execute("SELECT * FROM eusers WHERE email = ?", [
-        normalizedEmail,
-      ]);
+      const sql = normalizedEmail
+        ? "SELECT * FROM eusers WHERE LOWER(email) = ? LIMIT 1"
+        : "SELECT * FROM eusers WHERE phone = ? LIMIT 1";
+
+      const lookupValue = normalizedEmail || normalizedPhone;
+
+      const [rows] = await db.execute(sql, [lookupValue]);
 
       if (rows.length === 0) {
         return res.status(401).json({
@@ -413,8 +428,8 @@ const authController = {
       if (!valid) {
         return res.status(401).json({
           success: false,
-          message: "Invalid email or password",
-        });
+          message: "Invalid email/phone or password",
+        });a
       }
 
       if (Number(user.is_verified) !== 1) {
