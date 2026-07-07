@@ -288,34 +288,95 @@ exports.getRechargePlans = async ({ mobile, operatorCode, circleId }) => {
   const planGroups = Array.isArray(providerResponse.dependent_params)
     ? providerResponse.dependent_params
     : [];
-  const rawPlans = planGroups.flatMap((group) =>
-    Array.isArray(group?.value) ? group.value : [],
-  );
-  const uniquePlans = new Map();
 
-  for (const plan of rawPlans) {
+  const buildPlan = (plan) => {
     const amount = String(plan?.amount || "").trim();
     const validity = String(plan?.validity || "").trim();
     const description = String(plan?.plan_description || "").trim();
 
     if (!/^\d+(?:\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) {
-      continue;
+      return null;
     }
 
     const fingerprint = `${operatorCode}|${circleId}|${amount}|${validity}|${description}`;
+    return {
+      planId: createHash("sha256")
+        .update(fingerprint)
+        .digest("hex")
+        .slice(0, 20),
+      amount,
+      validity: validity || null,
+      description: description || null,
+      _fp: fingerprint,
+    };
+  };
 
-    if (!uniquePlans.has(fingerprint)) {
-      uniquePlans.set(fingerprint, {
-        planId: createHash("sha256")
-          .update(fingerprint)
-          .digest("hex")
-          .slice(0, 20),
-        amount,
-        validity: validity || null,
-        description: description || null,
-      });
+  // Keyword-based fallback used when EKO doesn't supply category labels
+  const AUTO_CATEGORIES = [
+    {
+      label: "OTT & Premium",
+      test: (d) =>
+        /netflix|amazon prime|jiohotstar|sonyliv|zee5|fancode|vi movies & tv/i.test(d),
+    },
+    {
+      label: "Unlimited",
+      test: (d) => /full day unlimited data|\d+(\.\d+)?\s*gb\/day/i.test(d),
+    },
+    {
+      label: "Combo",
+      test: (d) => /pack combo/i.test(d),
+    },
+    {
+      label: "Data Pack",
+      test: (d) => /\d+\s*gb\b/i.test(d),
+    },
+  ];
+
+  const autoCategory = (description) => {
+    for (const rule of AUTO_CATEGORIES) {
+      if (rule.test(description)) return rule.label;
     }
+    return "Other";
+  };
+
+  // Build grouped structure, deduplicating within each group
+  let groups = planGroups
+    .map((group) => {
+      const label = String(group?.key || "").trim();
+      const seen = new Set();
+      const plans = (Array.isArray(group?.value) ? group.value : [])
+        .map(buildPlan)
+        .filter((p) => p !== null && !seen.has(p._fp) && seen.add(p._fp))
+        .map(({ _fp, ...rest }) => rest)
+        .sort((a, b) => Number(a.amount) - Number(b.amount));
+      return { label, plans };
+    })
+    .filter((g) => g.plans.length > 0);
+
+  // If EKO didn't provide category labels, auto-categorize by description keywords
+  const hasRealLabels = groups.some((g) => g.label !== "");
+  if (!hasRealLabels) {
+    const allPlans = groups.flatMap((g) => g.plans);
+    const buckets = {};
+    for (const plan of allPlans) {
+      const cat = autoCategory(plan.description || "");
+      if (!buckets[cat]) buckets[cat] = [];
+      buckets[cat].push(plan);
+    }
+    const ORDER = ["Unlimited", "Combo", "Data Pack", "OTT & Premium", "Other"];
+    groups = ORDER.filter((cat) => buckets[cat]?.length)
+      .map((cat) => ({ label: cat, plans: buckets[cat] }));
+  } else {
+    groups = groups.map((g) => ({ ...g, label: g.label || "Other" }));
   }
+
+  // Flat deduplicated list for internal plan-id lookups (e.g. payment validation)
+  const allSeen = new Set();
+  const plans = groups
+    .flatMap((g) => g.plans.map((p) => ({ ...p, _fp: `${p.planId}` })))
+    .filter((p) => !allSeen.has(p._fp) && allSeen.add(p._fp))
+    .map(({ _fp, ...rest }) => rest)
+    .sort((a, b) => Number(a.amount) - Number(b.amount));
 
   return {
     status: providerResponse.status,
@@ -324,10 +385,9 @@ exports.getRechargePlans = async ({ mobile, operatorCode, circleId }) => {
     operatorId: operatorCode ? String(operatorCode) : null,
     circleId: circleId ? String(circleId) : null,
     mobile,
-    count: uniquePlans.size,
-    plans: Array.from(uniquePlans.values()).sort(
-      (first, second) => Number(first.amount) - Number(second.amount),
-    ),
+    count: plans.length,
+    groups,
+    plans,
   };
 };
 
