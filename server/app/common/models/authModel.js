@@ -40,6 +40,8 @@ class authModel {
         user_id,
         name,
         email,
+        phone,
+        company_user_id,
         password,
         status,
         is_verified,
@@ -53,6 +55,43 @@ class authModel {
     return rows[0];
   }
 
+  async findByEmailOrPhone({ email, phone }) {
+    const conditions = [];
+    const params = [];
+
+    if (email) {
+      conditions.push("LOWER(TRIM(email)) = ?");
+      params.push(email);
+    }
+
+    if (phone) {
+      conditions.push("phone = ?");
+      params.push(phone);
+    }
+
+    if (!conditions.length) return null;
+
+    const [rows] = await db.execute(
+      `SELECT 
+        user_id,
+        name,
+        email,
+        phone,
+        company_user_id,
+        password,
+        status,
+        is_verified,
+        device_id,
+        device_name
+     FROM customer
+     WHERE ${conditions.join(" OR ")}
+     LIMIT 1`,
+      params,
+    );
+
+    return rows[0];
+  }
+
   async findByCompanyUserId(company_user_id) {
     const [rows] = await db.execute(
       `SELECT user_id, name, email, company_user_id
@@ -60,6 +99,23 @@ class authModel {
      WHERE company_user_id = ?`,
       [company_user_id],
     );
+    return rows[0];
+  }
+
+  async findEmployeeById(employeeId) {
+    const [rows] = await db.execute(
+      `SELECT 
+        id,
+        company_id,
+        name,
+        email,
+        contact AS phone
+     FROM company_users
+     WHERE id = ? AND status = 1
+     LIMIT 1`,
+      [employeeId],
+    );
+
     return rows[0];
   }
 
