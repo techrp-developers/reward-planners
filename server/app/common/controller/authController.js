@@ -17,9 +17,10 @@
   const {
     enqueueWhatsApp,
   } = require("../../../services/whatsapp/waEnqueueService");
-  const { notifyUser } = require("../utils/notification");
-  const { uploadToR2 } = require("../../../utils/r2upload");
-  const { deleteFromR2 } = require("../../../utils/r2delete");
+const { notifyUser } = require("../utils/notification");
+const { uploadToR2 } = require("../../../utils/r2upload");
+const { deleteFromR2 } = require("../../../utils/r2delete");
+const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
 
   const ACCESS_EXPIRES = "1h";
   const REFRESH_EXPIRES_DAYS = 7;
@@ -504,12 +505,12 @@
               module: "wallet",
               type: "first_login_reward",
               title: "Coins credited",
-              message: "You received 3000 reward coins for your first login.",
+              message: `You received ${FIRST_LOGIN_REWARD_COINS} reward coins for your first login.`,
               icon: "wallet",
               reference_type: "wallet",
               reference_id: user.user_id,
               action_url: "/wallet",
-              metadata: { coins: 3000 },
+              metadata: { coins: FIRST_LOGIN_REWARD_COINS },
             },
             "first login reward notification",
           );
@@ -518,7 +519,7 @@
             rewardCreditMail({
               email: user.email,
               name: user.name,
-              coins: 3000,
+              coins: FIRST_LOGIN_REWARD_COINS,
             }).catch((err) => {
               console.error("First login reward email failed:", err);
             });
@@ -529,7 +530,7 @@
                 phone: employee.phone,
                 company_id: employee.company_id,
                 customer_name: employee.name || "User",
-                coins: 3000,
+                coins: FIRST_LOGIN_REWARD_COINS,
               },
             }).catch((err) => {
               console.error("First login reward WhatsApp failed:", err);
@@ -543,7 +544,7 @@
           refreshToken,
           firstLoginReward: {
             awarded: firstLoginBonus,
-            coins: firstLoginBonus ? 3000 : 0,
+            coins: firstLoginBonus ? FIRST_LOGIN_REWARD_COINS : 0,
           },
         });
       } catch (err) {

@@ -1,6 +1,7 @@
 const db = require("../../../config/database");
 const fs = require("fs");
 const path = require("path");
+const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
 
 class WalletModel {
   // create wallet
@@ -9,8 +10,6 @@ class WalletModel {
 
     try {
       await conn.beginTransaction();
-
-      const FIRST_LOGIN_REWARD = 3000;
 
       const EXPIRY_MONTHS = parseInt(
         process.env.WALLET_EXPIRY_MONTHS || "3",
@@ -35,7 +34,7 @@ class WalletModel {
         `INSERT INTO customer_wallet
         (user_id, balance)
         VALUES (?, ?)`,
-        [userId, FIRST_LOGIN_REWARD],
+        [userId, FIRST_LOGIN_REWARD_COINS],
       );
 
       const expiryDate = new Date();
@@ -51,7 +50,7 @@ class WalletModel {
           "Welcome Bonus",
           "First login reward",
           "credit",
-          FIRST_LOGIN_REWARD,
+          FIRST_LOGIN_REWARD_COINS,
           "reward",
           expiryDate,
         ],
