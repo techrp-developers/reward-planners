@@ -41,7 +41,14 @@ cron.schedule("*/5 * * * *", async () => {
       if (freshTxn) {
         await conn.beginTransaction();
 
-        if (err.retryable === false) {
+        if (err.reconciliationRequired) {
+          await TransactionModel.updateStatus(
+            txn.id,
+            "RECONCILIATION_REQUIRED",
+            err.providerResponse || err.message,
+            conn,
+          );
+        } else if (err.retryable === false) {
           await TransactionModel.updateStatus(
             txn.id,
             "FAILED_FINAL",

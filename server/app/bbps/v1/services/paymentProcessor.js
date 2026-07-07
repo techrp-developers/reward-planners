@@ -7,26 +7,45 @@ const removeEmptyFields = (payload) =>
     ),
   );
 
-const isEkoPaymentSuccessful = (result) => {
+const getResponseCandidates = (result) => {
   if (!result || typeof result !== "object") {
-    return false;
+    return [];
   }
 
-  if (
-    result.response_type_id === -1 ||
-    Number(result.status) === 97 ||
-    result.invalid_params
-  ) {
-    return false;
-  }
-
-  const normalizedStatus = String(result.status ?? "").trim().toUpperCase();
-  return (
-    result.success === true ||
-    normalizedStatus === "0" ||
-    normalizedStatus === "SUCCESS" ||
-    normalizedStatus === "SUCCESSFUL"
+  return [result, result.data].filter(
+    (value) => value && typeof value === "object" && !Array.isArray(value),
   );
+};
+
+const hasProviderFailureSignal = (result) =>
+  getResponseCandidates(result).some(
+    (item) =>
+      item.response_type_id === -1 ||
+      Number(item.status) === 97 ||
+      item.invalid_params,
+  );
+
+const isEkoPaymentSuccessful = (result) => {
+  if (hasProviderFailureSignal(result)) {
+    return false;
+  }
+
+  return getResponseCandidates(result).some((item) => {
+    const normalizedStatus = String(item.status ?? "").trim().toUpperCase();
+    const normalizedResponseStatus = String(item.response_status_id ?? "")
+      .trim()
+      .toUpperCase();
+
+    return (
+      item.success === true ||
+      normalizedStatus === "0" ||
+      normalizedStatus === "SUCCESS" ||
+      normalizedStatus === "SUCCESSFUL" ||
+      normalizedResponseStatus === "0" ||
+      normalizedResponseStatus === "SUCCESS" ||
+      normalizedResponseStatus === "SUCCESSFUL"
+    );
+  });
 };
 
 const processTransaction = async (txn, req) => {
@@ -70,12 +89,22 @@ const processTransaction = async (txn, req) => {
 
   if (!isEkoPaymentSuccessful(result)) {
     const error = new Error(result?.message || "EKO rejected the payment");
-    error.retryable = false;
     error.providerResponse = result;
+
+    if (hasProviderFailureSignal(result)) {
+      error.retryable = false;
+    } else {
+      error.reconciliationRequired = true;
+    }
+
     throw error;
   }
 
   return result;
 };
 
-module.exports = { processTransaction, isEkoPaymentSuccessful };
+module.exports = {
+  processTransaction,
+  isEkoPaymentSuccessful,
+  hasProviderFailureSignal,
+};

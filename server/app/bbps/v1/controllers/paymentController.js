@@ -459,9 +459,24 @@ class PaymentController {
           providerResponse: err.providerResponse,
         });
 
-        const failureStatus =
-          err.retryable === false ? "FAILED_FINAL" : "FAILED_RETRY";
+        const failureStatus = err.reconciliationRequired
+          ? "RECONCILIATION_REQUIRED"
+          : err.retryable === false
+            ? "FAILED_FINAL"
+            : "FAILED_RETRY";
         const willRetry = failureStatus === "FAILED_RETRY";
+        const needsReconciliation = failureStatus === "RECONCILIATION_REQUIRED";
+        const pendingProviderAction = willRetry || needsReconciliation;
+        const notificationType = willRetry
+          ? "bbps_payment_retry"
+          : needsReconciliation
+            ? "bbps_payment_reconciliation"
+            : "bbps_payment_failed";
+        const notificationMessage = willRetry
+          ? "Your payment was captured, but bill processing will be retried automatically."
+          : needsReconciliation
+            ? "Your payment was captured and the provider response is pending review."
+            : "The provider rejected the bill payment. Your refund has been initiated.";
 
         await TransactionModel.updateStatus(
           txn.id,
@@ -480,14 +495,12 @@ class PaymentController {
           {
             userId,
             module: "bbps",
-            type: willRetry
-              ? "bbps_payment_retry"
-              : "bbps_payment_failed",
-            title: willRetry ? "Bill payment pending" : "Bill payment failed",
-            message: willRetry
-              ? "Your payment was captured, but bill processing will be retried automatically."
-              : "The provider rejected the bill payment. Your refund has been initiated.",
-            icon: willRetry ? "clock" : "x-circle",
+            type: notificationType,
+            title: pendingProviderAction
+              ? "Bill payment pending"
+              : "Bill payment failed",
+            message: notificationMessage,
+            icon: pendingProviderAction ? "clock" : "x-circle",
             reference_type: "bbps_transaction",
             reference_id: txn.id,
             action_url: `/bbps/transactions/${txn.id}`,
@@ -497,14 +510,18 @@ class PaymentController {
           "bbps retry notification",
         );
 
-        return res.status(err.retryable === false ? 422 : 202).json({
+        return res
+          .status(err.retryable === false && !needsReconciliation ? 422 : 202)
+          .json({
           success: false,
           message:
-            err.retryable === false
+            needsReconciliation
+              ? "Payment was captured and the provider response is pending reconciliation"
+              : err.retryable === false
               ? "The provider rejected the transaction and a refund was initiated"
               : "Payment was captured and bill processing will be retried automatically",
           transaction_id: txn.id,
-        });
+          });
       }
     } catch (err) {
       await conn.rollback();
@@ -609,7 +626,14 @@ class PaymentController {
       if (txn) {
         await conn.beginTransaction();
 
-        if (err.retryable === false) {
+        if (err.reconciliationRequired) {
+          await TransactionModel.updateStatus(
+            txn.id,
+            "RECONCILIATION_REQUIRED",
+            err.providerResponse || err.message,
+            conn,
+          );
+        } else if (err.retryable === false) {
           await TransactionModel.updateStatus(
             txn.id,
             "FAILED_FINAL",

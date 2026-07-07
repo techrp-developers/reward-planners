@@ -1,6 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { isEkoPaymentSuccessful } = require("../services/paymentProcessor");
+const {
+  hasProviderFailureSignal,
+  isEkoPaymentSuccessful,
+} = require("../services/paymentProcessor");
 const {
   shouldIgnoreCapturedEvent,
   shouldIgnoreFailedEvent,
@@ -13,12 +16,16 @@ const {
 test("EKO business responses are classified conservatively", () => {
   assert.equal(isEkoPaymentSuccessful({ status: 0 }), true);
   assert.equal(isEkoPaymentSuccessful({ status: "SUCCESS" }), true);
+  assert.equal(isEkoPaymentSuccessful({ data: { status: 0 } }), true);
+  assert.equal(isEkoPaymentSuccessful({ response_status_id: 0 }), true);
   assert.equal(isEkoPaymentSuccessful({ status: 97 }), false);
   assert.equal(
     isEkoPaymentSuccessful({ status: 0, response_type_id: -1 }),
     false,
   );
   assert.equal(isEkoPaymentSuccessful({}), false);
+  assert.equal(hasProviderFailureSignal({}), false);
+  assert.equal(hasProviderFailureSignal({ status: 97 }), true);
 });
 
 test("EKO paybill amount formatting is stable for request hash", () => {
