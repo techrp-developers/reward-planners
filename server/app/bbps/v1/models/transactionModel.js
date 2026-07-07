@@ -173,10 +173,13 @@ class TransactionModel {
         t.provider_client_ref_id,
         t.created_at,
         ro.status AS payment_status,
-        ro.razorpay_order_id
+        ro.razorpay_order_id,
+        r.status AS refund_status
       FROM bbps_transactions t
       LEFT JOIN razorpay_orders ro
         ON ro.ref_id = t.id AND ro.module = 'bbps'
+      LEFT JOIN bbps_refunds r
+        ON r.transaction_id = t.id
       ${whereSql}
       ORDER BY t.created_at DESC
       LIMIT ? OFFSET ?`,

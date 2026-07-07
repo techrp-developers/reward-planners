@@ -2,6 +2,7 @@ const ekoService = require("../services/eko_service");
 const TransactionModel = require("../models/transactionModel");
 const BillFetchModel = require("../models/billFetchModel");
 const db = require("../../../../config/database");
+const { mapFinalStatus } = require("../utils/finalStatus");
 
 /**
  * @typedef {Object} FrontendFetchBillPayload
@@ -720,6 +721,7 @@ class BillController {
       const orders = result.orders.map((order) => ({
         ...order,
         operator_name: operatorMap[order.operator_id] || null,
+        final_status: mapFinalStatus(order.bbps_status, order.refund_status),
       }));
 
       return res.json({
@@ -1082,29 +1084,7 @@ class BillController {
       // =========================
       // 3. MAP STATUS FOR FRONTEND
       // =========================
-      let finalStatus = "PENDING";
-
-      if (txn.bbps_status === "PAID") {
-        finalStatus = "SUCCESS";
-      } else if (refund?.status === "completed") {
-        finalStatus = "REFUNDED";
-      } else if (["pending", "processing", "failed"].includes(refund?.status)) {
-        finalStatus = "REFUND_PENDING";
-      } else if (
-        refund?.status === "manual_review" ||
-        txn.bbps_status === "RECONCILIATION_REQUIRED"
-      ) {
-        finalStatus = "RECONCILIATION_REQUIRED";
-      } else if (
-        txn.bbps_status === "FAILED_FINAL" ||
-        txn.bbps_status === "PAYMENT_FAILED"
-      ) {
-        finalStatus = "FAILED";
-      } else if (txn.bbps_status === "FAILED_RETRY") {
-        finalStatus = "RETRYING";
-      } else if (txn.bbps_status === "INIT") {
-        finalStatus = "PENDING";
-      }
+      const finalStatus = mapFinalStatus(txn.bbps_status, refund?.status);
 
       // =========================
       // 4. RESPONSE
