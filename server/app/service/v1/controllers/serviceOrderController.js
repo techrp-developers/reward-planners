@@ -9,6 +9,7 @@ const razorpay = require("../middlewares/razorpay");
 const db = require("../../../../config/database");
 const crypto = require("crypto");
 const sharp = require("sharp");
+const InvoiceService = require("../../../../services/Invoice/service-invoice");
 const {
   finalizePaidServiceOrder,
   generateInvoiceOnce,
@@ -720,6 +721,31 @@ class ServiceOrderController {
 
       const { parentId } = req.params;
 
+      const [[ownedOrder]] = await db.execute(
+        `SELECT id, payment_status
+         FROM service_orders
+         WHERE parent_order_id = ?
+           AND user_id = ?
+         LIMIT 1`,
+        [parentId, userId],
+      );
+
+      if (!ownedOrder) {
+        return res.status(404).json({
+          success: false,
+          message: "Order not found",
+        });
+      }
+
+      if (ownedOrder.payment_status !== "paid") {
+        return res.status(400).json({
+          success: false,
+          message: "Invoice is available after payment",
+        });
+      }
+
+      await InvoiceService.generateInvoice(parentId);
+
       const [[invoice]] = await db.execute(
         `SELECT si.*
          FROM service_invoices si
@@ -741,13 +767,28 @@ class ServiceOrderController {
         });
       }
 
-      res.json({
-        success: true,
-        data: {
-          ...invoice,
-          url: `/uploads/service-invoices/${invoice.invoice_url}`,
-        },
+      const invoicePath = path.join(
+        __dirname,
+        "../../../../uploads/service-invoices",
+        invoice.invoice_url,
+      );
+
+      if (!fs.existsSync(invoicePath)) {
+        return res.status(404).json({
+          success: false,
+          message: "Invoice file not found",
+        });
+      }
+
+      const pdf = fs.readFileSync(invoicePath);
+
+      res.set({
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="${invoice.invoice_number}.pdf"`,
+        "Content-Length": pdf.length,
       });
+
+      return res.end(pdf);
     } catch (error) {
       console.error(error);
       res.status(500).json({
