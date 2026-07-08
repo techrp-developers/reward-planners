@@ -71,6 +71,7 @@ class ServiceCartModel {
         sb.name AS bundle_name,
         sb.description AS bundle_description,
         sb.type AS bundle_type,
+        sb.banner_image AS bundle_image,
         (
           SELECT COUNT(*)
           FROM service_bundle_items all_bi
@@ -122,6 +123,7 @@ class ServiceCartModel {
           bundle_name: item.bundle_name,
           bundle_description: item.bundle_description,
           bundle_type: item.bundle_type,
+          bundle_image: getPublicUrl(item.bundle_image),
           bundle_item_count: item.bundle_item_count
             ? Number(item.bundle_item_count)
             : 0,
@@ -132,6 +134,7 @@ class ServiceCartModel {
           service_id: item.service_id,
           title: item.title,
           image_url: getPublicUrl(item.image_url),
+          variant_image: getPublicUrl(item.image_url),
 
           documents: [],
         };
@@ -163,6 +166,7 @@ class ServiceCartModel {
             bundle_name: item.bundle_name,
             bundle_description: item.bundle_description,
             bundle_type: item.bundle_type,
+            bundle_image: item.bundle_image,
             bundle_item_count: item.bundle_item_count
               ? Number(item.bundle_item_count)
               : 0,

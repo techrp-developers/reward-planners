@@ -594,7 +594,7 @@ class ServiceCheckoutController {
 
       // 1 Get bundle
       const [[bundle]] = await db.execute(
-        `SELECT id, name, type FROM service_bundles WHERE id = ?`,
+        `SELECT id, name, type, banner_image FROM service_bundles WHERE id = ?`,
         [bundle_id],
       );
 
@@ -712,6 +712,7 @@ class ServiceCheckoutController {
       const bundleData = {
         bundle_id: bundle.id,
         bundle_name: bundle.name,
+        bundle_image: getPublicUrl(bundle.banner_image),
         items: selectedItems,
         bundle_total: selectedItems.reduce(
           (sum, i) => sum + Number(i.price),
