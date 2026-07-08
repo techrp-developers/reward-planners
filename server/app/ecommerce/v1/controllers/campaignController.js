@@ -12,6 +12,56 @@ const {
   calculateRedeemableCoins,
 } = require("../utils/rewardCalculate");
 
+async function addWishlistStatus(products, userId) {
+  products.forEach((product) => {
+    product.is_wishlisted = false;
+  });
+
+  if (!userId || !products.length) return products;
+
+  const pairs = products
+    .map((product) => ({
+      productId: Number(product.product_id),
+      variantId: Number(product.variant_id),
+    }))
+    .filter((pair) => pair.productId > 0 && pair.variantId > 0);
+
+  if (!pairs.length) return products;
+
+  const uniquePairs = [
+    ...new Map(
+      pairs.map((pair) => [`${pair.productId}:${pair.variantId}`, pair]),
+    ).values(),
+  ];
+
+  const conditions = uniquePairs
+    .map(() => "(product_id = ? AND variant_id = ?)")
+    .join(" OR ");
+  const params = uniquePairs.flatMap((pair) => [
+    pair.productId,
+    pair.variantId,
+  ]);
+
+  const [rows] = await db.execute(
+    `SELECT product_id, variant_id
+     FROM customer_wishlist
+     WHERE user_id = ?
+       AND (${conditions})`,
+    [userId, ...params],
+  );
+
+  const wishlisted = new Set(
+    rows.map((row) => `${Number(row.product_id)}:${Number(row.variant_id)}`),
+  );
+
+  products.forEach((product) => {
+    const key = `${Number(product.product_id)}:${Number(product.variant_id)}`;
+    product.is_wishlisted = wishlisted.has(key);
+  });
+
+  return products;
+}
+
 class CampaignController {
   // ========================================user==========================================
   async getHomeCampaigns(req, res) {
@@ -136,6 +186,8 @@ class CampaignController {
           };
         }),
       );
+
+      await addWishlistStatus(data, req.user?.user_id);
 
       return res.json({
         success: true,

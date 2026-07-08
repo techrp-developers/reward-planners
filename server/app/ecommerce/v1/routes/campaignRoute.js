@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const CampaignController = require("../controllers/campaignController");
 const drainMode = require("../../../../middleware/drainMode");
+const optionalAuth = require("../../../common/middlewares/optionalAuth");
 
 // ================================= USER ROUTES =================================
 
@@ -15,6 +16,6 @@ router.get("/list", CampaignController.getUserCampaigns);
 router.get("/details/:id", CampaignController.getUserCampaignById);
 
 // Campaign products
-router.get("/:id/products", CampaignController.getCampaignProducts);
+router.get("/:id/products", optionalAuth, CampaignController.getCampaignProducts);
 
 module.exports = router;

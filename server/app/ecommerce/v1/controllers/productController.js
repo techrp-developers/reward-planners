@@ -22,6 +22,98 @@ function nonNegativeInt(value, fallback = 0, max = 10000) {
   return Math.min(parsed, max);
 }
 
+function getProductId(product) {
+  return Number(product.product_id || product.id);
+}
+
+async function addWishlistStatus(products, userId) {
+  const list = Array.isArray(products) ? products : [products];
+
+  if (!list.length) return products;
+
+  list.forEach((product) => {
+    product.is_wishlisted = false;
+    if (Array.isArray(product.variants)) {
+      product.variants.forEach((variant) => {
+        variant.is_wishlisted = false;
+      });
+    }
+  });
+
+  if (!userId) return products;
+
+  const pairs = [];
+
+  list.forEach((product) => {
+    const productId = getProductId(product);
+
+    if (productId > 0 && Number(product.variant_id) > 0) {
+      pairs.push({
+        productId,
+        variantId: Number(product.variant_id),
+      });
+    }
+
+    if (Array.isArray(product.variants)) {
+      product.variants.forEach((variant) => {
+        if (productId > 0 && Number(variant.variant_id) > 0) {
+          pairs.push({
+            productId,
+            variantId: Number(variant.variant_id),
+          });
+        }
+      });
+    }
+  });
+
+  if (!pairs.length) return products;
+
+  const uniquePairs = [
+    ...new Map(
+      pairs.map((pair) => [`${pair.productId}:${pair.variantId}`, pair]),
+    ).values(),
+  ];
+
+  const conditions = uniquePairs
+    .map(() => "(product_id = ? AND variant_id = ?)")
+    .join(" OR ");
+
+  const params = uniquePairs.flatMap((pair) => [
+    pair.productId,
+    pair.variantId,
+  ]);
+
+  const [rows] = await db.execute(
+    `SELECT product_id, variant_id
+     FROM customer_wishlist
+     WHERE user_id = ?
+       AND (${conditions})`,
+    [userId, ...params],
+  );
+
+  const wishlisted = new Set(
+    rows.map((row) => `${Number(row.product_id)}:${Number(row.variant_id)}`),
+  );
+
+  list.forEach((product) => {
+    const key = `${getProductId(product)}:${Number(product.variant_id)}`;
+    product.is_wishlisted = wishlisted.has(key);
+
+    if (Array.isArray(product.variants)) {
+      product.variants.forEach((variant) => {
+        const variantKey = `${getProductId(product)}:${Number(variant.variant_id)}`;
+        variant.is_wishlisted = wishlisted.has(variantKey);
+      });
+
+      product.is_wishlisted = product.variants.some(
+        (variant) => variant.is_wishlisted,
+      );
+    }
+  });
+
+  return products;
+}
+
 class ProductController {
   // all the products
   async getAllProducts(req, res) {
@@ -101,6 +193,7 @@ class ProductController {
 
           return {
             id: product.product_id,
+            variant_id: product.variant_id,
             title: product.product_name,
             brand: product.brand_name,
             category: product.category_name,
@@ -128,6 +221,8 @@ class ProductController {
           };
         }),
       );
+
+      await addWishlistStatus(processedProducts, req.user?.user_id);
 
       return res.json({
         success: true,
@@ -248,6 +343,7 @@ class ProductController {
 
           return {
             id: product.product_id,
+            variant_id: product.variant_id,
             title: product.product_name,
             brand: product.brand_name,
             category: product.category_name,
@@ -273,6 +369,8 @@ class ProductController {
           };
         }),
       );
+
+      await addWishlistStatus(processedProducts, req.user?.user_id);
 
       return res.json({
         success: true,
@@ -393,6 +491,7 @@ class ProductController {
 
           return {
             id: product.product_id,
+            variant_id: product.variant_id,
             title: product.product_name,
             brand: product.brand_name,
             category: product.category_name,
@@ -421,6 +520,8 @@ class ProductController {
       );
 
       const hasMore = page < Math.ceil(totalItems / limit);
+
+      await addWishlistStatus(processedProducts, req.user?.user_id);
 
       return res.json({
         success: true,
@@ -547,6 +648,8 @@ class ProductController {
           }),
         ),
       };
+
+      await addWishlistStatus(processedProduct, req.user?.user_id);
 
       return res.json({
         success: true,
@@ -902,6 +1005,8 @@ class ProductController {
         }),
       );
 
+      await addWishlistStatus(recentlyViewed, userId);
+
       return res.json({
         success: true,
         data: recentlyViewed,
@@ -933,6 +1038,8 @@ class ProductController {
         offset,
       );
 
+      await addWishlistStatus(products, userId);
+
       return res.status(200).json({
         success: true,
         total: products.length,
@@ -955,6 +1062,8 @@ class ProductController {
       const offset = nonNegativeInt(req.query.offset);
 
       const products = await ProductModel.getNewArrivals(limit, offset);
+
+      await addWishlistStatus(products, req.user?.user_id);
 
       return res.status(200).json({
         success: true,
@@ -991,6 +1100,8 @@ class ProductController {
         offset,
       );
 
+      await addWishlistStatus(products, req.user?.user_id);
+
       return res.status(200).json({
         success: true,
         total: products.length,
@@ -1020,6 +1131,8 @@ class ProductController {
         days,
       );
 
+      await addWishlistStatus(products, req.user?.user_id);
+
       return res.status(200).json({
         success: true,
         total: products.length,
@@ -1044,6 +1157,8 @@ class ProductController {
       const offset = nonNegativeInt(req.query.offset);
 
       const products = await ProductModel.getBestSellers(limit, offset, days);
+
+      await addWishlistStatus(products, req.user?.user_id);
 
       return res.status(200).json({
         success: true,
@@ -1074,6 +1189,8 @@ class ProductController {
         days,
       );
 
+      await addWishlistStatus(products, req.user?.user_id);
+
       return res.status(200).json({
         success: true,
         total: products.length,
@@ -1097,6 +1214,8 @@ class ProductController {
       const offset = nonNegativeInt(req.query.offset);
 
       const products = await ProductModel.getTopRatedProducts(limit, offset);
+
+      await addWishlistStatus(products, req.user?.user_id);
 
       return res.status(200).json({
         success: true,
@@ -1226,6 +1345,8 @@ class ProductController {
         offset,
       });
 
+      await addWishlistStatus(products, req.user?.user_id);
+
       return res.status(200).json({
         success: true,
         total: products.length,
@@ -1326,6 +1447,7 @@ class ProductController {
 
           return {
             id: product.product_id,
+            variant_id: product.variant_id,
             title: product.product_name,
 
             image: mainImage,
@@ -1341,6 +1463,8 @@ class ProductController {
           };
         }),
       );
+
+      await addWishlistStatus(processedProducts, req.user?.user_id);
 
       return res.json({
         success: true,
