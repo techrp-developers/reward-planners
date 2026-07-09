@@ -110,6 +110,27 @@ class ReviewController {
         });
       }
 
+      const [[existingReview]] = await conn.execute(
+        `
+        SELECT review_id
+        FROM product_reviews
+        WHERE user_id = ?
+          AND order_id = ?
+          AND product_id = ?
+          AND variant_id = ?
+        LIMIT 1
+        `,
+        [userId, order_id, product_id, variant_id],
+      );
+
+      if (existingReview) {
+        await conn.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Review already submitted for this product",
+        });
+      }
+
       // Create review
       const reviewId = await ReviewModel.createReview(
         {
