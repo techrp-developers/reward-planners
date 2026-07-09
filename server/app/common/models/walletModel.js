@@ -76,18 +76,35 @@ class WalletModel {
 
     const [[expiry]] = await db.execute(
       `SELECT 
-        SUM(coins) AS expiring_coins,
-        MIN(expiry_date) AS expiry_date
+        COALESCE(SUM(wt.coins), 0) AS expiring_coins,
+        MIN(wt.expiry_date) AS expiry_date
+     FROM (
+       SELECT DATE(MIN(expiry_date)) AS expiry_day
+       FROM wallet_transactions
+       WHERE user_id = ?
+       AND transaction_type = 'credit'
+       AND expiry_date IS NOT NULL
+       AND expiry_date > NOW()
+     ) AS next_expiry
+     LEFT JOIN wallet_transactions wt
+       ON wt.user_id = ?
+      AND wt.transaction_type = 'credit'
+      AND DATE(wt.expiry_date) = next_expiry.expiry_day
+     GROUP BY next_expiry.expiry_day`,
+      [userId, userId],
+    );
+
+    const [[earned]] = await db.execute(
+      `SELECT COALESCE(SUM(coins), 0) AS total_earned_points
      FROM wallet_transactions
      WHERE user_id = ?
-     AND transaction_type = 'credit'
-     AND expiry_date IS NOT NULL
-     AND expiry_date > NOW()`,
+     AND transaction_type = 'credit'`,
       [userId],
     );
 
     return {
       balance: wallet?.balance ?? 0,
+      total_earned_points: earned?.total_earned_points || 0,
       expiring_coins: expiry?.expiring_coins || 0,
       expiry_date: expiry?.expiry_date || null,
     };
@@ -102,11 +119,12 @@ class WalletModel {
     } else if (type === "debit") {
       condition = "AND transaction_type = 'debit'";
     } else if (type === "expired") {
-      condition = "AND expiry_date IS NOT NULL AND expiry_date < NOW()";
+      condition =
+        "AND transaction_type = 'credit' AND expiry_date IS NOT NULL AND expiry_date < NOW()";
     }
 
     const pageNum = Math.max(1, parseInt(page) || 1);
-    const limitNum = Math.min(50, Math.max(1, parseInt(limit) || 10));
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 50));
     const offset = (pageNum - 1) * limitNum;
 
     const [rows] = await db.execute(

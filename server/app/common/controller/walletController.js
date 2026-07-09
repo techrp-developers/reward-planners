@@ -36,7 +36,7 @@ class WalletController {
         });
       }
 
-      const { type = "all", page = 1, limit = 10 } = req.query;
+      const { type = "all", page = 1, limit = 50 } = req.query;
 
       const transactions = await WalletModel.getWalletTransactions(
         userId,
