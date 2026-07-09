@@ -1,7 +1,4 @@
 const WalletModel = require("../models/walletModel");
-const db = require("../../../config/database");
-const fs = require("fs");
-const path = require("path");
 
 class WalletController {
   // get balance
