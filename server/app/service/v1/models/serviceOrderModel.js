@@ -74,6 +74,7 @@ class ServiceOrderModel {
     let sql = `
     SELECT 
       so.id,
+      so.service_id,
       so.order_ref,
       so.price,
       so.status,
@@ -181,6 +182,7 @@ class ServiceOrderModel {
 
       const item = {
         id: row.id,
+        service_id: row.service_id,
         order_ref: row.order_ref,
         service_name: row.service_name,
         variant_name: row.variant_name,
@@ -325,6 +327,7 @@ class ServiceOrderModel {
       `
     SELECT 
       so.id,
+      so.service_id,
       so.order_ref,
       so.price,
       so.status,
@@ -1048,6 +1051,8 @@ class ServiceOrderModel {
       status: order.status,
 
       service: {
+        service_id: order.service_id,
+
         service_name: order.service_name,
 
         variant_name: order.variant_name,
