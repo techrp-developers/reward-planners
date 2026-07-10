@@ -1,86 +1,122 @@
+import { lazy, Suspense } from "react";
 import { Routes, Route } from "react-router-dom";
 import { routes } from "./routes";
 import { Navigate } from "react-router-dom";
-import { useAuth } from "./auth/useAuth";
+import { useAuth } from "./common/auth/useAuth.ts";
 
 /* Auth */
-import AuthLayout from "./layouts/AuthLayout";
-import LoginPage from "./auth/LoginPage";
-import RegisterPage from "./auth/RegisterPage";
-import ForgotPassword from "./auth/ForgotPassword";
-import ResetPassword from "./auth/ResetPassword";
-import VerifyOtpPage from "./auth/VerifyOtpPage";
+const AuthLayout = lazy(() => import("./common/layouts/AuthLayout.tsx"));
+const LoginPage = lazy(() => import("./common/auth/LoginPage.tsx"));
+const RegisterPage = lazy(() => import("./common/auth/RegisterPage.tsx"));
+const ForgotPassword = lazy(() => import("./common/auth/ForgotPassword.tsx"));
+const ResetPassword = lazy(() => import("./common/auth/ResetPassword.tsx"));
+const VerifyOtpPage = lazy(() => import("./common/auth/VerifyOtpPage.tsx"));
 
 /* Layouts */
-import VendorLayout from "./layouts/VendorLayout";
-import ManagerLayout from "./layouts/ManagerLayout";
-import AdminLayout from "./layouts/AdminLayout";
-import HrLayout from "./layouts/HrLayout";
+const VendorLayout = lazy(() => import("./modules/products/vendor/VendorLayout.tsx"));
+const ManagerLayout = lazy(() => import("./modules/products/vendorManager/ManagerLayout.tsx"));
+const AdminLayout = lazy(() => import("./modules/admin/layout/AdminLayout.tsx"));
+const HrLayout = lazy(() => import("./modules/hr/layout/HrLayout.tsx"));
+const ServiceLayout = lazy(() => import("./modules/service/serviceManager/ServiceLayout.tsx"));
+const ServicePartnerLayout = lazy(() => import("./modules/service/servicePartner/ServicePartnerLayout.tsx"));
 
 /* Dashboards */
-import VendorDashboard from "./pages/vendor/Dashboard";
-import ManagerDashboard from "./pages/vendor_manager/Dashboard";
-import HrDashboard from "./pages/hr/Dashboard";
-import EmployeeOnboarding from "./components/feature/hr/onboarding/EmployeeOnboarding.tsx";
-import EmployeeList from "./components/feature/hr/EmployeeList.tsx";
+const VendorDashboard = lazy(() => import("./modules/products/vendor/Dashboard.tsx"));
+const ManagerDashboard = lazy(() => import("./modules/products/vendorManager/Dashboard.tsx"));
+const HrDashboard = lazy(() => import("./modules/hr/dashboard/HrDashboard.tsx"));
+const EmployeeOnboarding = lazy(() => import("./modules/hr/onboarding/EmployeeOnboarding.tsx"));
+const EmployeeList = lazy(() => import("./modules/hr/employees/EmployeeList.tsx"));
 
-import ProductApprovalList from "./components/feature/manager/product/ProductApprovalList";
-import CategoryManagement from "./components/feature/manager/category/Categories";
-import SubcategoryManagement from "./components/feature/manager/category/Subcategories";
-import DocumentManagement from "./components/feature/manager/document/DocumentAdd";
-import DocumentCategoryManagement from "./components/feature/manager/document/DocumentCategory";
-import SubSubCategoryManagement from "./components/feature/manager/category/Subsubcategories";
-import ProductViewPage from "./components/feature/manager/product/ProductViewPage";
-import Onboarding from "./components/feature/vendor/onboarding/Onboarding";
-import ChangePasswordPage from "./pages/changePassword";
-import ProductListingDynamic from "./components/feature/vendor/products/ProductAdd";
-import ProductManagerList from "./components/feature/vendor/products/ProductList";
-import ProductManage from "./components/feature/vendor/products/ProductManage";
-import ProductVariantEdit from "./components/feature/vendor/products/ProductVariantEdit";
-import ProductVariantImages from "./components/feature/vendor/products/ProductVariantImage";
-import EditProductPage from "./components/feature/vendor/products/ProductEdit";
-import ReviewProductPage from "./components/feature/vendor/products/ProductView";
-import VendorApprovalList from "./components/feature/manager/vendor/VendorApprovalList";
-import VendorApprovalForm from "./components/feature/manager/vendor/VendorApprovalForm";
-import AdminDashboard from "./pages/admin/Dashboard";
-import AdminServicesPage from "./pages/admin/Services.tsx";
-import AdminVendorApprovalList from "./components/feature/admin/vendor/VendorApprovalList";
-import AdminVendorApprovalForm from "./components/feature/admin/vendor/VendorApprovalForm";
-import AdminProductApprovalList from "./components/feature/admin/product/ProductApprovalList";
-import AdminProductViewPage from "./components/feature/admin/product/ProductViewPage";
-import NotFoundPage from "./pages/NotFound";
+const ProductApprovalList = lazy(() => import("./modules/products/vendorManager/ProductApprovalList.tsx"));
+const CategoryManagement = lazy(() => import("./modules/products/vendorManager/category/Categories.tsx"));
+const SubcategoryManagement = lazy(() => import("./modules/products/vendorManager/category/Subcategories.tsx"));
+const DocumentManagement = lazy(() => import("./modules/products/vendorManager/document/DocumentAdd.tsx"));
+const DocumentCategoryManagement = lazy(() => import("./modules/products/vendorManager/document/DocumentCategory.tsx"));
+const SubSubCategoryManagement = lazy(() => import("./modules/products/vendorManager/category/Subsubcategories.tsx"));
+const ProductViewPage = lazy(() => import("./modules/products/vendorManager/ProductViewPage.tsx"));
+const Onboarding = lazy(() => import("./modules/products/vendor/Onboarding.tsx"));
+const ChangePasswordPage = lazy(() => import("./common/auth/changePassword.tsx"));
+const ProductListingDynamic = lazy(() => import("./modules/products/screens/ProductAdd.tsx"));
+const ProductManagerList = lazy(() => import("./modules/products/screens/ProductList.tsx"));
+const ProductManage = lazy(() => import("./modules/products/screens/ProductManage.tsx"));
+const ProductVariantEdit = lazy(() => import("./modules/products/screens/ProductVariantEdit.tsx"));
+const ProductVariantImages = lazy(() => import("./modules/products/screens/ProductVariantImage.tsx"));
+const EditProductPage = lazy(() => import("./modules/products/screens/ProductEdit.tsx"));
+const ReviewProductPage = lazy(() => import("./modules/products/screens/ProductView.tsx"));
+const VendorApprovalList = lazy(() => import("./modules/products/vendorManager/VendorApprovalList.tsx"));
+const VendorApprovalForm = lazy(() => import("./modules/products/vendorManager/VendorApprovalForm.tsx"));
+const AdminDashboard = lazy(() => import("./modules/admin/dashboard/AdminDashboard.tsx"));
+const AdminServicesPage = lazy(() => import("./modules/admin/services/AdminServicesPage.tsx"));
+const AdminVendorApprovalList = lazy(() => import("./modules/admin/vendors/AdminVendorApprovalList.tsx"));
+const AdminVendorApprovalForm = lazy(() => import("./modules/admin/vendors/AdminVendorApprovalForm.tsx"));
+const AdminProductApprovalList = lazy(() => import("./modules/admin/products/AdminProductApprovalList.tsx"));
+const AdminProductViewPage = lazy(() => import("./modules/admin/products/AdminProductViewPage.tsx"));
+const NotFoundPage = lazy(() => import("./common/auth/NotFound.tsx"));
 
 // Vendor Orders
-import OrderSummary from "./components/feature/vendor/orders/OrderSummary";
-import OrderDetail from "./components/feature/vendor/orders/OrderDetail";
+const OrderSummary = lazy(() => import("./modules/products/vendor/OrderSummary.tsx"));
+const OrderDetail = lazy(() => import("./modules/products/vendor/OrderDetail.tsx"));
 
 // Manager Order
-import OrderList from "./components/feature/manager/order/OrderList";
-import OrderView from "./components/feature/manager/order/OrderView";
+const OrderList = lazy(() => import("./modules/products/vendorManager/order/OrderList.tsx"));
+const OrderView = lazy(() => import("./modules/products/vendorManager/order/OrderView.tsx"));
 
 // Service
-import ServiceEnquiries from "./components/feature/manager/serviceEnquiry/ServiceEnquiries.tsx";
-import ServiceDetails from "./components/feature/manager/serviceEnquiry/ServiceDetails.tsx";
-import ServiceOrderList from "./components/feature/manager/serviceOrder/ServiceOrderList.tsx";
-import ServiceOrderView from "./components/feature/manager/serviceOrder/ServiceOrderView.tsx";
+const ServiceEnquiries = lazy(() => import("./modules/products/inHouseServices/ServiceEnquiries.tsx"));
+const ServiceDetails = lazy(() => import("./modules/products/inHouseServices/ServiceDetails.tsx"));
+const ServiceOrderList = lazy(() => import("./modules/products/inHouseServices/ServiceOrderList.tsx"));
+const ServiceOrderView = lazy(() => import("./modules/products/inHouseServices/ServiceOrderView.tsx"));
 
 // Manage Rewards
-import RewardRule from "./components/feature/manager/reward/RewardRule";
-import RewardForm from "./components/feature/manager/reward/RewardForm";
-import ProductRewardMapping from "./components/feature/manager/reward/ProductRewardMapping";
+const RewardRule = lazy(() => import("./modules/products/vendorManager/reward/RewardRule.tsx"));
+const RewardForm = lazy(() => import("./modules/products/vendorManager/reward/RewardForm.tsx"));
+const ProductRewardMapping = lazy(() => import("./modules/products/vendorManager/reward/ProductRewardMapping.tsx"));
 
 /* Attribute */
-import AttributeManagement from "./components/feature/manager/attribute/attributes";
+const AttributeManagement = lazy(() => import("./modules/products/vendorManager/attribute/attributes.tsx"));
 
 /* Sales */
-// import FlashSaleCreate from "./components/feature/manager/flashSale/FlashSaleCreate";
-// import FlashSaleList from "./components/feature/manager/flashSale/FlashSaleList";
-// import FlashSaleVariant from "./components/feature/manager/flashSale/FlashSaleVariant";
+// import FlashSaleCreate from "./vendor/components/feature/manager/flashSale/FlashSaleCreate";
+// import FlashSaleList from "./vendor/components/feature/manager/flashSale/FlashSaleList";
+// import FlashSaleVariant from "./vendor/components/feature/manager/flashSale/FlashSaleVariant";
 
 /* Order */
-import CancellationRequest from "./components/feature/manager/order/CancellationRequest";
-import CancellationDetail from "./components/feature/manager/order/CancellationDetail";
-import ManageRewards from "./components/feature/hr/ManageRewards.tsx";
+const CancellationRequest = lazy(() => import("./modules/products/vendorManager/order/CancellationRequest.tsx"));
+const CancellationDetail = lazy(() => import("./modules/products/vendorManager/order/CancellationDetail.tsx"));
+const ManageRewards = lazy(() => import("./modules/hr/rewards/ManageRewards.tsx"));
+
+// Service Partners (Services vertical)
+const ServicePartnerList = lazy(() => import("./modules/service/serviceManager/servicePartners/pages/ServicePartnerList.tsx"));
+const ServicePartnerOnboard = lazy(() => import("./modules/service/serviceManager/servicePartners/pages/ServicePartnerOnboard.tsx"));
+const ServicePartnerProfile = lazy(() => import("./modules/service/serviceManager/servicePartners/pages/ServicePartnerProfile.tsx"));
+const PartnerManagerList = lazy(() => import("./modules/service/serviceManager/partnerManagers/pages/PartnerManagerList.tsx"));
+const PartnerManagerOnboard = lazy(() => import("./modules/service/serviceManager/partnerManagers/pages/PartnerManagerOnboard.tsx"));
+const ServiceDashboard = lazy(() => import("./modules/service/serviceManager/dashboard/pages/ServiceDashboard.tsx"));
+const ServiceListingsPage = lazy(() => import("./modules/service/serviceManager/serviceListings/pages/ServiceListingsPage.tsx"));
+const BookingsPage = lazy(() => import("./modules/service/serviceManager/bookings/pages/BookingsPage.tsx"));
+const ServiceReportsPage = lazy(() => import("./modules/service/serviceManager/reports/pages/ServiceReportsPage.tsx"));
+const ServiceSettingsPage = lazy(() => import("./modules/service/serviceManager/settings/pages/ServiceSettingsPage.tsx"));
+
+// Service Partner self-service portal
+const ServicePartnerDashboard = lazy(() => import("./modules/service/servicePartner/dashboard/pages/ServicePartnerDashboard.tsx"));
+const MyProfile = lazy(() => import("./modules/service/servicePartner/profile/pages/MyProfile.tsx"));
+const ServicePartnerOnboarding = lazy(() => import("./modules/service/servicePartner/profile/pages/ServicePartnerOnboarding.tsx"));
+const MyServicesList = lazy(() => import("./modules/service/servicePartner/services/pages/MyServicesList.tsx"));
+const MyServiceForm = lazy(() => import("./modules/service/servicePartner/services/pages/MyServiceForm.tsx"));
+const RateCardPage = lazy(() => import("./modules/service/servicePartner/services/pages/RateCardPage.tsx"));
+const BookingsList = lazy(() => import("./modules/service/servicePartner/bookings/pages/BookingsList.tsx"));
+const BookingDetails = lazy(() => import("./modules/service/servicePartner/bookings/pages/BookingDetails.tsx"));
+const ReviewsList = lazy(() => import("./modules/service/servicePartner/reviews/pages/ReviewsList.tsx"));
+const DocumentsPage = lazy(() => import("./modules/service/servicePartner/documents/pages/DocumentsPage.tsx"));
+const SettingsPage = lazy(() => import("./modules/service/servicePartner/settings/pages/SettingsPage.tsx"));
+
+function RouteFallback() {
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <div className="w-12 h-12 border-[3px] border-transparent border-t-[#852BAF] border-r-[#FC3F78] rounded-full animate-spin" />
+    </div>
+  );
+}
 
 export default function App() {
   // const { user, loading } = useAuth();
@@ -103,7 +139,8 @@ export default function App() {
     );
   }
   return (
-    <Routes>
+    <Suspense fallback={<RouteFallback />}>
+      <Routes>
       {/* ========== AUTH ========== */}
       <Route element={<AuthLayout />}>
         <Route path="/login" element={<LoginPage />} />
@@ -292,6 +329,38 @@ export default function App() {
           path={routes.manager.rewards.mapping}
           element={<ProductRewardMapping />}
         />
+
+        {/* Service Partners */}
+        <Route
+          path={routes.manager.servicePartners.list}
+          element={<ServicePartnerList />}
+        />
+        <Route
+          path={routes.manager.servicePartners.onboard}
+          element={<ServicePartnerOnboard />}
+        />
+        <Route
+          path={routes.manager.servicePartners.edit}
+          element={<ServicePartnerOnboard />}
+        />
+        <Route
+          path={routes.manager.servicePartners.profile}
+          element={<ServicePartnerProfile />}
+        />
+
+        {/* Partner Managers */}
+        <Route
+          path={routes.manager.partnerManagers.list}
+          element={<PartnerManagerList />}
+        />
+        <Route
+          path={routes.manager.partnerManagers.onboard}
+          element={<PartnerManagerOnboard />}
+        />
+        <Route
+          path={routes.manager.partnerManagers.edit}
+          element={<PartnerManagerOnboard />}
+        />
       </Route>
 
       {/* ========== ADMIN ========== */}
@@ -320,6 +389,95 @@ export default function App() {
         <Route path={routes.admin.services} element={<AdminServicesPage />} />
       </Route>
 
+      {/* ========== SERVICES ========== */}
+      <Route element={<ServiceLayout />}>
+        <Route path={routes.service.dashboard} element={<ServiceDashboard />} />
+
+        {/* Service Partners */}
+        <Route
+          path={routes.service.servicePartners.list}
+          element={<ServicePartnerList />}
+        />
+        <Route
+          path={routes.service.servicePartners.onboard}
+          element={<ServicePartnerOnboard />}
+        />
+        <Route
+          path={routes.service.servicePartners.edit}
+          element={<ServicePartnerOnboard />}
+        />
+        <Route
+          path={routes.service.servicePartners.profile}
+          element={<ServicePartnerProfile />}
+        />
+
+        {/* Partner Managers */}
+        <Route
+          path={routes.service.partnerManagers.list}
+          element={<PartnerManagerList />}
+        />
+        <Route
+          path={routes.service.partnerManagers.onboard}
+          element={<PartnerManagerOnboard />}
+        />
+        <Route
+          path={routes.service.partnerManagers.edit}
+          element={<PartnerManagerOnboard />}
+        />
+
+        <Route path={routes.service.serviceListings} element={<ServiceListingsPage />} />
+        <Route path={routes.service.bookings} element={<BookingsPage />} />
+        <Route path={routes.service.reports} element={<ServiceReportsPage />} />
+        <Route path={routes.service.settings} element={<ServiceSettingsPage />} />
+      </Route>
+
+      {/* ========== SERVICE PARTNER (self-service portal) ========== */}
+      <Route element={<ServicePartnerLayout />}>
+        <Route
+          path={routes.servicePartner.dashboard}
+          element={<ServicePartnerDashboard />}
+        />
+        <Route
+          path={routes.servicePartner.onboarding}
+          element={<ServicePartnerOnboarding />}
+        />
+        <Route
+          path={routes.servicePartner.changePassword}
+          element={<ChangePasswordPage />}
+        />
+        <Route path={routes.servicePartner.profile} element={<MyProfile />} />
+
+        {/* My Services */}
+        <Route
+          path={routes.servicePartner.services.list}
+          element={<MyServicesList />}
+        />
+        <Route
+          path={routes.servicePartner.services.add}
+          element={<MyServiceForm />}
+        />
+        <Route
+          path={routes.servicePartner.services.edit}
+          element={<MyServiceForm />}
+        />
+
+        <Route path={routes.servicePartner.rateCard} element={<RateCardPage />} />
+
+        {/* Bookings */}
+        <Route
+          path={routes.servicePartner.bookings.list}
+          element={<BookingsList />}
+        />
+        <Route
+          path={routes.servicePartner.bookings.details}
+          element={<BookingDetails />}
+        />
+
+        <Route path={routes.servicePartner.reviews} element={<ReviewsList />} />
+        <Route path={routes.servicePartner.documents} element={<DocumentsPage />} />
+        <Route path={routes.servicePartner.settings} element={<SettingsPage />} />
+      </Route>
+
       {/* ========== HR ========== */}
       <Route element={<HrLayout />}>
         <Route path={routes.hr.dashboard} element={<HrDashboard />} />
@@ -337,6 +495,8 @@ export default function App() {
         path="*"
         element={user ? <NotFoundPage /> : <Navigate to="/login" replace />}
       />
-    </Routes>
-  );
+      </Routes>
+    </Suspense>
+
+);
 }

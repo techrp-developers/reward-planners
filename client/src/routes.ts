@@ -52,7 +52,18 @@ export const routes = {
       create:"/manager/reward-create",
       edit:"/manager/reward-edit/:id",
       mapping:"/manager/reward-mapping",
-    }
+    },
+    servicePartners: {
+      list: "/manager/service-partners",
+      onboard: "/manager/service-partners/onboard",
+      edit: "/manager/service-partners/edit/:id",
+      profile: "/manager/service-partners/:id",
+    },
+    partnerManagers: {
+      list: "/manager/partner-managers",
+      onboard: "/manager/partner-managers/onboard",
+      edit: "/manager/partner-managers/edit/:id",
+    },
   },
   admin: {
     dashboard: "/admin/dashboard",
@@ -69,7 +80,44 @@ export const routes = {
     changePassword: "/hr/change-password",
     onboarding: "/hr/onboarding",
     employees: "/hr/employees",
-      rewards: "/hr/rewards", 
+      rewards: "/hr/rewards",
 
+  },
+  service: {
+    dashboard: "/service/dashboard",
+    servicePartners: {
+      list: "/service/service-partners",
+      onboard: "/service/service-partners/onboard",
+      edit: "/service/service-partners/edit/:id",
+      profile: "/service/service-partners/:id",
+    },
+    partnerManagers: {
+      list: "/service/partner-managers",
+      onboard: "/service/partner-managers/onboard",
+      edit: "/service/partner-managers/edit/:id",
+    },
+    serviceListings: "/service/service-listings",
+    bookings: "/service/bookings",
+    reports: "/service/reports",
+    settings: "/service/settings",
+  },
+  servicePartner: {
+    dashboard: "/service-partner/dashboard",
+    onboarding: "/service-partner/onboarding",
+    changePassword: "/service-partner/change-password",
+    profile: "/service-partner/profile",
+    services: {
+      list: "/service-partner/services",
+      add: "/service-partner/services/add",
+      edit: "/service-partner/services/edit/:id",
+    },
+    rateCard: "/service-partner/rate-card",
+    bookings: {
+      list: "/service-partner/bookings",
+      details: "/service-partner/bookings/:bookingId",
+    },
+    reviews: "/service-partner/reviews",
+    documents: "/service-partner/documents",
+    settings: "/service-partner/settings",
   },
 };
