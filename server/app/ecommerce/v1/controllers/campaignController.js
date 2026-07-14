@@ -2,9 +2,10 @@ const db = require("../../../../config/database");
 const CampaignModel = require("../../../../models/campaignModel");
 const RewardModel = require("../../../../models/rewardModel");
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
-function getPublicUrl(path) {
+function getPublicUrl(path, updatedAt) {
   if (!path) return null;
-  return `${CDN_BASE_URL}/${path}`;
+  const version = updatedAt ? `?v=${encodeURIComponent(updatedAt)}` : "";
+  return `${CDN_BASE_URL}/${path}${version}`;
 }
 const {
   calculateReward,
@@ -162,12 +163,12 @@ class CampaignController {
 
           const rp_price = (salePrice - redeem_coins).toFixed(2);
 
-          const { image_url, ...rest } = product;
+          const { image_url, image_updated_at, ...rest } = product;
 
           return {
             ...rest,
 
-            image: image_url ? `${CDN_BASE_URL}/${image_url}` : null,
+            image: getPublicUrl(image_url, image_updated_at),
 
             price: `₹${salePrice}`,
             originalPrice: mrp ? `₹${mrp}` : null,

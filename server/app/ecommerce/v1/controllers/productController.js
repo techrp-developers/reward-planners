@@ -4,6 +4,13 @@ const db = require("../../../../config/database");
 const fs = require("fs");
 const path = require("path");
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
+
+function buildImageUrl(path, updatedAt) {
+  if (!path) return null;
+  const version = updatedAt ? `?v=${encodeURIComponent(updatedAt)}` : "";
+  return `${CDN_BASE_URL}/${path}${version}`;
+}
+
 const {
   calculateReward,
   resolveRedemption,
@@ -143,10 +150,12 @@ class ProductController {
             product.images && product.images.length
               ? product.images[0].image_url
               : null;
+          const imageUpdatedAt =
+            product.images && product.images.length
+              ? product.images[0].updated_at
+              : null;
 
-          const mainImage = imagePath
-            ? `${CDN_BASE_URL}/${imagePath}?v=${product.updated_at || Date.now()}`
-            : null;
+          const mainImage = buildImageUrl(imagePath, imageUpdatedAt);
 
           const salePrice = product.sale_price ? Number(product.sale_price) : 0;
           const mrp = product.mrp ? Number(product.mrp) : 0;
@@ -293,8 +302,11 @@ class ProductController {
           const imagePath = product.images?.length
             ? product.images[0].image_url
             : null;
+          const imageUpdatedAt = product.images?.length
+            ? product.images[0].updated_at
+            : null;
 
-          const mainImage = imagePath ? `${CDN_BASE_URL}/${imagePath}` : null;
+          const mainImage = buildImageUrl(imagePath, imageUpdatedAt);
 
           const salePrice = Number(product.sale_price) || 0;
           const mrp = Number(product.mrp) || 0;
@@ -440,8 +452,11 @@ class ProductController {
           const imagePath = product.images?.length
             ? product.images[0].image_url
             : null;
+          const imageUpdatedAt = product.images?.length
+            ? product.images[0].updated_at
+            : null;
 
-          const mainImage = imagePath ? `${CDN_BASE_URL}/${imagePath}` : null;
+          const mainImage = buildImageUrl(imagePath, imageUpdatedAt);
 
           const salePrice = Number(product.sale_price) || 0;
           const mrp = Number(product.mrp) || 0;
@@ -868,7 +883,8 @@ class ProductController {
           DISTINCT CONCAT(
             pi.image_id, '::',
             pi.image_url, '::',
-            pi.sort_order
+            pi.sort_order, '::',
+            pi.updated_at
           )
           ORDER BY pi.sort_order ASC
         ) AS images
@@ -930,9 +946,10 @@ class ProductController {
           // Parse image
           let image = null;
           if (row.images) {
-            const first = row.images.split(",")[0];
-            const imagePath = first.split("::")[1];
-            image = imagePath ? `${CDN_BASE_URL}/${imagePath}` : null;
+            const parts = row.images.split(",")[0].split("::");
+            const imagePath = parts[1];
+            const imageUpdatedAt = parts[parts.length - 1];
+            image = buildImageUrl(imagePath, imageUpdatedAt);
           }
 
           /* ===============================
@@ -1406,10 +1423,12 @@ class ProductController {
             product.images && product.images.length
               ? product.images[0].image_url
               : null;
+          const imageUpdatedAt =
+            product.images && product.images.length
+              ? product.images[0].updated_at
+              : null;
 
-          const mainImage = imagePath
-            ? `${CDN_BASE_URL}/${imagePath}?v=${product.updated_at || Date.now()}`
-            : null;
+          const mainImage = buildImageUrl(imagePath, imageUpdatedAt);
 
           const salePrice = product.sale_price ? Number(product.sale_price) : 0;
 

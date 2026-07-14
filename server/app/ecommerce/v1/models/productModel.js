@@ -9,9 +9,10 @@ const {
 } = require("../utils/rewardCalculate");
 
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
-function getPublicUrl(path) {
+function getPublicUrl(path, updatedAt) {
   if (!path) return null;
-  return `${CDN_BASE_URL}/${path}`;
+  const version = updatedAt ? `?v=${encodeURIComponent(updatedAt)}` : "";
+  return `${CDN_BASE_URL}/${path}${version}`;
 }
 
 class ProductModel {
@@ -240,7 +241,8 @@ class ProductModel {
               pi.image_id, '::',
               pi.image_url, '::',
               pi.type, '::',
-              pi.sort_order
+              pi.sort_order, '::',
+              pi.updated_at
             )
             ORDER BY pi.sort_order ASC
           ) AS images
@@ -298,13 +300,15 @@ class ProductModel {
 
         if (row.images) {
           images = row.images.split(",").map((item) => {
-            const [image_id, image_url, type, sort_order] = item.split("::");
+            const [image_id, image_url, type, sort_order, updated_at] =
+              item.split("::");
 
             return {
               image_id: Number(image_id),
               image_url,
               type,
               sort_order: Number(sort_order),
+              updated_at,
             };
           });
         }
@@ -551,13 +555,15 @@ class ProductModel {
 
       // ================= PRODUCT IMAGES =================
       const [images] = await db.execute(
-        `SELECT image_url
+        `SELECT image_url, updated_at
        FROM product_images
        WHERE product_id = ?`,
         [productId],
       );
 
-      product.images = images.map((img) => getPublicUrl(img.image_url));
+      product.images = images.map((img) =>
+        getPublicUrl(img.image_url, img.updated_at),
+      );
 
       // ================= PRODUCT VIDEO =================
       const [videos] = await db.execute(
@@ -644,7 +650,7 @@ class ProductModel {
         // Variant images
         const [variantImages] = await db.execute(
           `
-        SELECT image_url
+        SELECT image_url, updated_at
         FROM product_variant_images
         WHERE variant_id = ?
         ORDER BY
@@ -658,7 +664,7 @@ class ProductModel {
         );
 
         variant.images = variantImages.map((img) =>
-          getPublicUrl(img.image_url),
+          getPublicUrl(img.image_url, img.updated_at),
         );
       }
 
@@ -983,7 +989,8 @@ class ProductModel {
             pi.image_id, '::',
             pi.image_url, '::',
             pi.type, '::',
-            pi.sort_order
+            pi.sort_order, '::',
+            pi.updated_at
           )
           ORDER BY pi.sort_order ASC
         ) AS images
@@ -1040,12 +1047,14 @@ class ProductModel {
 
         if (row.images) {
           images = row.images.split(",").map((item) => {
-            const [image_id, image_url, type, sort_order] = item.split("::");
+            const [image_id, image_url, type, sort_order, updated_at] =
+              item.split("::");
             return {
               image_id: Number(image_id),
               image_url,
               type,
               sort_order: Number(sort_order),
+              updated_at,
             };
           });
         }
@@ -1194,7 +1203,8 @@ class ProductModel {
             pi.image_id, '::',
             pi.image_url, '::',
             pi.type, '::',
-            pi.sort_order
+            pi.sort_order, '::',
+            pi.updated_at
           )
           ORDER BY pi.sort_order ASC
         ) AS images
@@ -1246,12 +1256,14 @@ class ProductModel {
 
         if (row.images) {
           images = row.images.split(",").map((item) => {
-            const [image_id, image_url, type, sort_order] = item.split("::");
+            const [image_id, image_url, type, sort_order, updated_at] =
+              item.split("::");
             return {
               image_id: Number(image_id),
               image_url,
               type,
               sort_order: Number(sort_order),
+              updated_at,
             };
           });
         }
@@ -1361,6 +1373,7 @@ class ProductModel {
       p.product_id AS id,
       p.product_name AS title,
       pi.image_url AS image,
+      pi.updated_at AS image_updated_at,
       'product' AS type
 
     FROM eproducts p
@@ -1427,10 +1440,12 @@ class ProductModel {
       image: getPublicUrl(sub.image),
     }));
 
-    const formattedProducts = products.map((prod) => ({
-      ...prod,
-      image: getPublicUrl(prod.image),
-    }));
+    const formattedProducts = products.map(
+      ({ image, image_updated_at, ...prod }) => ({
+        ...prod,
+        image: getPublicUrl(image, image_updated_at),
+      }),
+    );
 
     return [
       ...formattedCategories,
@@ -1502,7 +1517,8 @@ class ProductModel {
           DISTINCT CONCAT(
             pi.image_id, '::',
             pi.image_url, '::',
-            pi.sort_order
+            pi.sort_order, '::',
+            pi.updated_at
           )
           ORDER BY pi.sort_order ASC
         ) AS images
@@ -1589,9 +1605,10 @@ class ProductModel {
           let image = null;
 
           if (row.images) {
-            const first = row.images.split(",")[0];
-            const imagePath = first.split("::")[1];
-            image = imagePath ? `${CDN_BASE_URL}/${imagePath}` : null;
+            const parts = row.images.split(",")[0].split("::");
+            const imagePath = parts[1];
+            const imageUpdatedAt = parts[parts.length - 1];
+            image = getPublicUrl(imagePath, imageUpdatedAt);
           }
 
           /* ===============================
@@ -1694,7 +1711,7 @@ class ProductModel {
         ) AS total_score,
 
         GROUP_CONCAT(
-          DISTINCT CONCAT(pi.image_id,'::',pi.image_url)
+          DISTINCT CONCAT(pi.image_id,'::',pi.image_url,'::',pi.updated_at)
         ) AS images
 
       FROM eproducts p
@@ -1794,9 +1811,10 @@ class ProductModel {
 
           let image = null;
           if (row.images) {
-            const first = row.images.split(",")[0];
-            const imagePath = first.split("::")[1];
-            image = imagePath ? `${CDN_BASE_URL}/${imagePath}` : null;
+            const parts = row.images.split(",")[0].split("::");
+            const imagePath = parts[1];
+            const imageUpdatedAt = parts[parts.length - 1];
+            image = getPublicUrl(imagePath, imageUpdatedAt);
           }
 
           /* ===============================
@@ -1897,7 +1915,8 @@ class ProductModel {
           DISTINCT CONCAT(
             pi.image_id,'::',
             pi.image_url,'::',
-            pi.sort_order
+            pi.sort_order,'::',
+            pi.updated_at
           )
           ORDER BY pi.sort_order ASC
         ) AS images
@@ -1969,9 +1988,10 @@ class ProductModel {
 
           let image = null;
           if (row.images) {
-            const first = row.images.split(",")[0];
-            const imagePath = first.split("::")[1];
-            image = imagePath ? `${CDN_BASE_URL}/${imagePath}` : null;
+            const parts = row.images.split(",")[0].split("::");
+            const imagePath = parts[1];
+            const imageUpdatedAt = parts[parts.length - 1];
+            image = getPublicUrl(imagePath, imageUpdatedAt);
           }
 
           /* ===============================
@@ -2075,7 +2095,8 @@ class ProductModel {
           DISTINCT CONCAT(
             pi.image_id,'::',
             pi.image_url,'::',
-            pi.sort_order
+            pi.sort_order,'::',
+            pi.updated_at
           )
           ORDER BY pi.sort_order ASC
         ) AS images
@@ -2152,9 +2173,10 @@ class ProductModel {
 
           let image = null;
           if (row.images) {
-            const first = row.images.split(",")[0];
-            const imagePath = first.split("::")[1];
-            image = imagePath ? `${CDN_BASE_URL}/${imagePath}` : null;
+            const parts = row.images.split(",")[0].split("::");
+            const imagePath = parts[1];
+            const imageUpdatedAt = parts[parts.length - 1];
+            image = getPublicUrl(imagePath, imageUpdatedAt);
           }
 
           /* ===============================
@@ -2254,7 +2276,8 @@ class ProductModel {
           DISTINCT CONCAT(
             pi.image_id,'::',
             pi.image_url,'::',
-            pi.sort_order
+            pi.sort_order,'::',
+            pi.updated_at
           )
           ORDER BY pi.sort_order ASC
         ) AS images
@@ -2321,9 +2344,10 @@ class ProductModel {
 
           let image = null;
           if (row.images) {
-            const first = row.images.split(",")[0];
-            const imagePath = first.split("::")[1];
-            image = imagePath ? `${CDN_BASE_URL}/${imagePath}` : null;
+            const parts = row.images.split(",")[0].split("::");
+            const imagePath = parts[1];
+            const imageUpdatedAt = parts[parts.length - 1];
+            image = getPublicUrl(imagePath, imageUpdatedAt);
           }
 
           /* ===============================
@@ -2426,7 +2450,8 @@ class ProductModel {
           DISTINCT CONCAT(
             pi.image_id,'::',
             pi.image_url,'::',
-            pi.sort_order
+            pi.sort_order,'::',
+            pi.updated_at
           )
           ORDER BY pi.sort_order ASC
         ) AS images
@@ -2493,9 +2518,10 @@ class ProductModel {
 
           let image = null;
           if (row.images) {
-            const first = row.images.split(",")[0];
-            const imagePath = first.split("::")[1];
-            image = imagePath ? `${CDN_BASE_URL}/${imagePath}` : null;
+            const parts = row.images.split(",")[0].split("::");
+            const imagePath = parts[1];
+            const imageUpdatedAt = parts[parts.length - 1];
+            image = getPublicUrl(imagePath, imageUpdatedAt);
           }
 
           /* ===============================
@@ -2597,7 +2623,8 @@ class ProductModel {
           DISTINCT CONCAT(
             pi.image_id,'::',
             pi.image_url,'::',
-            pi.sort_order
+            pi.sort_order,'::',
+            pi.updated_at
           )
           ORDER BY pi.sort_order ASC
         ) AS images
@@ -2660,9 +2687,10 @@ class ProductModel {
 
           let image = null;
           if (row.images) {
-            const first = row.images.split(",")[0];
-            const imagePath = first.split("::")[1];
-            image = imagePath ? `${CDN_BASE_URL}/${imagePath}` : null;
+            const parts = row.images.split(",")[0].split("::");
+            const imagePath = parts[1];
+            const imageUpdatedAt = parts[parts.length - 1];
+            image = getPublicUrl(imagePath, imageUpdatedAt);
           }
 
           /* ===============================
@@ -2762,7 +2790,8 @@ class ProductModel {
           DISTINCT CONCAT(
             pi.image_id,'::',
             pi.image_url,'::',
-            pi.sort_order
+            pi.sort_order,'::',
+            pi.updated_at
           )
           ORDER BY pi.sort_order ASC
         ) AS images
@@ -2814,9 +2843,10 @@ class ProductModel {
 
           let image = null;
           if (row.images) {
-            const first = row.images.split(",")[0];
-            const imagePath = first.split("::")[1];
-            image = imagePath ? `${CDN_BASE_URL}/${imagePath}` : null;
+            const parts = row.images.split(",")[0].split("::");
+            const imagePath = parts[1];
+            const imageUpdatedAt = parts[parts.length - 1];
+            image = getPublicUrl(imagePath, imageUpdatedAt);
           }
 
           /* ===============================
