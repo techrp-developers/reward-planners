@@ -217,6 +217,7 @@ function buildBodyValues(templateKey, ctx) {
 
     case "reward_planners_launch_inamdar":
     case "reward_planners_launch_ddm":
+    case "reward_planners_launch_lavender":
     case "reward_planners_launch":
     case "reward_planners_launch_invitation":
       return [name];

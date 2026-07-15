@@ -119,11 +119,13 @@ class GlobalModel {
      FROM company_users
      WHERE company_id = ?
        AND status = 1
-       AND email IS NOT NULL
-       AND TRIM(email) <> ''
-       AND LOWER(TRIM(email)) NOT LIKE 'temp%'
        AND contact IS NOT NULL
-       AND TRIM(contact) <> ''`,
+       AND TRIM(contact) <> ''
+       AND (
+         email IS NULL
+         OR TRIM(email) = ''
+         OR LOWER(TRIM(email)) NOT LIKE 'temp%'
+       )`,
       [companyId],
     );
 
