@@ -859,7 +859,7 @@ class CheckoutModel {
   }
 
   // Get checkout details
-  async getCheckoutCart(userId, useRewards = true) {
+  async getCheckoutCart(userId, useRewards = true, addressId = null) {
     // ===============================
     // 1. WALLET
     // ===============================
@@ -1020,11 +1020,17 @@ class CheckoutModel {
     // ===============================
     // 5. FETCH DEFAULT ADDRESS
     // ===============================
-    const [addressRows] = await db.execute(
-      `SELECT zipcode FROM customer_addresses
-     WHERE user_id = ? AND is_default = 1 LIMIT 1`,
-      [userId],
-    );
+    const [addressRows] = addressId
+      ? await db.execute(
+          `SELECT zipcode FROM customer_addresses
+           WHERE user_id = ? AND address_id = ? LIMIT 1`,
+          [userId, addressId],
+        )
+      : await db.execute(
+          `SELECT zipcode FROM customer_addresses
+           WHERE user_id = ? AND is_default = 1 LIMIT 1`,
+          [userId],
+        );
 
     // if (!addressRows.length) throw new Error("INVALID_ADDRESS");
 
@@ -1051,7 +1057,9 @@ class CheckoutModel {
 
       const group = vendorGroups[vendorId];
       group.totalWeightKg += item.quantity * item.weight;
-      group.totalAmount += item.itemTotal;
+      // Keep the courier quote identical to checkoutCart(), which uses the
+      // merchandise amount remaining after reward redemption.
+      group.totalAmount += item.itemTotal - item.redeemable;
       group.length = Math.max(group.length, item.length);
       group.breadth = Math.max(group.breadth, item.breadth);
       group.height += item.height * item.quantity;
@@ -1180,6 +1188,7 @@ class CheckoutModel {
     quantity,
     useRewards = true,
     userId,
+    addressId = null,
   }) {
     // ===============================
     // 1. WALLET
@@ -1282,11 +1291,17 @@ class CheckoutModel {
     // ===============================
     // 6. SHIPPING (UNCHANGED)
     // ===============================
-    const [addressRows] = await db.execute(
-      `SELECT zipcode FROM customer_addresses
-     WHERE user_id = ? AND is_default = 1 LIMIT 1`,
-      [userId],
-    );
+    const [addressRows] = addressId
+      ? await db.execute(
+          `SELECT zipcode FROM customer_addresses
+           WHERE user_id = ? AND address_id = ? LIMIT 1`,
+          [userId, addressId],
+        )
+      : await db.execute(
+          `SELECT zipcode FROM customer_addresses
+           WHERE user_id = ? AND is_default = 1 LIMIT 1`,
+          [userId],
+        );
 
     const destinationPincode = addressRows[0]?.zipcode || null;
     const addressRequired = !destinationPincode;
@@ -1308,7 +1323,9 @@ class CheckoutModel {
         origin: vendorAddress.pincode,
         destination: destinationPincode,
         payment_type: "prepaid",
-        order_amount: itemTotal.toString(),
+        // Keep the courier quote identical to buyNow(), which uses the
+        // merchandise amount remaining after reward redemption.
+        order_amount: finalItemTotal.toString(),
         weight: Math.round(quantity * Number(row.weight) * 1000).toString(),
         length: Math.round(row.length).toString(),
         breadth: Math.round(row.breadth).toString(),

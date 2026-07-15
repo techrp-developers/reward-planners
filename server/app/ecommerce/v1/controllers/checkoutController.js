@@ -277,11 +277,20 @@ class CheckoutController {
         });
       }
 
-      const { use_rewards = "true" } = req.query;
+      const { use_rewards = "true", address_id } = req.query;
+
+      const addressId = address_id ? Number(address_id) : null;
+      if (address_id && (!Number.isInteger(addressId) || addressId < 1)) {
+        return res.status(400).json({
+          success: false,
+          message: "Valid address_id required",
+        });
+      }
 
       const checkoutData = await CheckoutModel.getCheckoutCart(
         userId,
         use_rewards === "true",
+        addressId,
       );
 
       return res.json({
@@ -331,6 +340,7 @@ class CheckoutController {
         variant_id,
         qty = 1,
         use_rewards = "true",
+        address_id,
       } = req.query;
 
       if (!product_id || !variant_id || Number(qty) < 1) {
@@ -340,12 +350,21 @@ class CheckoutController {
         });
       }
 
+      const addressId = address_id ? Number(address_id) : null;
+      if (address_id && (!Number.isInteger(addressId) || addressId < 1)) {
+        return res.status(400).json({
+          success: false,
+          message: "Valid address_id required",
+        });
+      }
+
       const checkoutData = await CheckoutModel.getBuyNowCheckout({
         productId: Number(product_id),
         variantId: Number(variant_id),
         quantity: Number(qty),
         useRewards: use_rewards === "true",
         userId,
+        addressId,
       });
 
       return res.json({
