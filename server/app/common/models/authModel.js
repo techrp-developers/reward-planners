@@ -173,6 +173,23 @@ class authModel {
     return rows[0];
   }
 
+  async findEmployeeByPhone(phone) {
+    const [rows] = await db.execute(
+      `SELECT
+        id,
+        company_id,
+        name,
+        email,
+        contact AS phone
+     FROM company_users
+     WHERE TRIM(contact) = ? AND status = 1
+     LIMIT 1`,
+      [phone],
+    );
+
+    return rows[0];
+  }
+
   async storeActivationOTP(email, otp) {
     const expiry = new Date(Date.now() + 10 * 60 * 1000);
 
@@ -301,7 +318,7 @@ class authModel {
         company_id,
         company_user_id,
         name,
-        email.toLowerCase(),
+        email ? email.toLowerCase() : null,
         normalizedPhone,
         password,
       ],
