@@ -242,11 +242,130 @@ class PaymentController {
         });
       }
 
+      // A lost create-order response can be retried by the client. Reuse the
+      // recent untouched recharge order instead of creating a second payable
+      // transaction. Fetched-bill orders already have single-use protection.
+      if (fetchBillFlag === 0) {
+        const [[existingOrder]] = await conn.execute(
+          `SELECT t.id AS transaction_id, ro.razorpay_order_id, ro.amount
+           FROM bbps_transactions t
+           JOIN razorpay_orders ro
+             ON ro.ref_id = t.id AND ro.module = 'bbps'
+           WHERE t.user_id = ?
+             AND t.operator_id = ?
+             AND t.utility_acc_no = ?
+             AND t.recharge_plan_id = ?
+             AND COALESCE(t.recharge_circle_id, '') = COALESCE(?, '')
+             AND t.amount = ?
+             AND t.bbps_status = 'INIT'
+             AND ro.status = 'created'
+             AND t.created_at >= DATE_SUB(NOW(), INTERVAL 10 MINUTE)
+           ORDER BY t.id DESC
+           LIMIT 1
+           FOR UPDATE`,
+          [
+            userId,
+            operator_id,
+            utilityAccountNo,
+            rechargePlanId,
+            rechargeCircleId,
+            amount,
+          ],
+        );
+
+        if (existingOrder) {
+          await conn.commit();
+          return res.json({
+            success: true,
+            data: {
+              key: process.env.RAZOR_API_KEY,
+              orderId: existingOrder.razorpay_order_id,
+              amount: Math.round(Number(existingOrder.amount) * 100),
+              currency: "INR",
+              transaction_id: existingOrder.transaction_id,
+              reused: true,
+            },
+          });
+        }
+      }
+
       console.error("createOrder error:", err);
 
       return res.status(500).json({
         success: false,
         message: err.message,
+      });
+    } finally {
+      conn.release();
+    }
+  }
+
+  async cancelUnpaidOrder(req, res) {
+    const conn = await db.getConnection();
+    try {
+      const userId = req.user?.user_id;
+      const transactionId = Number(req.body?.transaction_id);
+
+      if (!userId) {
+        return res.status(401).json({ success: false, message: "Unauthorized user" });
+      }
+      if (!Number.isInteger(transactionId) || transactionId <= 0) {
+        return res.status(400).json({ success: false, message: "Valid transaction_id required" });
+      }
+
+      await conn.beginTransaction();
+      const txn = await TransactionModel.getByIdForUpdate(transactionId, conn);
+      if (!txn || Number(txn.user_id) !== Number(userId)) {
+        await conn.rollback();
+        return res.status(404).json({ success: false, message: "Transaction not found" });
+      }
+      if (txn.bbps_status !== "INIT") {
+        await conn.rollback();
+        return res.status(409).json({
+          success: false,
+          status: txn.bbps_status,
+          message: "Transaction can no longer be cancelled as unpaid",
+        });
+      }
+
+      const [[rpOrder]] = await conn.execute(
+        `SELECT razorpay_order_id, status, razorpay_payment_id
+         FROM razorpay_orders
+         WHERE ref_id = ? AND module = 'bbps'
+         LIMIT 1 FOR UPDATE`,
+        [transactionId],
+      );
+      if (!rpOrder || rpOrder.status !== "created" || rpOrder.razorpay_payment_id) {
+        await conn.rollback();
+        return res.status(409).json({
+          success: false,
+          message: "Payment may already be in progress",
+        });
+      }
+
+      // Razorpay rejects cancellation once an order has a payment attempt,
+      // which makes this the authoritative safety check before local expiry.
+      await razorpay.orders.cancel(rpOrder.razorpay_order_id);
+
+      await conn.execute(
+        `UPDATE razorpay_orders SET status = 'failed'
+         WHERE razorpay_order_id = ? AND status = 'created'`,
+        [rpOrder.razorpay_order_id],
+      );
+      await TransactionModel.updateStatus(
+        transactionId,
+        "PAYMENT_FAILED",
+        { message: "Customer cancelled before payment" },
+        conn,
+      );
+      await conn.commit();
+      return res.json({ success: true, status: "cancelled", transaction_id: transactionId });
+    } catch (error) {
+      await conn.rollback();
+      console.error("[BBPS][cancel-order] error", error);
+      return res.status(409).json({
+        success: false,
+        message: "Payment could not be safely cancelled",
       });
     } finally {
       conn.release();
@@ -358,15 +477,27 @@ class PaymentController {
 
       // DUPLICATE PAYMENT PROTECTION
       const [existingPayment] = await conn.execute(
-        `SELECT id FROM razorpay_orders WHERE razorpay_payment_id=?`,
+        `SELECT ro.ref_id, t.user_id, t.bbps_status
+         FROM razorpay_orders ro
+         JOIN bbps_transactions t ON t.id = ro.ref_id
+         WHERE ro.razorpay_payment_id = ? AND ro.module = 'bbps'`,
         [razorpay_payment_id],
       );
 
       if (existingPayment.length) {
+        const duplicate = existingPayment[0];
         await conn.rollback();
+        if (Number(duplicate.user_id) !== Number(userId)) {
+          return res.status(403).json({
+            success: false,
+            message: "Unauthorized payment",
+          });
+        }
         return res.json({
-          success: true,
+          success: duplicate.bbps_status === "PAID",
           message: "Already processed",
+          transaction_id: duplicate.ref_id,
+          status: duplicate.bbps_status,
         });
       }
 

@@ -365,6 +365,51 @@ class PaymentController {
     });
   }
 
+  async cancelPendingOrder(req, res) {
+    const userId = req.user?.user_id;
+    const orderId = Number(req.params.orderId);
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized user" });
+    }
+    if (!Number.isInteger(orderId) || orderId <= 0) {
+      return res.status(400).json({ message: "Valid orderId required" });
+    }
+
+    const conn = await db.getConnection();
+    try {
+      await conn.beginTransaction();
+      const [[order]] = await conn.query(
+        `SELECT status FROM eorders
+         WHERE order_id = ? AND user_id = ?
+         LIMIT 1 FOR UPDATE`,
+        [orderId, userId],
+      );
+
+      if (!order) {
+        await conn.rollback();
+        return res.status(404).json({ message: "Order not found" });
+      }
+      if (order.status !== "pending_payment") {
+        await conn.rollback();
+        return res.status(409).json({
+          status: order.status,
+          message: "Order can no longer be cancelled as unpaid",
+        });
+      }
+
+      await expirePendingOrder(conn, orderId);
+      await conn.commit();
+      return res.json({ success: true, status: "cancelled", orderId });
+    } catch (error) {
+      await conn.rollback();
+      console.error("Cancel pending payment order error:", error);
+      return res.status(500).json({ message: "Unable to cancel pending order" });
+    } finally {
+      conn.release();
+    }
+  }
+
   // =================
   // REFUND LOGIC
   // =================

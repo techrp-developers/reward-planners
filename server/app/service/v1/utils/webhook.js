@@ -18,11 +18,24 @@ async function processEvent(req) {
     const paymentId = payment.id;
 
     const [rpOrder] = await db.execute(
-      `SELECT ref_id FROM razorpay_orders WHERE razorpay_order_id = ?`,
+      `SELECT ref_id, amount FROM razorpay_orders WHERE razorpay_order_id = ?`,
       [razorpayOrderId],
     );
 
     if (!rpOrder.length) return;
+
+    if (
+      payment.currency !== "INR" ||
+      Number(payment.amount) !== Math.round(Number(rpOrder[0].amount) * 100)
+    ) {
+      console.error("[service webhook] Captured payment amount mismatch", {
+        razorpayOrderId,
+        expected: Math.round(Number(rpOrder[0].amount) * 100),
+        received: payment.amount,
+        currency: payment.currency,
+      });
+      return;
+    }
 
     const parentOrderId = rpOrder[0].ref_id;
 

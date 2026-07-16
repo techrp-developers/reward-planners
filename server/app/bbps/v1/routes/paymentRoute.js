@@ -27,4 +27,11 @@ router.post(
 // retry Transaction
 router.post("/retry", auth, paymentLimiter, PaymentController.retryTransaction);
 
+router.post(
+  "/cancel-order",
+  auth,
+  paymentLimiter,
+  PaymentController.cancelUnpaidOrder,
+);
+
 module.exports = router;

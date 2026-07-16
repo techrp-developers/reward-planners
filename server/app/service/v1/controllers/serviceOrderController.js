@@ -14,6 +14,9 @@ const {
   finalizePaidServiceOrder,
   generateInvoiceOnce,
 } = require("../utils/paymentFinalizer");
+const {
+  deriveServicePaymentStatus,
+} = require("../utils/paymentState");
 const { notifyUser } = require("../../../common/utils/notification");
 
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
@@ -274,7 +277,12 @@ class ServiceOrderController {
         .update(body.toString())
         .digest("hex");
 
-      if (expectedSignature !== razorpay_signature) {
+      const expectedBuffer = Buffer.from(expectedSignature, "hex");
+      const receivedBuffer = Buffer.from(razorpay_signature, "hex");
+      if (
+        expectedBuffer.length !== receivedBuffer.length ||
+        !crypto.timingSafeEqual(expectedBuffer, receivedBuffer)
+      ) {
         return res.status(400).json({
           success: false,
           message: "Payment verification failed",
@@ -392,6 +400,47 @@ class ServiceOrderController {
       if (connection) {
         connection.release();
       }
+    }
+  }
+
+  async paymentStatus(req, res) {
+    res.set("Cache-Control", "no-store");
+    const userId = req.user?.user_id;
+    const parentOrderId = String(req.params.parentOrderId || "").trim();
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized user" });
+    }
+    if (!parentOrderId) {
+      return res.status(400).json({ success: false, message: "parentOrderId required" });
+    }
+
+    try {
+      const [orders] = await db.execute(
+        `SELECT id, status, payment_status
+         FROM service_orders
+         WHERE parent_order_id = ? AND user_id = ?`,
+        [parentOrderId, userId],
+      );
+
+      if (!orders.length) {
+        return res.status(404).json({ success: false, message: "Order not found" });
+      }
+
+      const paymentStatus = deriveServicePaymentStatus(orders);
+
+      return res.json({
+        success: true,
+        payment_status: paymentStatus,
+        parent_order_id: parentOrderId,
+        order_id: orders[0].id,
+      });
+    } catch (error) {
+      console.error("Service payment status error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Unable to fetch payment status",
+      });
     }
   }
 

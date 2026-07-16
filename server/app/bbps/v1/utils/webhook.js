@@ -32,7 +32,10 @@ async function processEvent(req) {
         return;
       }
 
-      if (Number(payment.amount) !== Math.round(Number(rpOrder.amount) * 100)) {
+      if (
+        payment.currency !== "INR" ||
+        Number(payment.amount) !== Math.round(Number(rpOrder.amount) * 100)
+      ) {
         throw new Error("Captured Razorpay payment amount mismatch");
       }
 
@@ -133,7 +136,7 @@ async function processEvent(req) {
 
       await conn.execute(
         `UPDATE razorpay_orders
-          SET raw_response=?
+          SET status='failed', raw_response=?
           WHERE razorpay_order_id=?`,
         [JSON.stringify(body), razorpayOrderId],
       );
