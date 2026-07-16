@@ -454,9 +454,6 @@ class orderModel {
       };
     });
 
-    // static for Now
-    const bagDiscount = 1032;
-
     return {
       order: {
         order_id: order.order_id,
@@ -491,7 +488,13 @@ class orderModel {
         reward_discount: Number(order.reward_discount),
         reward_coins_used: Number(order.reward_coins_used),
         reward_coins_earned: Number(order.reward_coins_earned),
-        bag_discount: 0,
+        bag_discount: Math.max(
+          0,
+          Number(order.product_total) +
+            Number(order.shipping_total) -
+            Number(order.reward_discount) -
+            Number(order.total_amount),
+        ),
         order_total: Number(order.total_amount),
       },
     };
