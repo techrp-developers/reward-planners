@@ -15,6 +15,7 @@ import {
   FiStar,
 } from "react-icons/fi";
 import { useAuth } from "../../auth/useAuth";
+import { hrApi } from "../../api/hrApi";
 
 /* ================= TYPES ================= */
 
@@ -25,7 +26,7 @@ interface Employee {
   phone: string;
   department: string;
   role: string;
-  status: "active" | "pending";
+  status: "active" | "pending" | "inactive";
   created_at: string;
   totalRewards: number; // added for rewards tracking
 }
@@ -45,12 +46,33 @@ interface DepartmentData {
   color: string;
 }
 
+interface DashboardData {
+  summary: {
+    total_employees: number;
+    active_employees: number;
+    inactive_employees: number;
+    pending_onboarding: number;
+    departments: number;
+  };
+  department_distribution: Array<{ name: string; count: number }>;
+  top_earners: Array<{
+    id: number;
+    name: string;
+    role: string;
+    department: string;
+    total_rewards: number;
+  }>;
+  total_rewards_distributed: number;
+  recent_employees: Array<Omit<Employee, "totalRewards">>;
+}
+
 /* ================= COMPONENT ================= */
 
 export default function HrDashboard() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
 
   /* ================= MOCK DATA WITH REWARDS ================= */
   useEffect(() => {
@@ -167,29 +189,50 @@ export default function HrDashboard() {
           totalRewards: 54000,
         },
       ];
-      setEmployees(mockEmployees);
-      setLoading(false);
+      void mockEmployees;
     }, 800);
 
     return () => clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    hrApi
+      .get("/employees/dashboard")
+      .then((response) => {
+        const data: DashboardData = response.data.data;
+        setDashboard(data);
+        setEmployees(
+          data.recent_employees.map((employee) => ({
+            ...employee,
+            totalRewards: 0,
+          })),
+        );
+      })
+      .catch((error) => console.error("Unable to load HR dashboard:", error))
+      .finally(() => setLoading(false));
+  }, []);
+
   // Top 10 employees by totalRewards
-  const topTenEmployees = [...employees]
-    .sort((a, b) => b.totalRewards - a.totalRewards)
-    .slice(0, 10);
+  const topTenEmployees = (dashboard?.top_earners || []).map((employee) => ({
+    ...employee,
+    totalRewards: employee.total_rewards,
+  }));
 
   // Total rewards distributed across all employees
-  const totalRewardsDistributed = employees.reduce(
-    (acc, curr) => acc + curr.totalRewards,
-    0
-  );
+  const totalRewardsDistributed = dashboard?.total_rewards_distributed || 0;
+  const summary = dashboard?.summary ?? {
+    total_employees: 0,
+    active_employees: 0,
+    inactive_employees: 0,
+    pending_onboarding: 0,
+    departments: 0,
+  };
 
   /* ================= STATS ================= */
   const stats: StatCard[] = [
     {
       title: "Total Employees",
-      value: employees.length,
+      value: summary.total_employees,
       icon: FiUsers,
       gradient: "from-[#852BAF] to-[#FC3F78]",
       trend: "+12%",
@@ -197,7 +240,7 @@ export default function HrDashboard() {
     },
     {
       title: "Active Employees",
-      value: employees.filter((e) => e.status === "active").length,
+      value: summary.active_employees,
       icon: FiUserCheck,
       gradient: "from-emerald-500 to-teal-600",
       trend: "+5%",
@@ -205,7 +248,7 @@ export default function HrDashboard() {
     },
     {
       title: "Pending Onboarding",
-      value: employees.filter((e) => e.status === "pending").length,
+      value: summary.pending_onboarding,
       icon: FiUserX,
       gradient: "from-amber-500 to-orange-600",
       trend: "-3%",
@@ -213,7 +256,7 @@ export default function HrDashboard() {
     },
     {
       title: "Departments",
-      value: [...new Set(employees.map((e) => e.department))].length,
+      value: summary.departments,
       icon: FiBriefcase,
       gradient: "from-rose-500 to-pink-600",
       trend: "+1",
@@ -222,17 +265,12 @@ export default function HrDashboard() {
   ];
 
   /* ================= DEPARTMENT DATA ================= */
-  const departmentCounts = employees.reduce((acc, emp) => {
-    acc[emp.department] = (acc[emp.department] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
-  const departmentData: DepartmentData[] = Object.entries(departmentCounts).map(
-    ([name, count], idx) => {
+  const departmentData: DepartmentData[] = (
+    dashboard?.department_distribution || []
+  ).map(({ name, count }, idx) => {
       const colors = ["#852BAF", "#FC3F78", "#8B5CF6", "#10B981", "#F59E0B", "#3B82F6", "#EC4899"];
       return { name, count, color: colors[idx % colors.length] };
-    }
-  );
+    });
 
   const maxCount = Math.max(...departmentData.map((d) => d.count), 1);
 
@@ -373,7 +411,7 @@ export default function HrDashboard() {
               <h2 className="text-lg font-bold text-gray-900">
                 Employee Status
               </h2>
-              <p className="text-sm text-gray-500">Active vs Pending overview</p>
+              <p className="text-sm text-gray-500">Active vs Inactive overview</p>
             </div>
           </div>
 
@@ -393,8 +431,8 @@ export default function HrDashboard() {
                   stroke="url(#gradientActive)"
                   strokeWidth="12"
                   strokeDasharray={`${
-                    (employees.filter((e) => e.status === "active").length /
-                      employees.length) *
+                    (summary.active_employees /
+                      Math.max(summary.total_employees, 1)) *
                     251.2
                   } 251.2`}
                   strokeLinecap="round"
@@ -407,13 +445,13 @@ export default function HrDashboard() {
                   stroke="#F59E0B"
                   strokeWidth="12"
                   strokeDasharray={`${
-                    (employees.filter((e) => e.status === "pending").length /
-                      employees.length) *
+                    (summary.inactive_employees /
+                      Math.max(summary.total_employees, 1)) *
                     251.2
                   } 251.2`}
                   strokeDashoffset={`-${
-                    (employees.filter((e) => e.status === "active").length /
-                      employees.length) *
+                    (summary.active_employees /
+                      Math.max(summary.total_employees, 1)) *
                     251.2
                   }`}
                   strokeLinecap="round"
@@ -428,7 +466,7 @@ export default function HrDashboard() {
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="text-center">
                   <p className="text-3xl font-bold text-gray-900">
-                    {employees.length}
+                    {summary.total_employees}
                   </p>
                   <p className="text-xs text-gray-500">Total</p>
                 </div>
@@ -441,7 +479,7 @@ export default function HrDashboard() {
                 <div className="w-4 h-4 rounded-full bg-gradient-to-r from-[#852BAF] to-[#FC3F78]"></div>
                 <div>
                   <p className="text-sm font-bold text-gray-900">
-                    {employees.filter((e) => e.status === "active").length}
+                    {summary.active_employees}
                   </p>
                   <p className="text-xs text-gray-500">Active</p>
                 </div>
@@ -450,9 +488,9 @@ export default function HrDashboard() {
                 <div className="w-4 h-4 rounded-full bg-amber-500"></div>
                 <div>
                   <p className="text-sm font-bold text-gray-900">
-                    {employees.filter((e) => e.status === "pending").length}
+                    {summary.inactive_employees}
                   </p>
-                  <p className="text-xs text-gray-500">Pending</p>
+                  <p className="text-xs text-gray-500">Inactive</p>
                 </div>
               </div>
             </div>
@@ -509,7 +547,7 @@ export default function HrDashboard() {
                     <div
                       className="h-full bg-emerald-500"
                       style={{
-                        width: `${(emp.totalRewards / topTenEmployees[0].totalRewards) * 100}%`,
+                        width: `${(emp.totalRewards / Math.max(topTenEmployees[0]?.totalRewards || 0, 1)) * 100}%`,
                       }}
                     ></div>
                   </div>
@@ -613,7 +651,7 @@ export default function HrDashboard() {
                         ) : (
                           <>
                             <FiClock className="w-3 h-3" />
-                            Pending
+                            Inactive
                           </>
                         )}
                       </span>
@@ -666,7 +704,7 @@ export default function HrDashboard() {
           <div>
             <h3 className="font-semibold">Pending Approvals</h3>
             <p className="text-sm text-purple-100">
-              {employees.filter((e) => e.status === "pending").length} employees
+              {summary.pending_onboarding} employees
               waiting
             </p>
           </div>

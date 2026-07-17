@@ -1,7 +1,9 @@
 import axios from "axios";
 
+const API_BASE_URL = "https://rewardplanners.com/api/crm";
+
 export const api = axios.create({
-  baseURL: "/api/crm", 
+  baseURL: API_BASE_URL,
 });
 
 api.interceptors.request.use(

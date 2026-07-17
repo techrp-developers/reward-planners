@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import Swal from "sweetalert2";
+import { hrApi } from "../../../../api/hrApi";
 import {
   FiUser,
   FiMail,
@@ -63,17 +64,24 @@ export default function EmployeeOnboarding() {
 
     setIsSubmitting(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      Swal.fire({
+    try {
+      await hrApi.post("/employees", formData);
+      await Swal.fire({
         title: "Success!",
         text: "Employee has been onboarded successfully!",
         icon: "success",
         confirmButtonColor: "#852BAF",
       });
       setFormData(initialForm);
+    } catch (error: any) {
+      await Swal.fire(
+        "Unable to add employee",
+        error.response?.data?.message || "Please check that the local server is running.",
+        "error",
+      );
+    } finally {
       setIsSubmitting(false);
-    }, 1000);
+    }
   };
 
   const handleCSVUpload = async () => {
@@ -84,17 +92,26 @@ export default function EmployeeOnboarding() {
 
     setIsSubmitting(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      Swal.fire({
+    try {
+      const uploadData = new FormData();
+      uploadData.append("file", csvFile);
+      const response = await hrApi.post("/employees/bulk-upload", uploadData);
+      await Swal.fire({
         title: "Success!",
-        text: `Successfully uploaded ${csvFile.name}`,
+        text: response.data?.message || `Successfully uploaded ${csvFile.name}`,
         icon: "success",
         confirmButtonColor: "#852BAF",
       });
       setCsvFile(null);
+    } catch (error: any) {
+      await Swal.fire(
+        "Unable to upload CSV",
+        error.response?.data?.message || "Please check the CSV and try again.",
+        "error",
+      );
+    } finally {
       setIsSubmitting(false);
-    }, 1000);
+    }
   };
 
   /* ================= UI ================= */
