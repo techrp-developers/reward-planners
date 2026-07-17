@@ -4,6 +4,7 @@ const {
   generateInvoiceOnce,
 } = require("./paymentFinalizer");
 const { notifyUser } = require("../../../common/utils/notification");
+const { releaseServiceCoins } = require("../../../../services/rewards/serviceWalletService");
 
 async function processEvent(req) {
   const body = req.parsedBody;
@@ -117,13 +118,25 @@ async function processEvent(req) {
 
     const parentOrderId = rpOrder[0].ref_id;
 
-    await db.execute(
+    const failureConn = await db.getConnection();
+    try {
+      await failureConn.beginTransaction();
+      const released = await releaseServiceCoins(failureConn, parentOrderId);
+      await failureConn.execute(
       `UPDATE service_orders
-       SET payment_status = 'failed'
+       SET payment_status = 'failed',
+           reward_coins_used = CASE WHEN ? THEN 0 ELSE reward_coins_used END
        WHERE parent_order_id = ?
        AND payment_status NOT IN ('paid', 'failed')`,
-      [parentOrderId],
-    );
+      [released ? 1 : 0, parentOrderId],
+      );
+      await failureConn.commit();
+    } catch (error) {
+      await failureConn.rollback();
+      throw error;
+    } finally {
+      failureConn.release();
+    }
 
     const [[orderUser]] = await db.execute(
       `SELECT user_id FROM service_orders WHERE parent_order_id = ? LIMIT 1`,

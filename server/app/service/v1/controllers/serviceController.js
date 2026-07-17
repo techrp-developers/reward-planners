@@ -15,6 +15,7 @@ const ServiceVariantModel = require("../models/serviceVariantModel");
 const ServiceDocumentModel = require("../models/serviceDocumentModel");
 const ServiceFormModel = require("../models/serviceFormModel");
 const ServiceSectionModel = require("../models/serviceSectionModel");
+const { calculateServiceRewards } = require("../utils/serviceRewards");
 const { UPLOAD_BASE } = require("../../../../config/path");
 const sharp = require("sharp");
 const { uploadToR2 } = require("../../../../utils/r2upload");
@@ -469,6 +470,7 @@ class ServiceController {
       const variants = await ServiceVariantModel.getVariantsByService(id);
 
       for (let v of variants) {
+        v.rewards = calculateServiceRewards(v.price, v);
         const sections = await ServiceVariantModel.getSectionsByVariant(v.id);
 
         const formatted = formatVariantSections(sections);

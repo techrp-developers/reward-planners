@@ -31,8 +31,8 @@ class ServiceOrderModel {
   async create(data, conn = db) {
     const [result] = await conn.execute(
       `INSERT INTO service_orders
-    (user_id, service_id, variant_id, address_id, enquiry_id, price, parent_order_id, bundle_id, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    (user_id, service_id, variant_id, address_id, enquiry_id, price, parent_order_id, bundle_id, status, reward_coins_earned, reward_coins_used)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         data.user_id,
         data.service_id,
@@ -43,6 +43,8 @@ class ServiceOrderModel {
         data.parent_order_id,
         data.bundle_id || null,
         data.status,
+        Number(data.reward_coins_earned || 0),
+        Number(data.reward_coins_used || 0),
       ],
     );
 
@@ -57,6 +59,8 @@ class ServiceOrderModel {
     return {
       id: insertId,
       order_ref: ref,
+      reward_coins_earned: Number(data.reward_coins_earned || 0),
+      reward_coins_used: Number(data.reward_coins_used || 0),
     };
   }
 

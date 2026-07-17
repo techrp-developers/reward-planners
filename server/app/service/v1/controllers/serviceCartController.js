@@ -243,12 +243,21 @@ class ServiceCartController {
       const total =
         cartData.individual_items.reduce((s, i) => s + Number(i.price), 0) +
         cartData.bundles.reduce((s, b) => s + Number(b.bundle_total), 0);
+      const allItems = [
+        ...cartData.individual_items,
+        ...cartData.bundles.flatMap((bundle) => bundle.items),
+      ];
+      const rewards = {
+        earn_coins: allItems.reduce((sum, item) => sum + Number(item.rewards?.earn_coins || 0), 0),
+        max_redeem_coins: allItems.reduce((sum, item) => sum + Number(item.rewards?.max_redeem_coins || 0), 0),
+      };
 
       res.json({
         success: true,
         data: {
           ...cartData,
           total,
+          rewards,
         },
       });
     } catch (err) {

@@ -1,4 +1,5 @@
 const db = require("../../../../config/database");
+const { calculateServiceRewards } = require("../utils/serviceRewards");
 
 // helper function
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
@@ -84,6 +85,14 @@ class ServiceCartModel {
         sv.service_id,
         sv.title,
         sv.image_url,
+        sv.can_earn_reward,
+        sv.earn_reward_type,
+        sv.earn_reward_value,
+        sv.max_earn_reward,
+        sv.can_redeem_reward,
+        sv.redemption_type,
+        sv.redemption_value,
+        sv.max_redemption_amount,
 
         sd.id as document_id,
         sd.document_name,
@@ -135,6 +144,16 @@ class ServiceCartModel {
           title: item.title,
           image_url: getPublicUrl(item.image_url),
           variant_image: getPublicUrl(item.image_url),
+          can_earn_reward: Number(item.can_earn_reward),
+          earn_reward_type: item.earn_reward_type,
+          earn_reward_value: Number(item.earn_reward_value || 0),
+          max_earn_reward: item.max_earn_reward === null ? null : Number(item.max_earn_reward),
+          can_redeem_reward: Number(item.can_redeem_reward),
+          redemption_type: item.redemption_type,
+          redemption_value: Number(item.redemption_value || 0),
+          max_redemption_amount: item.max_redemption_amount === null ? null : Number(item.max_redemption_amount),
+
+          rewards: calculateServiceRewards(item.price, item),
 
           documents: [],
         };
@@ -199,6 +218,7 @@ class ServiceCartModel {
           : item.individual_price;
 
         item.price = Number(price);
+        item.rewards = calculateServiceRewards(item.price, item);
         bundle.bundle_total += item.price * (item.quantity || 1);
       });
     });

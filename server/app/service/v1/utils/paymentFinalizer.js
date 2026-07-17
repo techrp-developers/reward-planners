@@ -1,4 +1,5 @@
 const InvoiceService = require("../../../../services/Invoice/service-invoice");
+const { consumeServiceCoins } = require("../../../../services/rewards/serviceWalletService");
 
 async function finalizePaidServiceOrder({
   conn,
@@ -7,6 +8,7 @@ async function finalizePaidServiceOrder({
   razorpayOrderId,
   rawResponse,
 }) {
+  await consumeServiceCoins(conn, parentOrderId);
   const [orderUpdate] = await conn.execute(
     `UPDATE service_orders
      SET status = 'documents_pending',

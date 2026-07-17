@@ -18,6 +18,8 @@ const {
   deriveServicePaymentStatus,
 } = require("../utils/paymentState");
 const { notifyUser } = require("../../../common/utils/notification");
+const { creditCompletedServiceReward } = require("../utils/serviceRewards");
+const { releaseServiceCoins } = require("../../../../services/rewards/serviceWalletService");
 
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
 function getPublicUrl(path) {
@@ -113,7 +115,7 @@ class ServiceOrderController {
       await connection.beginTransaction();
 
       const [orders] = await connection.execute(
-        `SELECT id, price, status, payment_status
+        `SELECT id, price, reward_coins_used, status, payment_status
          FROM service_orders
          WHERE parent_order_id = ?
            AND user_id = ?
@@ -143,7 +145,8 @@ class ServiceOrderController {
       }
 
       const totalAmount = orders.reduce(
-        (sum, order) => sum + Number(order.price || 0),
+        (sum, order) =>
+          sum + Math.max(0, Number(order.price || 0) - Number(order.reward_coins_used || 0)),
         0,
       );
 
@@ -1120,6 +1123,38 @@ class ServiceOrderController {
       }
 
       await ServiceOrderModel.updateStatus(id, status);
+
+      if (status === "completed" && order.status !== "completed") {
+        await creditCompletedServiceReward(db, id);
+      }
+
+      if (status === "cancelled" && order.status === "pending_payment") {
+        const [[remaining]] = await db.execute(
+          `SELECT COUNT(*) AS count FROM service_orders
+           WHERE parent_order_id = ? AND status <> 'cancelled'`,
+          [order.parent_order_id],
+        );
+        if (Number(remaining.count) === 0) {
+          const walletConn = await db.getConnection();
+          try {
+            await walletConn.beginTransaction();
+            const released = await releaseServiceCoins(walletConn, order.parent_order_id);
+            if (released) {
+              await walletConn.execute(
+                `UPDATE service_orders SET reward_coins_used = 0
+                 WHERE parent_order_id = ?`,
+                [order.parent_order_id],
+              );
+            }
+            await walletConn.commit();
+          } catch (error) {
+            await walletConn.rollback();
+            throw error;
+          } finally {
+            walletConn.release();
+          }
+        }
+      }
 
       notifyUser(
         {

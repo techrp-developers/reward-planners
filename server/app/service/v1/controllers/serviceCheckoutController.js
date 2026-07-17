@@ -2,6 +2,11 @@ const db = require("../../../../config/database");
 const CartModel = require("../models/serviceCartModel");
 const ServiceOrderModel = require("../models/serviceOrderModel");
 const crypto = require("crypto");
+const { calculateServiceRewards, allocateRedeemedCoins } = require("../utils/serviceRewards");
+const {
+  getWalletBalance,
+  reserveServiceCoins,
+} = require("../../../../services/rewards/serviceWalletService");
 
 // helper function
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
@@ -62,6 +67,15 @@ function calculateSummary({ bundles = [], individual_items = [] }) {
 
   const total =
     item_total - discount - reward_discount + delivery_fee + handling_fee;
+  const allItems = [...individual_items, ...bundles.flatMap((b) => b.items)];
+  const earn_coins = allItems.reduce(
+    (sum, item) => sum + Number(item.rewards?.earn_coins || 0),
+    0,
+  );
+  const max_redeem_coins = allItems.reduce(
+    (sum, item) => sum + Number(item.rewards?.max_redeem_coins || 0),
+    0,
+  );
 
   return {
     item_total,
@@ -70,12 +84,31 @@ function calculateSummary({ bundles = [], individual_items = [] }) {
     delivery_fee,
     handling_fee,
     total,
+    earn_coins,
+    max_redeem_coins,
 
     //  extra clarity (optional but useful)
     breakdown: {
       individual_total,
       bundle_total,
     },
+  };
+}
+
+async function applyRedemptionPreview(userId, items, requestedCoins, summary) {
+  const walletBalance = await getWalletBalance(db, userId);
+  const redemption = allocateRedeemedCoins(items, requestedCoins, walletBalance);
+  redemption.items.forEach((quoted, index) => {
+    items[index].redeem_coins = quoted.redeem_coins;
+    items[index].final_price = quoted.final_price;
+  });
+  return {
+    ...summary,
+    wallet_balance: walletBalance,
+    requested_redeem_coins: redemption.requested_coins,
+    redeem_coins: redemption.redeem_coins,
+    reward_discount: redemption.redeem_coins,
+    total: Math.max(0, summary.total - redemption.redeem_coins),
   };
 }
 
@@ -119,9 +152,21 @@ class ServiceCheckoutController {
 
       conn = await db.getConnection();
       await conn.beginTransaction();
+      const checkoutItems = [
+        ...individual_items,
+        ...bundles.flatMap((bundle) => bundle.items),
+      ];
+      const walletBalance = await getWalletBalance(conn, userId, true);
+      const redemption = allocateRedeemedCoins(
+        checkoutItems,
+        req.body?.redeem_coins,
+        walletBalance,
+      );
+      let allocationIndex = 0;
 
       //  1. Handle individual items
       for (let item of individual_items) {
+        const allocation = redemption.items[allocationIndex++];
         const order = await ServiceOrderModel.create({
           user_id: userId,
           addressId,
@@ -132,6 +177,8 @@ class ServiceCheckoutController {
           parent_order_id: parentOrderId,
           bundle_id: null,
           status: "pending_payment",
+          reward_coins_earned: Number(item.rewards?.earn_coins || 0),
+          reward_coins_used: allocation.redeem_coins,
         }, conn);
 
         createdOrders.push(order);
@@ -140,6 +187,7 @@ class ServiceCheckoutController {
       //  2. Handle bundles
       for (let bundle of bundles) {
         for (let item of bundle.items) {
+          const allocation = redemption.items[allocationIndex++];
           const order = await ServiceOrderModel.create({
             user_id: userId,
             addressId,
@@ -150,11 +198,19 @@ class ServiceCheckoutController {
             parent_order_id: parentOrderId,
             bundle_id: bundle.bundle_id,
             status: "pending_payment",
+            reward_coins_earned: Number(item.rewards?.earn_coins || 0),
+            reward_coins_used: allocation.redeem_coins,
           }, conn);
 
           createdOrders.push(order);
         }
       }
+
+      await reserveServiceCoins(conn, {
+        parentOrderId,
+        userId,
+        coins: redemption.redeem_coins,
+      });
 
       //3. clear cart
       await CartModel.clearCart(cart.id, conn);
@@ -167,6 +223,11 @@ class ServiceCheckoutController {
         data: {
           orders: createdOrders,
           parent_order_id: parentOrderId,
+          rewards: {
+            earn_coins: createdOrders.reduce((sum, order) => sum + order.reward_coins_earned, 0),
+            redeem_coins: redemption.redeem_coins,
+            wallet_balance_after: walletBalance - redemption.redeem_coins,
+          },
         },
       });
     } catch (err) {
@@ -188,6 +249,7 @@ class ServiceCheckoutController {
 
   // buy now
   async buyNow(req, res) {
+    let conn;
     try {
       const userId = req.user?.user_id;
       // const userId=1;
@@ -218,7 +280,10 @@ class ServiceCheckoutController {
 
       // get price from variant
       const [[variant]] = await db.execute(
-        `SELECT price FROM service_variants WHERE id = ? AND service_id = ?`,
+        `SELECT price, can_earn_reward, earn_reward_type, earn_reward_value,
+                max_earn_reward, can_redeem_reward, redemption_type,
+                redemption_value, max_redemption_amount
+         FROM service_variants WHERE id = ? AND service_id = ?`,
         [variant_id, service_id],
       );
 
@@ -230,6 +295,16 @@ class ServiceCheckoutController {
       }
 
       const parentOrderId = crypto.randomUUID();
+      const rewards = calculateServiceRewards(variant.price, variant);
+      const rewardItem = { price: Number(variant.price), rewards };
+      conn = await db.getConnection();
+      await conn.beginTransaction();
+      const walletBalance = await getWalletBalance(conn, userId, true);
+      const redemption = allocateRedeemedCoins(
+        [rewardItem],
+        req.body?.redeem_coins,
+        walletBalance,
+      );
 
       // create single order
       const order = await ServiceOrderModel.create({
@@ -242,7 +317,15 @@ class ServiceCheckoutController {
         parent_order_id: parentOrderId,
         bundle_id: null,
         status: "pending_payment",
+        reward_coins_earned: rewards.earn_coins,
+        reward_coins_used: redemption.redeem_coins,
+      }, conn);
+      await reserveServiceCoins(conn, {
+        parentOrderId,
+        userId,
+        coins: redemption.redeem_coins,
       });
+      await conn.commit();
 
       res.json({
         success: true,
@@ -250,13 +333,21 @@ class ServiceCheckoutController {
         data: {
           orders: [order],
           parent_order_id: parentOrderId,
+          rewards: {
+            earn_coins: rewards.earn_coins,
+            redeem_coins: redemption.redeem_coins,
+            wallet_balance_after: walletBalance - redemption.redeem_coins,
+          },
         },
       });
     } catch (err) {
+      if (conn) await conn.rollback();
       res.status(500).json({
         success: false,
         message: err.message,
       });
+    } finally {
+      if (conn) conn.release();
     }
   }
 
@@ -312,7 +403,15 @@ class ServiceCheckoutController {
           bi.variant_id,
           bi.price AS bundle_price,
           bi.is_required,
-          sv.price AS individual_price
+          sv.price AS individual_price,
+          sv.can_earn_reward,
+          sv.earn_reward_type,
+          sv.earn_reward_value,
+          sv.max_earn_reward,
+          sv.can_redeem_reward,
+          sv.redemption_type,
+          sv.redemption_value,
+          sv.max_redemption_amount
         FROM service_bundle_items bi
         JOIN service_variants sv ON sv.id = bi.variant_id
           AND sv.service_id = bi.service_id
@@ -366,6 +465,10 @@ class ServiceCheckoutController {
 
       conn = await db.getConnection();
       await conn.beginTransaction();
+      const walletBalance = await getWalletBalance(conn, userId, true);
+      let redeemRemaining = Math.max(0, Math.floor(Number(req.body?.redeem_coins || 0)));
+      let walletRemaining = walletBalance;
+      let totalRedeemed = 0;
 
       // 7 create orders
       for (let item of items) {
@@ -386,6 +489,17 @@ class ServiceCheckoutController {
             : Number(item.individual_price); //  partial
         }
 
+        const rewards = calculateServiceRewards(finalPrice, item);
+        const redemption = allocateRedeemedCoins(
+          [{ price: finalPrice, rewards }],
+          redeemRemaining,
+          walletRemaining,
+        );
+        const redeemed = redemption.redeem_coins;
+        redeemRemaining -= redeemed;
+        walletRemaining -= redeemed;
+        totalRedeemed += redeemed;
+
         const order = await ServiceOrderModel.create({
           user_id: userId,
           addressId,
@@ -396,10 +510,18 @@ class ServiceCheckoutController {
           parent_order_id: parentOrderId,
           bundle_id: bundle_id,
           status: "pending_payment",
+          reward_coins_earned: rewards.earn_coins,
+          reward_coins_used: redeemed,
         }, conn);
 
         createdOrders.push(order);
       }
+
+      await reserveServiceCoins(conn, {
+        parentOrderId,
+        userId,
+        coins: totalRedeemed,
+      });
 
       await conn.commit();
 
@@ -410,6 +532,11 @@ class ServiceCheckoutController {
           orders: createdOrders,
           parent_order_id: parentOrderId,
           is_bundle_applied: bundle.type === "fixed" || isFullBundleSelected,
+          rewards: {
+            earn_coins: createdOrders.reduce((sum, order) => sum + order.reward_coins_earned, 0),
+            redeem_coins: totalRedeemed,
+            wallet_balance_after: walletBalance - totalRedeemed,
+          },
         },
       });
     } catch (err) {
@@ -452,12 +579,18 @@ class ServiceCheckoutController {
         });
       }
 
-      const summary = calculateSummary(cartData);
+      let summary = calculateSummary(cartData);
 
       const all_items = [
         ...individual_items,
         ...bundles.flatMap((b) => b.items),
       ];
+      summary = await applyRedemptionPreview(
+        userId,
+        all_items,
+        req.query?.redeem_coins,
+        summary,
+      );
 
       res.json({
         success: true,
@@ -480,6 +613,7 @@ class ServiceCheckoutController {
 
   async getBuyNowPreview(req, res) {
     try {
+      const userId = req.user?.user_id;
       const { service_id, variant_id } = req.query;
 
       if (!service_id || !variant_id) {
@@ -497,6 +631,14 @@ class ServiceCheckoutController {
         sv.variant_name,
         sv.title,
         sv.image_url,
+        sv.can_earn_reward,
+        sv.earn_reward_type,
+        sv.earn_reward_value,
+        sv.max_earn_reward,
+        sv.can_redeem_reward,
+        sv.redemption_type,
+        sv.redemption_value,
+        sv.max_redemption_amount,
 
         s.name AS service_name,
 
@@ -553,14 +695,22 @@ class ServiceCheckoutController {
           price: parseFloat(firstRow.price),
           quantity: 1,
 
+          rewards: calculateServiceRewards(firstRow.price, firstRow),
+
           documents, // added here
         },
       ];
 
-      const summary = calculateSummary({
+      let summary = calculateSummary({
         bundles: [],
         individual_items: items,
       });
+      summary = await applyRedemptionPreview(
+        userId,
+        items,
+        req.query?.redeem_coins,
+        summary,
+      );
 
       res.json({
         success: true,
@@ -583,6 +733,7 @@ class ServiceCheckoutController {
   // bundle buy now preview
   async getBuyNowBundlePreview(req, res) {
     try {
+      const userId = req.user?.user_id;
       const { bundle_id, selected_items } = req.query;
 
       if (!bundle_id) {
@@ -618,7 +769,15 @@ class ServiceCheckoutController {
           sv.variant_name,
           sv.title,
           sv.image_url,
-          sv.price AS individual_price
+          sv.price AS individual_price,
+          sv.can_earn_reward,
+          sv.earn_reward_type,
+          sv.earn_reward_value,
+          sv.max_earn_reward,
+          sv.can_redeem_reward,
+          sv.redemption_type,
+          sv.redemption_value,
+          sv.max_redemption_amount
 
         FROM service_bundle_items bi
         JOIN services s ON s.id = bi.service_id
@@ -702,6 +861,7 @@ class ServiceCheckoutController {
 
           price: finalPrice,
           quantity: 1,
+          rewards: calculateServiceRewards(finalPrice, item),
 
           // helpful for UI
           is_required: item.is_required,
@@ -723,10 +883,16 @@ class ServiceCheckoutController {
       };
 
       // 6 Summary (reuse your helper)
-      const summary = calculateSummary({
+      let summary = calculateSummary({
         bundles: [bundleData],
         individual_items: [],
       });
+      summary = await applyRedemptionPreview(
+        userId,
+        selectedItems,
+        req.query?.redeem_coins,
+        summary,
+      );
 
       res.json({
         success: true,
