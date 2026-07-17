@@ -81,6 +81,8 @@ class ServiceOrderModel {
       so.service_id,
       so.order_ref,
       so.price,
+      so.reward_coins_used,
+      so.reward_coins_earned,
       so.status,
       so.payment_status,
       so.created_at,
@@ -163,6 +165,9 @@ class ServiceOrderModel {
           parent_order_id: parentId,
           created_at: row.created_at,
           total_amount: 0,
+          subtotal: 0,
+          reward_discount: 0,
+          reward_coins_earned: 0,
 
           //  FIX: store all statuses
           statuses: [],
@@ -192,6 +197,12 @@ class ServiceOrderModel {
         variant_name: row.variant_name,
         image_url: row.image_url ? getPublicUrl(row.image_url) : null,
         price: Number(row.price),
+        reward_coins_used: Number(row.reward_coins_used || 0),
+        reward_coins_earned: Number(row.reward_coins_earned || 0),
+        total_amount: Math.max(
+          0,
+          Number(row.price) - Number(row.reward_coins_used || 0),
+        ),
         bundle_id: row.bundle_id,
       };
 
@@ -215,7 +226,7 @@ class ServiceOrderModel {
         }
 
         order.bundles[row.bundle_id].items.push(item);
-        order.bundles[row.bundle_id].bundle_total += Number(row.price);
+        order.bundles[row.bundle_id].bundle_total += item.total_amount;
       } else {
         order.items.push(item);
 
@@ -227,7 +238,10 @@ class ServiceOrderModel {
       }
 
       order.summary.total_items += 1;
-      order.total_amount += Number(row.price);
+      order.subtotal += Number(row.price);
+      order.reward_discount += Number(row.reward_coins_used || 0);
+      order.reward_coins_earned += Number(row.reward_coins_earned || 0);
+      order.total_amount += item.total_amount;
     });
 
     //  FINAL TRANSFORM
@@ -257,6 +271,14 @@ class ServiceOrderModel {
         created_at: order.created_at,
         status: finalStatus,
         total_amount: order.total_amount,
+        subtotal: order.subtotal,
+        reward_discount: order.reward_discount,
+        reward_coins_used: order.reward_discount,
+        reward_coins_earned: order.reward_coins_earned,
+        rewards: {
+          used: order.reward_discount,
+          earned: order.reward_coins_earned,
+        },
 
         items: order.items,
         bundles: Object.values(order.bundles),
@@ -334,6 +356,8 @@ class ServiceOrderModel {
       so.service_id,
       so.order_ref,
       so.price,
+      so.reward_coins_used,
+      so.reward_coins_earned,
       so.status,
       so.bundle_id,
       so.created_at,
@@ -409,6 +433,9 @@ class ServiceOrderModel {
       items: [],
       bundles: {},
       total_amount: 0,
+      subtotal: 0,
+      reward_discount: 0,
+      reward_coins_earned: 0,
     };
 
     rows.forEach((row) => {
@@ -420,6 +447,12 @@ class ServiceOrderModel {
         title: row.title,
         image_url: row.image_url ? getPublicUrl(row.image_url) : null,
         price: Number(row.price),
+        reward_coins_used: Number(row.reward_coins_used || 0),
+        reward_coins_earned: Number(row.reward_coins_earned || 0),
+        total_amount: Math.max(
+          0,
+          Number(row.price) - Number(row.reward_coins_used || 0),
+        ),
         status: row.status,
       };
 
@@ -433,15 +466,23 @@ class ServiceOrderModel {
         }
 
         response.bundles[row.bundle_id].items.push(item);
-        response.bundles[row.bundle_id].bundle_total += Number(row.price);
+        response.bundles[row.bundle_id].bundle_total += item.total_amount;
       } else {
         response.items.push(item);
       }
 
-      response.total_amount += Number(row.price);
+      response.subtotal += Number(row.price);
+      response.reward_discount += Number(row.reward_coins_used || 0);
+      response.reward_coins_earned += Number(row.reward_coins_earned || 0);
+      response.total_amount += item.total_amount;
     });
 
     response.bundles = Object.values(response.bundles);
+    response.reward_coins_used = response.reward_discount;
+    response.rewards = {
+      used: response.reward_discount,
+      earned: response.reward_coins_earned,
+    };
 
     return response;
   }

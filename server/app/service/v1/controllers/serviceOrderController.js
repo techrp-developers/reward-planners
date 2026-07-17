@@ -736,11 +736,21 @@ class ServiceOrderController {
           address: order.address,
 
           total_amount: order.total_amount,
+          subtotal: order.subtotal,
+          reward_discount: order.reward_discount,
+          reward_coins_used: order.reward_coins_used,
+          reward_coins_earned: order.reward_coins_earned,
+          rewards: order.rewards,
 
           summary: {
             total_services: allItems.length,
             completed_services: completedServices,
             total_bundles: processedBundles.length,
+            subtotal: order.subtotal,
+            reward_discount: order.reward_discount,
+            total: order.total_amount,
+            reward_coins_used: order.reward_coins_used,
+            reward_coins_earned: order.reward_coins_earned,
           },
 
           timeline: parentTimeline,
