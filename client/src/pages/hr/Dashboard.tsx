@@ -321,7 +321,7 @@ export default function HrDashboard() {
         {stats.map((stat, index) => (
           <div
             key={index}
-            className="relative overflow-hidden transition-all duration-300 bg-white border border-gray-100 shadow-md rounded-2xl hover:shadow-xl group"
+            className="relative overflow-hidden transition-all duration-300 bg-white border border-gray-100 shadow-md rounded-2xl hover:shadow-xl group cursor-pointer"
           >
             <div
               className="absolute top-0 right-0 w-24 h-24 -mt-8 -mr-8 transition-transform duration-500 rounded-full bg-gradient-to-br opacity-10 group-hover:scale-150"
@@ -365,7 +365,7 @@ export default function HrDashboard() {
         {/* Department Distribution Chart */}
         <div className="p-6 bg-white border border-gray-100 shadow-md rounded-2xl">
           <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-gradient-to-r from-[#852BAF] to-[#FC3F78] rounded-xl">
+            <div className="p-2 bg-gradient-to-r from-[#852BAF] to-[#FC3F78] rounded-xl cursor-pointer">
               <FiBriefcase className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -404,7 +404,7 @@ export default function HrDashboard() {
         {/* Status Overview Chart */}
         <div className="p-6 bg-white border border-gray-100 shadow-md rounded-2xl">
           <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-gradient-to-r from-[#852BAF] to-[#FC3F78] rounded-xl">
+            <div className="p-2 bg-gradient-to-r from-[#852BAF] to-[#FC3F78] rounded-xl cursor-pointer">
               <FiUsers className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -504,7 +504,7 @@ export default function HrDashboard() {
         <div className="flex flex-col bg-white border border-gray-100 shadow-md lg:col-span-1 rounded-2xl">
           <div className="flex items-center justify-between p-5 border-b border-gray-100">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-amber-100 text-amber-600">
+              <div className="p-2 rounded-lg bg-amber-100 text-amber-600 cursor-pointer">
                 <FiStar className="w-5 h-5" />
               </div>
               <h2 className="text-sm font-bold tracking-widest text-gray-900 uppercase">
@@ -516,7 +516,17 @@ export default function HrDashboard() {
             </div>
           </div>
           <div className="flex-1 overflow-y-auto max-h-[500px] p-2 space-y-1">
-            {topTenEmployees.map((emp, index) => (
+            {topTenEmployees.length === 0 ? (
+              <div className="flex flex-col items-center justify-center px-4 py-12 text-center">
+                <div className="flex items-center justify-center w-14 h-14 mb-3 rounded-full bg-amber-50">
+                  <FiStar className="w-7 h-7 text-amber-300" />
+                </div>
+                <p className="text-sm font-semibold text-gray-700">No records available</p>
+                <p className="mt-1 text-xs text-gray-400">
+                  Reward earners will appear here after points are distributed.
+                </p>
+              </div>
+            ) : topTenEmployees.map((emp, index) => (
               <div
                 key={emp.id}
                 className="flex items-center justify-between p-3 transition-colors rounded-xl hover:bg-gray-50 group"
@@ -555,18 +565,18 @@ export default function HrDashboard() {
               </div>
             ))}
           </div>
-          <div className="p-4 border-t border-gray-50 bg-gray-50/50 rounded-b-2xl">
+          {/* <div className="p-4 border-t border-gray-50 bg-gray-50/50 rounded-b-2xl">
             <button className="w-full py-2 text-xs font-bold text-purple-600 transition-colors hover:text-purple-800">
               Download Rewards Report
             </button>
-          </div>
+          </div> */}
         </div>
 
         {/* Recent Employees Table */}
         <div className="overflow-hidden bg-white border border-gray-100 shadow-md lg:col-span-2 rounded-2xl">
           <div className="flex items-center justify-between p-5 border-b border-gray-100">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-gradient-to-r from-[#852BAF] to-[#FC3F78] rounded-xl">
+              <div className="p-2 bg-gradient-to-r from-[#852BAF] to-[#FC3F78] rounded-xl cursor-pointer">
                 <FiUsers className="w-5 h-5 text-white" />
               </div>
               <div>
@@ -598,7 +608,19 @@ export default function HrDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {employees.slice(0, 5).map((employee) => (
+                {employees.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-5 py-12 text-center">
+                      <div className="flex items-center justify-center w-14 h-14 mx-auto mb-3 rounded-full bg-purple-50">
+                        <FiUsers className="w-7 h-7 text-purple-300" />
+                      </div>
+                      <p className="text-sm font-semibold text-gray-700">No recent employees available</p>
+                      <p className="mt-1 text-xs text-gray-400">
+                        Newly added employees will appear here.
+                      </p>
+                    </td>
+                  </tr>
+                ) : employees.slice(0, 5).map((employee) => (
                   <tr
                     key={employee.id}
                     className="transition-colors hover:bg-gray-50"
@@ -615,14 +637,32 @@ export default function HrDashboard() {
                     </td>
                     <td className="px-5 py-4">
                       <div className="text-sm">
-                        <div className="flex items-center gap-2 text-gray-600">
-                          <FiMail className="w-3 h-3" />
-                          {employee.email}
-                        </div>
-                        <div className="flex items-center gap-2 text-gray-500 mt-0.5">
-                          <FiPhone className="w-3 h-3" />
-                          {employee.phone}
-                        </div>
+                        {employee.email ? (
+                          <a
+                            href={`mailto:${employee.email}`}
+                            className="flex items-center gap-2 text-gray-600 transition-colors hover:text-purple-600 hover:underline"
+                          >
+                            <FiMail className="w-3 h-3" />
+                            {employee.email}
+                          </a>
+                        ) : (
+                          <div className="flex items-center gap-2 text-gray-400">
+                            <FiMail className="w-3 h-3" /> No email
+                          </div>
+                        )}
+                        {employee.phone ? (
+                          <a
+                            href={`tel:${employee.phone}`}
+                            className="flex items-center gap-2 text-gray-500 mt-0.5 transition-colors hover:text-emerald-600 hover:underline"
+                          >
+                            <FiPhone className="w-3 h-3" />
+                            {employee.phone}
+                          </a>
+                        ) : (
+                          <div className="flex items-center gap-2 text-gray-400 mt-0.5">
+                            <FiPhone className="w-3 h-3" /> No phone
+                          </div>
+                        )}
                       </div>
                     </td>
                     <td className="px-5 py-4">
@@ -697,15 +737,14 @@ export default function HrDashboard() {
           </div>
         </Link>
 
-        <div className="flex items-center gap-4 p-5 text-white shadow-lg bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl">
-          <div className="p-3 rounded-xl bg-white/20">
-            <FiUserX className="w-6 h-6" />
+        <div className="flex items-center gap-4 p-5 transition-all duration-300 bg-white border border-gray-100 shadow-md rounded-2xl hover:shadow-lg hover:border-amber-200 group">
+          <div className="p-3 transition-transform rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 group-hover:scale-110">
+            <FiUserX className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h3 className="font-semibold">Pending Approvals</h3>
-            <p className="text-sm text-purple-100">
-              {summary.pending_onboarding} employees
-              waiting
+            <h3 className="font-semibold text-gray-900">Pending Approvals</h3>
+            <p className="text-sm text-gray-500">
+              {summary.pending_onboarding} employees waiting
             </p>
           </div>
         </div>

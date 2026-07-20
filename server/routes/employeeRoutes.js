@@ -28,6 +28,13 @@ router.get(
   employeeController.dashboard.bind(employeeController),
 );
 
+// Authenticated HR company branding
+router.get(
+  "/company-profile",
+  ...guard,
+  employeeController.companyProfile.bind(employeeController),
+);
+
 // Bulk upload employee records
 router.post(
   "/bulk-upload",

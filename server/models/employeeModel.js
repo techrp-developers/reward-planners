@@ -1,6 +1,17 @@
 const db = require("../config/database");
 
 class EmployeeModel {
+  async getCompanyProfile(companyId) {
+    const [[company]] = await db.execute(
+      `SELECT company_id, company_name, company_logo
+       FROM companies
+       WHERE company_id = ? AND status = 1
+       LIMIT 1`,
+      [companyId],
+    );
+    return company;
+  }
+
   buildStatusExpression() {
     return `CASE
       WHEN cu.status = 1 THEN 'active'

@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { FiUser, FiUsers, FiCheckCircle, FiInbox } from "react-icons/fi";
+import { useEffect, useState } from "react";
+import { FiUser, FiUsers, FiCheckCircle, FiInbox, FiGift } from "react-icons/fi";
 import { FaUsers } from "react-icons/fa";
+import { hrApi } from "../../../api/hrApi";
 
 // Import your actual form components (these must exist in ./reward_management/)
 import IndividualForm from "./reward_management/Individual";
@@ -13,6 +14,16 @@ export default function ManageRewards() {
   const [useCTC, setUseCTC] = useState(true);
   const [useTenure, setUseTenure] = useState(false);
   const [selectedType, setSelectedType] = useState<DistributionType>(null);
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [walletLoading, setWalletLoading] = useState(true);
+
+  useEffect(() => {
+    hrApi
+      .get("/company-wallet")
+      .then((response) => setWalletBalance(Number(response.data?.data?.balance || 0)))
+      .catch((error) => console.error("Unable to load company wallet:", error))
+      .finally(() => setWalletLoading(false));
+  }, []);
 
   const handleSelect = (type: DistributionType) => {
     setSelectedType((prev) => (prev === type ? null : type));
@@ -21,16 +32,31 @@ export default function ManageRewards() {
   return (
     <div className="max-w-6xl p-6 mx-auto space-y-8 duration-700 animate-in fade-in">
       {/* HEADER SECTION */}
-      <div className="flex flex-col gap-2">
-        <h2 className="text-3xl font-extrabold tracking-tight text-gray-900">
-          Manage{" "}
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-indigo-600">
-            Rewards
-          </span>
-        </h2>
-        <p className="font-medium text-gray-500">
-          Configure how incentives are distributed across your organization.
-        </p>
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-3xl font-extrabold tracking-tight text-gray-900">
+            Manage{" "}
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-indigo-600">
+              Rewards
+            </span>
+          </h2>
+          <p className="font-medium text-gray-500">
+            Configure how incentives are distributed across your organization.
+          </p>
+        </div>
+        <div className="flex items-center gap-4 px-5 py-4 text-white shadow-lg bg-gradient-to-r from-purple-600 to-indigo-600 rounded-2xl shadow-purple-200">
+          <div className="p-2.5 rounded-xl bg-white/20">
+            <FiGift className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold tracking-wide text-purple-100 uppercase">
+              Reward Balance
+            </p>
+            <p className="text-2xl font-black">
+              {walletLoading ? "..." : `${walletBalance.toLocaleString()} points`}
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
@@ -89,7 +115,7 @@ export default function ManageRewards() {
               </label>
             </div>
 
-            <button className="w-full py-4 mt-8 text-sm font-bold text-white transition-all bg-gray-900 shadow-lg rounded-2xl hover:bg-black active:scale-[0.98] shadow-gray-200">
+            <button className="w-full py-4 mt-8 text-sm font-bold text-white transition-all bg-gray-900 shadow-lg rounded-2xl hover:bg-black active:scale-[0.98] shadow-gray-200 cursor-pointer">
               Save Configuration
             </button>
           </div>
@@ -151,9 +177,15 @@ export default function ManageRewards() {
                   </button>
                 </div>
 
-                {selectedType === "employee" && <IndividualForm />}
-                {selectedType === "team" && <TeamForm />}
-                {selectedType === "all" && <CompanyForm />}
+                {selectedType === "employee" && (
+                  <IndividualForm onAwardComplete={setWalletBalance} />
+                )}
+                {selectedType === "team" && (
+                  <TeamForm onAwardComplete={setWalletBalance} />
+                )}
+                {selectedType === "all" && (
+                  <CompanyForm onAwardComplete={setWalletBalance} />
+                )}
               </div>
             ) : (
               /* EMPTY STATE */

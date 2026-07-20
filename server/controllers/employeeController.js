@@ -59,6 +59,34 @@ function escapeCsv(value) {
 }
 
 class EmployeeController {
+  async companyProfile(req, res) {
+    try {
+      const companyId = getCompanyId(req);
+      if (!companyId) {
+        return res.status(400).json({ success: false, message: "A company is required" });
+      }
+
+      const company = await EmployeeModel.getCompanyProfile(companyId);
+      if (!company) {
+        return res.status(404).json({ success: false, message: "Company not found" });
+      }
+
+      const logo = company.company_logo
+        ? company.company_logo.startsWith("http")
+          ? company.company_logo
+          : `https://cdn.rewardplanners.com/${company.company_logo}`
+        : null;
+
+      return res.json({
+        success: true,
+        data: { ...company, company_logo: logo },
+      });
+    } catch (error) {
+      console.error("Company profile error:", error);
+      return res.status(500).json({ success: false, message: "Unable to fetch company profile" });
+    }
+  }
+
   async dashboard(req, res) {
     try {
       const companyId = getCompanyId(req);
@@ -87,7 +115,7 @@ class EmployeeController {
       const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
       const limit = Math.min(
         Math.max(Number.parseInt(req.query.limit, 10) || 20, 1),
-        100,
+        500,
       );
 
       if (!companyId) {

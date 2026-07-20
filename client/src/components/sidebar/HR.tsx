@@ -9,6 +9,7 @@ FiGift
 } from "react-icons/fi";
 import { HiOutlineUserCircle } from "react-icons/hi2";
 import { useAuth } from "../../auth/useAuth";
+import { hrApi } from "../../api/hrApi";
 
 /* ================= TYPES ================= */
 
@@ -44,9 +45,17 @@ export default function HrNavbar({ closeSidebar }: HrNavbarProps) {
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [loading, setLoading] = useState<boolean>(true);
+  const [company, setCompany] = useState<{
+    company_name: string;
+    company_logo: string | null;
+  } | null>(null);
 
   useEffect(() => {
-    setLoading(false);
+    hrApi
+      .get("/employees/company-profile")
+      .then((response) => setCompany(response.data?.data || null))
+      .catch((error) => console.error("Unable to load company branding:", error))
+      .finally(() => setLoading(false));
   }, []);
 
   const isActive = (path: string): boolean => pathname === path;
@@ -88,9 +97,17 @@ const navItems: NavItem[] = [
       {/* Branding */}
       <div className="px-8 py-10">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#852BAF] to-[#FC3F78] shadow-lg flex items-center justify-center text-white font-black italic">
-            R
-          </div>
+          {company?.company_logo ? (
+            <img
+              src={company.company_logo}
+              alt={`${company.company_name} logo`}
+              className="object-contain w-10 h-10 p-1 bg-white border border-gray-100 rounded-lg shadow-sm"
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#852BAF] to-[#FC3F78] shadow-lg flex items-center justify-center text-white font-black italic">
+              R
+            </div>
+          )}
           <div>
             <h1 className="text-xl font-black text-gray-900">REWARDS</h1>
             <p className="text-[10px] uppercase font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#852BAF] to-[#FC3F78]">
