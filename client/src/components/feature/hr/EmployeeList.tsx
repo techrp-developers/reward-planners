@@ -334,88 +334,155 @@ export default function EmployeeList() {
 
       {/* TABLE */}
       <div className="overflow-hidden bg-white border border-gray-200 shadow-lg rounded-2xl">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="bg-gray-50">
-              <tr className="text-xs font-semibold tracking-wider text-gray-500 uppercase">
-                <th className="px-5 py-4">Employee</th>
-                <th className="px-5 py-4">Contact</th>
-                <th className="px-5 py-4">Department</th>
-                <th className="px-5 py-4">Role</th>
-                <th className="px-5 py-4">Status</th>
-                <th className="px-5 py-4">Joined</th>
-                <th className="px-5 py-4 text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filteredEmployees.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-5 py-12 text-center">
-                    <FiUser className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                    <p className="font-medium text-gray-500">No employees found</p>
-                  </td>
-                </tr>
-              ) : (
-                paginatedEmployees.map((emp) => (
-                  <tr key={emp.id} className="transition-colors hover:bg-gray-50">
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center justify-center w-10 h-10 font-bold text-white rounded-full bg-gradient-to-r from-purple-500 to-pink-500">
-                          {emp.name.charAt(0)}
-                        </div>
-                        <span className="font-semibold text-gray-900">{emp.name}</span>
+        {filteredEmployees.length === 0 ? (
+          <div className="px-5 py-12 text-center">
+            <FiUser className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+            <p className="font-medium text-gray-500">No employees found</p>
+          </div>
+        ) : (
+          <>
+            {/* Mobile / Tablet card list */}
+            <div className="divide-y divide-gray-100 lg:hidden">
+              {paginatedEmployees.map((emp) => (
+                <div key={emp.id} className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-center w-10 h-10 font-bold text-white rounded-full shrink-0 bg-gradient-to-r from-purple-500 to-pink-500">
+                        {emp.name.charAt(0)}
                       </div>
-                    </td>
-                    <td className="px-5 py-4 text-sm text-gray-600">
-                      {emp.email ? (
-                        <a
-                          href={`mailto:${emp.email}`}
-                          className="flex items-center gap-2 transition-colors hover:text-purple-600 hover:underline"
-                        >
-                          <FiMail className="w-3.5 h-3.5" /> {emp.email}
-                        </a>
-                      ) : (
-                        <div className="flex items-center gap-2 text-gray-400">
-                          <FiMail className="w-3.5 h-3.5" /> No email
-                        </div>
-                      )}
-                      {emp.phone ? (
-                        <a
-                          href={`tel:${emp.phone}`}
-                          className="flex items-center gap-2 mt-0.5 text-gray-400 transition-colors hover:text-emerald-600 hover:underline"
-                        >
-                          <FiPhone className="w-3.5 h-3.5" /> {emp.phone}
-                        </a>
-                      ) : (
-                        <div className="flex items-center gap-2 mt-0.5 text-gray-400">
-                          <FiPhone className="w-3.5 h-3.5" /> No phone
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-5 py-4 text-sm font-medium text-gray-700">{emp.department}</td>
-                    <td className="px-5 py-4 text-sm text-gray-600">{emp.role}</td>
-                    <td className="px-5 py-4"><StatusBadge status={emp.status} /></td>
-                    <td className="px-5 py-4 text-sm text-gray-500">{emp.created_at}</td>
-                    <td className="px-5 py-4">
-                      <div className="flex items-center justify-center gap-2">
-                        <button onClick={() => void openEditModal(emp)} className="p-2 text-gray-400 hover:text-purple-600 cursor-pointer"><FiEdit className="w-4 h-4" /></button>
-                        {emp.status !== "inactive" && (
-                          <button
-                            onClick={() => void handleDelete(emp)}
-                            className="p-2 text-gray-400 cursor-pointer hover:text-red-600"
-                            aria-label={`Deactivate ${emp.name}`}
-                          >
-                            <FiTrash2 className="w-4 h-4" />
-                          </button>
-                        )}
+                      <div>
+                        <p className="font-semibold text-gray-900">{emp.name}</p>
+                        <p className="text-xs text-gray-500">
+                          {emp.role || "—"} · {emp.department || "—"}
+                        </p>
                       </div>
-                    </td>
+                    </div>
+                    <StatusBadge status={emp.status} />
+                  </div>
+                  <div className="flex flex-col gap-1 mt-3 text-sm">
+                    {emp.email ? (
+                      <a
+                        href={`mailto:${emp.email}`}
+                        className="flex items-center gap-2 text-gray-600 transition-colors hover:text-purple-600 hover:underline"
+                      >
+                        <FiMail className="w-3.5 h-3.5" /> {emp.email}
+                      </a>
+                    ) : (
+                      <div className="flex items-center gap-2 text-gray-400">
+                        <FiMail className="w-3.5 h-3.5" /> No email
+                      </div>
+                    )}
+                    {emp.phone ? (
+                      <a
+                        href={`tel:${emp.phone}`}
+                        className="flex items-center gap-2 text-gray-400 transition-colors hover:text-emerald-600 hover:underline"
+                      >
+                        <FiPhone className="w-3.5 h-3.5" /> {emp.phone}
+                      </a>
+                    ) : (
+                      <div className="flex items-center gap-2 text-gray-400">
+                        <FiPhone className="w-3.5 h-3.5" /> No phone
+                      </div>
+                    )}
+                    <p className="mt-1 text-xs text-gray-400">Joined {emp.created_at}</p>
+                  </div>
+                  <div className="flex items-center gap-2 pt-3 mt-3 border-t border-gray-50">
+                    <button
+                      onClick={() => void openEditModal(emp)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 border border-gray-200 rounded-lg hover:text-purple-600 hover:border-purple-200 cursor-pointer"
+                    >
+                      <FiEdit className="w-3.5 h-3.5" /> Edit
+                    </button>
+                    {emp.status !== "inactive" && (
+                      <button
+                        onClick={() => void handleDelete(emp)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 border border-gray-200 rounded-lg cursor-pointer hover:text-red-600 hover:border-red-200"
+                        aria-label={`Deactivate ${emp.name}`}
+                      >
+                        <FiTrash2 className="w-3.5 h-3.5" /> Deactivate
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop table */}
+            <div className="hidden overflow-x-auto lg:block">
+              <table className="w-full text-left">
+                <thead className="bg-gray-50">
+                  <tr className="text-xs font-semibold tracking-wider text-gray-500 uppercase">
+                    <th className="px-5 py-4">Employee</th>
+                    <th className="px-5 py-4">Contact</th>
+                    <th className="px-5 py-4">Department</th>
+                    <th className="px-5 py-4">Role</th>
+                    <th className="px-5 py-4">Status</th>
+                    <th className="px-5 py-4">Joined</th>
+                    <th className="px-5 py-4 text-center">Actions</th>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {paginatedEmployees.map((emp) => (
+                    <tr key={emp.id} className="transition-colors hover:bg-gray-50">
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center justify-center w-10 h-10 font-bold text-white rounded-full bg-gradient-to-r from-purple-500 to-pink-500">
+                            {emp.name.charAt(0)}
+                          </div>
+                          <span className="font-semibold text-gray-900">{emp.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-4 text-sm text-gray-600">
+                        {emp.email ? (
+                          <a
+                            href={`mailto:${emp.email}`}
+                            className="flex items-center gap-2 transition-colors hover:text-purple-600 hover:underline"
+                          >
+                            <FiMail className="w-3.5 h-3.5" /> {emp.email}
+                          </a>
+                        ) : (
+                          <div className="flex items-center gap-2 text-gray-400">
+                            <FiMail className="w-3.5 h-3.5" /> No email
+                          </div>
+                        )}
+                        {emp.phone ? (
+                          <a
+                            href={`tel:${emp.phone}`}
+                            className="flex items-center gap-2 mt-0.5 text-gray-400 transition-colors hover:text-emerald-600 hover:underline"
+                          >
+                            <FiPhone className="w-3.5 h-3.5" /> {emp.phone}
+                          </a>
+                        ) : (
+                          <div className="flex items-center gap-2 mt-0.5 text-gray-400">
+                            <FiPhone className="w-3.5 h-3.5" /> No phone
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-5 py-4 text-sm font-medium text-gray-700">{emp.department}</td>
+                      <td className="px-5 py-4 text-sm text-gray-600">{emp.role}</td>
+                      <td className="px-5 py-4"><StatusBadge status={emp.status} /></td>
+                      <td className="px-5 py-4 text-sm text-gray-500">{emp.created_at}</td>
+                      <td className="px-5 py-4">
+                        <div className="flex items-center justify-center gap-2">
+                          <button onClick={() => void openEditModal(emp)} className="p-2 text-gray-400 hover:text-purple-600 cursor-pointer"><FiEdit className="w-4 h-4" /></button>
+                          {emp.status !== "inactive" && (
+                            <button
+                              onClick={() => void handleDelete(emp)}
+                              className="p-2 text-gray-400 cursor-pointer hover:text-red-600"
+                              aria-label={`Deactivate ${emp.name}`}
+                            >
+                              <FiTrash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
 
         {totalPages > 1 && (
           <div className="flex flex-col gap-3 px-5 py-4 border-t border-gray-100 sm:flex-row sm:items-center sm:justify-between">

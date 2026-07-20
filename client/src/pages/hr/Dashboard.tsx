@@ -595,89 +595,36 @@ export default function HrDashboard() {
             </Link>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr className="text-xs font-semibold tracking-wider text-left text-gray-500 uppercase">
-                  <th className="px-5 py-4">Employee</th>
-                  <th className="px-5 py-4">Contact</th>
-                  <th className="px-5 py-4">Department</th>
-                  <th className="px-5 py-4">Role</th>
-                  <th className="px-5 py-4">Status</th>
-                  <th className="px-5 py-4">Joined</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {employees.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-5 py-12 text-center">
-                      <div className="flex items-center justify-center w-14 h-14 mx-auto mb-3 rounded-full bg-purple-50">
-                        <FiUsers className="w-7 h-7 text-purple-300" />
-                      </div>
-                      <p className="text-sm font-semibold text-gray-700">No recent employees available</p>
-                      <p className="mt-1 text-xs text-gray-400">
-                        Newly added employees will appear here.
-                      </p>
-                    </td>
-                  </tr>
-                ) : employees.slice(0, 5).map((employee) => (
-                  <tr
-                    key={employee.id}
-                    className="transition-colors hover:bg-gray-50"
-                  >
-                    <td className="px-5 py-4">
+          {employees.length === 0 ? (
+            <div className="px-5 py-12 text-center">
+              <div className="flex items-center justify-center w-14 h-14 mx-auto mb-3 rounded-full bg-purple-50">
+                <FiUsers className="w-7 h-7 text-purple-300" />
+              </div>
+              <p className="text-sm font-semibold text-gray-700">No recent employees available</p>
+              <p className="mt-1 text-xs text-gray-400">
+                Newly added employees will appear here.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Mobile / Tablet card list */}
+              <div className="divide-y divide-gray-100 lg:hidden">
+                {employees.slice(0, 5).map((employee) => (
+                  <div key={employee.id} className="p-4">
+                    <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3">
-                        <div className="flex items-center justify-center w-10 h-10 font-bold text-white rounded-full bg-gradient-to-r from-purple-500 to-pink-500">
+                        <div className="flex items-center justify-center w-10 h-10 font-bold text-white rounded-full shrink-0 bg-gradient-to-r from-purple-500 to-pink-500">
                           {employee.name.charAt(0)}
                         </div>
-                        <span className="font-semibold text-gray-900">
-                          {employee.name}
-                        </span>
+                        <div>
+                          <p className="font-semibold text-gray-900">{employee.name}</p>
+                          <p className="text-xs text-gray-500">
+                            {employee.role || "—"} · {employee.department || "—"}
+                          </p>
+                        </div>
                       </div>
-                    </td>
-                    <td className="px-5 py-4">
-                      <div className="text-sm">
-                        {employee.email ? (
-                          <a
-                            href={`mailto:${employee.email}`}
-                            className="flex items-center gap-2 text-gray-600 transition-colors hover:text-purple-600 hover:underline"
-                          >
-                            <FiMail className="w-3 h-3" />
-                            {employee.email}
-                          </a>
-                        ) : (
-                          <div className="flex items-center gap-2 text-gray-400">
-                            <FiMail className="w-3 h-3" /> No email
-                          </div>
-                        )}
-                        {employee.phone ? (
-                          <a
-                            href={`tel:${employee.phone}`}
-                            className="flex items-center gap-2 text-gray-500 mt-0.5 transition-colors hover:text-emerald-600 hover:underline"
-                          >
-                            <FiPhone className="w-3 h-3" />
-                            {employee.phone}
-                          </a>
-                        ) : (
-                          <div className="flex items-center gap-2 text-gray-400 mt-0.5">
-                            <FiPhone className="w-3 h-3" /> No phone
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className="text-sm font-medium text-gray-700">
-                        {employee.department}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className="text-sm text-gray-600">
-                        {employee.role}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4">
                       <span
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold shrink-0 ${
                           employee.status === "active"
                             ? "bg-emerald-100 text-emerald-700"
                             : "bg-amber-100 text-amber-700"
@@ -695,17 +642,142 @@ export default function HrDashboard() {
                           </>
                         )}
                       </span>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className="text-sm text-gray-500">
-                        {employee.created_at}
-                      </span>
-                    </td>
-                  </tr>
+                    </div>
+                    <div className="flex flex-col gap-1 mt-3 text-sm">
+                      {employee.email ? (
+                        <a
+                          href={`mailto:${employee.email}`}
+                          className="flex items-center gap-2 text-gray-600 transition-colors hover:text-purple-600 hover:underline"
+                        >
+                          <FiMail className="w-3 h-3" />
+                          {employee.email}
+                        </a>
+                      ) : (
+                        <div className="flex items-center gap-2 text-gray-400">
+                          <FiMail className="w-3 h-3" /> No email
+                        </div>
+                      )}
+                      {employee.phone ? (
+                        <a
+                          href={`tel:${employee.phone}`}
+                          className="flex items-center gap-2 text-gray-500 transition-colors hover:text-emerald-600 hover:underline"
+                        >
+                          <FiPhone className="w-3 h-3" />
+                          {employee.phone}
+                        </a>
+                      ) : (
+                        <div className="flex items-center gap-2 text-gray-400">
+                          <FiPhone className="w-3 h-3" /> No phone
+                        </div>
+                      )}
+                      <p className="mt-1 text-xs text-gray-400">Joined {employee.created_at}</p>
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </div>
+
+              {/* Desktop table */}
+              <div className="hidden overflow-x-auto lg:block">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr className="text-xs font-semibold tracking-wider text-left text-gray-500 uppercase">
+                      <th className="px-5 py-4">Employee</th>
+                      <th className="px-5 py-4">Contact</th>
+                      <th className="px-5 py-4">Department</th>
+                      <th className="px-5 py-4">Role</th>
+                      <th className="px-5 py-4">Status</th>
+                      <th className="px-5 py-4">Joined</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {employees.slice(0, 5).map((employee) => (
+                      <tr
+                        key={employee.id}
+                        className="transition-colors hover:bg-gray-50"
+                      >
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center justify-center w-10 h-10 font-bold text-white rounded-full bg-gradient-to-r from-purple-500 to-pink-500">
+                              {employee.name.charAt(0)}
+                            </div>
+                            <span className="font-semibold text-gray-900">
+                              {employee.name}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-5 py-4">
+                          <div className="text-sm">
+                            {employee.email ? (
+                              <a
+                                href={`mailto:${employee.email}`}
+                                className="flex items-center gap-2 text-gray-600 transition-colors hover:text-purple-600 hover:underline"
+                              >
+                                <FiMail className="w-3 h-3" />
+                                {employee.email}
+                              </a>
+                            ) : (
+                              <div className="flex items-center gap-2 text-gray-400">
+                                <FiMail className="w-3 h-3" /> No email
+                              </div>
+                            )}
+                            {employee.phone ? (
+                              <a
+                                href={`tel:${employee.phone}`}
+                                className="flex items-center gap-2 text-gray-500 mt-0.5 transition-colors hover:text-emerald-600 hover:underline"
+                              >
+                                <FiPhone className="w-3 h-3" />
+                                {employee.phone}
+                              </a>
+                            ) : (
+                              <div className="flex items-center gap-2 text-gray-400 mt-0.5">
+                                <FiPhone className="w-3 h-3" /> No phone
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className="text-sm font-medium text-gray-700">
+                            {employee.department}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className="text-sm text-gray-600">
+                            {employee.role}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
+                              employee.status === "active"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-amber-100 text-amber-700"
+                            }`}
+                          >
+                            {employee.status === "active" ? (
+                              <>
+                                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+                                Active
+                              </>
+                            ) : (
+                              <>
+                                <FiClock className="w-3 h-3" />
+                                Inactive
+                              </>
+                            )}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className="text-sm text-gray-500">
+                            {employee.created_at}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </div>
       </div>
 

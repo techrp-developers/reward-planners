@@ -132,7 +132,7 @@ export default function EmployeeOnboarding() {
     <div className="max-w-5xl p-4 mx-auto md:p-6">
 
       {/* HEADER */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div>
           <Link
             to="/hr/dashboard"
@@ -149,10 +149,10 @@ export default function EmployeeOnboarding() {
       </div>
 
       {/* TAB SWITCH */}
-      <div className="flex inline-flex gap-2 p-1 mb-6 bg-gray-100 rounded-xl">
+      <div className="inline-flex flex-wrap gap-2 p-1 mb-6 bg-gray-100 rounded-xl">
         <button
           onClick={() => setActiveTab("form")}
-          className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
+          className={`px-4 sm:px-5 py-2.5 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
             activeTab === "form"
               ? "bg-white text-purple-600 shadow-md"
               : "text-gray-600 hover:text-gray-900"
@@ -164,7 +164,7 @@ export default function EmployeeOnboarding() {
 
         <button
           onClick={() => setActiveTab("bulk")}
-          className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
+          className={`px-4 sm:px-5 py-2.5 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
             activeTab === "bulk"
               ? "bg-white text-purple-600 shadow-md"
               : "text-gray-600 hover:text-gray-900"
