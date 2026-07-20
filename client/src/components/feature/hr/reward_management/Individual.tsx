@@ -125,7 +125,7 @@ const IndividualForm: React.FC<{ onAwardComplete?: (balance: number) => void }> 
                   type="button"
                   key={employee.id}
                   onClick={() => setSelectedEmployee(employee)}
-                  className={`flex w-full items-center justify-between p-4 text-left transition-colors ${
+                  className={`flex w-full items-center justify-between p-4 text-left transition-colors cursor-pointer ${
                     selected ? "bg-purple-50" : "bg-white hover:bg-gray-50"
                   }`}
                 >
@@ -219,10 +219,10 @@ const IndividualForm: React.FC<{ onAwardComplete?: (balance: number) => void }> 
 
       {/* ACTION BUTTONS */}
       <div className="flex items-center justify-end gap-4 pt-6 border-t border-gray-50">
-        <button type="button" onClick={() => { setSelectedEmployee(null); setPoints(""); setNote(""); }} className="px-6 py-2.5 text-sm font-semibold text-gray-500 hover:text-gray-700 transition-colors">
+        <button type="button" onClick={() => { setSelectedEmployee(null); setPoints(""); setNote(""); }} className="px-6 py-2.5 text-sm font-semibold text-gray-500 hover:text-gray-700 transition-colors cursor-pointer">
           Discard
         </button>
-        <button type="button" onClick={() => void assignReward()} disabled={submitting} className="px-8 py-3 bg-gray-900 text-white text-sm font-bold rounded-2xl shadow-lg shadow-gray-200 hover:bg-black hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
+        <button type="button" onClick={() => void assignReward()} disabled={submitting} className="px-8 py-3 bg-gray-900 text-white text-sm font-bold rounded-2xl shadow-lg shadow-gray-200 hover:bg-black hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer">
           {submitting ? "Assigning..." : "Assign Reward"}
         </button>
       </div>

@@ -147,7 +147,7 @@ export default function TeamForm({
       </div>
 
       <div className="flex justify-end pt-5 border-t border-gray-100">
-        <button type="button" onClick={() => void distribute()} disabled={submitting || !members.length} className="flex items-center gap-2 px-8 py-3 text-sm font-bold text-white bg-blue-600 rounded-2xl disabled:opacity-50">
+        <button type="button" onClick={() => void distribute()} disabled={submitting || !members.length} className="flex items-center gap-2 px-8 py-3 text-sm font-bold text-white bg-blue-600 rounded-2xl disabled:opacity-50 cursor-pointer">
           <FiUsers /> {submitting ? "Distributing..." : "Distribute to Team"}
         </button>
       </div>

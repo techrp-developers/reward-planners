@@ -109,7 +109,7 @@ export default function CompanyForm({
       </div>
 
       <div className="flex justify-end pt-5 border-t border-gray-100">
-        <button type="button" onClick={() => void distribute()} disabled={submitting || loading || !employees.length} className="px-10 py-3 text-sm font-bold text-white bg-gray-900 rounded-2xl disabled:opacity-50">
+        <button type="button" onClick={() => void distribute()} disabled={submitting || loading || !employees.length} className="px-10 py-3 text-sm font-bold text-white bg-gray-900 rounded-2xl disabled:opacity-50 cursor-pointer">
           {submitting ? "Distributing..." : "Confirm Allocation"}
         </button>
       </div>
