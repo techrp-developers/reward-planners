@@ -102,7 +102,7 @@ const IndividualForm: React.FC<{ onAwardComplete?: (balance: number) => void }> 
         <label className="flex items-center gap-2 text-sm font-bold text-gray-700">
           Select Employee
         </label>
-        <div className="relative group">
+        <div className={`relative group ${selectedEmployee ? "hidden" : ""}`}>
           <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
             <FiSearch className="text-gray-400 transition-colors group-focus-within:text-purple-500" />
           </div>
@@ -114,7 +114,7 @@ const IndividualForm: React.FC<{ onAwardComplete?: (balance: number) => void }> 
             className="w-full py-3 pr-4 font-medium text-gray-900 transition-all border border-gray-100 outline-none pl-11 bg-gray-50 rounded-2xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 placeholder:text-gray-400"
           />
         </div>
-        <div className="overflow-y-auto border border-gray-100 divide-y divide-gray-50 max-h-64 rounded-2xl">
+        <div className={`overflow-y-auto border border-gray-100 divide-y divide-gray-50 max-h-64 rounded-2xl ${selectedEmployee ? "hidden" : ""}`}>
           {loadingEmployees ? (
             <div className="p-6 text-sm text-center text-gray-400">Loading active employees...</div>
           ) : filteredEmployees.length === 0 ? (
@@ -126,7 +126,10 @@ const IndividualForm: React.FC<{ onAwardComplete?: (balance: number) => void }> 
                 <button
                   type="button"
                   key={employee.id}
-                  onClick={() => setSelectedEmployee(employee)}
+                  onClick={() => {
+                    setSelectedEmployee(employee);
+                    setSearch("");
+                  }}
                   className={`flex w-full items-center justify-between p-4 text-left transition-colors cursor-pointer ${
                     selected ? "bg-purple-50" : "bg-white hover:bg-gray-50"
                   }`}
@@ -149,9 +152,32 @@ const IndividualForm: React.FC<{ onAwardComplete?: (balance: number) => void }> 
           )}
         </div>
         {selectedEmployee && (
-          <p className="text-xs font-semibold text-emerald-600">
-            Selected: {selectedEmployee.name} ({selectedEmployee.role || "Employee"})
-          </p>
+          <div className="flex items-center justify-between p-4 border border-emerald-200 bg-emerald-50/60 rounded-2xl">
+            <div className="flex items-center gap-3">
+              <span className="flex items-center justify-center w-11 h-11 text-sm font-bold text-white rounded-full bg-emerald-500">
+                {selectedEmployee.name?.charAt(0).toUpperCase() || <FiUser />}
+              </span>
+              <div>
+                <p className="flex items-center gap-2 text-sm font-bold text-gray-900">
+                  {selectedEmployee.name}
+                  <FiCheck className="text-emerald-600" />
+                </p>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  {selectedEmployee.role || "Employee"} · {selectedEmployee.department || "No department"}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedEmployee(null);
+                setSearch("");
+              }}
+              className="px-4 py-2 text-xs font-bold text-purple-600 bg-white border border-purple-100 rounded-xl hover:bg-purple-50 cursor-pointer"
+            >
+              Change
+            </button>
+          </div>
         )}
       </div>
 
