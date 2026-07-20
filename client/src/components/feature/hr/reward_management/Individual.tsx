@@ -65,6 +65,8 @@ const IndividualForm: React.FC<{ onAwardComplete?: (balance: number) => void }> 
       const response = await hrApi.post("/company-wallet/award", {
         employee_id: selectedEmployee.id,
         points: rewardPoints,
+        allocation_type: "individual",
+        category: rewardTitles[category],
         title: rewardTitles[category],
         description: note,
       });

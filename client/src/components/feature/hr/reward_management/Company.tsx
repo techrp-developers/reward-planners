@@ -55,6 +55,9 @@ export default function CompanyForm({
       const response = await hrApi.post("/company-wallet/award", {
         employee_ids: employees.map((employee) => employee.id),
         points: pointValue,
+        allocation_type: "department",
+        group_name: "Entire Company",
+        category: "Organization Appreciation",
         title: "Company-wide Reward",
         description: note,
       });

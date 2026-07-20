@@ -1,6 +1,8 @@
 const crypto = require("crypto");
 const CompanyWalletModel = require("../models/companyWalletModel");
-const { rewardCreditMail } = require("../services/mailBuilder/firstTimeReward");
+const { sendIndividualAppreciation } = require("../services/mailBuilder/individualAppreciation");
+const { sendTeamAppreciation } = require("../services/mailBuilder/teamAppreciation");
+const { sendDepartmentAppreciation } = require("../services/mailBuilder/departmentAppreciation");
 const { enqueueWhatsApp } = require("../services/whatsapp/waEnqueueService");
 
 function companyIdFor(req) {
@@ -52,6 +54,10 @@ class CompanyWalletController {
       const rawIds = req.body.employee_ids || (req.body.employee_id ? [req.body.employee_id] : []);
       const employeeIds = [...new Set(rawIds.map(Number).filter(Number.isSafeInteger))];
       const points = positiveInteger(req.body.points);
+      const allocationType = String(req.body.allocation_type || "individual").toLowerCase();
+      if (!["individual", "team", "department"].includes(allocationType)) {
+        return res.status(400).json({ success: false, message: "Invalid allocation_type" });
+      }
       if (!companyId || !employeeIds.length || !points) {
         return res.status(400).json({ success: false, message: "employee_id(s) and positive integer points are required" });
       }
@@ -70,9 +76,24 @@ class CompanyWalletController {
 
       const notificationResults = await Promise.all(
         result.awards.map(async (award) => {
+          const mailData = {
+            email: award.email,
+            employeeName: award.name,
+            rewardPoints: award.points,
+            category: String(req.body.category || req.body.title || "Appreciation Reward"),
+            awardedBy: req.user.email || "HR Team",
+            appreciationNote: req.body.description || req.body.note || undefined,
+            teamName: req.body.group_name,
+            groupName: req.body.group_name,
+          };
+          const sendAppreciationMail = allocationType === "team"
+            ? sendTeamAppreciation
+            : allocationType === "department"
+              ? sendDepartmentAppreciation
+              : sendIndividualAppreciation;
           const [email, whatsapp] = await Promise.all([
             award.email
-              ? rewardCreditMail({ name: award.name, email: award.email, coins: award.points })
+              ? sendAppreciationMail(mailData)
               : Promise.resolve({ ok: false, reason: "EMAIL_MISSING" }),
             award.phone
               ? enqueueWhatsApp({

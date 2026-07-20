@@ -57,6 +57,9 @@ export default function TeamForm({
       const response = await hrApi.post("/company-wallet/award", {
         employee_ids: members.map((member) => member.id),
         points: pointValue,
+        allocation_type: "team",
+        group_name: department,
+        category: "Team Appreciation",
         title: `${department} Team Reward`,
         description: note,
       });
