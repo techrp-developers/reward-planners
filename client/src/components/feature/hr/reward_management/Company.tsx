@@ -75,11 +75,19 @@ export default function CompanyForm({
   };
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-7 duration-500 animate-in fade-in slide-in-from-bottom-2">
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <label className="space-y-2">
           <span className="text-sm font-bold text-gray-700">Points per Employee</span>
-          <input type="number" min="1" step="1" value={points} onChange={(event) => setPoints(event.target.value)} placeholder="Enter points" className="w-full px-4 py-3 font-medium border border-gray-100 outline-none bg-gray-50 rounded-2xl focus:border-purple-500" />
+          <input
+            type="number"
+            min="1"
+            step="1"
+            value={points}
+            onChange={(event) => setPoints(event.target.value)}
+            placeholder="Enter points"
+            className="w-full px-4 py-3 font-medium text-gray-900 transition-all border border-gray-100 outline-none bg-gray-50 rounded-2xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+          />
         </label>
         <div className="p-4 border border-purple-100 bg-purple-50/50 rounded-2xl">
           <p className="text-xs font-bold tracking-wide text-purple-500 uppercase">Active Recipients</p>
@@ -89,13 +97,18 @@ export default function CompanyForm({
 
       <label className="block space-y-2">
         <span className="text-sm font-bold text-gray-700">Appreciation Note (Optional)</span>
-        <textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} className="w-full px-4 py-3 border border-gray-100 outline-none resize-none bg-gray-50 rounded-2xl focus:border-purple-500" />
+        <textarea
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          rows={3}
+          className="w-full px-4 py-3 font-medium text-gray-900 transition-all border border-gray-100 outline-none resize-none bg-gray-50 rounded-2xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+        />
       </label>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="flex items-center gap-3 p-5 border border-purple-100 bg-purple-50/50 rounded-2xl">
           <FiUsers className="w-6 h-6 text-purple-600" />
-          <div><p className="text-xs text-gray-500">Employees</p><p className="font-bold">{employees.length}</p></div>
+          <div><p className="text-xs text-gray-500">Employees</p><p className="font-bold text-gray-900">{employees.length}</p></div>
         </div>
         <div className="p-5 border border-amber-100 bg-amber-50/50 rounded-2xl">
           <p className="text-xs text-gray-500">Total Wallet Deduction</p>
@@ -103,13 +116,28 @@ export default function CompanyForm({
         </div>
       </div>
 
-      <div className="flex gap-2 p-4 text-xs text-amber-800 border border-amber-100 bg-amber-50/50 rounded-2xl">
-        <FiInfo className="w-4 h-4 shrink-0" />
+      <div className="flex items-center gap-3 p-4 text-xs leading-tight text-amber-800 border border-amber-100 bg-amber-50/50 rounded-2xl">
+        <FiInfo className="w-5 h-5 shrink-0" />
         Only active employees are included. Every recipient must have an active customer account.
       </div>
 
-      <div className="flex justify-end pt-5 border-t border-gray-100">
-        <button type="button" onClick={() => void distribute()} disabled={submitting || loading || !employees.length} className="px-10 py-3 text-sm font-bold text-white bg-gray-900 rounded-2xl disabled:opacity-50 cursor-pointer">
+      <div className="flex items-center justify-end gap-4 pt-6 border-t border-gray-50">
+        <button
+          type="button"
+          onClick={() => {
+            setPoints("");
+            setNote("");
+          }}
+          className="px-6 py-2.5 text-sm font-semibold text-gray-500 transition-colors cursor-pointer hover:text-gray-700"
+        >
+          Discard
+        </button>
+        <button
+          type="button"
+          onClick={() => void distribute()}
+          disabled={submitting || loading || !employees.length}
+          className="px-10 py-3 bg-gray-900 text-white text-sm font-bold rounded-2xl shadow-lg shadow-gray-200 hover:bg-black hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+        >
           {submitting ? "Distributing..." : "Confirm Allocation"}
         </button>
       </div>
