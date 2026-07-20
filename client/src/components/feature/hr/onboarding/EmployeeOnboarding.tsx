@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import Swal from "sweetalert2";
 import { hrApi } from "../../../../api/hrApi";
@@ -42,6 +42,18 @@ export default function EmployeeOnboarding() {
   const [formData, setFormData] = useState<EmployeeForm>(initialForm);
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [departments, setDepartments] = useState<string[]>([]);
+  const [departmentsLoading, setDepartmentsLoading] = useState(true);
+
+  useEffect(() => {
+    hrApi
+      .get("/employees/departments")
+      .then((response) =>
+        setDepartments((response.data?.data || []).map((item: { name: string }) => item.name)),
+      )
+      .catch((error) => console.error("Unable to load departments:", error))
+      .finally(() => setDepartmentsLoading(false));
+  }, []);
 
   /* ================= HANDLERS ================= */
 
@@ -140,7 +152,7 @@ export default function EmployeeOnboarding() {
       <div className="flex inline-flex gap-2 p-1 mb-6 bg-gray-100 rounded-xl">
         <button
           onClick={() => setActiveTab("form")}
-          className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+          className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
             activeTab === "form"
               ? "bg-white text-purple-600 shadow-md"
               : "text-gray-600 hover:text-gray-900"
@@ -152,7 +164,7 @@ export default function EmployeeOnboarding() {
 
         <button
           onClick={() => setActiveTab("bulk")}
-          className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+          className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
             activeTab === "bulk"
               ? "bg-white text-purple-600 shadow-md"
               : "text-gray-600 hover:text-gray-900"
@@ -236,17 +248,14 @@ export default function EmployeeOnboarding() {
                   name="department"
                   value={formData.department}
                   onChange={handleChange}
-                  className="w-full py-3 pl-12 pr-4 transition-all bg-white border border-gray-200 appearance-none rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full py-3 pl-12 pr-4 transition-all bg-white border border-gray-200 appearance-none rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent cursor-pointer"
                 >
-                  <option value="">Select Department</option>
-                  <option value="Human Resources">Human Resources</option>
-                  <option value="Engineering">Engineering</option>
-                  <option value="Marketing">Marketing</option>
-                  <option value="Finance">Finance</option>
-                  <option value="Operations">Operations</option>
-                  <option value="Sales">Sales</option>
-                  <option value="IT">IT</option>
-                  <option value="Customer Support">Customer Support</option>
+                  <option value="">
+                    {departmentsLoading ? "Loading Departments..." : "Select Department"}
+                  </option>
+                  {departments.map((department) => (
+                    <option key={department} value={department}>{department}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -274,7 +283,7 @@ export default function EmployeeOnboarding() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex items-center gap-2 px-8 py-3 font-semibold text-white transition-all duration-300 shadow-lg rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] hover:from-[#9B3DCF] hover:to-[#FD4F88] shadow-purple-500/30 hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-8 py-3 font-semibold text-white transition-all duration-300 shadow-lg rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] hover:from-[#9B3DCF] hover:to-[#FD4F88] shadow-purple-500/30 hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
             >
               {isSubmitting ? (
                 <>
@@ -349,7 +358,7 @@ export default function EmployeeOnboarding() {
             <button
               onClick={handleCSVUpload}
               disabled={isSubmitting || !csvFile}
-              className="flex items-center gap-2 px-8 py-3 font-semibold text-white transition-all duration-300 shadow-lg rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 shadow-emerald-500/30 hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-8 py-3 font-semibold text-white transition-all duration-300 shadow-lg rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 shadow-emerald-500/30 hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
             >
               {isSubmitting ? (
                 <>

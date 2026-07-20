@@ -74,6 +74,7 @@ export default function EmployeeList() {
   const [editLoading, setEditLoading] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [departments, setDepartments] = useState<string[]>([]);
   const pageSize = 10;
 
   const fetchEmployees = async () => {
@@ -96,6 +97,12 @@ export default function EmployeeList() {
 
   useEffect(() => {
     void fetchEmployees();
+    hrApi
+      .get("/employees/departments")
+      .then((response) =>
+        setDepartments((response.data?.data || []).map((item: { name: string }) => item.name)),
+      )
+      .catch((error) => console.error("Unable to load departments:", error));
   }, []);
 
   const filteredEmployees = useMemo(() => {
@@ -392,7 +399,15 @@ export default function EmployeeList() {
                     <td className="px-5 py-4">
                       <div className="flex items-center justify-center gap-2">
                         <button onClick={() => void openEditModal(emp)} className="p-2 text-gray-400 hover:text-purple-600 cursor-pointer"><FiEdit className="w-4 h-4" /></button>
-                        <button onClick={() => void handleDelete(emp)} className="p-2 text-gray-400 hover:text-red-600 cursor-pointer"><FiTrash2 className="w-4 h-4" /></button>
+                        {emp.status !== "inactive" && (
+                          <button
+                            onClick={() => void handleDelete(emp)}
+                            className="p-2 text-gray-400 cursor-pointer hover:text-red-600"
+                            aria-label={`Deactivate ${emp.name}`}
+                          >
+                            <FiTrash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -521,25 +536,10 @@ export default function EmployeeList() {
                       className="w-full py-3 pl-11 pr-4 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     >
                       <option value="">Select Department</option>
-                      <option value="Human Resources">Human Resources</option>
-                      <option value="Engineering">Engineering</option>
-                      <option value="Marketing">Marketing</option>
-                      <option value="Finance">Finance</option>
-                      <option value="Operations">Operations</option>
-                      <option value="Sales">Sales</option>
-                      <option value="IT">IT</option>
-                      <option value="Customer Support">Customer Support</option>
-                      {![
-                        "",
-                        "Human Resources",
-                        "Engineering",
-                        "Marketing",
-                        "Finance",
-                        "Operations",
-                        "Sales",
-                        "IT",
-                        "Customer Support",
-                      ].includes(editForm.department) && (
+                      {departments.map((department) => (
+                        <option key={department} value={department}>{department}</option>
+                      ))}
+                      {editForm.department && !departments.includes(editForm.department) && (
                         <option value={editForm.department}>{editForm.department}</option>
                       )}
                     </select>
@@ -577,7 +577,7 @@ export default function EmployeeList() {
                           status: current.status === "active" ? "inactive" : "active",
                         }))
                       }
-                      className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
+                      className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 cursor-pointer ${
                         editForm.status === "active" ? "bg-emerald-500" : "bg-gray-300"
                       }`}
                     >
@@ -596,14 +596,14 @@ export default function EmployeeList() {
                     type="button"
                     onClick={closeEditModal}
                     disabled={savingEdit}
-                    className="px-5 py-2.5 font-semibold text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-100 disabled:opacity-60"
+                    className="px-5 py-2.5 font-semibold text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-100 disabled:opacity-60 cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={savingEdit}
-                    className="px-6 py-2.5 font-semibold text-white rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] disabled:opacity-60"
+                    className="px-6 py-2.5 font-semibold text-white rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] disabled:opacity-60 cursor-pointer"
                   >
                     {savingEdit ? "Saving..." : "Save Changes"}
                   </button>

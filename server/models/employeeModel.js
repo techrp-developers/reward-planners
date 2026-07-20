@@ -12,6 +12,23 @@ class EmployeeModel {
     return company;
   }
 
+  async getDepartments(companyId) {
+    const [rows] = await db.execute(
+      `SELECT TRIM(department) AS name, COUNT(*) AS employee_count
+       FROM company_users
+       WHERE company_id = ?
+         AND department IS NOT NULL
+         AND TRIM(department) != ''
+       GROUP BY TRIM(department)
+       ORDER BY name ASC`,
+      [companyId],
+    );
+    return rows.map((row) => ({
+      name: row.name,
+      employee_count: Number(row.employee_count),
+    }));
+  }
+
   buildStatusExpression() {
     return `CASE
       WHEN cu.status = 1 THEN 'active'

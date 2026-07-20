@@ -35,6 +35,13 @@ router.get(
   employeeController.companyProfile.bind(employeeController),
 );
 
+// Distinct departments for the authenticated HR company
+router.get(
+  "/departments",
+  ...guard,
+  employeeController.departments.bind(employeeController),
+);
+
 // Bulk upload employee records
 router.post(
   "/bulk-upload",

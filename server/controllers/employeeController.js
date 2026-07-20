@@ -59,6 +59,22 @@ function escapeCsv(value) {
 }
 
 class EmployeeController {
+  async departments(req, res) {
+    try {
+      const companyId = getCompanyId(req);
+      if (!companyId) {
+        return res.status(400).json({ success: false, message: "A company is required" });
+      }
+      return res.json({
+        success: true,
+        data: await EmployeeModel.getDepartments(companyId),
+      });
+    } catch (error) {
+      console.error("Employee departments error:", error);
+      return res.status(500).json({ success: false, message: "Unable to fetch departments" });
+    }
+  }
+
   async companyProfile(req, res) {
     try {
       const companyId = getCompanyId(req);
