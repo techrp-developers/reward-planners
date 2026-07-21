@@ -1,7 +1,7 @@
 const db = require("../../../../config/database");
 const {
   finalizePaidServiceOrder,
-  generateInvoiceOnce,
+  generateAndEmailInvoice,
 } = require("./paymentFinalizer");
 const { notifyUser } = require("../../../common/utils/notification");
 const { releaseServiceCoins } = require("../../../../services/rewards/serviceWalletService");
@@ -88,9 +88,9 @@ async function processEvent(req) {
         "service webhook paid notification",
       );
 
-      generateInvoiceOnce(parentOrderId).catch((err) => {
+      generateAndEmailInvoice(parentOrderId).catch((err) => {
         console.error(
-          `[webhook] Invoice generation failed for parent_order_id=${parentOrderId}:`,
+          `[webhook] Invoice email failed for parent_order_id=${parentOrderId}:`,
           err.message,
         );
       });
