@@ -1084,7 +1084,7 @@ class ProductController {
       success: false,
       message: "Error fetching approved product List",
     });
-  }
+  }o
 
   // Product Visibility
   async Visibility(req, res) {
