@@ -70,6 +70,20 @@ router.post(
 );
 
 // ================================================Service======================================================
+router.get(
+  "/service-cancellation-requests",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  orderController.getServiceCancellationRequests,
+);
+
+router.get(
+  "/service-cancellation-request/:serviceOrderId",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  orderController.getServiceCancellationDetails,
+);
+
 // approve cancellation request
 router.post(
   "/approve-service-cancellation/:serviceOrderId",

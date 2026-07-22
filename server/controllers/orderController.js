@@ -4,6 +4,7 @@ const xpressService = require("../services/ExpressBees/xpressbees_service");
 const ServiceOrderModel = require("../app/service/v1/models/serviceOrderModel");
 const { sendOpsAlert } = require("../services/alertService");
 const EcommerceRefundService = require("../services/Razorpay/ecommerceRefundService");
+const { notifyUser } = require("../app/common/utils/notification");
 const Razorpay = require("razorpay");
 
 const razorpay = new Razorpay({
@@ -384,6 +385,45 @@ class OrderController {
   }
 
   // ===========================================Service============================================================
+  async getServiceCancellationRequests(req, res) {
+    try {
+      const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+      const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 20));
+      const data = await ServiceOrderModel.getServiceCancellationRequests({
+        status: req.query.status || null,
+        page,
+        limit,
+      });
+      return res.json({ success: true, ...data });
+    } catch (error) {
+      console.error("Service cancellation requests error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Unable to fetch service cancellation requests",
+      });
+    }
+  }
+
+  async getServiceCancellationDetails(req, res) {
+    try {
+      const serviceOrderId = Number(req.params.serviceOrderId);
+      if (!Number.isInteger(serviceOrderId) || serviceOrderId <= 0) {
+        return res.status(400).json({ success: false, message: "Invalid service order id" });
+      }
+      const data = await ServiceOrderModel.getAdminCancellationDetails(serviceOrderId);
+      return res.json({ success: true, data });
+    } catch (error) {
+      if (error.message === "SERVICE_ORDER_NOT_FOUND") {
+        return res.status(404).json({ success: false, message: "Service order not found" });
+      }
+      console.error("Service cancellation details error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Unable to fetch service cancellation details",
+      });
+    }
+  }
+
   // approve service cancellation
   async approveServiceCancellation(req, res) {
     const conn = await db.getConnection();
@@ -405,7 +445,25 @@ class OrderController {
         message: "Cancellation approved successfully",
       });
 
-      if (refundData?.payment_id) {
+      notifyUser(
+        {
+          userId: refundData.user_id,
+          module: "service",
+          type: "service_cancellation_approved",
+          title: "Cancellation approved",
+          message:
+            refundData.refund_status === "completed"
+              ? "Your service was cancelled and your refund is complete."
+              : "Your service was cancelled and your refund has been initiated.",
+          icon: "x-circle",
+          reference_type: "service_order",
+          reference_id: refundData.service_order_id,
+          action_url: `/service-orders/${refundData.service_order_id}`,
+        },
+        "service cancellation approved notification",
+      );
+
+      if (refundData?.payment_id && refundData.amount > 0) {
         ServiceOrderModel.processRefund(refundData).catch((err) => {
           console.error(
             `[approveServiceCancellation] Refund failed for service_order_id=${refundData.service_order_id}:`,
@@ -436,9 +494,24 @@ class OrderController {
 
       const serviceOrderId = Number(req.params.serviceOrderId);
 
-      await ServiceOrderModel.rejectCancellation(serviceOrderId, conn);
+      const rejection = await ServiceOrderModel.rejectCancellation(serviceOrderId, conn);
 
       await conn.commit();
+
+      notifyUser(
+        {
+          userId: rejection.user_id,
+          module: "service",
+          type: "service_cancellation_rejected",
+          title: "Cancellation rejected",
+          message: "Your service cancellation request was rejected.",
+          icon: "x-circle",
+          reference_type: "service_order",
+          reference_id: serviceOrderId,
+          action_url: `/service-orders/${serviceOrderId}`,
+        },
+        "service cancellation rejected notification",
+      );
 
       return res.json({
         success: true,

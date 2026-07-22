@@ -1,5 +1,6 @@
 const db = require("../../../../config/database");
 const razorpay = require("../middlewares/razorpay");
+const { notifyUser } = require("../../../common/utils/notification");
 
 // helper function
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
@@ -603,6 +604,10 @@ class ServiceOrderModel {
 
     const refundToCard = Math.max(0, refundAmount - coinsUsed);
 
+    if (refundToCard > 0 && !cancellation.payment_id) {
+      throw new Error("PAYMENT_ID_MISSING");
+    }
+
     // =====================================
     // 4 Reverse wallet coins
     // =====================================
@@ -714,6 +719,15 @@ class ServiceOrderModel {
       );
     }
 
+    if (refundToWallet > 0) {
+      await conn.execute(
+        `INSERT INTO service_order_refunds
+          (service_order_id, user_id, refund_amount, refund_method, status)
+         VALUES (?, ?, ?, 'wallet', 'completed')`,
+        [serviceOrderId, cancellation.user_id, refundToWallet],
+      );
+    }
+
     // =====================================
     // 6 Update cancellation request
     // =====================================
@@ -725,11 +739,11 @@ class ServiceOrderModel {
     SET
       status = 'approved',
       refund_amount = ?,
-      refund_status = 'initiated'
+      refund_status = ?
 
     WHERE service_order_id = ?
     `,
-      [refundAmount, serviceOrderId],
+      [refundAmount, refundToCard > 0 ? "initiated" : "completed", serviceOrderId],
     );
 
     // =====================================
@@ -774,6 +788,13 @@ class ServiceOrderModel {
       `,
         [serviceOrderId],
       );
+    } else {
+      await conn.execute(
+        `INSERT INTO service_order_cancellation_timeline
+          (service_order_id, event)
+         VALUES (?, 'refund_completed')`,
+        [serviceOrderId],
+      );
     }
 
     // =====================================
@@ -793,15 +814,13 @@ class ServiceOrderModel {
       [refundAmount, serviceOrderId],
     );
 
-    return refundToCard > 0
-      ? {
-          payment_id: cancellation.payment_id,
-
-          amount: refundToCard,
-
-          service_order_id: serviceOrderId,
-        }
-      : null;
+    return {
+      payment_id: cancellation.payment_id,
+      amount: refundToCard,
+      service_order_id: serviceOrderId,
+      user_id: cancellation.user_id,
+      refund_status: refundToCard > 0 ? "initiated" : "completed",
+    };
   }
 
   async processRefund(data) {
@@ -836,6 +855,25 @@ class ServiceOrderModel {
         [service_order_id],
       );
 
+      const [[recipient]] = await db.execute(
+        `SELECT user_id FROM service_orders WHERE id = ?`,
+        [service_order_id],
+      );
+      notifyUser(
+        {
+          userId: recipient?.user_id,
+          module: "service",
+          type: "service_refund_completed",
+          title: "Refund completed",
+          message: "Your service cancellation refund has been completed.",
+          icon: "wallet",
+          reference_type: "service_order",
+          reference_id: service_order_id,
+          action_url: `/service-orders/${service_order_id}`,
+        },
+        "service refund completed notification",
+      );
+
       // =====================================
       // Timeline: refund completed
       // =====================================
@@ -868,6 +906,26 @@ class ServiceOrderModel {
         [data.service_order_id],
       );
 
+      const [[recipient]] = await db.execute(
+        `SELECT user_id FROM service_orders WHERE id = ?`,
+        [data.service_order_id],
+      );
+      notifyUser(
+        {
+          userId: recipient?.user_id,
+          module: "service",
+          type: "service_refund_failed",
+          title: "Refund delayed",
+          message: "Your refund is delayed and will be retried automatically.",
+          icon: "alert-circle",
+          reference_type: "service_order",
+          reference_id: data.service_order_id,
+          action_url: `/service-orders/${data.service_order_id}`,
+          priority: "high",
+        },
+        "service refund failed notification",
+      );
+
       await db.execute(
         `
         INSERT INTO
@@ -897,7 +955,8 @@ class ServiceOrderModel {
       `
       SELECT
         id,
-        status
+        status,
+        user_id
 
       FROM service_order_cancellations
 
@@ -951,6 +1010,55 @@ class ServiceOrderModel {
     `,
       [serviceOrderId],
     );
+
+    return { user_id: cancellation.user_id };
+  }
+
+  async getServiceCancellationRequests({ status = null, page = 1, limit = 20 }) {
+    const offset = (page - 1) * limit;
+    const params = [];
+    let where = "";
+    if (status && status !== "all") {
+      where = "WHERE soc.status = ?";
+      params.push(status);
+    }
+
+    const [[countRow]] = await db.execute(
+      `SELECT COUNT(*) AS total FROM service_order_cancellations soc ${where}`,
+      params,
+    );
+    const [requests] = await db.execute(
+      `SELECT soc.id, soc.service_order_id, soc.status, soc.refund_status,
+              soc.comment, ocr.reason_text AS reason, soc.created_at,
+              so.order_ref, so.parent_order_id,
+              so.status AS order_status, so.payment_status, so.price,
+              c.name AS customer_name, c.email, c.phone,
+              s.name AS service_name
+       FROM service_order_cancellations soc
+       JOIN service_orders so ON so.id = soc.service_order_id
+       JOIN customer c ON c.user_id = soc.user_id
+       JOIN services s ON s.id = so.service_id
+       LEFT JOIN order_cancellation_reasons ocr ON ocr.reason_id = soc.reason_id
+       ${where}
+       ORDER BY soc.created_at DESC
+       LIMIT ? OFFSET ?`,
+      [...params, limit, offset],
+    );
+
+    const total = Number(countRow.total || 0);
+    return { requests, total, page, totalPages: Math.ceil(total / limit) };
+  }
+
+  async getAdminCancellationDetails(serviceOrderId) {
+    const [[order]] = await db.execute(
+      `SELECT user_id FROM service_orders WHERE id = ?`,
+      [serviceOrderId],
+    );
+    if (!order) throw new Error("SERVICE_ORDER_NOT_FOUND");
+    return this.getCancellationDetails({
+      userId: order.user_id,
+      serviceOrderId,
+    });
   }
 
   // get service cancellation details
@@ -964,6 +1072,7 @@ class ServiceOrderModel {
     SELECT
 
       so.id,
+      so.service_id,
       so.order_ref,
       so.status,
       so.price,
@@ -1024,15 +1133,19 @@ class ServiceOrderModel {
     const [[cancellation]] = await db.execute(
       `
       SELECT
-        status,
-        refund_amount,
-        refund_status,
-        refund_method,
-        created_at
+        soc.status,
+        soc.comment,
+        ocr.reason_text AS reason,
+        soc.refund_amount,
+        soc.refund_status,
+        soc.refund_method,
+        soc.created_at
 
-      FROM service_order_cancellations
+      FROM service_order_cancellations soc
+      LEFT JOIN order_cancellation_reasons ocr
+        ON ocr.reason_id = soc.reason_id
 
-      WHERE service_order_id = ?
+      WHERE soc.service_order_id = ?
       `,
       [serviceOrderId],
     );
@@ -1137,6 +1250,10 @@ class ServiceOrderModel {
       cancellation: cancellation
         ? {
             status: cancellation.status,
+
+            reason: cancellation.reason,
+
+            comment: cancellation.comment,
 
             refund_status: cancellation.refund_status,
 

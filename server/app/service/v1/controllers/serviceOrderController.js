@@ -17,6 +17,19 @@ const {
 const {
   deriveServicePaymentStatus,
 } = require("../utils/paymentState");
+
+const SERVICE_CANCELLATION_EVENT_LABELS = {
+  cancellation_requested: "Cancellation Requested",
+  cancellation_approved: "Cancellation Approved",
+  cancellation_rejected: "Cancellation Rejected",
+  refund_initiated: "Refund Initiated",
+  refund_completed: "Refund Completed",
+  refund_failed: "Refund Failed",
+};
+
+function getServiceCancellationEventLabel(event) {
+  return SERVICE_CANCELLATION_EVENT_LABELS[event] || event;
+}
 const { notifyUser } = require("../../../common/utils/notification");
 const { creditCompletedServiceReward } = require("../utils/serviceRewards");
 const { releaseServiceCoins } = require("../../../../services/rewards/serviceWalletService");
@@ -553,22 +566,59 @@ class ServiceOrderController {
 
         // cancellation
         const [[cancellation]] = await db.execute(
-          `SELECT * FROM service_order_cancellations
-         WHERE service_order_id = ?`,
+          `SELECT soc.*, ocr.reason_text AS reason
+           FROM service_order_cancellations soc
+           LEFT JOIN order_cancellation_reasons ocr
+             ON ocr.reason_id = soc.reason_id
+           WHERE soc.service_order_id = ?`,
           [item.id],
         );
 
+        const [cancellationTimeline] = cancellation
+          ? await db.execute(
+              `SELECT event, created_at
+               FROM service_order_cancellation_timeline
+               WHERE service_order_id = ?
+               ORDER BY created_at ASC`,
+              [item.id],
+            )
+          : [[]];
+
         // refund
-        const [[refund]] = await db.execute(
-          `SELECT * FROM service_order_refunds
-         WHERE service_order_id = ?`,
+        const [refunds] = await db.execute(
+          `SELECT refund_amount, refund_method, status
+           FROM service_order_refunds
+           WHERE service_order_id = ?`,
           [item.id],
+        );
+
+        const refund = refunds.reduce(
+          (summary, entry) => {
+            const amount = Number(entry.refund_amount || 0);
+            summary.total += amount;
+            if (entry.refund_method === "original") {
+              summary.money_refund += amount;
+            } else if (entry.refund_method === "wallet") {
+              summary.coin_refund += amount;
+            }
+            if (entry.status === "failed") summary.status = "failed";
+            else if (entry.status === "pending" && summary.status !== "failed") {
+              summary.status = "pending";
+            }
+            return summary;
+          },
+          {
+            total: 0,
+            money_refund: 0,
+            coin_refund: 0,
+            status: refunds.length ? "completed" : null,
+          },
         );
 
         // can cancel
         const canCancel = [
-          "pending_payment",
           "documents_pending",
+          "documents_uploaded",
           "in_progress",
         ].includes(item.status);
 
@@ -576,7 +626,7 @@ class ServiceOrderController {
         let timeline = [];
 
         // cancelled flow
-        if (item.status === "cancelled") {
+        if (item.status === "cancelled" && cancellation) {
           timeline = [
             {
               status: "Cancellation Requested",
@@ -595,6 +645,13 @@ class ServiceOrderController {
             {
               status: "Refund Completed",
               completed: cancellation?.refund_status === "completed",
+            },
+          ];
+        } else if (item.status === "cancelled") {
+          timeline = [
+            {
+              status: "Order Cancelled",
+              completed: true,
             },
           ];
         } else {
@@ -637,19 +694,32 @@ class ServiceOrderController {
 
           cancellation: cancellation
             ? {
-                can_cancel: canCancel,
+                can_cancel: false,
                 status: cancellation.status,
                 reason: cancellation.reason,
                 refund_status: cancellation.refund_status,
+                timeline: cancellationTimeline.map((entry) => ({
+                  event: entry.event,
+                  label: getServiceCancellationEventLabel(entry.event),
+                  date: entry.created_at,
+                })),
               }
             : {
                 can_cancel: canCancel,
               },
 
-          refund: refund
+          refund: refunds.length
             ? {
-                amount: Number(refund.refund_amount),
-                method: refund.refund_method,
+                amount: refund.total,
+                method:
+                  refund.money_refund > 0 && refund.coin_refund > 0
+                    ? "split"
+                    : refund.money_refund > 0
+                      ? "original"
+                      : "wallet",
+                total: refund.total,
+                money_refund: refund.money_refund,
+                coin_refund: refund.coin_refund,
                 status: refund.status,
               }
             : null,
@@ -763,6 +833,7 @@ class ServiceOrderController {
         },
       });
     } catch (err) {
+      console.error("[getOrderDetails] ERROR:", err);
       res.status(500).json({
         success: false,
         message: err.message,
@@ -1592,6 +1663,7 @@ class ServiceOrderController {
 
       WHERE id = ?
       AND user_id = ?
+      FOR UPDATE
       `,
         [service_order_id, userId],
       );
@@ -1610,8 +1682,6 @@ class ServiceOrderController {
       // =====================================
 
       const allowedStatuses = [
-        "pending_payment",
-        "payment_done",
         "documents_pending",
         "documents_uploaded",
         "in_progress",
@@ -1623,6 +1693,28 @@ class ServiceOrderController {
         return res.status(400).json({
           success: false,
           message: "Cancellation not allowed at this stage",
+        });
+      }
+
+      if (order.payment_status !== "paid") {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Only paid service orders can use the cancellation request flow",
+        });
+      }
+
+      const [[reason]] = await connection.execute(
+        `SELECT reason_id FROM order_cancellation_reasons
+         WHERE reason_id = ? AND is_active = 1`,
+        [reason_id],
+      );
+
+      if (!reason) {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Invalid cancellation reason",
         });
       }
 
