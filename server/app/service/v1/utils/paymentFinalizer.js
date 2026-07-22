@@ -20,7 +20,7 @@ async function finalizePaidServiceOrder({
          payment_status = 'paid'
      WHERE parent_order_id = ?
        AND status = 'pending_payment'
-       AND payment_status != 'paid'`,
+       AND COALESCE(payment_status, 'pending') <> 'paid'`,
     [paymentId, parentOrderId],
   );
 

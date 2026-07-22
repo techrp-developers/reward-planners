@@ -601,7 +601,7 @@ class ServiceOrderController {
           timeline = [
             {
               status: "Order Confirmed",
-              completed: true,
+              completed: item.payment_status === "paid",
             },
             {
               status: "Documents Submitted",
@@ -705,7 +705,9 @@ class ServiceOrderController {
       const parentTimeline = [
         {
           status: "Order Confirmed",
-          completed: true,
+          completed:
+            allItems.length > 0 &&
+            allItems.every((item) => item.payment_status === "paid"),
         },
         {
           status: "Services In Progress",

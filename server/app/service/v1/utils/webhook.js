@@ -127,7 +127,7 @@ async function processEvent(req) {
        SET payment_status = 'failed',
            reward_coins_used = CASE WHEN ? THEN 0 ELSE reward_coins_used END
        WHERE parent_order_id = ?
-       AND payment_status NOT IN ('paid', 'failed')`,
+       AND COALESCE(payment_status, 'pending') NOT IN ('paid', 'failed')`,
       [released ? 1 : 0, parentOrderId],
       );
       await failureConn.commit();

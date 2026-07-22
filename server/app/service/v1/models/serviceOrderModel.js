@@ -31,8 +31,8 @@ class ServiceOrderModel {
   async create(data, conn = db) {
     const [result] = await conn.execute(
       `INSERT INTO service_orders
-    (user_id, service_id, variant_id, address_id, enquiry_id, price, parent_order_id, bundle_id, status, reward_coins_earned, reward_coins_used)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    (user_id, service_id, variant_id, address_id, enquiry_id, price, parent_order_id, bundle_id, status, payment_status, reward_coins_earned, reward_coins_used)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         data.user_id,
         data.service_id,
@@ -43,6 +43,7 @@ class ServiceOrderModel {
         data.parent_order_id,
         data.bundle_id || null,
         data.status,
+        data.payment_status || "pending",
         Number(data.reward_coins_earned || 0),
         Number(data.reward_coins_used || 0),
       ],
@@ -359,6 +360,7 @@ class ServiceOrderModel {
       so.reward_coins_used,
       so.reward_coins_earned,
       so.status,
+      so.payment_status,
       so.bundle_id,
       so.created_at,
 
@@ -454,6 +456,7 @@ class ServiceOrderModel {
           Number(row.price) - Number(row.reward_coins_used || 0),
         ),
         status: row.status,
+        payment_status: row.payment_status || "pending",
       };
 
       if (row.bundle_id) {
