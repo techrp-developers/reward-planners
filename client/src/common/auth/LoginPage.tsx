@@ -11,7 +11,8 @@ type Role =
   | "warehouse_manager"
   | "hr"
   | "service_manager"
-  | "service_partner";
+  | "service_partner"
+  | "flea_market_manager";
 
 interface LoginForm {
   email: string;
@@ -193,6 +194,7 @@ export default function LoginPage() {
                     <option value="hr">HR</option>
                     <option value="service_manager">Service Manager</option>
                     <option value="service_partner">Service Partner</option>
+                    <option value="flea_market_manager">Flea Market Manager</option>
                   </select>
                 </div>
               </div>

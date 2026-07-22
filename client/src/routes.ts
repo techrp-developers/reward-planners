@@ -75,6 +75,12 @@ export const routes = {
     vendorReview: "/admin/vendor-review/:id",
   
   },
+  warehouse: {
+    dashboard: "/warehouse/dashboard",
+  },
+  fleaMarket: {
+    dashboard: "/flea-market/dashboard",
+  },
   hr: {
     dashboard: "/hr/dashboard",
     changePassword: "/hr/change-password",

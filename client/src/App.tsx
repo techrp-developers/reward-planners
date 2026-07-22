@@ -17,6 +17,8 @@ const VendorLayout = lazy(() => import("./modules/products/vendor/VendorLayout.t
 const ManagerLayout = lazy(() => import("./modules/products/vendorManager/ManagerLayout.tsx"));
 const AdminLayout = lazy(() => import("./modules/admin/layout/AdminLayout.tsx"));
 const HrLayout = lazy(() => import("./modules/hr/layout/HrLayout.tsx"));
+const WarehouseLayout = lazy(() => import("./modules/warehouse_manager/layout/WarehouseLayout.tsx"));
+const FleaMarketLayout = lazy(() => import("./modules/flea_market/layout/FleaMarketLayout.tsx"));
 const ServiceLayout = lazy(() => import("./modules/service/serviceManager/ServiceLayout.tsx"));
 const ServicePartnerLayout = lazy(() => import("./modules/service/servicePartner/ServicePartnerLayout.tsx"));
 
@@ -24,6 +26,8 @@ const ServicePartnerLayout = lazy(() => import("./modules/service/servicePartner
 const VendorDashboard = lazy(() => import("./modules/products/vendor/Dashboard.tsx"));
 const ManagerDashboard = lazy(() => import("./modules/products/vendorManager/Dashboard.tsx"));
 const HrDashboard = lazy(() => import("./modules/hr/dashboard/HrDashboard.tsx"));
+const WarehouseDashboard = lazy(() => import("./modules/warehouse_manager/dashboard/WarehouseDashboard.tsx"));
+const FleaMarketDashboard = lazy(() => import("./modules/flea_market/dashboard/FleaMarketDashboard.tsx"));
 const EmployeeOnboarding = lazy(() => import("./modules/hr/onboarding/EmployeeOnboarding.tsx"));
 const EmployeeList = lazy(() => import("./modules/hr/employees/EmployeeList.tsx"));
 
@@ -118,6 +122,29 @@ function RouteFallback() {
   );
 }
 
+function resolveDashboardPath(role?: string) {
+  switch (role) {
+    case "vendor":
+      return routes.vendor.dashboard;
+    case "vendor_manager":
+      return routes.manager.dashboard;
+    case "warehouse_manager":
+      return routes.warehouse.dashboard;
+    case "hr":
+      return routes.hr.dashboard;
+    case "admin":
+      return routes.admin.dashboard;
+    case "service_manager":
+      return routes.service.dashboard;
+    case "service_partner":
+      return routes.servicePartner.dashboard;
+    case "flea_market_manager":
+      return routes.fleaMarket.dashboard;
+    default:
+      return "/login";
+  }
+}
+
 export default function App() {
   // const { user, loading } = useAuth();
   const { user, initializing } = useAuth();
@@ -141,6 +168,17 @@ export default function App() {
   return (
     <Suspense fallback={<RouteFallback />}>
       <Routes>
+      {/* ========== ROOT ========== */}
+      <Route
+        path="/"
+        element={
+          <Navigate
+            to={user ? resolveDashboardPath(user.role) : "/login"}
+            replace
+          />
+        }
+      />
+
       {/* ========== AUTH ========== */}
       <Route element={<AuthLayout />}>
         <Route path="/login" element={<LoginPage />} />
@@ -476,6 +514,22 @@ export default function App() {
         <Route path={routes.servicePartner.reviews} element={<ReviewsList />} />
         <Route path={routes.servicePartner.documents} element={<DocumentsPage />} />
         <Route path={routes.servicePartner.settings} element={<SettingsPage />} />
+      </Route>
+
+      {/* ========== WAREHOUSE ========== */}
+      <Route element={<WarehouseLayout />}>
+        <Route
+          path={routes.warehouse.dashboard}
+          element={<WarehouseDashboard />}
+        />
+      </Route>
+
+      {/* ========== FLEA MARKET ========== */}
+      <Route element={<FleaMarketLayout />}>
+        <Route
+          path={routes.fleaMarket.dashboard}
+          element={<FleaMarketDashboard />}
+        />
       </Route>
 
       {/* ========== HR ========== */}

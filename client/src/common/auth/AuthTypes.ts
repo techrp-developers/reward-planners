@@ -9,7 +9,8 @@ export interface User {
     | "warehouse_manager"
     | "hr"
     | "service_manager"
-    | "service_partner";
+    | "service_partner"
+    | "flea_market_manager";
   phone?: string;
 }
 

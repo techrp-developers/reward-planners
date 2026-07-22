@@ -35,6 +35,34 @@ const STATIC_SERVICE_PARTNER = {
   },
 };
 
+// Static local login for Warehouse Manager so the new warehouse_manager
+// module/dashboard can be checked without a real backend user row.
+const STATIC_WAREHOUSE_MANAGER = {
+  email: "warehouse@rewardsplanners.com",
+  password: "Warehouse@123",
+  token: "warehouse-manager-static-token",
+  user: {
+    user_id: 10002,
+    name: "Warehouse Manager",
+    email: "warehouse@rewardsplanners.com",
+    role: "warehouse_manager" as const,
+  },
+};
+
+// Static local login for Flea Market so the new flea_market module/dashboard
+// can be checked without a real backend user row.
+const STATIC_FLEA_MARKET_MANAGER = {
+  email: "fleamarket@rewardsplanners.com",
+  password: "FleaMarket@123",
+  token: "flea-market-manager-static-token",
+  user: {
+    user_id: 10003,
+    name: "Flea Market Manager",
+    email: "fleamarket@rewardsplanners.com",
+    role: "flea_market_manager" as const,
+  },
+};
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const navigate = useNavigate();
 
@@ -95,6 +123,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     case "service_partner":
       return "service-partner";
 
+    case "flea_market_manager":
+      return "flea_market_manager";
+
     default:
       return "admin";
   }
@@ -122,6 +153,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     case "service_partner":
       return "/service-partner/dashboard";
+
+    case "flea_market_manager":
+      return "/flea-market/dashboard";
 
     default:
       return "/";
@@ -156,6 +190,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(STATIC_SERVICE_PARTNER.user);
       setLoading(false);
       navigate(resolveDashboard("service_partner"), { replace: true });
+      return;
+    }
+
+    if (
+      email.trim().toLowerCase() === STATIC_WAREHOUSE_MANAGER.email &&
+      password === STATIC_WAREHOUSE_MANAGER.password
+    ) {
+      setLoading(true);
+      localStorage.setItem("token", STATIC_WAREHOUSE_MANAGER.token);
+      localStorage.setItem("user", JSON.stringify(STATIC_WAREHOUSE_MANAGER.user));
+      setUser(STATIC_WAREHOUSE_MANAGER.user);
+      setLoading(false);
+      navigate(resolveDashboard("warehouse_manager"), { replace: true });
+      return;
+    }
+
+    if (
+      email.trim().toLowerCase() === STATIC_FLEA_MARKET_MANAGER.email &&
+      password === STATIC_FLEA_MARKET_MANAGER.password
+    ) {
+      setLoading(true);
+      localStorage.setItem("token", STATIC_FLEA_MARKET_MANAGER.token);
+      localStorage.setItem("user", JSON.stringify(STATIC_FLEA_MARKET_MANAGER.user));
+      setUser(STATIC_FLEA_MARKET_MANAGER.user);
+      setLoading(false);
+      navigate(resolveDashboard("flea_market_manager"), { replace: true });
       return;
     }
 
