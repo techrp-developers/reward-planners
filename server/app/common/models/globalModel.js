@@ -6,10 +6,17 @@ class GlobalModel {
   async getGlobalSuggestions(search) {
     const result = {};
 
-    result.products = await ProductModel.getSearchSuggestions({
+    const ecommerceSuggestions = await ProductModel.getSearchSuggestions({
       search,
       limit: 5,
     });
+
+    // Keep the global-search response backward compatible as a flat list.
+    result.products = [
+      ...ecommerceSuggestions.categories,
+      ...ecommerceSuggestions.subcategories,
+      ...ecommerceSuggestions.products,
+    ].slice(0, 5);
 
     result.services = await ServiceModel.getSearchSuggestions({
       search,

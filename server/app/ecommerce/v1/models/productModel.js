@@ -15,6 +15,44 @@ function getPublicUrl(path, updatedAt) {
   return `${CDN_BASE_URL}/${path}${version}`;
 }
 
+const SEARCH_SYNONYMS = {
+  earbud: ["earphone"],
+  earphone: ["earbud"],
+  headphone: ["headset"],
+  headset: ["headphone"],
+  men: ["man", "male", "mens"],
+  man: ["men", "male", "mens"],
+  dress: ["clothing", "clothes", "apparel"],
+  clothing: ["dress", "clothes", "apparel"],
+};
+
+function singularizeSearchToken(token) {
+  if (token.endsWith("ies") && token.length > 4) return `${token.slice(0, -3)}y`;
+  if (token.endsWith("es") && token.length > 4) return token.slice(0, -2);
+  if (token.endsWith("s") && token.length > 3) return token.slice(0, -1);
+  return token;
+}
+
+function buildSearchPatterns(search) {
+  const normalized = String(search)
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  const ignoredWords = new Set(["and", "for", "the"]);
+  const terms = new Set(normalized ? [normalized] : []);
+
+  for (const rawToken of normalized.split(" ")) {
+    if (!rawToken || ignoredWords.has(rawToken)) continue;
+    const token = singularizeSearchToken(rawToken);
+    terms.add(rawToken);
+    terms.add(token);
+    for (const synonym of SEARCH_SYNONYMS[token] || []) terms.add(synonym);
+  }
+
+  return [...terms].filter(Boolean).map((term) => `%${term}%`);
+}
+
 class ProductModel {
   // async getAllProducts({ search, sortBy, sortOrder, limit, offset }) {
   //   try {
@@ -1322,10 +1360,16 @@ class ProductModel {
   // Search Suggestions
   async getSearchSuggestions({ search, limit }) {
     if (!search || search.length < 2) {
-      return [];
+      return {
+        categories: [],
+        subcategories: [],
+        products: [],
+      };
     }
 
-    const keyword = `%${search}%`;
+    const patterns = buildSearchPatterns(search);
+    const likeAny = (column) =>
+      `(${patterns.map(() => `${column} LIKE ?`).join(" OR ")})`;
 
     /* ========================================
      1 Category Suggestions
@@ -1340,10 +1384,10 @@ class ProductModel {
     FROM categories
     WHERE status = 1
       AND is_visible_in_ui = 1
-      AND category_name LIKE ?
+      AND ${likeAny("category_name")}
     LIMIT ?
     `,
-      [keyword, limit],
+      [...patterns, limit],
     );
 
     /* ========================================
@@ -1352,16 +1396,22 @@ class ProductModel {
     const [subcategories] = await db.execute(
       `
     SELECT 
-      subcategory_id AS id,
-      subcategory_name AS title,
-      cover_image AS image,
+      sc.subcategory_id AS id,
+      sc.subcategory_name AS title,
+      sc.cover_image AS image,
+      sc.category_id,
+      c.category_name,
       'subcategory' AS type
-    FROM sub_categories
-    WHERE status = 1
-      AND subcategory_name LIKE ?
+    FROM sub_categories sc
+    INNER JOIN categories c
+      ON c.category_id = sc.category_id
+    WHERE sc.status = 1
+      AND c.status = 1
+      AND c.is_visible_in_ui = 1
+      AND (${likeAny("sc.subcategory_name")} OR ${likeAny("c.category_name")})
     LIMIT ?
     `,
-      [keyword, limit],
+      [...patterns, ...patterns, limit],
     );
 
     /* ========================================
@@ -1374,6 +1424,10 @@ class ProductModel {
       p.product_name AS title,
       pi.image_url AS image,
       pi.updated_at AS image_updated_at,
+      p.category_id,
+      c.category_name,
+      p.subcategory_id,
+      sc.subcategory_name,
       'product' AS type
 
     FROM eproducts p
@@ -1415,16 +1469,23 @@ class ProductModel {
       AND p.is_deleted = 0
       AND v.variant_id IS NOT NULL
       AND (
-        p.product_name LIKE ?
-        OR p.brand_name LIKE ?
-        OR c.category_name LIKE ?
-        OR sc.subcategory_name LIKE ?
-        OR ssc.name LIKE ?
+        ${likeAny("p.product_name")}
+        OR ${likeAny("p.brand_name")}
+        OR ${likeAny("c.category_name")}
+        OR ${likeAny("sc.subcategory_name")}
+        OR ${likeAny("ssc.name")}
       )
 
     LIMIT ?
     `,
-      [keyword, keyword, keyword, keyword, keyword, limit],
+      [
+        ...patterns,
+        ...patterns,
+        ...patterns,
+        ...patterns,
+        ...patterns,
+        limit,
+      ],
     );
 
     /* ========================================
@@ -1433,25 +1494,38 @@ class ProductModel {
     const formattedCategories = categories.map((cat) => ({
       ...cat,
       image: getPublicUrl(cat.image),
+      navigation: {
+        destination: "category_products",
+        category_id: cat.id,
+      },
     }));
 
     const formattedSubcategories = subcategories.map((sub) => ({
       ...sub,
       image: getPublicUrl(sub.image),
+      navigation: {
+        destination: "subcategory_products",
+        category_id: sub.category_id,
+        subcategory_id: sub.id,
+      },
     }));
 
     const formattedProducts = products.map(
       ({ image, image_updated_at, ...prod }) => ({
         ...prod,
         image: getPublicUrl(image, image_updated_at),
+        navigation: {
+          destination: "product_details",
+          product_id: prod.id,
+        },
       }),
     );
 
-    return [
-      ...formattedCategories,
-      ...formattedSubcategories,
-      ...formattedProducts,
-    ].slice(0, limit);
+    return {
+      categories: formattedCategories,
+      subcategories: formattedSubcategories,
+      products: formattedProducts,
+    };
   }
 
   // Load Products

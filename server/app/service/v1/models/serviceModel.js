@@ -982,19 +982,20 @@ class ServiceModel {
       'service' AS type
     FROM services
     WHERE status = 1
-      AND (
-        name LIKE ?
-        OR description LIKE ?
-      )
+      AND name LIKE ?
     ORDER BY name ASC
     LIMIT ?
     `,
-      [keyword, keyword, limit],
+      [keyword, limit],
     );
 
-    return rows.map((service) => ({
+    return rows.map(({ updated_at, ...service }) => ({
       ...service,
-      image: getPublicUrl(service.image, service.updated_at),
+      image: getPublicUrl(service.image, updated_at),
+      navigation: {
+        destination: "service_details",
+        service_id: service.id,
+      },
     }));
   }
 }
