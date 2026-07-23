@@ -1,7 +1,6 @@
 import axios from "axios";
 
-// const HR_API_BASE_URL = "https://rewardplanners.com/api/crm";
-const HR_API_BASE_URL = "http://localhost:5000";
+const HR_API_BASE_URL = "https://rewardplanners.com/api/crm";
 
 export const hrApi = axios.create({
   baseURL: HR_API_BASE_URL,
