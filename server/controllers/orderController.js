@@ -4,6 +4,7 @@ const xpressService = require("../services/ExpressBees/xpressbees_service");
 const ServiceOrderModel = require("../app/service/v1/models/serviceOrderModel");
 const { sendOpsAlert } = require("../services/alertService");
 const EcommerceRefundService = require("../services/Razorpay/ecommerceRefundService");
+const ItemCancellationModel = require("../models/itemCancellationModel");
 const { notifyUser } = require("../app/common/utils/notification");
 const Razorpay = require("razorpay");
 
@@ -393,6 +394,173 @@ class OrderController {
       return res
         .status(500)
         .json({ success: false, message: "Unable to reject cancellation" });
+    } finally {
+      conn.release();
+    }
+  }
+
+  async getItemCancellationRequests(req, res) {
+    try {
+      const data = await ItemCancellationModel.list({
+        status: req.query.status || "requested",
+        page: Math.max(1, Number.parseInt(req.query.page, 10) || 1),
+        limit: Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 20)),
+      });
+      return res.json({ success: true, ...data });
+    } catch (error) {
+      console.error("Item cancellation requests error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Unable to fetch item cancellation requests",
+      });
+    }
+  }
+
+  async getItemCancellationDetails(req, res) {
+    try {
+      const data = await ItemCancellationModel.details(
+        Number(req.params.orderItemId),
+      );
+      return res.json({ success: true, data });
+    } catch (error) {
+      if (error.message === "CANCELLATION_REQUEST_NOT_FOUND") {
+        return res.status(404).json({
+          success: false,
+          message: "Item cancellation request not found",
+        });
+      }
+      console.error("Item cancellation details error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Unable to fetch item cancellation details",
+      });
+    }
+  }
+
+  async approveItemCancellation(req, res) {
+    const conn = await db.getConnection();
+    try {
+      await conn.beginTransaction();
+      const orderItemId = Number(req.params.orderItemId);
+      const refund = await ItemCancellationModel.approve(orderItemId, conn);
+      await conn.commit();
+
+      if (refund.original > 0) {
+        try {
+          await EcommerceRefundService.processRefund({
+            orderId: refund.order_id,
+            orderItemId,
+            shipmentId: refund.shipment_id,
+            vendorOrderId: refund.vendor_order_id,
+            paymentId: refund.payment_id,
+            amount: refund.original,
+            refundKey: `item_${orderItemId}_cancel_refund`,
+          });
+        } catch (error) {
+          await db.execute(
+            `UPDATE ecommerce_item_cancellations
+             SET refund_status = 'failed' WHERE order_item_id = ?`,
+            [orderItemId],
+          );
+          await db.execute(
+            `INSERT INTO ecommerce_item_cancellation_timeline
+              (order_item_id, event, meta)
+             VALUES (?, 'refund_failed', ?)`,
+            [orderItemId, JSON.stringify({ error: error.message })],
+          );
+          sendOpsAlert({
+            level: "critical",
+            category: "refund",
+            message: `Item cancellation refund failed for item ${orderItemId}`,
+            meta: {
+              orderId: refund.order_id,
+              orderItemId,
+              amount: refund.original,
+              error: error.message,
+            },
+          }).catch(() => {});
+        }
+      }
+
+      notifyUser(
+        {
+          userId: refund.user_id,
+          module: "ecommerce",
+          type: "item_cancellation_approved",
+          title: "Item cancellation approved",
+          message: "Your item was cancelled and its refund is being processed.",
+          icon: "x-circle",
+          reference_type: "order_item",
+          reference_id: orderItemId,
+          action_url: `/orders/order-details/${refund.order_id}`,
+        },
+        "item cancellation approved",
+      );
+
+      return res.json({
+        success: true,
+        message: "Item cancellation approved",
+        data: {
+          order_item_id: orderItemId,
+          refund_amount: refund.total,
+          refund_status: refund.original > 0 ? "initiated" : "completed",
+        },
+      });
+    } catch (error) {
+      await conn.rollback();
+      const errors = {
+        CANCELLATION_REQUEST_NOT_FOUND: [404, "Item cancellation request not found"],
+        INVALID_CANCELLATION_STATE: [409, "Cancellation request was already decided"],
+        SHIPMENT_ALREADY_BOOKED: [
+          409,
+          "Shipment booking has started; item cancellation must be rejected",
+        ],
+      };
+      const [status, message] = errors[error.message] || [
+        500,
+        "Unable to approve item cancellation",
+      ];
+      if (status === 500) console.error("Approve item cancellation error:", error);
+      return res.status(status).json({ success: false, message });
+    } finally {
+      conn.release();
+    }
+  }
+
+  async rejectItemCancellation(req, res) {
+    const conn = await db.getConnection();
+    try {
+      await conn.beginTransaction();
+      const orderItemId = Number(req.params.orderItemId);
+      const result = await ItemCancellationModel.reject(orderItemId, conn);
+      await conn.commit();
+
+      notifyUser(
+        {
+          userId: result.user_id,
+          module: "ecommerce",
+          type: "item_cancellation_rejected",
+          title: "Item cancellation rejected",
+          message: "Your item cancellation request was rejected.",
+          icon: "x-circle",
+          reference_type: "order_item",
+          reference_id: orderItemId,
+          action_url: `/orders/order-details/${result.order_id}`,
+        },
+        "item cancellation rejected",
+      );
+      return res.json({ success: true, message: "Item cancellation rejected" });
+    } catch (error) {
+      await conn.rollback();
+      const status =
+        error.message === "CANCELLATION_REQUEST_NOT_FOUND" ? 404 : 409;
+      return res.status(status).json({
+        success: false,
+        message:
+          status === 404
+            ? "Item cancellation request not found"
+            : "Cancellation request was already decided",
+      });
     } finally {
       conn.release();
     }

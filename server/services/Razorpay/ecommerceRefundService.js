@@ -40,7 +40,8 @@ async function completeRefund(refundId, gatewayRefund) {
   try {
     await conn.beginTransaction();
     const [[row]] = await conn.query(
-      `SELECT payment_id, order_id, shipment_id, refund_amount, refund_key
+      `SELECT payment_id, order_id, order_item_id, shipment_id,
+              refund_amount, refund_key
        FROM order_refunds WHERE refund_id = ? FOR UPDATE`,
       [refundId],
     );
@@ -66,6 +67,24 @@ async function completeRefund(refundId, gatewayRefund) {
            WHERE order_id = ? AND event = 'refund_completed'
          )`,
         [row.order_id, row.order_id],
+      );
+    }
+    if (row.order_item_id) {
+      await conn.query(
+        `UPDATE ecommerce_item_cancellations
+         SET refund_status = 'completed'
+         WHERE order_item_id = ?`,
+        [row.order_item_id],
+      );
+      await conn.query(
+        `INSERT INTO ecommerce_item_cancellation_timeline
+          (order_item_id, event)
+         SELECT ?, 'refund_completed'
+         WHERE NOT EXISTS (
+           SELECT 1 FROM ecommerce_item_cancellation_timeline
+           WHERE order_item_id = ? AND event = 'refund_completed'
+         )`,
+        [row.order_item_id, row.order_item_id],
       );
     }
     await conn.commit();
@@ -100,6 +119,7 @@ async function completeRefund(refundId, gatewayRefund) {
 
 async function processRefund({
   orderId,
+  orderItemId = null,
   shipmentId = null,
   vendorOrderId = null,
   amount,
@@ -168,11 +188,12 @@ async function processRefund({
     } else {
       const [created] = await conn.query(
         `INSERT INTO order_refunds
-          (order_id, payment_id, shipment_id, vendor_order_id, refund_amount,
+          (order_id, order_item_id, payment_id, shipment_id, vendor_order_id, refund_amount,
            refund_method, status, refund_key, retry_count, last_retried_at)
-         VALUES (?, ?, ?, ?, ?, 'original', 'initiated', ?, 1, NOW())`,
+         VALUES (?, ?, ?, ?, ?, ?, 'original', 'initiated', ?, 1, NOW())`,
         [
           orderId,
+          orderItemId,
           payment.payment_id,
           shipmentId,
           vendorOrderId,
@@ -242,7 +263,7 @@ async function processRefund({
 
 async function retryPendingRefunds(limit = 20) {
   const [rows] = await db.query(
-    `SELECT refund_id, order_id, payment_id, shipment_id, vendor_order_id,
+    `SELECT refund_id, order_id, order_item_id, payment_id, shipment_id, vendor_order_id,
             refund_amount, refund_key, razorpay_refund_id
      FROM order_refunds
      WHERE status IN ('pending', 'initiated', 'failed')
@@ -278,6 +299,7 @@ async function retryPendingRefunds(limit = 20) {
 
       await processRefund({
         orderId: row.order_id,
+        orderItemId: row.order_item_id,
         paymentId: row.payment_id,
         shipmentId: row.shipment_id,
         vendorOrderId: row.vendor_order_id,

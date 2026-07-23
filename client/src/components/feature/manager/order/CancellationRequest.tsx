@@ -1,153 +1,103 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../../../../api/api";
 import { FiXCircle } from "react-icons/fi";
+import { api } from "../../../../api/api";
 
-interface CancellationRequest {
-  order_id: number;
+interface ItemCancellation {
+  order_item_id: number;
   order_ref: string;
   customer_name: string;
-  total_amount: number;
-  reason_id: number;
-  reason: string;
-  comment: string | null;
+  product_name: string;
+  quantity: number;
+  final_price: number;
+  status: string;
+  refund_status: string;
   requested_at: string;
 }
 
-interface CancellationResponse {
-  success: boolean;
-  requests: CancellationRequest[];
-}
-
-const CancellationRequests: React.FC = () => {
+export default function CancellationRequests() {
   const navigate = useNavigate();
-
-  const [requests, setRequests] = useState<CancellationRequest[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [requests, setRequests] = useState<ItemCancellation[]>([]);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchRequests = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const res = await api.get<CancellationResponse>(
-        "/order/cancellation-requests",
-      );
-
-      if (!res.data.success) {
-        throw new Error("Failed to load requests");
-      }
-
-      setRequests(res.data.requests);
-    } catch (err) {
-      console.error("Failed to fetch cancellation requests", err);
-      setError("Unable to load cancellation requests.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchRequests();
+    const load = async () => {
+      try {
+        setLoading(true);
+        const response = await api.get<{
+          success: boolean;
+          requests: ItemCancellation[];
+        }>("/order/item-cancellation-requests");
+        setRequests(response.data.requests || []);
+      } catch (requestError) {
+        console.error("Unable to fetch item cancellations", requestError);
+        setError("Unable to load item cancellation requests.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
   }, []);
 
-  const formatCurrency = (amount: number) =>
+  const currency = (value: number) =>
     new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency: "INR",
-    }).format(amount);
-
-  const formatDate = (date: string) =>
-    new Date(date).toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
+    }).format(Number(value || 0));
 
   return (
-    <div className="w-full min-h-screen">
-      <div className="p-6 bg-white border border-gray-200 shadow-lg rounded-2xl">
-
-        {/* Header */}
-        <div className="flex items-start gap-4 mb-8">
-          <div className="w-12 h-12 bg-gradient-to-r from-[#852BAF] to-[#FC3F78] rounded-full flex items-center justify-center shrink-0 shadow-md">
+    <div className="min-h-screen w-full">
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg">
+        <div className="mb-8 flex items-start gap-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-r from-[#852BAF] to-[#FC3F78] shadow-md">
             <FiXCircle className="text-xl text-white" />
           </div>
           <div>
-            <h2 className="text-3xl font-bold text-gray-900">Cancellation Requests</h2>
-            <p className="mt-1 text-sm text-gray-500">Review and manage customer cancellation requests</p>
+            <h1 className="text-3xl font-bold text-gray-900">Item Cancellation Requests</h1>
+            <p className="mt-1 text-sm text-gray-500">
+              Review individual products without cancelling the remaining order.
+            </p>
           </div>
         </div>
 
-        {loading && (
-          <div className="flex justify-center py-12">
-            <div className="w-10 h-10 border-4 border-gray-200 border-t-[#852BAF] rounded-full animate-spin" />
-          </div>
-        )}
-        {error && (
-          <p className="px-4 py-3 mb-4 text-red-600 border border-red-200 bg-red-50 rounded-xl">{error}</p>
-        )}
-
-        {!loading && !error && (
-          <div className="overflow-hidden border border-gray-100 rounded-2xl">
-            <table className="min-w-full divide-y divide-gray-100">
-              <thead style={{ background: "linear-gradient(135deg, #fdf8ff 0%, #fff5f8 100%)" }}>
-                <tr>
-                  {["Order Ref", "Customer", "Total", "Reason", "Comment", "Date", "Action"].map((h) => (
-                    <th key={h} className="px-5 py-4 text-xs font-bold tracking-wider text-left text-gray-500 uppercase">
-                      {h}
-                    </th>
-                  ))}
+        {error && <div className="mb-4 rounded-xl bg-red-50 p-4 text-red-600">{error}</div>}
+        <div className="overflow-x-auto rounded-2xl border border-gray-100">
+          <table className="min-w-full divide-y divide-gray-100">
+            <thead className="bg-gradient-to-r from-purple-50 to-pink-50">
+              <tr>
+                {["Order", "Product", "Customer", "Amount", "Status", "Requested", "Action"].map((heading) => (
+                  <th key={heading} className="px-5 py-4 text-left text-xs font-bold uppercase tracking-wider text-gray-500">{heading}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {loading ? (
+                <tr><td colSpan={7} className="py-16 text-center text-gray-400">Loading requests…</td></tr>
+              ) : requests.length === 0 ? (
+                <tr><td colSpan={7} className="py-16 text-center text-gray-400">No item cancellation requests.</td></tr>
+              ) : requests.map((request) => (
+                <tr key={request.order_item_id} className="hover:bg-purple-50/30">
+                  <td className="px-5 py-4 font-semibold text-[#852BAF]">{request.order_ref}</td>
+                  <td className="px-5 py-4">
+                    <p className="font-semibold text-gray-800">{request.product_name}</p>
+                    <p className="text-xs text-gray-400">Qty {request.quantity} · Item #{request.order_item_id}</p>
+                  </td>
+                  <td className="px-5 py-4 text-gray-700">{request.customer_name}</td>
+                  <td className="px-5 py-4 font-semibold">{currency(request.final_price)}</td>
+                  <td className="px-5 py-4 text-sm capitalize">{request.status} · refund {request.refund_status}</td>
+                  <td className="px-5 py-4 text-sm text-gray-500">{new Date(request.requested_at).toLocaleString("en-IN")}</td>
+                  <td className="px-5 py-4">
+                    <button onClick={() => navigate(`/manager/cancellation-detail/${request.order_item_id}`)} className="cursor-pointer rounded-lg border border-purple-200 bg-purple-50 px-4 py-1.5 font-semibold text-[#852BAF] hover:bg-[#852BAF] hover:text-white">
+                      Review
+                    </button>
+                  </td>
                 </tr>
-              </thead>
-
-              <tbody className="bg-white divide-y divide-gray-50">
-                {requests.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="py-16 text-sm text-center text-gray-400">
-                      No cancellation requests
-                    </td>
-                  </tr>
-                ) : (
-                  requests.map((req) => (
-                    <tr key={req.order_id} className="transition-colors hover:bg-purple-50/30">
-                      <td className="px-5 py-4 font-semibold text-[#852BAF] text-sm">{req.order_ref}</td>
-
-                      <td className="px-5 py-4 text-sm text-gray-700">{req.customer_name}</td>
-
-                      <td className="px-5 py-4 text-sm font-semibold text-gray-900">
-                        {formatCurrency(req.total_amount)}
-                      </td>
-
-                      <td className="px-5 py-4 text-sm text-gray-700">
-                        #{req.reason_id} — {req.reason}
-                      </td>
-
-                      <td className="px-5 py-4 text-gray-500 text-sm max-w-[160px] truncate">
-                        {req.comment ?? "-"}
-                      </td>
-
-                      <td className="px-5 py-4 text-sm text-gray-600">{formatDate(req.requested_at)}</td>
-
-                      <td className="px-5 py-4">
-                        <button
-                          onClick={() => navigate(`/manager/cancellation-detail/${req.order_id}`)}
-                          className="px-4 py-1.5 text-sm font-semibold bg-purple-50 text-[#852BAF] border border-purple-200 rounded-lg hover:bg-gradient-to-r hover:from-[#852BAF] hover:to-[#FC3F78] hover:text-white hover:border-transparent transition-all cursor-pointer"
-                        >
-                          View
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
-};
-
-export default CancellationRequests;
+}

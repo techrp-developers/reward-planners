@@ -15,8 +15,18 @@ function canRequestCancellation(orderStatus) {
   return ["paid", "processing"].includes(orderStatus);
 }
 
+function canCancelShipment(shipmentStatus) {
+  return [
+    "awaiting_payment",
+    "pending",
+    "booking_in_progress",
+    "booked",
+  ].includes(shipmentStatus);
+}
+
 module.exports = {
   acceptsFirstPaymentCapture,
   vendorStatusForShipment,
   canRequestCancellation,
+  canCancelShipment,
 };

@@ -13,6 +13,7 @@ const {
 const { runNonBlocking } = require("../../../../utils/nonBlocking");
 const { notifyUser } = require("../../../common/utils/notification");
 const { canRequestCancellation } = require("../utils/lifecyclePolicy");
+const ItemCancellationModel = require("../models/itemCancellationModel");
 
 function positiveInt(value, fallback, max = 100) {
   const parsed = Number.parseInt(value, 10);
@@ -568,6 +569,83 @@ class OrderController {
       });
     } finally {
       await conn.release();
+    }
+  }
+
+  async requestItemCancellation(req, res) {
+    try {
+      const userId = req.user?.user_id;
+      const orderItemId = Number(req.params.orderItemId);
+      const reasonId = Number(req.body.reason_id);
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+      if (!Number.isInteger(orderItemId) || orderItemId <= 0 || !reasonId) {
+        return res.status(400).json({
+          success: false,
+          message: "Valid order item and cancellation reason are required",
+        });
+      }
+
+      const data = await ItemCancellationModel.request({
+        userId,
+        orderItemId,
+        reasonId,
+        comment: req.body.comment,
+      });
+
+      return res.json({
+        success: true,
+        message: "Item cancellation request submitted successfully",
+        data,
+      });
+    } catch (error) {
+      const errors = {
+        ITEM_NOT_FOUND: [404, "Order item not found"],
+        ITEM_NOT_CANCELLABLE: [
+          409,
+          "This item can only be cancelled before courier booking",
+        ],
+        INVALID_REASON: [400, "Invalid cancellation reason"],
+        CANCELLATION_ALREADY_REQUESTED: [
+          409,
+          "Cancellation was already requested for this item",
+        ],
+      };
+      const [status, message] = errors[error.message] || [
+        500,
+        "Unable to submit item cancellation request",
+      ];
+      if (status === 500) {
+        console.error("Item cancellation request error:", error);
+      }
+      return res.status(status).json({ success: false, message });
+    }
+  }
+
+  async itemCancellationDetails(req, res) {
+    try {
+      const data = await ItemCancellationModel.details({
+        userId: req.user?.user_id,
+        orderItemId: Number(req.params.orderItemId),
+      });
+      return res.json({ success: true, data });
+    } catch (error) {
+      if (error.message === "ITEM_NOT_FOUND") {
+        return res.status(404).json({
+          success: false,
+          message: "Order item not found",
+        });
+      }
+      console.error("Item cancellation details error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Unable to fetch item cancellation details",
+      });
     }
   }
 

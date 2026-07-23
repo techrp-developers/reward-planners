@@ -168,7 +168,7 @@ async function creditDeliveredOrderRewards(orderId) {
   try {
     await conn.beginTransaction();
     const [[order]] = await conn.query(
-      `SELECT user_id, reward_coins_earned, status
+      `SELECT user_id, status
        FROM eorders WHERE order_id = ? FOR UPDATE`,
       [orderId],
     );
@@ -177,6 +177,14 @@ async function creditDeliveredOrderRewards(orderId) {
       await conn.rollback();
       return false;
     }
+
+    const [[reward]] = await conn.query(
+      `SELECT COALESCE(SUM(reward_coins_earned), 0) AS coins
+       FROM eorder_items
+       WHERE order_id = ? AND fulfillment_status <> 'cancelled'`,
+      [orderId],
+    );
+    order.reward_coins_earned = Number(reward.coins || 0);
 
     const credited = await addWalletAdjustment(conn, {
       userId: order.user_id,

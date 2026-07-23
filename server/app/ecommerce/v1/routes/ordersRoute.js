@@ -18,6 +18,20 @@ router.get("/cancellation-reasons", OrderController.getCancellationReasons);
 // Submit cancel Request
 router.post("/cancel/:orderId", auth, OrderController.requestOrderCancellation);
 
+// item cancellation request
+router.post(
+  "/items/:orderItemId/cancel",
+  auth,
+  OrderController.requestItemCancellation,
+);
+
+// Item cancellation details
+router.get(
+  "/items/:orderItemId/cancellation",
+  auth,
+  OrderController.itemCancellationDetails,
+);
+
 // Get cancellation Details
 router.get(
   "/cancellation-details/:orderId",

@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node app.js",
     "dev": "nodemon app.js",
-    "test": "node --test app/bbps/v1/tests/paymentSafety.test.js app/ecommerce/v1/tests/lifecycleSafety.test.js services/whatsapp/tests/phone.test.js"
+    "test": "node --test app/bbps/v1/tests/paymentSafety.test.js app/ecommerce/v1/tests/lifecycleSafety.test.js app/ecommerce/v1/tests/orderProgress.test.js app/ecommerce/v1/tests/itemCancellationPolicy.test.js services/whatsapp/tests/phone.test.js"
   },
   "keywords": [
     "rewards",
