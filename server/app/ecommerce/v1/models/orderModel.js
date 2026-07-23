@@ -353,12 +353,13 @@ class orderModel {
 
         item_count: Number(o.item_count),
 
-        price:
+        price: Number(o.total_amount),
+        original_price: Number(o.total_amount),
+        active_price:
           o.derived_status === "cancelled"
             ? 0
             : Number(o.active_item_total || 0) +
               Number(o.active_shipping_total || 0),
-        original_price: Number(o.total_amount),
 
         status: o.derived_status,
         created_at: o.created_at,
