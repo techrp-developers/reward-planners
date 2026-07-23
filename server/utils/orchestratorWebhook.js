@@ -36,8 +36,16 @@ async function handleWebhook(req, res) {
       event: body.event,
       payment_id: body?.payload?.payment?.entity?.id,
       order_id: body?.payload?.payment?.entity?.order_id,
-      module: body?.payload?.payment?.entity?.notes?.module,
+      refund_id: body?.payload?.refund?.entity?.id,
+      module:
+        body?.payload?.payment?.entity?.notes?.module ||
+        body?.payload?.refund?.entity?.notes?.module,
     });
+
+    if (body?.event === "refund.processed" || body?.event === "refund.failed") {
+      await serviceWebhook.processEvent(req);
+      return res.sendStatus(200);
+    }
 
     //  FAN-OUT (parallel execution)
     // await Promise.all([

@@ -5,10 +5,18 @@ const {
 } = require("./paymentFinalizer");
 const { notifyUser } = require("../../../common/utils/notification");
 const { releaseServiceCoins } = require("../../../../services/rewards/serviceWalletService");
+const ServiceOrderModel = require("../models/serviceOrderModel");
 
 async function processEvent(req) {
   const body = req.parsedBody;
   const event = body.event;
+
+  if (event === "refund.processed" || event === "refund.failed") {
+    const refund = body?.payload?.refund?.entity;
+    if (!refund) return;
+    await ServiceOrderModel.reconcileRefundEntity(refund, event);
+    return;
+  }
 
   // =========================
   //  PAYMENT SUCCESS

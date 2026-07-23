@@ -13,7 +13,7 @@ interface CancellationDetailData {
   address: null | { address1: string; address2: string | null; city: string; state: string; country: string; zipcode: string; landmark: string | null; contact_name: string; contact_phone: string };
   cancellation: null | { status: string; reason: string | null; comment: string | null; refund_status: string; refund_amount: number; created_at: string };
   timeline: TimelineEntry[];
-  refund: { total: number; money_refund: number; coin_refund: number };
+  refund: { total: number; money_refund: number; coin_refund: number; status: string | null };
   rewards: { used: number; reversed: number };
   summary: { service_total: number; order_total: number };
 }
@@ -140,7 +140,7 @@ export default function ServiceCancellationDetail() {
           <div><p className="text-xs text-gray-400">Total refund</p><p className="mt-1 font-bold text-gray-900">{currency(data.refund.total)}</p></div>
           <div><p className="text-xs text-gray-400">Original payment</p><p className="mt-1 font-semibold text-gray-800">{currency(data.refund.money_refund)}</p></div>
           <div><p className="text-xs text-gray-400">Wallet coins</p><p className="mt-1 font-semibold text-gray-800">{data.refund.coin_refund}</p></div>
-          <div><p className="text-xs text-gray-400">Refund status</p><p className="mt-1 font-semibold capitalize text-gray-800">{data.cancellation?.refund_status || "pending"}</p></div>
+          <div><p className="text-xs text-gray-400">Refund status</p><p className="mt-1 font-semibold capitalize text-gray-800">{data.refund.status || data.cancellation?.refund_status || "pending"}</p></div>
         </div>
       </section>
 

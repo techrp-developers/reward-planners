@@ -1,5 +1,6 @@
 const db = require("../../../../config/database");
 const razorpay = require("../middlewares/razorpay");
+const axios = require("axios");
 const { notifyUser } = require("../../../common/utils/notification");
 
 // helper function
@@ -596,8 +597,8 @@ class ServiceOrderModel {
 
     // check wallet transactions for duplicate
     const [[existingWalletRefund]] = await conn.execute(
-      `SELECT id FROM wallet_transactions
-   WHERE reference_id = ? AND reason_code = 'ADMIN_ADJUSTMENT' LIMIT 1`,
+      `SELECT 1 AS refund_exists FROM wallet_transactions
+       WHERE reference_id = ? AND reason_code = 'ADMIN_ADJUSTMENT' LIMIT 1`,
       [serviceOrderId],
     );
 
@@ -836,125 +837,256 @@ class ServiceOrderModel {
     };
   }
 
-  async processRefund(data) {
+  async completeRefund(serviceOrderId, gatewayRefund) {
+    const conn = await db.getConnection();
+    let shouldNotify = false;
+    let userId;
     try {
-      const { payment_id, amount, service_order_id } = data;
-
-      // refund
-      const refund = await razorpay.payments.refund(payment_id, {
-        amount: Math.round(Number(amount) * 100),
-      });
-
-      // update refund
-      await db.execute(
-        `
-      UPDATE service_order_refunds
-      SET
-        status = 'completed',
-        razorpay_refund_id = ?
-
-      WHERE service_order_id = ?
-      AND status IN ('pending', 'failed')`,
-        [refund.id, service_order_id],
+      await conn.beginTransaction();
+      const [[row]] = await conn.execute(
+        `SELECT r.id, r.status, so.user_id
+         FROM service_order_refunds r
+         JOIN service_orders so ON so.id = r.service_order_id
+         WHERE r.service_order_id = ? AND r.refund_method = 'original'
+         LIMIT 1 FOR UPDATE`,
+        [serviceOrderId],
       );
+      if (!row) {
+        await conn.rollback();
+        return false;
+      }
 
-      // update cancellation
-      await db.execute(
-        `
-      UPDATE service_order_cancellations
-      SET refund_status = 'completed'
-      WHERE service_order_id = ?
-      `,
-        [service_order_id],
-      );
+      if (row.status === "completed") {
+        await conn.rollback();
+        return true;
+      }
 
-      const [[recipient]] = await db.execute(
-        `SELECT user_id FROM service_orders WHERE id = ?`,
-        [service_order_id],
+      userId = row.user_id;
+      shouldNotify = row.status !== "completed";
+      await conn.execute(
+        `UPDATE service_order_refunds
+         SET status = 'completed', razorpay_refund_id = ?
+         WHERE id = ?`,
+        [gatewayRefund.id, row.id],
       );
+      await conn.execute(
+        `UPDATE service_order_cancellations
+         SET refund_status = 'completed'
+         WHERE service_order_id = ?`,
+        [serviceOrderId],
+      );
+      await conn.execute(
+        `INSERT INTO service_order_cancellation_timeline (service_order_id, event)
+         SELECT ?, 'refund_completed'
+         WHERE NOT EXISTS (
+           SELECT 1 FROM service_order_cancellation_timeline
+           WHERE service_order_id = ? AND event = 'refund_completed'
+         )`,
+        [serviceOrderId, serviceOrderId],
+      );
+      await conn.commit();
+    } catch (error) {
+      await conn.rollback();
+      throw error;
+    } finally {
+      conn.release();
+    }
+
+    if (shouldNotify) {
       notifyUser(
         {
-          userId: recipient?.user_id,
+          userId,
           module: "service",
           type: "service_refund_completed",
           title: "Refund completed",
-          message: "Your service cancellation refund has been completed.",
+          message: "Your service cancellation refund has been processed.",
           icon: "wallet",
           reference_type: "service_order",
-          reference_id: service_order_id,
-          action_url: `/service-orders/${service_order_id}`,
+          reference_id: serviceOrderId,
+          action_url: `/service-orders/${serviceOrderId}`,
         },
         "service refund completed notification",
       );
+    }
+    return true;
+  }
 
-      // =====================================
-      // Timeline: refund completed
-      // =====================================
-      await db.execute(
-        `
-        INSERT INTO
-        service_order_cancellation_timeline
-        (
-          service_order_id,
-          event
-        )
-        VALUES
-        (
-          ?,
-          'refund_completed'
-        )
-        `,
-        [service_order_id],
+  async failRefund(serviceOrderId, gatewayRefundId, message) {
+    const conn = await db.getConnection();
+    let shouldNotify = false;
+    let userId;
+    try {
+      await conn.beginTransaction();
+      const [[row]] = await conn.execute(
+        `SELECT r.id, r.status, so.user_id
+         FROM service_order_refunds r
+         JOIN service_orders so ON so.id = r.service_order_id
+         WHERE r.service_order_id = ? AND r.refund_method = 'original'
+         LIMIT 1 FOR UPDATE`,
+        [serviceOrderId],
       );
+      if (!row) {
+        await conn.rollback();
+        return false;
+      }
+
+      if (row.status === "completed") {
+        await conn.rollback();
+        return true;
+      }
+
+      userId = row.user_id;
+      shouldNotify = row.status !== "failed";
+      await conn.execute(
+        `UPDATE service_order_refunds
+         SET status = 'failed', razorpay_refund_id = COALESCE(?, razorpay_refund_id)
+         WHERE id = ?`,
+        [gatewayRefundId || null, row.id],
+      );
+      await conn.execute(
+        `UPDATE service_order_cancellations
+         SET refund_status = 'initiated'
+         WHERE service_order_id = ?`,
+        [serviceOrderId],
+      );
+      await conn.execute(
+        `INSERT INTO service_order_cancellation_timeline (service_order_id, event)
+         SELECT ?, 'refund_failed'
+         WHERE NOT EXISTS (
+           SELECT 1 FROM service_order_cancellation_timeline
+           WHERE service_order_id = ? AND event = 'refund_failed'
+         )`,
+        [serviceOrderId, serviceOrderId],
+      );
+      await conn.commit();
     } catch (error) {
-      console.error("Service refund failed:", error);
+      await conn.rollback();
+      throw error;
+    } finally {
+      conn.release();
+    }
 
-      await db.execute(
-        `
-      UPDATE service_order_refunds
-      SET status = 'failed'
-      WHERE service_order_id = ?
-      AND status IN ('pending', 'failed')
-      `,
-        [data.service_order_id],
-      );
-
-      const [[recipient]] = await db.execute(
-        `SELECT user_id FROM service_orders WHERE id = ?`,
-        [data.service_order_id],
-      );
+    if (shouldNotify) {
       notifyUser(
         {
-          userId: recipient?.user_id,
+          userId,
           module: "service",
           type: "service_refund_failed",
-          title: "Refund delayed",
-          message: "Your refund is delayed and will be retried automatically.",
+          title: "Refund needs attention",
+          message: message || "Your refund could not be processed. Our team will review it.",
           icon: "alert-circle",
           reference_type: "service_order",
-          reference_id: data.service_order_id,
-          action_url: `/service-orders/${data.service_order_id}`,
+          reference_id: serviceOrderId,
+          action_url: `/service-orders/${serviceOrderId}`,
           priority: "high",
         },
         "service refund failed notification",
       );
+    }
+    return true;
+  }
 
-      await db.execute(
-        `
-        INSERT INTO
-        service_order_cancellation_timeline
-        (
-          service_order_id,
-          event
-        )
-        VALUES
-        (
-          ?,
-          'refund_failed'
-        )
-        `,
-        [data.service_order_id],
+  async reconcileRefundEntity(gatewayRefund, eventName = null) {
+    if (!gatewayRefund?.id) return false;
+    const serviceOrderIdFromNotes = Number(gatewayRefund.notes?.service_order_id);
+    const [[row]] = await db.execute(
+      `SELECT service_order_id FROM service_order_refunds
+       WHERE razorpay_refund_id = ?
+          OR (? > 0 AND service_order_id = ? AND refund_method = 'original')
+       LIMIT 1`,
+      [gatewayRefund.id, serviceOrderIdFromNotes, serviceOrderIdFromNotes],
+    );
+    if (!row) return false;
+
+    const status = String(gatewayRefund.status || "").toLowerCase();
+    if (eventName === "refund.processed" || status === "processed") {
+      return this.completeRefund(row.service_order_id, gatewayRefund);
+    }
+    if (eventName === "refund.failed" || status === "failed") {
+      return this.failRefund(
+        row.service_order_id,
+        gatewayRefund.id,
+        "Razorpay reported that the refund could not be processed.",
       );
+    }
+
+    await db.execute(
+      `UPDATE service_order_refunds
+       SET status = 'pending', razorpay_refund_id = ?
+       WHERE service_order_id = ? AND refund_method = 'original'
+         AND status <> 'completed'`,
+      [gatewayRefund.id, row.service_order_id],
+    );
+    return true;
+  }
+
+  async processRefund(data) {
+    const { payment_id, amount, service_order_id } = data;
+    const refundAmount = Number(amount);
+    if (!payment_id || !Number.isFinite(refundAmount) || refundAmount <= 0) {
+      throw new Error("INVALID_SERVICE_REFUND");
+    }
+
+    const [[existing]] = await db.execute(
+      `SELECT id, status, razorpay_refund_id
+       FROM service_order_refunds
+       WHERE service_order_id = ? AND refund_method = 'original'
+       LIMIT 1`,
+      [service_order_id],
+    );
+    if (!existing) throw new Error("SERVICE_REFUND_NOT_FOUND");
+    if (existing.status === "completed") return { status: "completed" };
+
+    if (existing.razorpay_refund_id) {
+      const gatewayRefund = await razorpay.refunds.fetch(existing.razorpay_refund_id);
+      await this.reconcileRefundEntity(gatewayRefund);
+      return { status: gatewayRefund.status, gatewayRefund };
+    }
+
+    const refundKey = `service_cancel_${service_order_id}`;
+    let gatewayRefund;
+    try {
+      const response = await axios.post(
+        `https://api.razorpay.com/v1/payments/${payment_id}/refund`,
+        {
+          amount: Math.round(refundAmount * 100),
+          receipt: refundKey,
+          notes: {
+            module: "service",
+            service_order_id: String(service_order_id),
+            refund_key: refundKey,
+          },
+        },
+        {
+          auth: {
+            username: process.env.RAZOR_API_KEY,
+            password: process.env.RAZOR_SECRET_KEY,
+          },
+          headers: {
+            "Content-Type": "application/json",
+            "X-Refund-Idempotency": refundKey,
+          },
+          timeout: 15000,
+        },
+      );
+      gatewayRefund = response.data;
+      await db.execute(
+        `UPDATE service_order_refunds
+         SET razorpay_refund_id = ?, status = 'pending'
+         WHERE id = ? AND status <> 'completed'`,
+        [gatewayRefund.id, existing.id],
+      );
+      await this.reconcileRefundEntity(gatewayRefund);
+      return { status: gatewayRefund.status, gatewayRefund };
+    } catch (error) {
+      if (!gatewayRefund?.id) {
+        await this.failRefund(
+          service_order_id,
+          null,
+          "The refund request could not be sent and will be retried.",
+        );
+      }
+      throw error;
     }
   }
 
@@ -1203,6 +1335,7 @@ class ServiceOrderModel {
 
     let moneyRefund = 0;
     let coinRefund = 0;
+    let refundStatus = refunds.length ? "completed" : null;
 
     refunds.forEach((r) => {
       if (r.refund_method === "original") {
@@ -1211,6 +1344,11 @@ class ServiceOrderModel {
 
       if (r.refund_method === "wallet") {
         coinRefund += Number(r.refund_amount);
+      }
+
+      if (r.status === "failed") refundStatus = "failed";
+      else if (r.status === "pending" && refundStatus !== "failed") {
+        refundStatus = "pending";
       }
     });
 
@@ -1293,6 +1431,8 @@ class ServiceOrderModel {
         money_refund: moneyRefund,
 
         coin_refund: coinRefund,
+
+        status: refundStatus,
       },
 
       rewards: {
