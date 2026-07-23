@@ -5,12 +5,21 @@ const {
   shouldIgnoreCapturedEvent,
   shouldIgnoreFailedEvent,
 } = require("./paymentState");
+const RefundService = require("../services/refundService");
 
 async function processEvent(req) {
   const conn = await db.getConnection();
   try {
     const body = req.parsedBody;
     const event = body.event;
+
+    if (event === "refund.processed" || event === "refund.failed") {
+      const refund = body?.payload?.refund?.entity;
+      if (refund) {
+        await RefundService.reconcileRefundEntity(refund, event);
+      }
+      return;
+    }
 
     // =========================
     //  PAYMENT SUCCESS

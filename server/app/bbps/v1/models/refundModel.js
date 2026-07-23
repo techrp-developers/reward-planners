@@ -52,14 +52,52 @@ class RefundModel {
     return result.affectedRows === 1;
   }
 
-  async markCompleted(id, refundId = null) {
+  async getById(id) {
+    const [[row]] = await db.execute(
+      `SELECT r.*, t.user_id
+       FROM bbps_refunds r
+       JOIN bbps_transactions t ON t.id = r.transaction_id
+       WHERE r.id = ?`,
+      [id],
+    );
+    return row || null;
+  }
+
+  async findForGatewayRefund(refund) {
+    const transactionId = Number(refund?.notes?.transaction_id);
+    const [[row]] = await db.execute(
+      `SELECT r.*, t.user_id
+       FROM bbps_refunds r
+       JOIN bbps_transactions t ON t.id = r.transaction_id
+       WHERE r.razorpay_refund_id = ?
+          OR (? > 0 AND r.transaction_id = ?)
+       LIMIT 1`,
+      [refund?.id || "", transactionId, transactionId],
+    );
+    return row || null;
+  }
+
+  async markPending(id, refundId) {
     await db.execute(
       `UPDATE bbps_refunds
-       SET status = 'completed', razorpay_refund_id = ?, completed_at = NOW(),
+       SET status = 'processing', razorpay_refund_id = ?,
            last_error = NULL
-       WHERE id = ?`,
+       WHERE id = ? AND status <> 'completed'`,
       [refundId, id],
     );
+  }
+
+  async markCompleted(id, refundId = null) {
+    const [result] = await db.execute(
+      `UPDATE bbps_refunds
+       SET status = 'completed',
+           razorpay_refund_id = COALESCE(?, razorpay_refund_id),
+           completed_at = NOW(),
+           last_error = NULL
+       WHERE id = ? AND status <> 'completed'`,
+      [refundId, id],
+    );
+    return result.affectedRows === 1;
   }
 
   async markFailed(id, error) {
@@ -69,6 +107,21 @@ class RefundModel {
            last_error = ?
        WHERE id = ?`,
       [String(error || "Refund failed").slice(0, 2000), id],
+    );
+  }
+
+  async markManualReview(id, refundId, error) {
+    await db.execute(
+      `UPDATE bbps_refunds
+       SET status = 'manual_review',
+           razorpay_refund_id = COALESCE(?, razorpay_refund_id),
+           last_error = ?
+       WHERE id = ? AND status <> 'completed'`,
+      [
+        refundId || null,
+        String(error || "Refund requires manual review").slice(0, 2000),
+        id,
+      ],
     );
   }
 }

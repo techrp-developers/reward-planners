@@ -43,7 +43,17 @@ async function handleWebhook(req, res) {
     });
 
     if (body?.event === "refund.processed" || body?.event === "refund.failed") {
-      await serviceWebhook.processEvent(req);
+      const refundModule = body?.payload?.refund?.entity?.notes?.module;
+      if (refundModule === "service") {
+        await serviceWebhook.processEvent(req);
+      } else if (refundModule === "bbps") {
+        await bbpsWebhook.processEvent(req);
+      } else {
+        await Promise.all([
+          serviceWebhook.processEvent(req),
+          bbpsWebhook.processEvent(req),
+        ]);
+      }
       return res.sendStatus(200);
     }
 
