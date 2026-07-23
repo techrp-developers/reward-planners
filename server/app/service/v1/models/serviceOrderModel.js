@@ -535,6 +535,7 @@ class ServiceOrderModel {
         so.user_id,
         so.price,
         so.payment_id,
+        so.payment_status,
         so.reward_coins_used,
         so.status AS order_status
 
@@ -561,6 +562,18 @@ class ServiceOrderModel {
 
     if (cancellation.order_status === "cancelled") {
       throw new Error("ORDER_ALREADY_CANCELLED");
+    }
+
+    if (cancellation.payment_status !== "paid") {
+      throw new Error("ORDER_NOT_PAID");
+    }
+
+    if (
+      !["documents_pending", "documents_uploaded", "in_progress"].includes(
+        cancellation.order_status,
+      )
+    ) {
+      throw new Error("ORDER_NOT_CANCELLABLE");
     }
 
     // =====================================
@@ -963,6 +976,7 @@ class ServiceOrderModel {
       WHERE service_order_id = ?
 
       LIMIT 1
+      FOR UPDATE
       `,
       [serviceOrderId],
     );

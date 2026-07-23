@@ -1205,6 +1205,21 @@ class ServiceOrderController {
         });
       }
 
+      const [[pendingCancellation]] = await db.execute(
+        `SELECT id FROM service_order_cancellations
+         WHERE service_order_id = ? AND status = 'requested'
+         LIMIT 1`,
+        [id],
+      );
+
+      if (pendingCancellation && status !== order.status) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "This service has a pending cancellation request. Approve or reject it before changing the service status.",
+        });
+      }
+
       await ServiceOrderModel.updateStatus(id, status);
 
       if (status === "completed" && order.status !== "completed") {

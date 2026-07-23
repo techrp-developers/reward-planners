@@ -12,6 +12,20 @@ const razorpay = new Razorpay({
   key_secret: process.env.RAZOR_SECRET_KEY,
 });
 
+function getServiceCancellationError(error) {
+  const errors = {
+    CANCELLATION_REQUEST_NOT_FOUND: [404, "Cancellation request not found"],
+    INVALID_CANCELLATION_STATE: [409, "Cancellation request has already been decided"],
+    ORDER_ALREADY_CANCELLED: [409, "Service order is already cancelled"],
+    ORDER_NOT_PAID: [409, "Only paid service orders can be refunded"],
+    ORDER_NOT_CANCELLABLE: [409, "Service order is no longer eligible for cancellation"],
+    REFUND_ALREADY_DONE: [409, "Refund has already been completed"],
+    PAYMENT_ID_MISSING: [409, "Payment reference is missing; manual review is required"],
+  };
+  const [status, message] = errors[error.message] || [500, "Unable to process cancellation"];
+  return { status, message };
+}
+
 class OrderController {
   async getOrderList(req, res) {
     try {
@@ -407,6 +421,7 @@ class OrderController {
   async getServiceCancellationDetails(req, res) {
     try {
       const serviceOrderId = Number(req.params.serviceOrderId);
+
       if (!Number.isInteger(serviceOrderId) || serviceOrderId <= 0) {
         return res.status(400).json({ success: false, message: "Invalid service order id" });
       }
@@ -433,6 +448,11 @@ class OrderController {
 
       const serviceOrderId = Number(req.params.serviceOrderId);
 
+      if (!Number.isInteger(serviceOrderId) || serviceOrderId <= 0) {
+        await conn.rollback();
+        return res.status(400).json({ success: false, message: "Invalid service order id" });
+      }
+
       const refundData = await ServiceOrderModel.approveCancellation(
         serviceOrderId,
         conn,
@@ -443,6 +463,11 @@ class OrderController {
       res.json({
         success: true,
         message: "Cancellation approved successfully",
+        data: {
+          status: "approved",
+          refund_status: refundData.refund_status,
+          service_order_id: refundData.service_order_id,
+        },
       });
 
       notifyUser(
@@ -476,9 +501,10 @@ class OrderController {
 
       console.error("Approve cancellation error:", error);
 
-      return res.status(500).json({
+      const mapped = getServiceCancellationError(error);
+      return res.status(mapped.status).json({
         success: false,
-        message: "Unable to approve cancellation",
+        message: mapped.message,
       });
     } finally {
       conn.release();
@@ -493,6 +519,11 @@ class OrderController {
       await conn.beginTransaction();
 
       const serviceOrderId = Number(req.params.serviceOrderId);
+
+      if (!Number.isInteger(serviceOrderId) || serviceOrderId <= 0) {
+        await conn.rollback();
+        return res.status(400).json({ success: false, message: "Invalid service order id" });
+      }
 
       const rejection = await ServiceOrderModel.rejectCancellation(serviceOrderId, conn);
 
@@ -516,15 +547,20 @@ class OrderController {
       return res.json({
         success: true,
         message: "Cancellation rejected",
+        data: {
+          status: "rejected",
+          service_order_id: serviceOrderId,
+        },
       });
     } catch (error) {
       await conn.rollback();
 
       console.error("Reject cancellation error:", error);
 
-      return res.status(500).json({
+      const mapped = getServiceCancellationError(error);
+      return res.status(mapped.status).json({
         success: false,
-        message: "Unable to reject cancellation",
+        message: mapped.message,
       });
     } finally {
       conn.release();

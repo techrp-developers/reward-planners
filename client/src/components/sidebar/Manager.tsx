@@ -91,6 +91,10 @@ export default function ManagerNavbar() {
       children: [
         { label: "Service Enquiries", to: routes.manager.services.enquiries },
         { label: "Service Orders", to: routes.manager.services.service_orders },
+        {
+          label: "Service Cancellations",
+          to: routes.manager.services.cancellation_requests,
+        },
       ],
     },
     {
