@@ -10,6 +10,8 @@ interface ItemCancellation {
   product_name: string;
   quantity: number;
   final_price: number;
+  reward_coins_used: number;
+  refundable_total: number;
   status: string;
   refund_status: string;
   requested_at: string;
@@ -84,7 +86,15 @@ export default function CancellationRequests() {
                     <p className="text-xs text-gray-400">Qty {request.quantity} · Item #{request.order_item_id}</p>
                   </td>
                   <td className="px-5 py-4 text-gray-700">{request.customer_name}</td>
-                  <td className="px-5 py-4 font-semibold">{currency(request.final_price)}</td>
+                  <td className="px-5 py-4">
+                    <p className="font-semibold">{currency(request.refundable_total)}</p>
+                    <p className="text-xs text-gray-500">
+                      {currency(request.final_price)} payment
+                      {Number(request.reward_coins_used || 0) > 0
+                        ? ` + ${request.reward_coins_used} wallet coin${Number(request.reward_coins_used) === 1 ? "" : "s"}`
+                        : ""}
+                    </p>
+                  </td>
                   <td className="px-5 py-4 text-sm capitalize">{request.status} · refund {request.refund_status}</td>
                   <td className="px-5 py-4 text-sm text-gray-500">{new Date(request.requested_at).toLocaleString("en-IN")}</td>
                   <td className="px-5 py-4">

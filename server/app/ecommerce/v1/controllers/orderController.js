@@ -608,7 +608,7 @@ class OrderController {
         ITEM_NOT_FOUND: [404, "Order item not found"],
         ITEM_NOT_CANCELLABLE: [
           409,
-          "This item can only be cancelled before courier booking",
+          "This item cannot be cancelled after pickup or from a booked multi-item shipment",
         ],
         INVALID_REASON: [400, "Invalid cancellation reason"],
         CANCELLATION_ALREADY_REQUESTED: [

@@ -7,6 +7,9 @@ const {
 } = require("../../../../services/Razorpay/orderExpiryService");
 const { notifyUser } = require("../../../common/utils/notification");
 const EcommerceRefundService = require("../../../../services/Razorpay/ecommerceRefundService");
+const {
+  shouldWaiveDeliveryFee,
+} = require("../utils/deliveryFeePolicy");
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZOR_API_KEY,
@@ -38,7 +41,7 @@ class PaymentController {
       // passing the checks and creating two Razorpay orders
       // ==========================
       const [[order]] = await conn.query(
-        `SELECT total_amount, status, expires_at
+        `SELECT total_amount, shipping_total, status, expires_at
        FROM eorders
        WHERE order_id = ? AND user_id = ?
        LIMIT 1
@@ -78,6 +81,30 @@ class PaymentController {
         return res.status(400).json({ message: "Order is not payable" });
       }
 
+      // Test-account safety net: even if a pending order was created by an
+      // older checkout process, never include its delivery fee in Razorpay.
+      if (
+        shouldWaiveDeliveryFee({ userId }) &&
+        Number(order.shipping_total || 0) > 0
+      ) {
+        order.total_amount = Math.max(
+          0,
+          Number(order.total_amount) - Number(order.shipping_total),
+        );
+        order.shipping_total = 0;
+        await conn.query(
+          `UPDATE eorders
+           SET total_amount = ?, shipping_total = 0
+           WHERE order_id = ?`,
+          [order.total_amount, orderId],
+        );
+        await conn.query(
+          `UPDATE order_shipments SET shipping_charges = 0
+           WHERE order_id = ? AND shipping_status = 'awaiting_payment'`,
+          [orderId],
+        );
+      }
+
       const amount = Number(order.total_amount);
 
       // ==========================
@@ -85,14 +112,26 @@ class PaymentController {
       // Also locked via the eorders FOR UPDATE above —
       // any concurrent request is blocked until we commit
       // ==========================
-      const [[existing]] = await conn.query(
-        `SELECT razorpay_order_id
+      let [[existing]] = await conn.query(
+        `SELECT payment_id, razorpay_order_id, amount
        FROM order_payments
        WHERE order_id = ?
          AND status IN ('created', 'pending')
        LIMIT 1`,
         [orderId],
       );
+
+      if (
+        existing &&
+        Math.abs(Number(existing.amount) - amount) > 0.001
+      ) {
+        await conn.query(
+          `UPDATE order_payments SET status = 'failed'
+           WHERE payment_id = ?`,
+          [existing.payment_id],
+        );
+        existing = null;
+      }
 
       if (existing) {
         await conn.rollback();

@@ -516,6 +516,11 @@ class orderModel {
       ic.status AS item_cancellation_status,
       ic.refund_status AS item_refund_status,
       ic.refund_amount AS item_refund_amount,
+      (
+        SELECT COUNT(*) FROM eorder_items sibling
+        WHERE sibling.vendor_order_id = oi.vendor_order_id
+          AND sibling.fulfillment_status <> 'cancelled'
+      ) AS active_shipment_item_count,
 
       (
         SELECT pi.image_url
@@ -582,6 +587,7 @@ class orderModel {
             fulfillmentStatus: i.fulfillment_status,
             shipmentStatus: i.shipping_status,
             paymentStatus: order.status,
+            activeShipmentItemCount: i.active_shipment_item_count,
           }),
           status: i.item_cancellation_status || null,
           refund_status: i.item_refund_status || null,

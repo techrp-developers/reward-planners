@@ -440,9 +440,37 @@ class OrderController {
   async approveItemCancellation(req, res) {
     const conn = await db.getConnection();
     try {
-      await conn.beginTransaction();
       const orderItemId = Number(req.params.orderItemId);
-      const refund = await ItemCancellationModel.approve(orderItemId, conn);
+      const candidate =
+        await ItemCancellationModel.getCourierCancellationCandidate(
+          orderItemId,
+        );
+      let courierCancellationConfirmed = false;
+
+      if (candidate.requiresCourierCancellation) {
+        const courierResult =
+          await xpressService.cancelShipmentExpressBees(
+            candidate.awb_number,
+          );
+        if (!courierResult?.status) {
+          const reason =
+            courierResult?.error?.message ||
+            courierResult?.error ||
+            courierResult?.message ||
+            "XpressBees rejected the cancellation";
+          const error = new Error("COURIER_CANCELLATION_FAILED");
+          error.cause = reason;
+          throw error;
+        }
+        courierCancellationConfirmed = true;
+      }
+
+      await conn.beginTransaction();
+      const refund = await ItemCancellationModel.approve(
+        orderItemId,
+        conn,
+        { courierCancellationConfirmed },
+      );
       await conn.commit();
 
       if (refund.original > 0) {
@@ -513,7 +541,20 @@ class OrderController {
         INVALID_CANCELLATION_STATE: [409, "Cancellation request was already decided"],
         SHIPMENT_ALREADY_BOOKED: [
           409,
-          "Shipment booking has started; item cancellation must be rejected",
+          "The shipment has already moved beyond pickup cancellation",
+        ],
+        BOOKED_SHARED_SHIPMENT: [
+          409,
+          "A booked shipment containing multiple active items cannot cancel only one item",
+        ],
+        COURIER_CANCELLATION_REQUIRED: [
+          409,
+          "XpressBees cancellation must complete before approving the refund",
+        ],
+        COURIER_CANCELLATION_FAILED: [
+          409,
+          error.cause ||
+            "XpressBees could not cancel this shipment; no refund was started",
         ],
       };
       const [status, message] = errors[error.message] || [

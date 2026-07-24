@@ -14,6 +14,9 @@ const {
   consumeWalletReservation,
 } = require("../../../../services/rewards/ecommerceWalletService");
 const { acceptsFirstPaymentCapture } = require("./lifecyclePolicy");
+const {
+  shouldSkipCourierBooking,
+} = require("./courierBookingPolicy");
 
 // booking payload
 async function buildXpressBookingPayload(orderId, vendorId) {
@@ -349,7 +352,7 @@ async function processShipmentsAfterPayment(orderId) {
     // ==========================
     const [[order]] = await conn.query(
       `
-      SELECT shipment_sync_status 
+      SELECT shipment_sync_status, user_id
       FROM eorders 
       WHERE order_id = ?
     `,
@@ -357,6 +360,17 @@ async function processShipmentsAfterPayment(orderId) {
     );
 
     if (!order) return;
+
+    if (
+      shouldSkipCourierBooking({
+        userId: order.user_id,
+      })
+    ) {
+      console.warn(
+        `[COURIER_TEST_MODE] Skipping courier booking for order ${orderId}, user ${order.user_id}`,
+      );
+      return { skipped: true, reason: "courier_test_mode" };
+    }
 
     if (order?.shipment_sync_status === "completed") {
       return;

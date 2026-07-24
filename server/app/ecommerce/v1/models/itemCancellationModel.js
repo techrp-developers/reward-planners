@@ -12,7 +12,12 @@ class ItemCancellationModel {
       const [[item]] = await conn.execute(
         `SELECT oi.order_item_id, oi.fulfillment_status,
                 o.order_id, o.status AS payment_status,
-                os.shipping_status
+                os.shipping_status,
+                (
+                  SELECT COUNT(*) FROM eorder_items sibling
+                  WHERE sibling.vendor_order_id = oi.vendor_order_id
+                    AND sibling.fulfillment_status <> 'cancelled'
+                ) AS active_shipment_item_count
          FROM eorder_items oi
          JOIN eorders o ON o.order_id = oi.order_id
          JOIN order_shipments os ON os.vendor_order_id = oi.vendor_order_id
@@ -27,6 +32,7 @@ class ItemCancellationModel {
           fulfillmentStatus: item.fulfillment_status,
           shipmentStatus: item.shipping_status,
           paymentStatus: item.payment_status,
+          activeShipmentItemCount: item.active_shipment_item_count,
         })
       ) {
         throw new Error("ITEM_NOT_CANCELLABLE");
@@ -65,7 +71,12 @@ class ItemCancellationModel {
       );
 
       await conn.commit();
-      return { orderId: item.order_id, orderItemId };
+      return {
+        orderId: item.order_id,
+        orderItemId,
+        status: "requested",
+        requires_admin_approval: true,
+      };
     } catch (error) {
       await conn.rollback();
       throw error;

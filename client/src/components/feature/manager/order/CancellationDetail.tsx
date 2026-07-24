@@ -8,7 +8,8 @@ interface DetailData {
   request: {
     order_item_id: number; order_id: number; order_ref: string;
     product_name: string; brand_name: string; quantity: number;
-    final_price: number; shipping_status: string; status: string;
+    final_price: number; reward_coins_used: number;
+    shipping_status: string; status: string;
     refund_status: string; refund_amount: number; reason_text: string | null;
     comment: string | null; requested_at: string;
   };
@@ -74,6 +75,9 @@ export default function CancellationDetail() {
   const request = data.request;
   const money = data.refunds.filter((r) => r.refund_method === "original").reduce((sum, r) => sum + Number(r.refund_amount), 0);
   const wallet = data.refunds.filter((r) => r.refund_method === "wallet").reduce((sum, r) => sum + Number(r.refund_amount), 0);
+  const eligibleMoney = Number(request.final_price || 0);
+  const eligibleWallet = Number(request.reward_coins_used || 0);
+  const eligibleTotal = eligibleMoney + eligibleWallet;
 
   return (
     <div className="min-h-screen p-6 md:p-10">
@@ -87,7 +91,13 @@ export default function CancellationDetail() {
           <div><p className="text-xs text-gray-400">Order</p><p className="font-semibold text-[#852BAF]">{request.order_ref}</p></div>
           <div><p className="text-xs text-gray-400">Product</p><p className="font-semibold">{request.product_name}</p><p className="text-xs text-gray-500">{request.brand_name} · Qty {request.quantity}</p></div>
           <div><p className="text-xs text-gray-400">Shipment</p><p className="font-semibold capitalize">{request.shipping_status.replaceAll("_", " ")}</p></div>
-          <div><p className="text-xs text-gray-400">Price</p><p className="font-bold">{currency(request.final_price)}</p></div>
+          <div>
+            <p className="text-xs text-gray-400">Paid value</p>
+            <p className="font-bold">{currency(eligibleTotal)}</p>
+            <p className="text-xs text-gray-500">
+              {currency(eligibleMoney)} payment + {eligibleWallet} wallet coin{eligibleWallet === 1 ? "" : "s"}
+            </p>
+          </div>
         </div>
       </section>
       <section className={card}>
@@ -108,9 +118,9 @@ export default function CancellationDetail() {
       <section className={card}>
         <h2 className="mb-4 text-xs font-bold uppercase tracking-widest text-gray-400">Refund breakdown</h2>
         <div className="grid gap-5 md:grid-cols-4">
-          <div><p className="text-xs text-gray-400">Approved total</p><p className="font-bold">{currency(request.refund_amount)}</p></div>
-          <div><p className="text-xs text-gray-400">Original payment</p><p className="font-semibold">{currency(money)}</p></div>
-          <div><p className="text-xs text-gray-400">Wallet coins</p><p className="font-semibold">{wallet}</p></div>
+          <div><p className="text-xs text-gray-400">Total refund</p><p className="font-bold">{currency(request.status === "requested" ? eligibleTotal : request.refund_amount)}</p></div>
+          <div><p className="text-xs text-gray-400">Original payment</p><p className="font-semibold">{currency(request.status === "requested" ? eligibleMoney : money)}</p></div>
+          <div><p className="text-xs text-gray-400">Wallet coins</p><p className="font-semibold">{request.status === "requested" ? eligibleWallet : wallet}</p></div>
           <div><p className="text-xs text-gray-400">Status</p><p className="font-semibold capitalize">{request.refund_status}</p></div>
         </div>
       </section>

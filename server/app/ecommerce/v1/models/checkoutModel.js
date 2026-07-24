@@ -13,6 +13,9 @@ const {
   resolveRedemption,
   calculateRedeemableCoins,
 } = require("../utils/rewardCalculate");
+const {
+  deliveryChargeForUser,
+} = require("../utils/deliveryFeePolicy");
 
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
 function getPublicUrl(path) {
@@ -289,7 +292,10 @@ class CheckoutModel {
           vendor_id: Number(vendorId),
           courier_id: selectedCourier.id || selectedCourier.courier_id || null,
           courier_name: selectedCourier.name,
-          shipping_charges: Number(selectedCourier.total_charges),
+          shipping_charges: deliveryChargeForUser({
+            userId,
+            calculatedCharge: selectedCourier.total_charges,
+          }),
           chargeable_weight: selectedCourier.chargeable_weight,
           package_weight: weightGrams,
           length,
@@ -649,7 +655,10 @@ class CheckoutModel {
 
       if (!courier) throw new Error("NOT_SERVICEABLE");
 
-      const shippingCharge = Number(courier.total_charges);
+      const shippingCharge = deliveryChargeForUser({
+        userId,
+        calculatedCharge: courier.total_charges,
+      });
 
       // =====================
       // DELIVERY DATE (FIXED)
@@ -1112,7 +1121,10 @@ class CheckoutModel {
 
         if (!courier) continue;
 
-        const shippingCharge = Number(courier.total_charges);
+        const shippingCharge = deliveryChargeForUser({
+          userId,
+          calculatedCharge: courier.total_charges,
+        });
         shippingTotal += shippingCharge;
 
         let edd;
@@ -1342,7 +1354,10 @@ class CheckoutModel {
 
       if (!courier) throw new Error("NOT_SERVICEABLE");
 
-      shippingCharge = Number(courier.total_charges);
+      shippingCharge = deliveryChargeForUser({
+        userId,
+        calculatedCharge: courier.total_charges,
+      });
 
       if (courier.estimated_delivery_date) {
         expectedDeliveryDate = courier.estimated_delivery_date;

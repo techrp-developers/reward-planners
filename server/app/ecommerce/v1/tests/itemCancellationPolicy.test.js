@@ -5,7 +5,7 @@ const {
   calculateItemRefund,
 } = require("../utils/itemCancellationPolicy");
 
-test("item cancellation is allowed only before courier booking", () => {
+test("booked cancellation is allowed only for a single active shipment item", () => {
   const base = { fulfillmentStatus: "active", paymentStatus: "paid" };
   assert.equal(
     canRequestItemCancellation({ ...base, shipmentStatus: "pending" }),
@@ -13,6 +13,14 @@ test("item cancellation is allowed only before courier booking", () => {
   );
   assert.equal(
     canRequestItemCancellation({ ...base, shipmentStatus: "booked" }),
+    true,
+  );
+  assert.equal(
+    canRequestItemCancellation({
+      ...base,
+      shipmentStatus: "booked",
+      activeShipmentItemCount: 2,
+    }),
     false,
   );
   assert.equal(

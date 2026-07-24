@@ -3,16 +3,27 @@ const PRE_BOOKING_SHIPMENT_STATUSES = [
   "pending",
   "booking_failed",
 ];
+const SINGLE_ITEM_COURIER_CANCELLABLE_STATUSES = [
+  "booked",
+  "pickup_scheduled",
+];
 
 function canRequestItemCancellation({
   fulfillmentStatus,
   shipmentStatus,
   paymentStatus,
+  activeShipmentItemCount = 1,
 }) {
   return (
     fulfillmentStatus === "active" &&
     ["paid", "processing"].includes(paymentStatus) &&
-    PRE_BOOKING_SHIPMENT_STATUSES.includes(shipmentStatus)
+    (
+      PRE_BOOKING_SHIPMENT_STATUSES.includes(shipmentStatus) ||
+      (
+        Number(activeShipmentItemCount) === 1 &&
+        SINGLE_ITEM_COURIER_CANCELLABLE_STATUSES.includes(shipmentStatus)
+      )
+    )
   );
 }
 
@@ -38,6 +49,7 @@ function calculateItemRefund({
 
 module.exports = {
   PRE_BOOKING_SHIPMENT_STATUSES,
+  SINGLE_ITEM_COURIER_CANCELLABLE_STATUSES,
   canRequestItemCancellation,
   calculateItemRefund,
 };
