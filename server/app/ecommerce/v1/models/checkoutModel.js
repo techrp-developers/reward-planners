@@ -1576,7 +1576,7 @@ class CheckoutModel {
 
       items: items.map((i) => ({
         product_name: i.product_name,
-        image: i.image,
+        image: i.image ? getPublicUrl(i.image) : null,
         quantity: i.quantity,
         price: Number(i.price),
         item_total: Number(i.price) * i.quantity,
