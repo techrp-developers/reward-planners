@@ -9,17 +9,32 @@ const {
   authorizeRoles,
 } = require("../../../../middleware/auth");
 const drainMode = require("../../../../middleware/drainMode");
+const {
+  paymentLimiter,
+} = require("../../../common/middlewares/rateLimiter");
 
 // create razorpay order
 router.post(
   "/create-order",
   auth,
+  paymentLimiter,
   drainMode,
   ServiceOrderController.createPaymentOrder,
 );
 
 // verify payment
-router.post("/verify-payment", auth, ServiceOrderController.verifyPayment);
+router.post(
+  "/verify-payment",
+  auth,
+  paymentLimiter,
+  ServiceOrderController.verifyPayment,
+);
+
+router.get(
+  "/payment-status/:parentOrderId",
+  auth,
+  ServiceOrderController.paymentStatus,
+);
 
 // Get all orders
 router.get("/my-orders", auth, ServiceOrderController.getMyOrders);

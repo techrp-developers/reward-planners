@@ -1,13 +1,25 @@
 const db = require("../../../../config/database");
 const TransactionModel = require("../models/transactionModel");
-const { processTransaction } = require("../services/paymentProcessor");
 const { notifyUser } = require("../../../common/utils/notification");
+const {
+  shouldIgnoreCapturedEvent,
+  shouldIgnoreFailedEvent,
+} = require("./paymentState");
+const RefundService = require("../services/refundService");
 
 async function processEvent(req) {
   const conn = await db.getConnection();
   try {
     const body = req.parsedBody;
     const event = body.event;
+
+    if (event === "refund.processed" || event === "refund.failed") {
+      const refund = body?.payload?.refund?.entity;
+      if (refund) {
+        await RefundService.reconcileRefundEntity(refund, event);
+      }
+      return;
+    }
 
     // =========================
     //  PAYMENT SUCCESS
@@ -17,7 +29,7 @@ async function processEvent(req) {
 
       const payment = body.payload.payment.entity;
       const [[rpOrder]] = await conn.execute(
-        `SELECT ref_id, amount
+        `SELECT ref_id, amount, status, razorpay_payment_id
          FROM razorpay_orders
          WHERE razorpay_order_id = ? AND module = 'bbps'
          FOR UPDATE`,
@@ -29,7 +41,10 @@ async function processEvent(req) {
         return;
       }
 
-      if (Number(payment.amount) !== Math.round(Number(rpOrder.amount) * 100)) {
+      if (
+        payment.currency !== "INR" ||
+        Number(payment.amount) !== Math.round(Number(rpOrder.amount) * 100)
+      ) {
         throw new Error("Captured Razorpay payment amount mismatch");
       }
 
@@ -43,9 +58,13 @@ async function processEvent(req) {
         return;
       }
 
-      //  DOUBLE EXECUTION PROTECTION
-      if (txn.bbps_status === "PAID") {
-        console.log("Skipping already paid txn:", txn.id);
+      if (
+        shouldIgnoreCapturedEvent({
+          orderStatus: rpOrder.status,
+          transactionStatus: txn.bbps_status,
+        })
+      ) {
+        console.log("Skipping duplicate captured webhook:", payment.order_id);
         await conn.rollback();
         return;
       }
@@ -57,63 +76,32 @@ async function processEvent(req) {
         [payment.id, JSON.stringify(body), payment.order_id],
       );
 
-      try {
-        const result = await processTransaction(txn, req);
+      await TransactionModel.updateStatus(
+        txn.id,
+        "FAILED_RETRY",
+        { message: "Razorpay payment captured; provider processing queued" },
+        conn,
+      );
 
-        await TransactionModel.updateStatus(txn.id, "PAID", result, conn);
+      await conn.commit();
 
-        await conn.commit();
-
-        notifyUser(
-          {
-            userId: txn.user_id,
-            module: "bbps",
-            type: "bbps_payment_success",
-            title: "Bill payment successful",
-            message: `Your payment of Rs. ${Number(txn.amount).toFixed(2)} was successful.`,
-            icon: "receipt",
-            reference_type: "bbps_transaction",
-            reference_id: txn.id,
-            action_url: `/bbps/transactions/${txn.id}`,
-            metadata: { operator_id: txn.operator_id },
-          },
-          "bbps webhook success notification",
-        );
-      } catch (err) {
-        const failureStatus =
-          err.retryable === false ? "FAILED_FINAL" : "FAILED_RETRY";
-        const willRetry = failureStatus === "FAILED_RETRY";
-
-        await TransactionModel.updateStatus(
-          txn.id,
-          failureStatus,
-          err.providerResponse || err.message,
-          conn,
-        );
-
-        await conn.commit();
-
-        notifyUser(
-          {
-            userId: txn.user_id,
-            module: "bbps",
-            type: willRetry
-              ? "bbps_payment_retry"
-              : "bbps_payment_failed",
-            title: willRetry ? "Bill payment pending" : "Bill payment failed",
-            message: willRetry
-              ? "Your payment was captured, but bill processing will be retried automatically."
-              : "Your payment was captured, but the provider rejected the bill payment.",
-            icon: willRetry ? "clock" : "x-circle",
-            reference_type: "bbps_transaction",
-            reference_id: txn.id,
-            action_url: `/bbps/transactions/${txn.id}`,
-            priority: "high",
-            metadata: { operator_id: txn.operator_id },
-          },
-          "bbps webhook retry notification",
-        );
-      }
+      notifyUser(
+        {
+          userId: txn.user_id,
+          module: "bbps",
+          type: "bbps_payment_retry",
+          title: "Bill payment processing",
+          message:
+            "Your payment was captured and bill processing is continuing.",
+          icon: "clock",
+          reference_type: "bbps_transaction",
+          reference_id: txn.id,
+          action_url: `/bbps/transactions/${txn.id}`,
+          priority: "high",
+          metadata: { operator_id: txn.operator_id },
+        },
+        "bbps webhook processing notification",
+      );
     }
 
     // =========================
@@ -126,8 +114,8 @@ async function processEvent(req) {
       const razorpayOrderId = payment.order_id;
 
       const [[rpOrder]] = await conn.execute(
-        `SELECT ref_id FROM razorpay_orders 
-         WHERE razorpay_order_id=? 
+        `SELECT ref_id, status, razorpay_payment_id FROM razorpay_orders
+         WHERE razorpay_order_id=? AND module = 'bbps'
          FOR UPDATE`,
         [razorpayOrderId],
       );
@@ -144,14 +132,20 @@ async function processEvent(req) {
         return;
       }
 
-      if (txn.bbps_status === "PAID") {
+      if (
+        shouldIgnoreFailedEvent({
+          orderStatus: rpOrder.status,
+          razorpayPaymentId: rpOrder.razorpay_payment_id,
+          transactionStatus: txn.bbps_status,
+        })
+      ) {
         await conn.rollback();
         return;
       }
 
       await conn.execute(
         `UPDATE razorpay_orders
-          SET raw_response=?
+          SET status='failed', raw_response=?
           WHERE razorpay_order_id=?`,
         [JSON.stringify(body), razorpayOrderId],
       );

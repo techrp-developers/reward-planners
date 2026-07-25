@@ -38,7 +38,7 @@ class ServiceBundleModel {
 
     return rows.map((item) => ({
       ...item,
-      image_url: getPublicUrl(item.image_url),
+      image_url: item.image_url,
     }));
   }
 

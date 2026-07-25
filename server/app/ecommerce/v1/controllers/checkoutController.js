@@ -91,6 +91,15 @@ class CheckoutController {
         });
       }
 
+      if (
+        ["WALLET_BALANCE_CHANGED", "CHECKOUT_CHANGED"].includes(error.message)
+      ) {
+        return res.status(409).json({
+          success: false,
+          message: "Checkout changed. Please review your cart and try again.",
+        });
+      }
+
       if (error.message === "INVALID_ADDRESS") {
         return res.status(400).json({
           success: false,
@@ -204,6 +213,13 @@ class CheckoutController {
         });
       }
 
+      if (error.message === "INVALID_VARIANT") {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid product variant",
+        });
+      }
+
       if (error.message === "PRICE_MISMATCH") {
         return res.status(400).json({
           success: false,
@@ -215,6 +231,15 @@ class CheckoutController {
         return res.status(400).json({
           success: false,
           message: "Not enough reward coins",
+        });
+      }
+
+      if (
+        ["WALLET_BALANCE_CHANGED", "CHECKOUT_CHANGED"].includes(error.message)
+      ) {
+        return res.status(409).json({
+          success: false,
+          message: "Price, stock, or wallet balance changed. Please try again.",
         });
       }
 
@@ -252,11 +277,20 @@ class CheckoutController {
         });
       }
 
-      const { use_rewards = "true" } = req.query;
+      const { use_rewards = "true", address_id } = req.query;
+
+      const addressId = address_id ? Number(address_id) : null;
+      if (address_id && (!Number.isInteger(addressId) || addressId < 1)) {
+        return res.status(400).json({
+          success: false,
+          message: "Valid address_id required",
+        });
+      }
 
       const checkoutData = await CheckoutModel.getCheckoutCart(
         userId,
         use_rewards === "true",
+        addressId,
       );
 
       return res.json({
@@ -301,7 +335,28 @@ class CheckoutController {
         });
       }
 
-      const { product_id, variant_id, qty = 1, use_rewards = true } = req.query;
+      const {
+        product_id,
+        variant_id,
+        qty = 1,
+        use_rewards = "true",
+        address_id,
+      } = req.query;
+
+      if (!product_id || !variant_id || Number(qty) < 1) {
+        return res.status(400).json({
+          success: false,
+          message: "Valid product_id, variant_id and quantity are required",
+        });
+      }
+
+      const addressId = address_id ? Number(address_id) : null;
+      if (address_id && (!Number.isInteger(addressId) || addressId < 1)) {
+        return res.status(400).json({
+          success: false,
+          message: "Valid address_id required",
+        });
+      }
 
       const checkoutData = await CheckoutModel.getBuyNowCheckout({
         productId: Number(product_id),
@@ -309,6 +364,7 @@ class CheckoutController {
         quantity: Number(qty),
         useRewards: use_rewards === "true",
         userId,
+        addressId,
       });
 
       return res.json({
@@ -323,6 +379,13 @@ class CheckoutController {
         return res.status(400).json({
           success: false,
           message: "Item out of stock",
+        });
+      }
+
+      if (error.message === "INVALID_VARIANT") {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid product variant",
         });
       }
 

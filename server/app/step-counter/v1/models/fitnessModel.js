@@ -1,7 +1,7 @@
 const db = require("../../../../config/database");
 
 class FitnessModel {
-  async upsertSteps(data) {
+  async upsertSteps(data, conn = db) {
     const {
       customer_id,
       step_date,
@@ -22,7 +22,7 @@ class FitnessModel {
         active_minutes = VALUES(active_minutes)
     `;
 
-    await db.execute(query, [
+    await conn.execute(query, [
       customer_id,
       step_date,
       steps,
@@ -32,10 +32,56 @@ class FitnessModel {
     ]);
   }
 
+  // Locks the row for the duration of the caller's transaction so concurrent
+  // syncs for the same user/date can't race on the same step-delta read.
+  async getStepsByDateForUpdate(customerId, date, conn) {
+    const [rows] = await conn.execute(
+      `SELECT steps, distance_km, calories, active_minutes
+       FROM fitness_steps
+       WHERE user_id = ? AND step_date = ?
+       FOR UPDATE`,
+      [customerId, date],
+    );
+
+    return rows[0];
+  }
+
+  // Locks the streak row for the duration of the caller's transaction so
+  // concurrent syncs for the same user can't both read-then-increment it.
+  async getStreakForUpdate(customerId, conn) {
+    const [rows] = await conn.execute(
+      `SELECT current_streak, longest_streak, last_goal_completed_date
+       FROM fitness_streaks
+       WHERE user_id = ?
+       FOR UPDATE`,
+      [customerId],
+    );
+
+    return rows[0];
+  }
+
   async getTodaySteps(customerId, date) {
     const [rows] = await db.execute(
       `SELECT * FROM fitness_steps WHERE user_id = ? AND step_date = ?`,
       [customerId, date],
+    );
+    return rows[0];
+  }
+
+  // Most recently-touched fitness_steps row among a set of candidate dates,
+  // but only if it was actually updated recently (used to resolve "today"
+  // tolerantly across a device/server timezone mismatch — see
+  // resolveEffectiveDate in fitnessService.js). The recency filter matters:
+  // without it, a user who simply hasn't synced yet today would see
+  // yesterday's leftover row mislabeled as "today" indefinitely instead of 0.
+  async getRecentlyUpdatedStepsForDates(customerId, dates, recencyMinutes, conn = db) {
+    const placeholders = dates.map(() => "?").join(", ");
+    const [rows] = await conn.execute(
+      `SELECT * FROM fitness_steps
+       WHERE user_id = ? AND step_date IN (${placeholders})
+       AND updated_at >= DATE_SUB(NOW(), INTERVAL ? MINUTE)
+       ORDER BY updated_at DESC LIMIT 1`,
+      [customerId, ...dates, recencyMinutes],
     );
     return rows[0];
   }
@@ -76,8 +122,8 @@ class FitnessModel {
     );
   }
 
-  async getUserAchievements(customerId) {
-    const [rows] = await db.execute(
+  async getUserAchievements(customerId, conn = db) {
+    const [rows] = await conn.execute(
       `SELECT achievement_id FROM fitness_user_achievements WHERE user_id = ?`,
       [customerId],
     );
@@ -92,8 +138,8 @@ class FitnessModel {
     );
   }
 
-  async getAllAchievements() {
-    const [rows] = await db.execute(`SELECT * FROM fitness_achievements`);
+  async getAllAchievements(conn = db) {
+    const [rows] = await conn.execute(`SELECT * FROM fitness_achievements`);
     return rows;
   }
 
@@ -173,6 +219,45 @@ class FitnessModel {
     await conn.execute(query, [customerId, date, type, referenceId, coins]);
   }
 
+  // Reward economy config — lets coin amounts be tuned via the DB instead of
+  // a code deploy. Returns null if the key is missing/disabled so the caller
+  // can fall back to a safe default.
+  async getRewardConfig(configKey, conn = db) {
+    const [rows] = await conn.execute(
+      `SELECT coins FROM fitness_reward_config WHERE config_key = ? AND is_active = 1`,
+      [configKey],
+    );
+    return rows[0] ? Number(rows[0].coins) : null;
+  }
+
+  // All active streak-bonus milestones, e.g. [{ streak_days: 7, coins: 100 }, ...]
+  async getStreakBonusConfig(conn = db) {
+    const [rows] = await conn.execute(
+      `SELECT streak_days, coins FROM fitness_streak_bonus_config WHERE is_active = 1 ORDER BY streak_days ASC`,
+    );
+    return rows.map((r) => ({ streak_days: Number(r.streak_days), coins: Number(r.coins) }));
+  }
+
+  // Adds `steps` to the running total for this user/date/hour bucket —
+  // used to build a real (if approximate) hourly chart instead of a
+  // fabricated percentage split.
+  async accumulateHourlySteps(customerId, date, hour, steps, conn) {
+    await conn.execute(
+      `INSERT INTO fitness_hourly_steps (user_id, step_date, hour, steps)
+       VALUES (?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE steps = steps + VALUES(steps)`,
+      [customerId, date, hour, steps],
+    );
+  }
+
+  async getHourlySteps(customerId, date, conn = db) {
+    const [rows] = await conn.execute(
+      `SELECT hour, steps FROM fitness_hourly_steps WHERE user_id = ? AND step_date = ? ORDER BY hour ASC`,
+      [customerId, date],
+    );
+    return rows.map((r) => ({ hour: Number(r.hour), steps: Number(r.steps) }));
+  }
+
   async getStepsByDate(customerId, date) {
     const [rows] = await db.execute(
       `SELECT steps, distance_km, calories, active_minutes
@@ -184,8 +269,8 @@ class FitnessModel {
     return rows[0];
   }
 
-  async getLifetimeSteps(customerId) {
-    const [rows] = await db.execute(
+  async getLifetimeSteps(customerId, conn = db) {
+    const [rows] = await conn.execute(
       `
       SELECT COALESCE(SUM(steps), 0) AS total_steps
       FROM fitness_steps

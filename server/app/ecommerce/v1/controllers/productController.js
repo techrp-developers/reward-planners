@@ -4,6 +4,13 @@ const db = require("../../../../config/database");
 const fs = require("fs");
 const path = require("path");
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
+
+function buildImageUrl(path, updatedAt) {
+  if (!path) return null;
+  const version = updatedAt ? `?v=${encodeURIComponent(updatedAt)}` : "";
+  return `${CDN_BASE_URL}/${path}${version}`;
+}
+
 const {
   calculateReward,
   resolveRedemption,
@@ -20,6 +27,98 @@ function nonNegativeInt(value, fallback = 0, max = 10000) {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed) || parsed < 0) return fallback;
   return Math.min(parsed, max);
+}
+
+function getProductId(product) {
+  return Number(product.product_id || product.id);
+}
+
+async function addWishlistStatus(products, userId) {
+  const list = Array.isArray(products) ? products : [products];
+
+  if (!list.length) return products;
+
+  list.forEach((product) => {
+    product.is_wishlisted = false;
+    if (Array.isArray(product.variants)) {
+      product.variants.forEach((variant) => {
+        variant.is_wishlisted = false;
+      });
+    }
+  });
+
+  if (!userId) return products;
+
+  const pairs = [];
+
+  list.forEach((product) => {
+    const productId = getProductId(product);
+
+    if (productId > 0 && Number(product.variant_id) > 0) {
+      pairs.push({
+        productId,
+        variantId: Number(product.variant_id),
+      });
+    }
+
+    if (Array.isArray(product.variants)) {
+      product.variants.forEach((variant) => {
+        if (productId > 0 && Number(variant.variant_id) > 0) {
+          pairs.push({
+            productId,
+            variantId: Number(variant.variant_id),
+          });
+        }
+      });
+    }
+  });
+
+  if (!pairs.length) return products;
+
+  const uniquePairs = [
+    ...new Map(
+      pairs.map((pair) => [`${pair.productId}:${pair.variantId}`, pair]),
+    ).values(),
+  ];
+
+  const conditions = uniquePairs
+    .map(() => "(product_id = ? AND variant_id = ?)")
+    .join(" OR ");
+
+  const params = uniquePairs.flatMap((pair) => [
+    pair.productId,
+    pair.variantId,
+  ]);
+
+  const [rows] = await db.execute(
+    `SELECT product_id, variant_id
+     FROM customer_wishlist
+     WHERE user_id = ?
+       AND (${conditions})`,
+    [userId, ...params],
+  );
+
+  const wishlisted = new Set(
+    rows.map((row) => `${Number(row.product_id)}:${Number(row.variant_id)}`),
+  );
+
+  list.forEach((product) => {
+    const key = `${getProductId(product)}:${Number(product.variant_id)}`;
+    product.is_wishlisted = wishlisted.has(key);
+
+    if (Array.isArray(product.variants)) {
+      product.variants.forEach((variant) => {
+        const variantKey = `${getProductId(product)}:${Number(variant.variant_id)}`;
+        variant.is_wishlisted = wishlisted.has(variantKey);
+      });
+
+      product.is_wishlisted = product.variants.some(
+        (variant) => variant.is_wishlisted,
+      );
+    }
+  });
+
+  return products;
 }
 
 class ProductController {
@@ -51,10 +150,12 @@ class ProductController {
             product.images && product.images.length
               ? product.images[0].image_url
               : null;
+          const imageUpdatedAt =
+            product.images && product.images.length
+              ? product.images[0].updated_at
+              : null;
 
-          const mainImage = imagePath
-            ? `${CDN_BASE_URL}/${imagePath}?v=${product.updated_at || Date.now()}`
-            : null;
+          const mainImage = buildImageUrl(imagePath, imageUpdatedAt);
 
           const salePrice = product.sale_price ? Number(product.sale_price) : 0;
           const mrp = product.mrp ? Number(product.mrp) : 0;
@@ -101,6 +202,7 @@ class ProductController {
 
           return {
             id: product.product_id,
+            variant_id: product.variant_id,
             title: product.product_name,
             brand: product.brand_name,
             category: product.category_name,
@@ -128,6 +230,8 @@ class ProductController {
           };
         }),
       );
+
+      await addWishlistStatus(processedProducts, req.user?.user_id);
 
       return res.json({
         success: true,
@@ -198,8 +302,11 @@ class ProductController {
           const imagePath = product.images?.length
             ? product.images[0].image_url
             : null;
+          const imageUpdatedAt = product.images?.length
+            ? product.images[0].updated_at
+            : null;
 
-          const mainImage = imagePath ? `${CDN_BASE_URL}/${imagePath}` : null;
+          const mainImage = buildImageUrl(imagePath, imageUpdatedAt);
 
           const salePrice = Number(product.sale_price) || 0;
           const mrp = Number(product.mrp) || 0;
@@ -248,6 +355,7 @@ class ProductController {
 
           return {
             id: product.product_id,
+            variant_id: product.variant_id,
             title: product.product_name,
             brand: product.brand_name,
             category: product.category_name,
@@ -273,6 +381,8 @@ class ProductController {
           };
         }),
       );
+
+      await addWishlistStatus(processedProducts, req.user?.user_id);
 
       return res.json({
         success: true,
@@ -342,8 +452,11 @@ class ProductController {
           const imagePath = product.images?.length
             ? product.images[0].image_url
             : null;
+          const imageUpdatedAt = product.images?.length
+            ? product.images[0].updated_at
+            : null;
 
-          const mainImage = imagePath ? `${CDN_BASE_URL}/${imagePath}` : null;
+          const mainImage = buildImageUrl(imagePath, imageUpdatedAt);
 
           const salePrice = Number(product.sale_price) || 0;
           const mrp = Number(product.mrp) || 0;
@@ -393,6 +506,7 @@ class ProductController {
 
           return {
             id: product.product_id,
+            variant_id: product.variant_id,
             title: product.product_name,
             brand: product.brand_name,
             category: product.category_name,
@@ -421,6 +535,8 @@ class ProductController {
       );
 
       const hasMore = page < Math.ceil(totalItems / limit);
+
+      await addWishlistStatus(processedProducts, req.user?.user_id);
 
       return res.json({
         success: true,
@@ -547,6 +663,8 @@ class ProductController {
           }),
         ),
       };
+
+      await addWishlistStatus(processedProduct, req.user?.user_id);
 
       return res.json({
         success: true,
@@ -765,7 +883,8 @@ class ProductController {
           DISTINCT CONCAT(
             pi.image_id, '::',
             pi.image_url, '::',
-            pi.sort_order
+            pi.sort_order, '::',
+            pi.updated_at
           )
           ORDER BY pi.sort_order ASC
         ) AS images
@@ -827,9 +946,10 @@ class ProductController {
           // Parse image
           let image = null;
           if (row.images) {
-            const first = row.images.split(",")[0];
-            const imagePath = first.split("::")[1];
-            image = imagePath ? `${CDN_BASE_URL}/${imagePath}` : null;
+            const parts = row.images.split(",")[0].split("::");
+            const imagePath = parts[1];
+            const imageUpdatedAt = parts[parts.length - 1];
+            image = buildImageUrl(imagePath, imageUpdatedAt);
           }
 
           /* ===============================
@@ -902,6 +1022,8 @@ class ProductController {
         }),
       );
 
+      await addWishlistStatus(recentlyViewed, userId);
+
       return res.json({
         success: true,
         data: recentlyViewed,
@@ -933,6 +1055,8 @@ class ProductController {
         offset,
       );
 
+      await addWishlistStatus(products, userId);
+
       return res.status(200).json({
         success: true,
         total: products.length,
@@ -955,6 +1079,8 @@ class ProductController {
       const offset = nonNegativeInt(req.query.offset);
 
       const products = await ProductModel.getNewArrivals(limit, offset);
+
+      await addWishlistStatus(products, req.user?.user_id);
 
       return res.status(200).json({
         success: true,
@@ -991,6 +1117,8 @@ class ProductController {
         offset,
       );
 
+      await addWishlistStatus(products, req.user?.user_id);
+
       return res.status(200).json({
         success: true,
         total: products.length,
@@ -1020,6 +1148,8 @@ class ProductController {
         days,
       );
 
+      await addWishlistStatus(products, req.user?.user_id);
+
       return res.status(200).json({
         success: true,
         total: products.length,
@@ -1044,6 +1174,8 @@ class ProductController {
       const offset = nonNegativeInt(req.query.offset);
 
       const products = await ProductModel.getBestSellers(limit, offset, days);
+
+      await addWishlistStatus(products, req.user?.user_id);
 
       return res.status(200).json({
         success: true,
@@ -1074,6 +1206,8 @@ class ProductController {
         days,
       );
 
+      await addWishlistStatus(products, req.user?.user_id);
+
       return res.status(200).json({
         success: true,
         total: products.length,
@@ -1097,6 +1231,8 @@ class ProductController {
       const offset = nonNegativeInt(req.query.offset);
 
       const products = await ProductModel.getTopRatedProducts(limit, offset);
+
+      await addWishlistStatus(products, req.user?.user_id);
 
       return res.status(200).json({
         success: true,
@@ -1226,6 +1362,8 @@ class ProductController {
         offset,
       });
 
+      await addWishlistStatus(products, req.user?.user_id);
+
       return res.status(200).json({
         success: true,
         total: products.length,
@@ -1285,10 +1423,12 @@ class ProductController {
             product.images && product.images.length
               ? product.images[0].image_url
               : null;
+          const imageUpdatedAt =
+            product.images && product.images.length
+              ? product.images[0].updated_at
+              : null;
 
-          const mainImage = imagePath
-            ? `${CDN_BASE_URL}/${imagePath}?v=${product.updated_at || Date.now()}`
-            : null;
+          const mainImage = buildImageUrl(imagePath, imageUpdatedAt);
 
           const salePrice = product.sale_price ? Number(product.sale_price) : 0;
 
@@ -1326,6 +1466,7 @@ class ProductController {
 
           return {
             id: product.product_id,
+            variant_id: product.variant_id,
             title: product.product_name,
 
             image: mainImage,
@@ -1341,6 +1482,8 @@ class ProductController {
           };
         }),
       );
+
+      await addWishlistStatus(processedProducts, req.user?.user_id);
 
       return res.json({
         success: true,

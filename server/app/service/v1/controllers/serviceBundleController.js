@@ -10,9 +10,10 @@ const { deleteFromR2 } = require("../../../../utils/r2delete");
 
 // helper function
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
-function getPublicUrl(path) {
+function getPublicUrl(path, updatedAt) {
   if (!path) return null;
-  return `${CDN_BASE_URL}/${path}`;
+  const version = updatedAt ? `?v=${encodeURIComponent(updatedAt)}` : "";
+  return `${CDN_BASE_URL}/${path}${version}`;
 }
 
 // Helper function
@@ -55,14 +56,14 @@ class ServiceBundleController {
   async getServiceBundles(req, res) {
     try {
       const [rows] = await db.execute(
-        `SELECT id, name, description, bundle_price, original_price, banner_image
+        `SELECT id, name, description, bundle_price, original_price, banner_image, updated_at
        FROM service_bundles
        WHERE status = 1`,
       );
 
       const bundles = rows.map((bundle) => ({
         ...bundle,
-        banner_image: getPublicUrl(bundle.banner_image),
+        banner_image: getPublicUrl(bundle.banner_image, bundle.updated_at),
       }));
 
       res.json({
@@ -97,6 +98,8 @@ class ServiceBundleController {
           .status(404)
           .json({ success: false, message: "Bundle not found" });
       }
+
+      bundle.banner_image = getPublicUrl(bundle.banner_image, bundle.updated_at);
 
       // 2 Items (services inside bundle)
       const items = await ServiceBundleModel.getBundleItems(id);

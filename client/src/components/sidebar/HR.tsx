@@ -5,10 +5,12 @@ import {
   FiUsers,
   FiUserPlus,
   FiLogOut,
-FiGift
+  FiGift,
+  FiChevronDown,
 } from "react-icons/fi";
 import { HiOutlineUserCircle } from "react-icons/hi2";
 import { useAuth } from "../../auth/useAuth";
+import { hrApi } from "../../api/hrApi";
 
 /* ================= TYPES ================= */
 
@@ -44,9 +46,17 @@ export default function HrNavbar({ closeSidebar }: HrNavbarProps) {
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [loading, setLoading] = useState<boolean>(true);
+  const [company, setCompany] = useState<{
+    company_name: string;
+    company_logo: string | null;
+  } | null>(null);
 
   useEffect(() => {
-    setLoading(false);
+    hrApi
+      .get("/employees/company-profile")
+      .then((response) => setCompany(response.data?.data || null))
+      .catch((error) => console.error("Unable to load company branding:", error))
+      .finally(() => setLoading(false));
   }, []);
 
   const isActive = (path: string): boolean => pathname === path;
@@ -88,9 +98,17 @@ const navItems: NavItem[] = [
       {/* Branding */}
       <div className="px-8 py-10">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#852BAF] to-[#FC3F78] shadow-lg flex items-center justify-center text-white font-black italic">
-            R
-          </div>
+          {company?.company_logo ? (
+            <img
+              src={company.company_logo}
+              alt={`${company.company_name} logo`}
+              className="object-contain w-10 h-10 p-1 bg-white border border-gray-100 rounded-lg shadow-sm"
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#852BAF] to-[#FC3F78] shadow-lg flex items-center justify-center text-white font-black italic">
+              R
+            </div>
+          )}
           <div>
             <h1 className="text-xl font-black text-gray-900">REWARDS</h1>
             <p className="text-[10px] uppercase font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#852BAF] to-[#FC3F78]">
@@ -147,43 +165,84 @@ const navItems: NavItem[] = [
         })}
       </div>
 
-      {/* Profile */}
-      <div className="p-4 mt-auto border-t border-gray-100">
+      {/* ── PROFILE SECTION ── */}
+      <div
+        className="p-3 m-3 rounded-2xl"
+        style={{
+          background:
+            "linear-gradient(135deg, rgba(133,43,175,0.06) 0%, rgba(252,63,120,0.04) 100%)",
+          border: "1px solid rgba(133,43,175,0.12)",
+        }}
+      >
         <button
           onClick={() => setIsProfileOpen((prev) => !prev)}
-          className="flex items-center w-full gap-3 p-2 rounded-2xl hover:bg-gray-50"
+          className="flex items-center w-full gap-3 group cursor-pointer"
         >
-          <div className="w-10 h-10 flex items-center justify-center text-white font-black rounded-xl bg-gradient-to-tr from-[#852BAF] to-[#FC3F78]">
-            {user?.email?.[0]?.toUpperCase() || "M"}
+          <div className="relative shrink-0">
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white text-[15px] transition-transform duration-200 group-hover:scale-105"
+              style={{
+                background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
+                boxShadow: "0 4px 12px rgba(133,43,175,0.3)",
+              }}
+            >
+              {user?.email?.charAt(0).toUpperCase() || "M"}
+            </div>
+            <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-white rounded-full flex items-center justify-center shadow-sm">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              </span>
+            </div>
           </div>
-          <div className="flex-1 text-left truncate">
-            <p className="text-xs font-black text-gray-900 truncate">
-              {user?.email?.split("@")[0] || "User"}
+
+          <div className="flex-1 min-w-0 overflow-hidden text-left">
+            <p className="text-[13px] font-semibold text-gray-900 truncate leading-tight">
+              {user?.name || user?.email}
             </p>
-            <p className="text-[10px] text-gray-400 truncate">HR Admin</p>
+            <p className="text-[10px] text-[#852BAF] font-bold uppercase tracking-wider mt-0.5">
+              HR Admin
+            </p>
           </div>
+
+          <FiChevronDown
+            className={`text-gray-400 shrink-0 transition-transform duration-300 ${
+              isProfileOpen ? "rotate-180" : ""
+            }`}
+          />
         </button>
 
-        {isProfileOpen && (
-          <div className="mt-2 space-y-1">
+        <div
+          className={`overflow-hidden transition-all duration-300 ${
+            isProfileOpen ? "max-h-28 mt-3 opacity-100" : "max-h-0 opacity-0"
+          }`}
+        >
+          <div
+            className="w-full h-px mb-2"
+            style={{
+              background:
+                "linear-gradient(90deg, rgba(133,43,175,0.2), transparent)",
+            }}
+          />
+          <div className="space-y-0.5">
             <Link
               to="/hr/change-password"
               onClick={closeSidebar}
-              className="flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-gray-100"
+              className="flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-white/80 hover:text-[#852BAF] rounded-xl transition-all duration-150"
             >
-              <HiOutlineUserCircle className="text-lg" />
+              <HiOutlineUserCircle className="text-base text-gray-400 shrink-0" />
               Change Password
             </Link>
 
             <button
               onClick={logout}
-              className="flex items-center w-full gap-2 px-3 py-2 text-sm text-red-500 rounded hover:bg-red-50"
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm font-medium text-red-500 hover:bg-red-50 hover:text-red-600 rounded-xl transition-all duration-150 cursor-pointer"
             >
-              <FiLogOut className="text-lg" />
-              Logout
+              <FiLogOut className="text-base shrink-0" />
+              Sign Out
             </button>
           </div>
-        )}
+        </div>
       </div>
     </nav>
   );

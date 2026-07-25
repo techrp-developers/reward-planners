@@ -35,6 +35,14 @@ router.post(
 // Payment status
 router.get("/payment-status/:orderId", auth, PaymentController.paymentStatus);
 
+// Release an unpaid order after the customer explicitly cancels/fails checkout.
+router.post(
+  "/cancel-order/:orderId",
+  auth,
+  paymentLimiter,
+  PaymentController.cancelPendingOrder,
+);
+
 // refund
 // router.post('/refund', PaymentController.refundPayment);
 

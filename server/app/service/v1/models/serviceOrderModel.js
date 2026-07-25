@@ -1,5 +1,7 @@
 const db = require("../../../../config/database");
 const razorpay = require("../middlewares/razorpay");
+const axios = require("axios");
+const { notifyUser } = require("../../../common/utils/notification");
 
 // helper function
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
@@ -31,8 +33,8 @@ class ServiceOrderModel {
   async create(data, conn = db) {
     const [result] = await conn.execute(
       `INSERT INTO service_orders
-    (user_id, service_id, variant_id, address_id, enquiry_id, price, parent_order_id, bundle_id, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    (user_id, service_id, variant_id, address_id, enquiry_id, price, parent_order_id, bundle_id, status, payment_status, reward_coins_earned, reward_coins_used)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         data.user_id,
         data.service_id,
@@ -43,6 +45,9 @@ class ServiceOrderModel {
         data.parent_order_id,
         data.bundle_id || null,
         data.status,
+        data.payment_status || "pending",
+        Number(data.reward_coins_earned || 0),
+        Number(data.reward_coins_used || 0),
       ],
     );
 
@@ -57,6 +62,8 @@ class ServiceOrderModel {
     return {
       id: insertId,
       order_ref: ref,
+      reward_coins_earned: Number(data.reward_coins_earned || 0),
+      reward_coins_used: Number(data.reward_coins_used || 0),
     };
   }
 
@@ -74,9 +81,13 @@ class ServiceOrderModel {
     let sql = `
     SELECT 
       so.id,
+      so.service_id,
       so.order_ref,
       so.price,
+      so.reward_coins_used,
+      so.reward_coins_earned,
       so.status,
+      so.payment_status,
       so.created_at,
       so.parent_order_id,
       so.bundle_id,
@@ -157,6 +168,9 @@ class ServiceOrderModel {
           parent_order_id: parentId,
           created_at: row.created_at,
           total_amount: 0,
+          subtotal: 0,
+          reward_discount: 0,
+          reward_coins_earned: 0,
 
           //  FIX: store all statuses
           statuses: [],
@@ -180,11 +194,18 @@ class ServiceOrderModel {
 
       const item = {
         id: row.id,
+        service_id: row.service_id,
         order_ref: row.order_ref,
         service_name: row.service_name,
         variant_name: row.variant_name,
         image_url: row.image_url ? getPublicUrl(row.image_url) : null,
         price: Number(row.price),
+        reward_coins_used: Number(row.reward_coins_used || 0),
+        reward_coins_earned: Number(row.reward_coins_earned || 0),
+        total_amount: Math.max(
+          0,
+          Number(row.price) - Number(row.reward_coins_used || 0),
+        ),
         bundle_id: row.bundle_id,
       };
 
@@ -208,7 +229,7 @@ class ServiceOrderModel {
         }
 
         order.bundles[row.bundle_id].items.push(item);
-        order.bundles[row.bundle_id].bundle_total += Number(row.price);
+        order.bundles[row.bundle_id].bundle_total += item.total_amount;
       } else {
         order.items.push(item);
 
@@ -220,7 +241,10 @@ class ServiceOrderModel {
       }
 
       order.summary.total_items += 1;
-      order.total_amount += Number(row.price);
+      order.subtotal += Number(row.price);
+      order.reward_discount += Number(row.reward_coins_used || 0);
+      order.reward_coins_earned += Number(row.reward_coins_earned || 0);
+      order.total_amount += item.total_amount;
     });
 
     //  FINAL TRANSFORM
@@ -230,7 +254,10 @@ class ServiceOrderModel {
 
       if (
         order.statuses.some(
-          (s) => s === "in_progress" || s === "documents_pending",
+          (s) =>
+            s === "in_progress" ||
+            s === "documents_pending" ||
+            s === "documents_uploaded",
         )
       ) {
         finalStatus = "in_progress";
@@ -247,6 +274,14 @@ class ServiceOrderModel {
         created_at: order.created_at,
         status: finalStatus,
         total_amount: order.total_amount,
+        subtotal: order.subtotal,
+        reward_discount: order.reward_discount,
+        reward_coins_used: order.reward_discount,
+        reward_coins_earned: order.reward_coins_earned,
+        rewards: {
+          used: order.reward_discount,
+          earned: order.reward_coins_earned,
+        },
 
         items: order.items,
         bundles: Object.values(order.bundles),
@@ -273,7 +308,10 @@ class ServiceOrderModel {
       all: result.length,
 
       in_progress: result.filter(
-        (x) => x.status === "in_progress" || x.status === "documents_pending",
+        (x) =>
+          x.status === "in_progress" ||
+          x.status === "documents_pending" ||
+          x.status === "documents_uploaded",
       ).length,
 
       completed: result.filter((x) => x.status === "completed").length,
@@ -318,9 +356,13 @@ class ServiceOrderModel {
       `
     SELECT 
       so.id,
+      so.service_id,
       so.order_ref,
       so.price,
+      so.reward_coins_used,
+      so.reward_coins_earned,
       so.status,
+      so.payment_status,
       so.bundle_id,
       so.created_at,
 
@@ -395,6 +437,9 @@ class ServiceOrderModel {
       items: [],
       bundles: {},
       total_amount: 0,
+      subtotal: 0,
+      reward_discount: 0,
+      reward_coins_earned: 0,
     };
 
     rows.forEach((row) => {
@@ -406,7 +451,14 @@ class ServiceOrderModel {
         title: row.title,
         image_url: row.image_url ? getPublicUrl(row.image_url) : null,
         price: Number(row.price),
+        reward_coins_used: Number(row.reward_coins_used || 0),
+        reward_coins_earned: Number(row.reward_coins_earned || 0),
+        total_amount: Math.max(
+          0,
+          Number(row.price) - Number(row.reward_coins_used || 0),
+        ),
         status: row.status,
+        payment_status: row.payment_status || "pending",
       };
 
       if (row.bundle_id) {
@@ -419,15 +471,23 @@ class ServiceOrderModel {
         }
 
         response.bundles[row.bundle_id].items.push(item);
-        response.bundles[row.bundle_id].bundle_total += Number(row.price);
+        response.bundles[row.bundle_id].bundle_total += item.total_amount;
       } else {
         response.items.push(item);
       }
 
-      response.total_amount += Number(row.price);
+      response.subtotal += Number(row.price);
+      response.reward_discount += Number(row.reward_coins_used || 0);
+      response.reward_coins_earned += Number(row.reward_coins_earned || 0);
+      response.total_amount += item.total_amount;
     });
 
     response.bundles = Object.values(response.bundles);
+    response.reward_coins_used = response.reward_discount;
+    response.rewards = {
+      used: response.reward_discount,
+      earned: response.reward_coins_earned,
+    };
 
     return response;
   }
@@ -476,6 +536,7 @@ class ServiceOrderModel {
         so.user_id,
         so.price,
         so.payment_id,
+        so.payment_status,
         so.reward_coins_used,
         so.status AS order_status
 
@@ -504,6 +565,18 @@ class ServiceOrderModel {
       throw new Error("ORDER_ALREADY_CANCELLED");
     }
 
+    if (cancellation.payment_status !== "paid") {
+      throw new Error("ORDER_NOT_PAID");
+    }
+
+    if (
+      !["documents_pending", "documents_uploaded", "in_progress"].includes(
+        cancellation.order_status,
+      )
+    ) {
+      throw new Error("ORDER_NOT_CANCELLABLE");
+    }
+
     // =====================================
     // 2 Prevent duplicate refund
     // =====================================
@@ -524,8 +597,8 @@ class ServiceOrderModel {
 
     // check wallet transactions for duplicate
     const [[existingWalletRefund]] = await conn.execute(
-      `SELECT id FROM wallet_transactions
-   WHERE reference_id = ? AND reason_code = 'ADMIN_ADJUSTMENT' LIMIT 1`,
+      `SELECT 1 AS refund_exists FROM wallet_transactions
+       WHERE reference_id = ? AND reason_code = 'ADMIN_ADJUSTMENT' LIMIT 1`,
       [serviceOrderId],
     );
 
@@ -544,6 +617,10 @@ class ServiceOrderModel {
     const refundToWallet = coinsUsed;
 
     const refundToCard = Math.max(0, refundAmount - coinsUsed);
+
+    if (refundToCard > 0 && !cancellation.payment_id) {
+      throw new Error("PAYMENT_ID_MISSING");
+    }
 
     // =====================================
     // 4 Reverse wallet coins
@@ -656,6 +733,15 @@ class ServiceOrderModel {
       );
     }
 
+    if (refundToWallet > 0) {
+      await conn.execute(
+        `INSERT INTO service_order_refunds
+          (service_order_id, user_id, refund_amount, refund_method, status)
+         VALUES (?, ?, ?, 'wallet', 'completed')`,
+        [serviceOrderId, cancellation.user_id, refundToWallet],
+      );
+    }
+
     // =====================================
     // 6 Update cancellation request
     // =====================================
@@ -667,11 +753,11 @@ class ServiceOrderModel {
     SET
       status = 'approved',
       refund_amount = ?,
-      refund_status = 'initiated'
+      refund_status = ?
 
     WHERE service_order_id = ?
     `,
-      [refundAmount, serviceOrderId],
+      [refundAmount, refundToCard > 0 ? "initiated" : "completed", serviceOrderId],
     );
 
     // =====================================
@@ -716,6 +802,13 @@ class ServiceOrderModel {
       `,
         [serviceOrderId],
       );
+    } else {
+      await conn.execute(
+        `INSERT INTO service_order_cancellation_timeline
+          (service_order_id, event)
+         VALUES (?, 'refund_completed')`,
+        [serviceOrderId],
+      );
     }
 
     // =====================================
@@ -735,97 +828,265 @@ class ServiceOrderModel {
       [refundAmount, serviceOrderId],
     );
 
-    return refundToCard > 0
-      ? {
-          payment_id: cancellation.payment_id,
+    return {
+      payment_id: cancellation.payment_id,
+      amount: refundToCard,
+      service_order_id: serviceOrderId,
+      user_id: cancellation.user_id,
+      refund_status: refundToCard > 0 ? "initiated" : "completed",
+    };
+  }
 
-          amount: refundToCard,
+  async completeRefund(serviceOrderId, gatewayRefund) {
+    const conn = await db.getConnection();
+    let shouldNotify = false;
+    let userId;
+    try {
+      await conn.beginTransaction();
+      const [[row]] = await conn.execute(
+        `SELECT r.id, r.status, so.user_id
+         FROM service_order_refunds r
+         JOIN service_orders so ON so.id = r.service_order_id
+         WHERE r.service_order_id = ? AND r.refund_method = 'original'
+         LIMIT 1 FOR UPDATE`,
+        [serviceOrderId],
+      );
+      if (!row) {
+        await conn.rollback();
+        return false;
+      }
 
-          service_order_id: serviceOrderId,
-        }
-      : null;
+      if (row.status === "completed") {
+        await conn.rollback();
+        return true;
+      }
+
+      userId = row.user_id;
+      shouldNotify = row.status !== "completed";
+      await conn.execute(
+        `UPDATE service_order_refunds
+         SET status = 'completed', razorpay_refund_id = ?
+         WHERE id = ?`,
+        [gatewayRefund.id, row.id],
+      );
+      await conn.execute(
+        `UPDATE service_order_cancellations
+         SET refund_status = 'completed'
+         WHERE service_order_id = ?`,
+        [serviceOrderId],
+      );
+      await conn.execute(
+        `INSERT INTO service_order_cancellation_timeline (service_order_id, event)
+         SELECT ?, 'refund_completed'
+         WHERE NOT EXISTS (
+           SELECT 1 FROM service_order_cancellation_timeline
+           WHERE service_order_id = ? AND event = 'refund_completed'
+         )`,
+        [serviceOrderId, serviceOrderId],
+      );
+      await conn.commit();
+    } catch (error) {
+      await conn.rollback();
+      throw error;
+    } finally {
+      conn.release();
+    }
+
+    if (shouldNotify) {
+      notifyUser(
+        {
+          userId,
+          module: "service",
+          type: "service_refund_completed",
+          title: "Refund completed",
+          message: "Your service cancellation refund has been processed.",
+          icon: "wallet",
+          reference_type: "service_order",
+          reference_id: serviceOrderId,
+          action_url: `/service-orders/${serviceOrderId}`,
+        },
+        "service refund completed notification",
+      );
+    }
+    return true;
+  }
+
+  async failRefund(serviceOrderId, gatewayRefundId, message) {
+    const conn = await db.getConnection();
+    let shouldNotify = false;
+    let userId;
+    try {
+      await conn.beginTransaction();
+      const [[row]] = await conn.execute(
+        `SELECT r.id, r.status, so.user_id
+         FROM service_order_refunds r
+         JOIN service_orders so ON so.id = r.service_order_id
+         WHERE r.service_order_id = ? AND r.refund_method = 'original'
+         LIMIT 1 FOR UPDATE`,
+        [serviceOrderId],
+      );
+      if (!row) {
+        await conn.rollback();
+        return false;
+      }
+
+      if (row.status === "completed") {
+        await conn.rollback();
+        return true;
+      }
+
+      userId = row.user_id;
+      shouldNotify = row.status !== "failed";
+      await conn.execute(
+        `UPDATE service_order_refunds
+         SET status = 'failed', razorpay_refund_id = COALESCE(?, razorpay_refund_id)
+         WHERE id = ?`,
+        [gatewayRefundId || null, row.id],
+      );
+      await conn.execute(
+        `UPDATE service_order_cancellations
+         SET refund_status = 'initiated'
+         WHERE service_order_id = ?`,
+        [serviceOrderId],
+      );
+      await conn.execute(
+        `INSERT INTO service_order_cancellation_timeline (service_order_id, event)
+         SELECT ?, 'refund_failed'
+         WHERE NOT EXISTS (
+           SELECT 1 FROM service_order_cancellation_timeline
+           WHERE service_order_id = ? AND event = 'refund_failed'
+         )`,
+        [serviceOrderId, serviceOrderId],
+      );
+      await conn.commit();
+    } catch (error) {
+      await conn.rollback();
+      throw error;
+    } finally {
+      conn.release();
+    }
+
+    if (shouldNotify) {
+      notifyUser(
+        {
+          userId,
+          module: "service",
+          type: "service_refund_failed",
+          title: "Refund needs attention",
+          message: message || "Your refund could not be processed. Our team will review it.",
+          icon: "alert-circle",
+          reference_type: "service_order",
+          reference_id: serviceOrderId,
+          action_url: `/service-orders/${serviceOrderId}`,
+          priority: "high",
+        },
+        "service refund failed notification",
+      );
+    }
+    return true;
+  }
+
+  async reconcileRefundEntity(gatewayRefund, eventName = null) {
+    if (!gatewayRefund?.id) return false;
+    const serviceOrderIdFromNotes = Number(gatewayRefund.notes?.service_order_id);
+    const [[row]] = await db.execute(
+      `SELECT service_order_id FROM service_order_refunds
+       WHERE razorpay_refund_id = ?
+          OR (? > 0 AND service_order_id = ? AND refund_method = 'original')
+       LIMIT 1`,
+      [gatewayRefund.id, serviceOrderIdFromNotes, serviceOrderIdFromNotes],
+    );
+    if (!row) return false;
+
+    const status = String(gatewayRefund.status || "").toLowerCase();
+    if (eventName === "refund.processed" || status === "processed") {
+      return this.completeRefund(row.service_order_id, gatewayRefund);
+    }
+    if (eventName === "refund.failed" || status === "failed") {
+      return this.failRefund(
+        row.service_order_id,
+        gatewayRefund.id,
+        "Razorpay reported that the refund could not be processed.",
+      );
+    }
+
+    await db.execute(
+      `UPDATE service_order_refunds
+       SET status = 'pending', razorpay_refund_id = ?
+       WHERE service_order_id = ? AND refund_method = 'original'
+         AND status <> 'completed'`,
+      [gatewayRefund.id, row.service_order_id],
+    );
+    return true;
   }
 
   async processRefund(data) {
+    const { payment_id, amount, service_order_id } = data;
+    const refundAmount = Number(amount);
+    if (!payment_id || !Number.isFinite(refundAmount) || refundAmount <= 0) {
+      throw new Error("INVALID_SERVICE_REFUND");
+    }
+
+    const [[existing]] = await db.execute(
+      `SELECT id, status, razorpay_refund_id
+       FROM service_order_refunds
+       WHERE service_order_id = ? AND refund_method = 'original'
+       LIMIT 1`,
+      [service_order_id],
+    );
+    if (!existing) throw new Error("SERVICE_REFUND_NOT_FOUND");
+    if (existing.status === "completed") return { status: "completed" };
+
+    if (existing.razorpay_refund_id) {
+      const gatewayRefund = await razorpay.refunds.fetch(existing.razorpay_refund_id);
+      await this.reconcileRefundEntity(gatewayRefund);
+      return { status: gatewayRefund.status, gatewayRefund };
+    }
+
+    const refundKey = `service_cancel_${service_order_id}`;
+    let gatewayRefund;
     try {
-      const { payment_id, amount, service_order_id } = data;
-
-      // refund
-      const refund = await razorpay.payments.refund(payment_id, {
-        amount: Math.round(Number(amount) * 100),
-      });
-
-      // update refund
-      await db.execute(
-        `
-      UPDATE service_order_refunds
-      SET
-        status = 'completed',
-        razorpay_refund_id = ?
-
-      WHERE service_order_id = ?
-      AND status IN ('pending', 'failed')`,
-        [refund.id, service_order_id],
+      const response = await axios.post(
+        `https://api.razorpay.com/v1/payments/${payment_id}/refund`,
+        {
+          amount: Math.round(refundAmount * 100),
+          receipt: refundKey,
+          notes: {
+            module: "service",
+            service_order_id: String(service_order_id),
+            refund_key: refundKey,
+          },
+        },
+        {
+          auth: {
+            username: process.env.RAZOR_API_KEY,
+            password: process.env.RAZOR_SECRET_KEY,
+          },
+          headers: {
+            "Content-Type": "application/json",
+            "X-Refund-Idempotency": refundKey,
+          },
+          timeout: 15000,
+        },
       );
-
-      // update cancellation
+      gatewayRefund = response.data;
       await db.execute(
-        `
-      UPDATE service_order_cancellations
-      SET refund_status = 'completed'
-      WHERE service_order_id = ?
-      `,
-        [service_order_id],
+        `UPDATE service_order_refunds
+         SET razorpay_refund_id = ?, status = 'pending'
+         WHERE id = ? AND status <> 'completed'`,
+        [gatewayRefund.id, existing.id],
       );
-
-      // =====================================
-      // Timeline: refund completed
-      // =====================================
-      await db.execute(
-        `
-        INSERT INTO
-        service_order_cancellation_timeline
-        (
-          service_order_id,
-          event
-        )
-        VALUES
-        (
-          ?,
-          'refund_completed'
-        )
-        `,
-        [service_order_id],
-      );
+      await this.reconcileRefundEntity(gatewayRefund);
+      return { status: gatewayRefund.status, gatewayRefund };
     } catch (error) {
-      console.error("Service refund failed:", error);
-
-      await db.execute(
-        `
-      UPDATE service_order_refunds
-      SET status = 'failed'
-      WHERE service_order_id = ?
-      AND status IN ('pending', 'failed')
-      `,
-        [data.service_order_id],
-      );
-
-      await db.execute(
-        `
-        INSERT INTO
-        service_order_cancellation_timeline
-        (
+      if (!gatewayRefund?.id) {
+        await this.failRefund(
           service_order_id,
-          event
-        )
-        VALUES
-        (
-          ?,
-          'refund_failed'
-        )
-        `,
-        [data.service_order_id],
-      );
+          null,
+          "The refund request could not be sent and will be retried.",
+        );
+      }
+      throw error;
     }
   }
 
@@ -839,13 +1100,15 @@ class ServiceOrderModel {
       `
       SELECT
         id,
-        status
+        status,
+        user_id
 
       FROM service_order_cancellations
 
       WHERE service_order_id = ?
 
       LIMIT 1
+      FOR UPDATE
       `,
       [serviceOrderId],
     );
@@ -893,6 +1156,55 @@ class ServiceOrderModel {
     `,
       [serviceOrderId],
     );
+
+    return { user_id: cancellation.user_id };
+  }
+
+  async getServiceCancellationRequests({ status = null, page = 1, limit = 20 }) {
+    const offset = (page - 1) * limit;
+    const params = [];
+    let where = "";
+    if (status && status !== "all") {
+      where = "WHERE soc.status = ?";
+      params.push(status);
+    }
+
+    const [[countRow]] = await db.execute(
+      `SELECT COUNT(*) AS total FROM service_order_cancellations soc ${where}`,
+      params,
+    );
+    const [requests] = await db.execute(
+      `SELECT soc.id, soc.service_order_id, soc.status, soc.refund_status,
+              soc.comment, ocr.reason_text AS reason, soc.created_at,
+              so.order_ref, so.parent_order_id,
+              so.status AS order_status, so.payment_status, so.price,
+              c.name AS customer_name, c.email, c.phone,
+              s.name AS service_name
+       FROM service_order_cancellations soc
+       JOIN service_orders so ON so.id = soc.service_order_id
+       JOIN customer c ON c.user_id = soc.user_id
+       JOIN services s ON s.id = so.service_id
+       LEFT JOIN order_cancellation_reasons ocr ON ocr.reason_id = soc.reason_id
+       ${where}
+       ORDER BY soc.created_at DESC
+       LIMIT ? OFFSET ?`,
+      [...params, limit, offset],
+    );
+
+    const total = Number(countRow.total || 0);
+    return { requests, total, page, totalPages: Math.ceil(total / limit) };
+  }
+
+  async getAdminCancellationDetails(serviceOrderId) {
+    const [[order]] = await db.execute(
+      `SELECT user_id FROM service_orders WHERE id = ?`,
+      [serviceOrderId],
+    );
+    if (!order) throw new Error("SERVICE_ORDER_NOT_FOUND");
+    return this.getCancellationDetails({
+      userId: order.user_id,
+      serviceOrderId,
+    });
   }
 
   // get service cancellation details
@@ -906,6 +1218,7 @@ class ServiceOrderModel {
     SELECT
 
       so.id,
+      so.service_id,
       so.order_ref,
       so.status,
       so.price,
@@ -966,15 +1279,19 @@ class ServiceOrderModel {
     const [[cancellation]] = await db.execute(
       `
       SELECT
-        status,
-        refund_amount,
-        refund_status,
-        refund_method,
-        created_at
+        soc.status,
+        soc.comment,
+        ocr.reason_text AS reason,
+        soc.refund_amount,
+        soc.refund_status,
+        soc.refund_method,
+        soc.created_at
 
-      FROM service_order_cancellations
+      FROM service_order_cancellations soc
+      LEFT JOIN order_cancellation_reasons ocr
+        ON ocr.reason_id = soc.reason_id
 
-      WHERE service_order_id = ?
+      WHERE soc.service_order_id = ?
       `,
       [serviceOrderId],
     );
@@ -1018,6 +1335,7 @@ class ServiceOrderModel {
 
     let moneyRefund = 0;
     let coinRefund = 0;
+    let refundStatus = refunds.length ? "completed" : null;
 
     refunds.forEach((r) => {
       if (r.refund_method === "original") {
@@ -1026,6 +1344,11 @@ class ServiceOrderModel {
 
       if (r.refund_method === "wallet") {
         coinRefund += Number(r.refund_amount);
+      }
+
+      if (r.status === "failed") refundStatus = "failed";
+      else if (r.status === "pending" && refundStatus !== "failed") {
+        refundStatus = "pending";
       }
     });
 
@@ -1041,6 +1364,8 @@ class ServiceOrderModel {
       status: order.status,
 
       service: {
+        service_id: order.service_id,
+
         service_name: order.service_name,
 
         variant_name: order.variant_name,
@@ -1078,6 +1403,10 @@ class ServiceOrderModel {
         ? {
             status: cancellation.status,
 
+            reason: cancellation.reason,
+
+            comment: cancellation.comment,
+
             refund_status: cancellation.refund_status,
 
             refund_method: cancellation.refund_method,
@@ -1102,6 +1431,8 @@ class ServiceOrderModel {
         money_refund: moneyRefund,
 
         coin_refund: coinRefund,
+
+        status: refundStatus,
       },
 
       rewards: {

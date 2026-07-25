@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Swal from "sweetalert2";
 import {
   FaTag,
   FaBox,
@@ -7,6 +8,10 @@ import {
   FaSpinner,
   FaArrowLeft,
   FaDownload,
+  FaCheck,
+  FaTimes,
+  FaRedo,
+  FaTrash,
 } from "react-icons/fa";
 
 import { useNavigate, useParams } from "react-router-dom";
@@ -14,8 +19,11 @@ import QuillEditor from "../../../QuillEditor";
 
 // const API_BASE = import.meta.env.VITE_API_URL;
 import { api } from "../../../../api/api";
+import { routes } from "../../../../routes";
 // const API_BASEIMAGE_URL = "https://rewardplanners.com/api/crm";
 const R2_BASE_URL = "https://cdn.rewardplanners.com";
+
+type ActionType = "approve" | "reject" | "request_resubmission";
 
 type ProductVariant = {
   variant_id: number;
@@ -259,6 +267,176 @@ export default function ReviewProductPage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const okBtnClass =
+    "px-6 py-2 rounded-xl font-bold text-white bg-[#852BAF] transition-all duration-300 cursor-pointer " +
+    "hover:bg-gradient-to-r hover:from-[#852BAF] hover:to-[#FC3F78] active:scale-95";
+
+  const handleProductAction = async (action: ActionType) => {
+    if (!product) return;
+
+    const modalConfigs: Record<
+      ActionType,
+      {
+        title: string;
+        text: string;
+        icon: "warning" | "question" | "success" | "error" | "info";
+        confirmText: string;
+        confirmColor: string;
+        needsReason: boolean;
+        placeholder?: string;
+      }
+    > = {
+      approve: {
+        title: "Approve Product?",
+        text: `Do you want to approve "${product.productName}"?`,
+        icon: "success",
+        confirmText: "Approve",
+        confirmColor: "#16A34A",
+        needsReason: false,
+      },
+      reject: {
+        title: "Reject Product?",
+        text: `Do you want to reject "${product.productName}"?`,
+        icon: "error",
+        confirmText: "Reject",
+        confirmColor: "#DC2626",
+        needsReason: true,
+        placeholder: "Provide rejection reason...",
+      },
+      request_resubmission: {
+        title: "Allow Resubmission?",
+        text: `Allow vendor to resubmit "${product.productName}"?`,
+        icon: "info",
+        confirmText: "Allow",
+        confirmColor: "#2563EB",
+        needsReason: true,
+        placeholder: "Reason for resubmission...",
+      },
+    };
+
+    const cfg = modalConfigs[action];
+
+    const result = await Swal.fire({
+      title: cfg.title,
+      text: cfg.text,
+      icon: cfg.icon,
+      showCancelButton: true,
+      confirmButtonText: cfg.confirmText,
+      cancelButtonText: "Cancel",
+      confirmButtonColor: cfg.confirmColor,
+      cancelButtonColor: "#9CA3AF",
+      reverseButtons: true,
+      input: cfg.needsReason ? "textarea" : undefined,
+      inputPlaceholder: cfg.needsReason ? cfg.placeholder : undefined,
+      inputAttributes: cfg.needsReason ? { "aria-label": "Reason" } : undefined,
+      preConfirm: (value) => {
+        if (cfg.needsReason && (!value || !String(value).trim())) {
+          Swal.showValidationMessage("Reason is required.");
+          return false;
+        }
+        return value;
+      },
+      buttonsStyling: false,
+      customClass: {
+        actions: "gap-[7px]",
+        confirmButton:
+          action === "approve"
+            ? "px-6 py-2 rounded-xl font-bold text-white bg-green-600 hover:bg-green-700 transition-all duration-300 cursor-pointer active:scale-95"
+            : action === "request_resubmission"
+              ? "px-6 py-2 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-700 transition-all duration-300 cursor-pointer active:scale-95"
+              : "px-6 py-2 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 transition-all duration-300 cursor-pointer active:scale-95",
+        cancelButton:
+          "px-6 py-2 rounded-xl font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-all duration-300 cursor-pointer",
+        popup: "rounded-2xl",
+      },
+    });
+
+    if (!result.isConfirmed) return;
+
+    const reason = cfg.needsReason
+      ? String(result.value || "").trim()
+      : undefined;
+
+    try {
+      const endpoint =
+        action === "request_resubmission" ? "resubmission" : action;
+
+      const res = await api.put(
+        `/manager/product/${endpoint}/${product.productId}`,
+        reason ? { reason } : {},
+      );
+
+      if (!res.data.success)
+        throw new Error(res.data.message || "Action failed");
+
+      await Swal.fire({
+        title: "Success!",
+        text: res.data.message || "Action completed successfully.",
+        icon: "success",
+        timer: 1400,
+        showConfirmButton: false,
+        customClass: { popup: "rounded-2xl" },
+      });
+
+      navigate(routes.manager.products);
+    } catch (error: any) {
+      await Swal.fire({
+        title: "Failed",
+        text: error?.message || "Something went wrong.",
+        icon: "error",
+        confirmButtonText: "OK",
+        buttonsStyling: false,
+        customClass: {
+          confirmButton: okBtnClass,
+          popup: "rounded-2xl",
+        },
+      });
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!product) return;
+
+    const result = await Swal.fire({
+      title: "Delete Product?",
+      text: `Are you sure you want to delete "${product.productName}"?`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Delete",
+      confirmButtonColor: "#DC2626",
+      cancelButtonText: "Cancel",
+      reverseButtons: true,
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      const res = await api.delete(
+        `/product/remove-product/${product.productId}`,
+      );
+
+      if (!res.data.success) {
+        throw new Error(res.data.message || "Delete failed");
+      }
+
+      await Swal.fire({
+        title: "Deleted!",
+        text: "Product deleted successfully.",
+        icon: "success",
+        timer: 1200,
+        showConfirmButton: false,
+      });
+
+      navigate(routes.manager.products);
+    } catch (error: any) {
+      await Swal.fire({
+        title: "Error",
+        text: error?.message || "Failed to delete product.",
+        icon: "error",
+      });
+    }
   };
 
 
@@ -746,6 +924,49 @@ export default function ReviewProductPage() {
             </div>
           </div>
         )}
+
+        {/* Actions */}
+        <div className={sc}>
+          <SectionHeader
+            icon={FaCheck}
+            title="Actions"
+            description="Approve, reject or manage this product"
+          />
+          <div className="flex flex-wrap items-center gap-3">
+            {(product.product_status === "pending" ||
+              product.product_status === "sent_for_approval") && (
+              <>
+                <button
+                  onClick={() => handleProductAction("approve")}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white rounded-xl shadow-sm transition-all bg-green-600 hover:bg-green-700 active:scale-95 cursor-pointer"
+                >
+                  <FaCheck className="text-xs" /> Approve
+                </button>
+
+                <button
+                  onClick={() => handleProductAction("reject")}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white rounded-xl shadow-sm transition-all bg-red-500 hover:bg-red-600 active:scale-95 cursor-pointer"
+                >
+                  <FaTimes className="text-xs" /> Reject
+                </button>
+              </>
+            )}
+
+            <button
+              onClick={() => handleProductAction("request_resubmission")}
+              className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white rounded-xl shadow-sm transition-all bg-[#852BAF] hover:opacity-90 active:scale-95 cursor-pointer"
+            >
+              <FaRedo className="text-xs" /> Request Resubmission
+            </button>
+
+            <button
+              onClick={handleDelete}
+              className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white rounded-xl shadow-sm transition-all bg-red-500 hover:bg-red-600 active:scale-95 cursor-pointer"
+            >
+              <FaTrash className="text-xs" /> Delete
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

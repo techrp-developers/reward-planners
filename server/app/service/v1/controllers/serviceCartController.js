@@ -1,6 +1,33 @@
 const db = require("../../../../config/database");
 const CartModel = require("../models/serviceCartModel");
 
+function parseSelectedItemIds(selectedItems) {
+  if (!selectedItems) return [];
+
+  const values = Array.isArray(selectedItems) ? selectedItems : [selectedItems];
+
+  return values
+    .flatMap((value) => {
+      if (typeof value === "number") return [value];
+      if (typeof value !== "string") return [];
+
+      const trimmed = value.trim();
+
+      if (!trimmed) return [];
+
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (err) {
+        // Fall through to comma-separated parsing.
+      }
+
+      return trimmed.split(",");
+    })
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value) && value > 0);
+}
+
 class ServiceCartController {
   async addToCart(req, res) {
     try {
@@ -125,12 +152,23 @@ class ServiceCartController {
         });
       }
 
+      const itemIds = new Set(items.map((i) => Number(i.id)));
+      const selectedItemIds = parseSelectedItemIds(selected_items).filter((id) =>
+        itemIds.has(id),
+      );
+      const requiredItems = items
+        .filter((i) => i.is_required === 1)
+        .map((i) => Number(i.id));
+      const selectedSet = new Set([
+        ...requiredItems,
+        ...selectedItemIds,
+      ]);
       const hasOptional = items.some((i) => i.is_required === 0);
 
       if (
         bundle.type === "custom" &&
         hasOptional &&
-        (!selected_items || selected_items.length === 0)
+        selectedItemIds.length === 0
       ) {
         return res.status(400).json({
           success: false,
@@ -138,21 +176,26 @@ class ServiceCartController {
         });
       }
 
-      const selectedSet = new Set(selected_items || []);
+      const isFullBundleSelected = selectedSet.size === items.length;
       const insertedItems = [];
 
       for (let item of items) {
         //  if custom bundle → apply selection
         if (bundle.type === "custom") {
-          if (item.is_required === 0 && !selectedSet.has(item.id)) {
+          if (item.is_required === 0 && !selectedSet.has(Number(item.id))) {
             continue;
           }
         }
 
-        let finalPrice =
-          bundle.type === "fixed"
+        let finalPrice;
+
+        if (bundle.type === "fixed") {
+          finalPrice = Number(item.bundle_price);
+        } else {
+          finalPrice = isFullBundleSelected
             ? Number(item.bundle_price)
             : Number(item.individual_price);
+        }
 
         // add to cart
         await CartModel.addItem(cart.id, {
@@ -200,12 +243,21 @@ class ServiceCartController {
       const total =
         cartData.individual_items.reduce((s, i) => s + Number(i.price), 0) +
         cartData.bundles.reduce((s, b) => s + Number(b.bundle_total), 0);
+      const allItems = [
+        ...cartData.individual_items,
+        ...cartData.bundles.flatMap((bundle) => bundle.items),
+      ];
+      const rewards = {
+        earn_coins: allItems.reduce((sum, item) => sum + Number(item.rewards?.earn_coins || 0), 0),
+        max_redeem_coins: allItems.reduce((sum, item) => sum + Number(item.rewards?.max_redeem_coins || 0), 0),
+      };
 
       res.json({
         success: true,
         data: {
           ...cartData,
           total,
+          rewards,
         },
       });
     } catch (err) {

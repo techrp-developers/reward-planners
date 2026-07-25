@@ -21,13 +21,15 @@ class ReviewController {
       SELECT o.order_id
       FROM eorders o
       JOIN eorder_items oi ON oi.order_id = o.order_id
+      JOIN order_shipments os ON os.vendor_order_id = oi.vendor_order_id
       LEFT JOIN product_reviews pr
         ON pr.order_id = o.order_id
         AND pr.variant_id = oi.variant_id
         AND pr.user_id = ?
       WHERE oi.variant_id = ?
       AND o.user_id = ?
-      AND o.status = 'delivered'
+      AND os.shipping_status = 'delivered'
+      AND oi.fulfillment_status <> 'cancelled'
       AND pr.review_id IS NULL
       LIMIT 1
       `,
@@ -92,9 +94,11 @@ class ReviewController {
       SELECT 1
       FROM eorders o
       JOIN eorder_items oi ON oi.order_id = o.order_id
+      JOIN order_shipments os ON os.vendor_order_id = oi.vendor_order_id
       WHERE o.order_id = ?
       AND o.user_id = ?
-      AND o.status = 'delivered'
+      AND os.shipping_status = 'delivered'
+      AND oi.fulfillment_status <> 'cancelled'
       AND oi.product_id = ?
       AND oi.variant_id = ?
       LIMIT 1
@@ -107,6 +111,27 @@ class ReviewController {
         return res.status(400).json({
           success: false,
           message: "Product not eligible for review",
+        });
+      }
+
+      const [[existingReview]] = await conn.execute(
+        `
+        SELECT review_id
+        FROM product_reviews
+        WHERE user_id = ?
+          AND order_id = ?
+          AND product_id = ?
+          AND variant_id = ?
+        LIMIT 1
+        `,
+        [userId, order_id, product_id, variant_id],
+      );
+
+      if (existingReview) {
+        await conn.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Review already submitted for this product",
         });
       }
 

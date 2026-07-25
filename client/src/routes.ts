@@ -45,7 +45,9 @@ export const routes = {
       enquiries:"/manager/enquiries",
       details: "/manager/enquiry/:id",
       service_orders: "/manager/service-orders",
-      service_order_details: "/manager/service-order-details/:parentOrderId"
+      service_order_details: "/manager/service-order-details/:parentOrderId",
+      cancellation_requests: "/manager/service-cancellation-requests",
+      cancellation_detail: "/manager/service-cancellation-detail/:serviceOrderId",
     },
     rewards:{
       rewardRule:"/manager/rewards-rule",

@@ -4,9 +4,10 @@ const path = require("path");
 
 // helper function
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
-function getPublicUrl(path) {
+function getPublicUrl(path, updatedAt) {
   if (!path) return null;
-  return `${CDN_BASE_URL}/${path}`;
+  const version = updatedAt ? `?v=${encodeURIComponent(updatedAt)}` : "";
+  return `${CDN_BASE_URL}/${path}${version}`;
 }
 
 class ServiceModel {
@@ -71,14 +72,14 @@ class ServiceModel {
 
     return rows.map((service) => ({
       ...service,
-      service_image: getPublicUrl(service.service_image),
+      service_image: getPublicUrl(service.service_image, service.updated_at),
     }));
   }
 
   async findById(id) {
     const [rows] = await db.execute(
       `
-      SELECT 
+      SELECT
         s.*,
         c.name AS category_name
       FROM services s
@@ -93,7 +94,7 @@ class ServiceModel {
 
     return {
       ...service,
-      service_image: getPublicUrl(service.service_image),
+      service_image: getPublicUrl(service.service_image, service.updated_at),
     };
   }
 
@@ -147,13 +148,14 @@ class ServiceModel {
   async findByCategoryId(categoryId) {
     const [rows] = await db.execute(
       `
-    SELECT 
+    SELECT
       id,
       name,
       description,
       price,
       estimated_days,
-      service_image
+      service_image,
+      updated_at
     FROM services
     WHERE category_id = ? AND status = 1
     ORDER BY sort_order ASC
@@ -163,13 +165,13 @@ class ServiceModel {
 
     return rows.map((service) => ({
       ...service,
-      service_image: getPublicUrl(service.service_image),
+      service_image: getPublicUrl(service.service_image, service.updated_at),
     }));
   }
 
   async findBasicById(id) {
     const [rows] = await db.execute(
-      `SELECT id, name, description, service_image
+      `SELECT id, name, description, service_image, updated_at
      FROM services
      WHERE id = ? AND status = 1`,
       [id],
@@ -181,7 +183,7 @@ class ServiceModel {
 
     return {
       ...service,
-      service_image: getPublicUrl(service.service_image),
+      service_image: getPublicUrl(service.service_image, service.updated_at),
     };
   }
 
@@ -234,6 +236,7 @@ class ServiceModel {
           s.total_orders,
           s.show_enquiry,
           s.service_image,
+          s.updated_at AS service_updated_at,
 
           sv.id AS variant_id,
           sv.price,
@@ -251,6 +254,7 @@ class ServiceModel {
             service_id,
             MIN(price) AS min_price
           FROM service_variants
+          WHERE status = 1
           GROUP BY service_id
         ) mv
           ON mv.service_id = s.id
@@ -258,6 +262,7 @@ class ServiceModel {
         JOIN service_variants sv
           ON sv.service_id = s.id
           AND sv.price = mv.min_price
+          AND sv.status = 1
 
         WHERE shsi.section_id = ?
         AND s.status = 1
@@ -309,7 +314,7 @@ class ServiceModel {
             coins: Math.floor(Number(item.price) * 0.1),
 
             service_image: item.service_image
-              ? getPublicUrl(item.service_image)
+              ? getPublicUrl(item.service_image, item.service_updated_at)
               : null,
 
             variant_image: item.image_url ? getPublicUrl(item.image_url) : null,
@@ -331,6 +336,7 @@ class ServiceModel {
           sb.id AS banner_id,
           sb.title,
           sb.image_url,
+          sb.updated_at,
           sb.redirect_type,
           sb.redirect_id,
           sb.redirect_url
@@ -363,7 +369,9 @@ class ServiceModel {
 
             title: item.title,
 
-            image_url: item.image_url ? getPublicUrl(item.image_url) : null,
+            image_url: item.image_url
+              ? getPublicUrl(item.image_url, item.updated_at)
+              : null,
 
             redirect_type: item.redirect_type,
 
@@ -396,6 +404,7 @@ class ServiceModel {
       s.total_orders,
       s.show_enquiry,
       s.service_image,
+      s.updated_at AS service_updated_at,
 
       sv.id AS variant_id,
       sv.title,
@@ -413,6 +422,7 @@ class ServiceModel {
         service_id,
         MIN(price) AS min_price
       FROM service_variants
+      WHERE status = 1
       GROUP BY service_id
     ) mv
       ON mv.service_id = s.id
@@ -420,6 +430,7 @@ class ServiceModel {
     JOIN service_variants sv
       ON sv.service_id = s.id
       AND sv.price = mv.min_price
+      AND sv.status = 1
 
     WHERE srs.service_id = ?
     AND srs.relation_type = 'related'
@@ -462,6 +473,7 @@ class ServiceModel {
         s.total_orders,
         s.show_enquiry,
         s.service_image,
+        s.updated_at AS service_updated_at,
 
         sv.id AS variant_id,
         sv.title,
@@ -476,6 +488,7 @@ class ServiceModel {
           service_id,
           MIN(price) AS min_price
         FROM service_variants
+        WHERE status = 1
         GROUP BY service_id
       ) mv
         ON mv.service_id = s.id
@@ -483,6 +496,7 @@ class ServiceModel {
       JOIN service_variants sv
         ON sv.service_id = s.id
         AND sv.price = mv.min_price
+        AND sv.status = 1
 
       WHERE s.category_id = ?
       AND s.id != ?
@@ -532,7 +546,7 @@ class ServiceModel {
       coins: Math.floor(Number(item.price) * 0.1),
 
       service_image: item.service_image
-        ? getPublicUrl(item.service_image)
+        ? getPublicUrl(item.service_image, item.service_updated_at)
         : null,
 
       variant_image: item.image_url ? getPublicUrl(item.image_url) : null,
@@ -786,6 +800,7 @@ class ServiceModel {
       s.total_orders,
       s.show_enquiry,
       s.service_image,
+      s.updated_at AS service_updated_at,
 
       sv.id AS variant_id,
       sv.title,
@@ -800,6 +815,7 @@ class ServiceModel {
         service_id,
         MIN(price) AS min_price
       FROM service_variants
+      WHERE status = 1
       GROUP BY service_id
     ) mv
       ON mv.service_id = s.id
@@ -807,6 +823,7 @@ class ServiceModel {
     JOIN service_variants sv
       ON sv.service_id = s.id
       AND sv.price = mv.min_price
+      AND sv.status = 1
 
     WHERE s.status = 1
 
@@ -849,7 +866,7 @@ class ServiceModel {
       coins: Math.floor(Number(item.price) * 0.1),
 
       service_image: item.service_image
-        ? getPublicUrl(item.service_image)
+        ? getPublicUrl(item.service_image, item.service_updated_at)
         : null,
 
       variant_image: item.image_url ? getPublicUrl(item.image_url) : null,
@@ -869,6 +886,7 @@ class ServiceModel {
       s.total_orders,
       s.show_enquiry,
       s.service_image,
+      s.updated_at AS service_updated_at,
 
       sv.id AS variant_id,
       sv.title,
@@ -888,6 +906,7 @@ class ServiceModel {
         service_id,
         MIN(price) AS min_price
       FROM service_variants
+      WHERE status = 1
       GROUP BY service_id
     ) mv
       ON mv.service_id = s.id
@@ -895,6 +914,7 @@ class ServiceModel {
     JOIN service_variants sv
       ON sv.service_id = s.id
       AND sv.price = mv.min_price
+      AND sv.status = 1
 
     WHERE srs.service_id = ?
     AND srs.relation_type = 'value_added'
@@ -937,7 +957,7 @@ class ServiceModel {
       coins: Math.floor(Number(item.price) * 0.1),
 
       service_image: item.service_image
-        ? getPublicUrl(item.service_image)
+        ? getPublicUrl(item.service_image, item.service_updated_at)
         : null,
 
       variant_image: item.image_url ? getPublicUrl(item.image_url) : null,
@@ -958,22 +978,24 @@ class ServiceModel {
       id,
       name AS title,
       service_image AS image,
+      updated_at,
       'service' AS type
     FROM services
     WHERE status = 1
-      AND (
-        name LIKE ?
-        OR description LIKE ?
-      )
+      AND name LIKE ?
     ORDER BY name ASC
     LIMIT ?
     `,
-      [keyword, keyword, limit],
+      [keyword, limit],
     );
 
-    return rows.map((service) => ({
+    return rows.map(({ updated_at, ...service }) => ({
       ...service,
-      image: getPublicUrl(service.image),
+      image: getPublicUrl(service.image, updated_at),
+      navigation: {
+        destination: "service_details",
+        service_id: service.id,
+      },
     }));
   }
 }

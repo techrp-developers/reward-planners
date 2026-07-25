@@ -1,0 +1,5 @@
+const FIRST_LOGIN_REWARD_COINS = 1000;
+
+module.exports = {
+  FIRST_LOGIN_REWARD_COINS,
+};

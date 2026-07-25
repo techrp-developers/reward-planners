@@ -15,15 +15,15 @@ const makeKeyGenerator = () => (req) => {
   if (req.user?.user_id) {
     return `user_${req.user.user_id}`;
   }
-  return ipKeyGenerator(req); // IPv6-safe fallback
+  return ipKeyGenerator(req.ip); // IPv6-safe fallback
 };
 
 // ==========================
 // PAYMENT — strictest
-// 10 attempts per 15 min
+// 10 attempts per 10 min
 // ==========================
 const paymentLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: 10 * 60 * 1000,
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
@@ -42,10 +42,10 @@ const paymentLimiter = rateLimit({
 
 // ==========================
 // CHECKOUT — moderate
-// 20 per 15 min
+// 20 per 10 min
 // ==========================
 const checkoutLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: 10 * 60 * 1000,
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
@@ -60,11 +60,11 @@ const checkoutLimiter = rateLimit({
 
 // ==========================
 // AUTH / OTP
-// 8 attempts per 15 min
+// 15 attempts per 5 min
 // ==========================
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 8,
+  windowMs: 5 * 60 * 1000,
+  max: 15,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: makeKeyGenerator(),
@@ -94,12 +94,25 @@ const generalLimiter = rateLimit({
   },
 });
 
+const providerReadLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: makeKeyGenerator(),
+  handler: (req, res) =>
+    res.status(429).json({
+      success: false,
+      message: "Too many provider requests. Please try again shortly.",
+    }),
+});
+
 // ==========================
 // STEP SYNC
-// 60 syncs per 15 min
+// 60 syncs per 10 min
 // ==========================
 const stepSyncLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: 10 * 60 * 1000,
   max: 60,
   standardHeaders: true,
   legacyHeaders: false,
@@ -117,5 +130,6 @@ module.exports = {
   checkoutLimiter,
   authLimiter,
   generalLimiter,
+  providerReadLimiter,
   stepSyncLimiter,
 };

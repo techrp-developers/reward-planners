@@ -182,6 +182,58 @@ class ServiceOrderDocumentModel {
       documents,
     };
   }
+
+  // Get the documents submitted by a customer for an admin order view.
+  async getUploadedDocsByParentOrderAdmin(parentOrderId) {
+    const [rows] = await db.execute(
+      `
+      SELECT
+        pod.id,
+        pod.document_key,
+        pod.file_path,
+        pod.uploaded,
+        pod.uploaded_at,
+        pod.expiry_date,
+        pod.document_number,
+        MAX(sd.document_name) AS document_name,
+        MAX(sd.is_mandatory) AS is_mandatory,
+        MAX(sd.is_expirable) AS is_expirable
+      FROM parent_order_documents pod
+      LEFT JOIN service_orders so
+        ON so.parent_order_id = pod.parent_order_id
+      LEFT JOIN service_documents sd
+        ON sd.service_id = so.service_id
+        AND sd.document_key = pod.document_key
+      WHERE pod.parent_order_id = ?
+        AND pod.uploaded = 1
+      GROUP BY
+        pod.id,
+        pod.document_key,
+        pod.file_path,
+        pod.uploaded,
+        pod.uploaded_at,
+        pod.expiry_date,
+        pod.document_number
+      ORDER BY document_name, pod.document_key
+      `,
+      [parentOrderId],
+    );
+
+    return Promise.all(
+      rows.map(async (row) => ({
+        id: row.id,
+        document_key: row.document_key,
+        document_name: row.document_name || row.document_key,
+        is_mandatory: Boolean(row.is_mandatory),
+        is_expirable: Boolean(row.is_expirable),
+        uploaded: Boolean(row.uploaded),
+        uploaded_at: row.uploaded_at,
+        expiry_date: row.expiry_date,
+        document_number: row.document_number,
+        file_url: row.file_path ? await getPrivateFileUrl(row.file_path) : null,
+      })),
+    );
+  }
 }
 
 module.exports = new ServiceOrderDocumentModel();

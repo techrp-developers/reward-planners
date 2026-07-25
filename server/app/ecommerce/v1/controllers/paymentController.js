@@ -6,6 +6,10 @@ const {
   expirePendingOrder,
 } = require("../../../../services/Razorpay/orderExpiryService");
 const { notifyUser } = require("../../../common/utils/notification");
+const EcommerceRefundService = require("../../../../services/Razorpay/ecommerceRefundService");
+const {
+  shouldWaiveDeliveryFee,
+} = require("../utils/deliveryFeePolicy");
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZOR_API_KEY,
@@ -37,7 +41,7 @@ class PaymentController {
       // passing the checks and creating two Razorpay orders
       // ==========================
       const [[order]] = await conn.query(
-        `SELECT total_amount, status, expires_at
+        `SELECT total_amount, shipping_total, status, expires_at
        FROM eorders
        WHERE order_id = ? AND user_id = ?
        LIMIT 1
@@ -77,6 +81,30 @@ class PaymentController {
         return res.status(400).json({ message: "Order is not payable" });
       }
 
+      // Test-account safety net: even if a pending order was created by an
+      // older checkout process, never include its delivery fee in Razorpay.
+      if (
+        shouldWaiveDeliveryFee({ userId }) &&
+        Number(order.shipping_total || 0) > 0
+      ) {
+        order.total_amount = Math.max(
+          0,
+          Number(order.total_amount) - Number(order.shipping_total),
+        );
+        order.shipping_total = 0;
+        await conn.query(
+          `UPDATE eorders
+           SET total_amount = ?, shipping_total = 0
+           WHERE order_id = ?`,
+          [order.total_amount, orderId],
+        );
+        await conn.query(
+          `UPDATE order_shipments SET shipping_charges = 0
+           WHERE order_id = ? AND shipping_status = 'awaiting_payment'`,
+          [orderId],
+        );
+      }
+
       const amount = Number(order.total_amount);
 
       // ==========================
@@ -84,8 +112,8 @@ class PaymentController {
       // Also locked via the eorders FOR UPDATE above —
       // any concurrent request is blocked until we commit
       // ==========================
-      const [[existing]] = await conn.query(
-        `SELECT razorpay_order_id
+      let [[existing]] = await conn.query(
+        `SELECT payment_id, razorpay_order_id, amount
        FROM order_payments
        WHERE order_id = ?
          AND status IN ('created', 'pending')
@@ -93,8 +121,25 @@ class PaymentController {
         [orderId],
       );
 
+      if (
+        existing &&
+        Math.abs(Number(existing.amount) - amount) > 0.001
+      ) {
+        await conn.query(
+          `UPDATE order_payments SET status = 'failed'
+           WHERE payment_id = ?`,
+          [existing.payment_id],
+        );
+        existing = null;
+      }
+
       if (existing) {
         await conn.rollback();
+        if (!existing.razorpay_order_id) {
+          return res.status(409).json({
+            message: "Payment order is being prepared. Please retry.",
+          });
+        }
         return res.status(200).json({
           key: process.env.RAZOR_API_KEY,
           orderId: existing.razorpay_order_id,
@@ -105,9 +150,16 @@ class PaymentController {
 
       // ==========================
       // CREATE RAZORPAY ORDER
-      // Done inside the transaction window so no second request
-      // can sneak past the existing check before we insert
+      // Claim the payment attempt in DB, release row locks, then call the
+      // external gateway. Concurrent requests see the pending claim.
       // ==========================
+      const [claim] = await conn.query(
+        `INSERT INTO order_payments (order_id, amount, status)
+         VALUES (?, ?, 'pending')`,
+        [orderId, amount],
+      );
+      await conn.commit();
+
       let razorpayOrder;
 
       try {
@@ -122,7 +174,10 @@ class PaymentController {
           },
         });
       } catch (razorpayErr) {
-        await conn.rollback();
+        await db.query(
+          `UPDATE order_payments SET status = 'failed' WHERE payment_id = ?`,
+          [claim.insertId],
+        );
         console.error(
           "[createOrder] Razorpay order creation failed:",
           razorpayErr,
@@ -131,6 +186,20 @@ class PaymentController {
           .status(502)
           .json({ message: "Payment gateway error. Please try again." });
       }
+
+      await db.query(
+        `UPDATE order_payments
+         SET razorpay_order_id = ?, status = 'created'
+         WHERE payment_id = ?`,
+        [razorpayOrder.id, claim.insertId],
+      );
+
+      return res.status(200).json({
+        key: process.env.RAZOR_API_KEY,
+        orderId: razorpayOrder.id,
+        amount: razorpayOrder.amount,
+        currency: razorpayOrder.currency,
+      });
 
       // ==========================
       // INSERT INTO order_payments
@@ -225,7 +294,12 @@ class PaymentController {
         .update(body)
         .digest("hex");
 
-      if (expectedSignature !== razorpay_signature) {
+      const expectedBuffer = Buffer.from(expectedSignature, "hex");
+      const receivedBuffer = Buffer.from(razorpay_signature, "hex");
+      if (
+        expectedBuffer.length !== receivedBuffer.length ||
+        !crypto.timingSafeEqual(expectedBuffer, receivedBuffer)
+      ) {
         return res.status(400).json({ status: "invalid signature" });
       }
 
@@ -264,7 +338,7 @@ class PaymentController {
       // Case C: Order paid but payment row not yet updated — webhook in flight
       // Case D: Neither paid nor cancelled — still waiting
       // ==========================
-      if (payment.status === "success" && order.status === "paid") {
+      if (payment.status === "success" && order.status !== "cancelled") {
         return res.json({
           status: "success",
           orderId: payment.order_id,
@@ -330,6 +404,51 @@ class PaymentController {
     });
   }
 
+  async cancelPendingOrder(req, res) {
+    const userId = req.user?.user_id;
+    const orderId = Number(req.params.orderId);
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized user" });
+    }
+    if (!Number.isInteger(orderId) || orderId <= 0) {
+      return res.status(400).json({ message: "Valid orderId required" });
+    }
+
+    const conn = await db.getConnection();
+    try {
+      await conn.beginTransaction();
+      const [[order]] = await conn.query(
+        `SELECT status FROM eorders
+         WHERE order_id = ? AND user_id = ?
+         LIMIT 1 FOR UPDATE`,
+        [orderId, userId],
+      );
+
+      if (!order) {
+        await conn.rollback();
+        return res.status(404).json({ message: "Order not found" });
+      }
+      if (order.status !== "pending_payment") {
+        await conn.rollback();
+        return res.status(409).json({
+          status: order.status,
+          message: "Order can no longer be cancelled as unpaid",
+        });
+      }
+
+      await expirePendingOrder(conn, orderId);
+      await conn.commit();
+      return res.json({ success: true, status: "cancelled", orderId });
+    } catch (error) {
+      await conn.rollback();
+      console.error("Cancel pending payment order error:", error);
+      return res.status(500).json({ message: "Unable to cancel pending order" });
+    } finally {
+      conn.release();
+    }
+  }
+
   // =================
   // REFUND LOGIC
   // =================
@@ -339,7 +458,22 @@ class PaymentController {
     shipmentId = null,
     vendorOrderId = null,
     amount,
+    paymentId = null,
+    razorpayPaymentId = null,
+    refundKey = null,
   }) {
+    return EcommerceRefundService.processRefund({
+      orderId,
+      shipmentId,
+      vendorOrderId,
+      amount,
+      paymentId,
+      razorpayPaymentId,
+      refundKey,
+    });
+
+    /* Legacy implementation retained below temporarily for compatibility
+       context; it is unreachable and can be removed after deployment. */
     const conn = await db.getConnection();
 
     try {

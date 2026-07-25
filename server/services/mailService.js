@@ -32,7 +32,7 @@ function assertMailConfigured() {
   }
 }
 
-async function sendMail({ to, subject, html }) {
+async function sendMail({ to, subject, html, text, attachments }) {
   assertMailConfigured();
 
   return transporter.sendMail({
@@ -40,6 +40,8 @@ async function sendMail({ to, subject, html }) {
     to,
     subject,
     html,
+    text,
+    attachments,
   });
 }
 

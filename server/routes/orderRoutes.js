@@ -69,7 +69,53 @@ router.post(
   orderController.rejectCancellation,
 );
 
+// admin order cancellation requests
+router.get(
+  "/item-cancellation-requests",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  orderController.getItemCancellationRequests,
+);
+
+// admin item cancellation details
+router.get(
+  "/item-cancellation-request/:orderItemId",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  orderController.getItemCancellationDetails,
+);
+
+// approve item cancellation request by admin
+router.post(
+  "/approve-item-cancellation/:orderItemId",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  orderController.approveItemCancellation,
+);
+
+// reject item cancellation request by admin
+router.post(
+  "/reject-item-cancellation/:orderItemId",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  orderController.rejectItemCancellation,
+);
+
 // ================================================Service======================================================
+router.get(
+  "/service-cancellation-requests",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  orderController.getServiceCancellationRequests,
+);
+
+router.get(
+  "/service-cancellation-request/:serviceOrderId",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  orderController.getServiceCancellationDetails,
+);
+
 // approve cancellation request
 router.post(
   "/approve-service-cancellation/:serviceOrderId",

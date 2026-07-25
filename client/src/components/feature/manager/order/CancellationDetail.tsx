@@ -1,281 +1,135 @@
-import React, { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { api } from "../../../../api/api";
+import { useCallback, useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import Swal from "sweetalert2";
+import axios from "axios";
+import { api } from "../../../../api/api";
 
-interface Order {
-  order_id: number;
-  order_ref: string;
-  status: string;
-  cancellation_status: string;
-  total_amount: string;
-  reason: string;
-  comment: string;
-  requested_at: string;
+interface DetailData {
+  request: {
+    order_item_id: number; order_id: number; order_ref: string;
+    product_name: string; brand_name: string; quantity: number;
+    final_price: number; reward_coins_used: number;
+    shipping_status: string; status: string;
+    refund_status: string; refund_amount: number; reason_text: string | null;
+    comment: string | null; requested_at: string;
+  };
+  timeline: { event: string; created_at: string }[];
+  refunds: { refund_amount: number; refund_method: string; status: string }[];
 }
 
-interface Timeline {
-  label: string;
-  date: string;
-}
-
-interface Refund {
-  amount: number;
-  method: string;
-  status: string;
-}
-
-interface Address {
-  type: string;
-  line1: string;
-  line2: string;
-  city: string;
-  state: string;
-  country: string;
-  zipcode: string;
-  landmark: string;
-}
-
-interface Customer {
-  user_id: number;
-  name: string;
-  email: string;
-  phone: string;
-}
-
-interface CancellationData {
-  order: Order;
-  customer: Customer;
-  address: Address;
-  timeline: Timeline[];
-  refunds: Refund[];
-  totalRefund: number;
-}
-
-interface CancellationResponse {
-  success: boolean;
-  data: CancellationData;
-}
-
-const CancellationDetail: React.FC = () => {
-  const { orderId } = useParams();
+export default function CancellationDetail() {
+  const { orderId: orderItemId } = useParams();
   const navigate = useNavigate();
+  const [data, setData] = useState<DetailData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
 
-  const [data, setData] = useState<CancellationData | null>(null);
-  const [loading, setLoading] = useState(false);
+  const load = useCallback(async () => {
+    if (!orderItemId) return;
+    try {
+      setLoading(true);
+      const response = await api.get<{ data: DetailData }>(
+        `/order/item-cancellation-request/${orderItemId}`,
+      );
+      setData(response.data.data);
+    } finally {
+      setLoading(false);
+    }
+  }, [orderItemId]);
 
-  const fetchDetails = async () => {
-    setLoading(true);
+  useEffect(() => { load(); }, [load]);
 
-    const res = await api.get<CancellationResponse>(
-      `/order/cancellation-request/${orderId}`,
-    );
-
-    setData(res.data.data);
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    if (orderId) fetchDetails();
-  }, [orderId]);
-
-  const formatCurrency = (amount: number | string) =>
-    new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-    }).format(Number(amount));
-
-  const formatDate = (date: string) =>
-    new Date(date).toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-
-  const approveCancellation = async () => {
-    const result = await Swal.fire({
-      title: "Approve Cancellation?",
-      text: "This will cancel the order and process the refund.",
+  const decide = async (decision: "approve" | "reject") => {
+    const approving = decision === "approve";
+    const confirmation = await Swal.fire({
+      title: `${approving ? "Approve" : "Reject"} item cancellation?`,
+      text: approving
+        ? "Only this product will be cancelled and its eligible card/wallet amount refunded."
+        : "This product will remain active in the order.",
       icon: "warning",
       showCancelButton: true,
-      confirmButtonColor: "#16a34a",
-      cancelButtonColor: "#6b7280",
-      confirmButtonText: "Yes, Approve",
-      cancelButtonText: "Cancel",
+      confirmButtonColor: approving ? "#16a34a" : "#dc2626",
+      confirmButtonText: approving ? "Approve cancellation" : "Reject cancellation",
     });
-
-    if (result.isConfirmed) {
-      await api.post(`/order/approve-cancellation/${orderId}`);
-
-      Swal.fire({
-        icon: "success",
-        title: "Cancellation Approved",
-        text: "The order cancellation has been approved.",
-        timer: 1800,
-        showConfirmButton: false,
-      });
-
-      fetchDetails();
+    if (!confirmation.isConfirmed) return;
+    try {
+      setActionLoading(true);
+      await api.post(`/order/${decision}-item-cancellation/${orderItemId}`);
+      await Swal.fire({ icon: "success", title: `Cancellation ${approving ? "approved" : "rejected"}`, timer: 1500, showConfirmButton: false });
+      await load();
+    } catch (error: unknown) {
+      const message = axios.isAxiosError<{ message?: string }>(error)
+        ? error.response?.data?.message
+        : undefined;
+      await Swal.fire({ icon: "error", title: "Action failed", text: message || "Unable to process this request." });
+    } finally {
+      setActionLoading(false);
     }
   };
 
-  const rejectCancellation = async () => {
-    const result = await Swal.fire({
-      title: "Reject Cancellation?",
-      text: "The order will continue as normal.",
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#dc2626",
-      cancelButtonColor: "#6b7280",
-      confirmButtonText: "Yes, Reject",
-      cancelButtonText: "Cancel",
-    });
+  const currency = (value: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(Number(value || 0));
+  const card = "mb-5 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm";
 
-    if (result.isConfirmed) {
-      await api.post(`/order/reject-cancellation/${orderId}`);
-
-      Swal.fire({
-        icon: "success",
-        title: "Cancellation Rejected",
-        text: "The cancellation request has been rejected.",
-        timer: 1800,
-        showConfirmButton: false,
-      });
-
-      fetchDetails();
-    }
-  };
-
-  if (loading) return <div className="p-6">Loading...</div>;
-  if (!data) return null;
-
-  const sectionCard = "bg-white border border-gray-100 rounded-2xl p-6 shadow-sm mb-5";
-  const sectionTitle = "text-xs font-bold text-gray-400 uppercase tracking-widest mb-4";
-  const fieldLabel = "text-xs text-gray-400 font-medium";
-  const fieldValue = "mt-1 font-semibold text-gray-800";
+  if (loading) return <div className="p-8 text-gray-500">Loading request…</div>;
+  if (!data) return <div className="p-8 text-red-600">Request not found.</div>;
+  const request = data.request;
+  const money = data.refunds.filter((r) => r.refund_method === "original").reduce((sum, r) => sum + Number(r.refund_amount), 0);
+  const wallet = data.refunds.filter((r) => r.refund_method === "wallet").reduce((sum, r) => sum + Number(r.refund_amount), 0);
+  const eligibleMoney = Number(request.final_price || 0);
+  const eligibleWallet = Number(request.reward_coins_used || 0);
+  const eligibleTotal = eligibleMoney + eligibleWallet;
 
   return (
-    <div className="min-h-screen p-6 md:p-10" style={{ background: "linear-gradient(160deg, #fdf8ff 0%, #fff5f8 50%, #f8f9ff 100%)" }}>
-
-      {/* HEADER */}
-      <div className="flex items-center justify-between mb-8">
-        <button
-          onClick={() => navigate(-1)}
-          className="inline-flex items-center gap-2 text-sm font-semibold bg-gradient-to-r from-[#852BAF] to-[#FC3F78] text-white px-5 py-2.5 rounded-xl shadow-lg hover:scale-[1.03] active:scale-95 transition cursor-pointer"
-        >
-          ← Back
-        </button>
-        <h2 className="text-2xl md:text-3xl font-bold text-gray-900">Cancellation Request</h2>
+    <div className="min-h-screen p-6 md:p-10">
+      <div className="mb-8 flex items-center justify-between">
+        <button onClick={() => navigate(-1)} className="cursor-pointer rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-5 py-2.5 font-semibold text-white">← Back</button>
+        <h1 className="text-3xl font-bold">Item Cancellation</h1>
       </div>
-
-      {/* ORDER SUMMARY */}
-      <div className={sectionCard}>
-        <p className={sectionTitle}>Order Summary</p>
-        <div className="grid md:grid-cols-4 gap-6">
+      <section className={card}>
+        <h2 className="mb-4 text-xs font-bold uppercase tracking-widest text-gray-400">Item summary</h2>
+        <div className="grid gap-5 md:grid-cols-4">
+          <div><p className="text-xs text-gray-400">Order</p><p className="font-semibold text-[#852BAF]">{request.order_ref}</p></div>
+          <div><p className="text-xs text-gray-400">Product</p><p className="font-semibold">{request.product_name}</p><p className="text-xs text-gray-500">{request.brand_name} · Qty {request.quantity}</p></div>
+          <div><p className="text-xs text-gray-400">Shipment</p><p className="font-semibold capitalize">{request.shipping_status.replaceAll("_", " ")}</p></div>
           <div>
-            <span className={fieldLabel}>Order Ref</span>
-            <p className={fieldValue}>{data.order.order_ref}</p>
-          </div>
-          <div>
-            <span className={fieldLabel}>Order Status</span>
-            <p className={`${fieldValue} capitalize`}>{data.order.status}</p>
-          </div>
-          <div>
-            <span className={fieldLabel}>Cancellation Status</span>
-            <p className="mt-1 font-semibold text-orange-600 capitalize">{data.order.cancellation_status}</p>
-          </div>
-          <div>
-            <span className={fieldLabel}>Order Total</span>
-            <p className="mt-1 text-xl font-bold text-[#852BAF]">{formatCurrency(data.order.total_amount)}</p>
+            <p className="text-xs text-gray-400">Paid value</p>
+            <p className="font-bold">{currency(eligibleTotal)}</p>
+            <p className="text-xs text-gray-500">
+              {currency(eligibleMoney)} payment + {eligibleWallet} wallet coin{eligibleWallet === 1 ? "" : "s"}
+            </p>
           </div>
         </div>
-      </div>
-
-      {/* CANCELLATION REASON */}
-      <div className={sectionCard}>
-        <p className={sectionTitle}>Cancellation Reason</p>
-        <p className="font-semibold text-gray-800">{data.order.reason}</p>
-        {data.order.comment && (
-          <p className="text-gray-500 text-sm mt-2">Comment: {data.order.comment}</p>
-        )}
-        <p className="text-xs text-gray-400 mt-3">Requested on {formatDate(data.order.requested_at)}</p>
-      </div>
-
-      {/* CUSTOMER */}
-      <div className={sectionCard}>
-        <p className={sectionTitle}>Customer Details</p>
-        <div className="grid md:grid-cols-3 gap-6">
-          <div><span className={fieldLabel}>Name</span><p className={fieldValue}>{data.customer.name}</p></div>
-          <div><span className={fieldLabel}>Email</span><p className={fieldValue}>{data.customer.email}</p></div>
-          <div><span className={fieldLabel}>Phone</span><p className={fieldValue}>{data.customer.phone}</p></div>
-        </div>
-      </div>
-
-      {/* ADDRESS */}
-      <div className={sectionCard}>
-        <p className={sectionTitle}>Shipping Address</p>
-        <p className="font-semibold text-gray-800">{data.address.line1}{data.address.line2 ? `, ${data.address.line2}` : ""}</p>
-        <p className="text-gray-600 text-sm">{data.address.city}, {data.address.state}, {data.address.country}</p>
-        <p className="text-gray-600 text-sm">{data.address.zipcode}</p>
-        {data.address.landmark && (
-          <p className="text-xs text-gray-400 mt-2">Landmark: {data.address.landmark}</p>
-        )}
-      </div>
-
-      {/* TIMELINE */}
-      <div className={sectionCard}>
-        <p className={sectionTitle}>Cancellation Timeline</p>
-        <div className="divide-y divide-gray-50">
-          {data.timeline.map((event, i) => (
-            <div key={i} className="flex justify-between py-3">
-              <span className="capitalize font-medium text-gray-700 text-sm">{event.label}</span>
-              <span className="text-gray-400 text-sm">{formatDate(event.date)}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* REFUND */}
-      <div className={sectionCard}>
-        <p className={sectionTitle}>Refund Details</p>
-        {data.refunds.length === 0 ? (
-          <p className="text-gray-400 text-sm">No refunds yet</p>
-        ) : (
-          <div className="divide-y divide-gray-50">
-            {data.refunds.map((refund, i) => (
-              <div key={i} className="flex justify-between items-center py-3 text-sm">
-                <span className="font-medium text-gray-700">{refund.method}</span>
-                <span className="font-semibold text-gray-800">{formatCurrency(refund.amount)}</span>
-                <span className="capitalize text-gray-500">{refund.status}</span>
-              </div>
-            ))}
+      </section>
+      <section className={card}>
+        <h2 className="mb-4 text-xs font-bold uppercase tracking-widest text-gray-400">Cancellation request</h2>
+        <p><strong>Status:</strong> <span className="capitalize">{request.status}</span></p>
+        <p><strong>Reason:</strong> {request.reason_text || "Not provided"}</p>
+        {request.comment && <p className="mt-3 rounded-xl bg-gray-50 p-4">{request.comment}</p>}
+      </section>
+      <section className={card}>
+        <h2 className="mb-4 text-xs font-bold uppercase tracking-widest text-gray-400">Timeline</h2>
+        {data.timeline.map((entry) => (
+          <div key={`${entry.event}-${entry.created_at}`} className="flex justify-between border-b py-3 last:border-0">
+            <span className="capitalize">{entry.event.replaceAll("_", " ")}</span>
+            <span className="text-gray-400">{new Date(entry.created_at).toLocaleString("en-IN")}</span>
           </div>
-        )}
-        <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-100 font-bold">
-          <span className="text-gray-800">Total Refund</span>
-          <span className="text-[#852BAF] text-lg">{formatCurrency(data.totalRefund)}</span>
+        ))}
+      </section>
+      <section className={card}>
+        <h2 className="mb-4 text-xs font-bold uppercase tracking-widest text-gray-400">Refund breakdown</h2>
+        <div className="grid gap-5 md:grid-cols-4">
+          <div><p className="text-xs text-gray-400">Total refund</p><p className="font-bold">{currency(request.status === "requested" ? eligibleTotal : request.refund_amount)}</p></div>
+          <div><p className="text-xs text-gray-400">Original payment</p><p className="font-semibold">{currency(request.status === "requested" ? eligibleMoney : money)}</p></div>
+          <div><p className="text-xs text-gray-400">Wallet coins</p><p className="font-semibold">{request.status === "requested" ? eligibleWallet : wallet}</p></div>
+          <div><p className="text-xs text-gray-400">Status</p><p className="font-semibold capitalize">{request.refund_status}</p></div>
         </div>
-      </div>
-
-      {/* ACTION BUTTONS */}
-      {data.order.cancellation_status === "requested" && (
-        <div className="flex gap-4 mt-2">
-          <button
-            onClick={approveCancellation}
-            className="px-6 py-2.5 rounded-xl font-bold text-white bg-green-600 hover:bg-green-700 shadow-sm transition-all cursor-pointer"
-          >
-            Approve Cancellation
-          </button>
-          <button
-            onClick={rejectCancellation}
-            className="px-6 py-2.5 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 shadow-sm transition-all cursor-pointer"
-          >
-            Reject Cancellation
-          </button>
+      </section>
+      {request.status === "requested" && (
+        <div className="flex gap-4">
+          <button disabled={actionLoading} onClick={() => decide("approve")} className="cursor-pointer rounded-xl bg-green-600 px-6 py-3 font-bold text-white disabled:opacity-50">Approve cancellation</button>
+          <button disabled={actionLoading} onClick={() => decide("reject")} className="cursor-pointer rounded-xl bg-red-600 px-6 py-3 font-bold text-white disabled:opacity-50">Reject cancellation</button>
         </div>
       )}
     </div>
   );
-};
-
-export default CancellationDetail;
+}

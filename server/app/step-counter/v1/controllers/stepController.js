@@ -1,18 +1,7 @@
 const FitnessModel = require("../models/fitnessModel");
 const FitnessService = require("../service/fitnessService");
 const db = require("../../../../config/database");
-
-const getErrorStatus = (err) => {
-  const badRequestMessages = [
-    "Invalid",
-    "Only today's steps",
-    "Suspicious",
-    "No goal set",
-  ];
-  return badRequestMessages.some((message) => err.message?.startsWith(message))
-    ? 400
-    : 500;
-};
+const { getErrorStatus, getSafeErrorMessage } = require("../utils/errorResponse");
 
 class StepController {
   async syncSteps(req, res) {
@@ -33,7 +22,7 @@ class StepController {
     } catch (err) {
       res.status(getErrorStatus(err)).json({
         success: false,
-        message: err.message,
+        message: getSafeErrorMessage(err),
       });
     }
   }

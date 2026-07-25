@@ -25,7 +25,7 @@ router.get(
 router.post("/buy-now", auth, drainMode, ServiceCheckoutController.buyNow);
 
 // Get buy now bundle preview
-router.post(
+router.get(
   "/buy-now-bundle-preview",
   auth,
   ServiceCheckoutController.getBuyNowBundlePreview,

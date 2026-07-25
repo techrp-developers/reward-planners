@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node app.js",
     "dev": "nodemon app.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test app/bbps/v1/tests/paymentSafety.test.js app/ecommerce/v1/tests/lifecycleSafety.test.js app/ecommerce/v1/tests/orderProgress.test.js app/ecommerce/v1/tests/itemCancellationPolicy.test.js app/ecommerce/v1/tests/courierBookingPolicy.test.js app/ecommerce/v1/tests/deliveryFeePolicy.test.js app/ecommerce/v1/tests/bookingGracePolicy.test.js services/whatsapp/tests/phone.test.js"
   },
   "keywords": [
     "rewards",

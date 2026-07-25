@@ -63,6 +63,8 @@ import ServiceEnquiries from "./components/feature/manager/serviceEnquiry/Servic
 import ServiceDetails from "./components/feature/manager/serviceEnquiry/ServiceDetails.tsx";
 import ServiceOrderList from "./components/feature/manager/serviceOrder/ServiceOrderList.tsx";
 import ServiceOrderView from "./components/feature/manager/serviceOrder/ServiceOrderView.tsx";
+import ServiceCancellationRequest from "./components/feature/manager/serviceOrder/ServiceCancellationRequest.tsx";
+import ServiceCancellationDetail from "./components/feature/manager/serviceOrder/ServiceCancellationDetail.tsx";
 
 // Manage Rewards
 import RewardRule from "./components/feature/manager/reward/RewardRule";
@@ -271,6 +273,14 @@ export default function App() {
         <Route
           path={routes.manager.services.service_order_details}
           element={<ServiceOrderView />}
+        />
+        <Route
+          path={routes.manager.services.cancellation_requests}
+          element={<ServiceCancellationRequest />}
+        />
+        <Route
+          path={routes.manager.services.cancellation_detail}
+          element={<ServiceCancellationDetail />}
         />
 
         {/* Rewards */}

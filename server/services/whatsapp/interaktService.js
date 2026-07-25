@@ -1,4 +1,5 @@
 const axios = require("axios");
+const { normalizeIndianMobile } = require("./phone");
 
 async function sendTemplateMessage({
   phone,
@@ -11,15 +12,19 @@ async function sendTemplateMessage({
 }) {
   const baseUrl = process.env.INTERAKT_BASE_URL;
   const apiKey = process.env.INTERAKT_API_KEY;
-  const phoneNumber = String(phone || "").replace("+91", "").replace("+", "");
+  const normalizedPhone = normalizeIndianMobile(phone);
 
   if (!baseUrl || !apiKey) {
     throw new Error("INTERAKT_CONFIG_MISSING");
   }
 
-  if (!phoneNumber) {
-    throw new Error("INTERAKT_PHONE_MISSING");
+  if (!normalizedPhone) {
+    const error = new Error("INTERAKT_PHONE_INVALID");
+    error.code = "INTERAKT_PHONE_INVALID";
+    throw error;
   }
+
+  const phoneNumber = normalizedPhone.slice(3);
 
   const payload = {
     countryCode: "+91",

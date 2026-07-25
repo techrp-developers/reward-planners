@@ -10,6 +10,7 @@ const swaggerSpec = require("./config/swagger");
 require("dotenv").config();
 require("./services/ExpressBees/cron/shipmentCron");
 require("./services/Bbps/retryCron");
+require("./services/Bbps/refundCron");
 require("./services/Razorpay/retryCron");
 require("./services/Maintenance/maintenanceCron");
 require("./services/Razorpay/orderExpiryCron");
@@ -33,6 +34,11 @@ const mpsRoute = require("./mps-connect/common/routes/indexRoute");
 
 const app = express();
 
+const trustProxyHops = Number(process.env.TRUST_PROXY_HOPS);
+if (Number.isInteger(trustProxyHops) && trustProxyHops > 0) {
+  app.set("trust proxy", trustProxyHops);
+}
+
 // Middleware
 app.use(
   helmet({
@@ -45,7 +51,7 @@ app.use(
     origin: "http://localhost:5173",
     // origin: process.env.CLIENT_URL || "https://rewardplanners.com",
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );

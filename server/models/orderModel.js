@@ -1,6 +1,9 @@
 const db = require("../config/database");
 const Razorpay = require("razorpay");
 const xpressService = require("../services/ExpressBees/xpressbees_service");
+const {
+  addWalletAdjustment,
+} = require("../services/rewards/ecommerceWalletService");
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZOR_API_KEY,
@@ -714,7 +717,8 @@ class OrderModel {
        status,
        cancellation_status,
        user_id,
-       reward_coins_used
+       reward_coins_used,
+       reward_coins_earned
      FROM eorders
      WHERE order_id = ?
      FOR UPDATE`,
@@ -729,6 +733,10 @@ class OrderModel {
 
     if (order.status === "cancelled") {
       throw new Error("ORDER_ALREADY_CANCELLED");
+    }
+
+    if (!["paid", "processing"].includes(order.status)) {
+      throw new Error("CANCELLATION_NOT_ALLOWED");
     }
 
     // ==========================
@@ -778,49 +786,42 @@ class OrderModel {
     // 4. REVERSE REWARD COINS
     // Check wallet_transactions for existing credit, not order_refunds
     // ==========================
-    if (order.reward_coins_used > 0) {
-      const [[walletCreditExists]] = await conn.execute(
-        `SELECT 1
-       FROM wallet_transactions
-       WHERE reference_id = ?
-         AND transaction_type = 'credit'
-         AND reason_code = 'ADMIN_ADJUSTMENT'
-       LIMIT 1`,
-        [orderId],
+    const returnedUsedCoins = await addWalletAdjustment(conn, {
+      userId: order.user_id,
+      coins: order.reward_coins_used,
+      orderId,
+      transactionType: "credit",
+      reasonCode: "ORDER_REFUND",
+      title: "Coins refunded for cancelled order",
+      description: "Redeemed coins returned after cancellation",
+    });
+    if (returnedUsedCoins) {
+      await conn.query(
+        `INSERT INTO order_refunds
+          (order_id, refund_amount, refund_method, status, refund_key)
+         VALUES (?, ?, 'wallet', 'completed', ?)`,
+        [orderId, order.reward_coins_used, `wallet_order_${orderId}_refund`],
       );
+    }
 
-      if (!walletCreditExists) {
-        // Update wallet balance
-        await conn.execute(
-          `UPDATE customer_wallet
-         SET balance = balance + ?
-         WHERE user_id = ?`,
-          [order.reward_coins_used, order.user_id],
-        );
-
-        const expiryDate = new Date();
-        expiryDate.setMonth(
-          expiryDate.getMonth() +
-            parseInt(process.env.WALLET_EXPIRY_MONTHS || "3", 10),
-        );
-
-        // Wallet transaction log
-        await conn.execute(
-          `INSERT INTO wallet_transactions
-         (user_id, title, transaction_type, coins, category,
-          reference_id, expiry_date, reason_code)
-         VALUES (?, 'Coins refunded for cancelled order', 'credit', ?, 'order', ?, ?, 'ADMIN_ADJUSTMENT')`,
-          [order.user_id, order.reward_coins_used, orderId, expiryDate],
-        );
-
-        // Wallet refund record
-        await conn.execute(
-          `INSERT INTO order_refunds
-         (order_id, refund_amount, refund_method, status)
-         VALUES (?, ?, 'wallet', 'completed')`,
-          [orderId, order.reward_coins_used],
-        );
-      }
+    // Compatibility for orders created before rewards moved to delivery time.
+    const [[creditedReward]] = await conn.query(
+      `SELECT coins FROM wallet_transactions
+       WHERE user_id = ? AND reference_id = ?
+         AND transaction_type = 'credit' AND reason_code = 'ORDER_REWARD'
+       LIMIT 1`,
+      [order.user_id, orderId],
+    );
+    if (creditedReward) {
+      await addWalletAdjustment(conn, {
+        userId: order.user_id,
+        coins: creditedReward.coins,
+        orderId,
+        transactionType: "debit",
+        reasonCode: "ORDER_REWARD_REVERSAL",
+        title: "Cancelled order reward reversed",
+        description: "Reward coins removed after cancellation",
+      });
     }
 
     // ==========================
@@ -856,22 +857,7 @@ class OrderModel {
       [orderId],
     );
 
-    // ==========================
-    // 8. CANCEL SHIPMENTS IN DB
-    // Courier cancel happens AFTER commit (external API call)
-    // ==========================
-    await conn.execute(
-      `UPDATE order_shipments
-     SET shipping_status = 'cancelled',
-         cancelled_at = NOW()
-     WHERE order_id = ?`,
-      [orderId],
-    );
-
-    // ==========================
-    // 9. FETCH SHIPMENTS FOR COURIER CANCEL (after DB commit)
-    // Return AWBs so controller can cancel at courier post-commit
-    // ==========================
+    // Capture cancellable AWBs before changing their local status.
     const [shipments] = await conn.execute(
       `SELECT id, awb_number, shipping_status
      FROM order_shipments
@@ -880,9 +866,26 @@ class OrderModel {
       [orderId],
     );
 
-    const cancellableAwbs = shipments
-      .filter((s) => ["booked", "picked_up"].includes(s.shipping_status))
-      .map((s) => s.awb_number);
+    const cancellableShipments = shipments.filter((s) =>
+      ["booked", "picked_up"].includes(s.shipping_status),
+    );
+
+    // ==========================
+    // 8. CANCEL SHIPMENTS IN DB
+    // Courier cancel happens AFTER commit (external API call)
+    // ==========================
+    await conn.execute(
+      `UPDATE order_shipments
+     SET cancel_sync_status = CASE
+           WHEN awb_number IS NOT NULL
+             AND shipping_status IN ('booked','picked_up') THEN 'pending'
+           ELSE 'not_needed'
+         END,
+         shipping_status = 'cancelled',
+         cancelled_at = NOW()
+     WHERE order_id = ?`,
+      [orderId],
+    );
 
     // ==========================
     // 10. TIMELINE EVENT
@@ -893,25 +896,9 @@ class OrderModel {
       [orderId],
     );
 
-    // ==========================
-    // 11. CREATE REFUND RECORD
-    // ==========================
-    let refundId = null;
-
-    if (payment) {
-      const [result] = await conn.execute(
-        `INSERT INTO order_refunds
-       (order_id, refund_amount, refund_method, status)
-       VALUES (?, ?, 'original', 'pending')`,
-        [orderId, payment.amount],
-      );
-
-      refundId = result.insertId;
-    }
-
     return payment
-      ? { ...payment, refundId, cancellableAwbs }
-      : { refundId: null, cancellableAwbs };
+      ? { ...payment, cancellableShipments }
+      : { cancellableShipments };
   }
 
   async rejectCancellation(orderId, conn) {

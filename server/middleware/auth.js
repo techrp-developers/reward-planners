@@ -39,6 +39,9 @@ exports.authenticateToken = async (req, res, next) => {
     }
 
     let vendorId = null;
+    let companyUserId = null;
+    let companyId = null;
+
     if (user.role === "vendor") {
       const [[vendor]] = await db.execute(
         `SELECT vendor_id
@@ -51,9 +54,37 @@ exports.authenticateToken = async (req, res, next) => {
       vendorId = vendor?.vendor_id || null;
     }
 
+    if (user.role === "hr") {
+      const [[companyUser]] = await db.execute(
+        `SELECT
+           cu.id AS company_user_id,
+           cu.company_id
+         FROM company_users cu
+         INNER JOIN companies co ON co.company_id = cu.company_id
+         WHERE LOWER(TRIM(cu.email)) = LOWER(TRIM(?))
+           AND cu.status = 1
+           AND co.status = 1
+         ORDER BY cu.id DESC
+         LIMIT 1`,
+        [user.email],
+      );
+
+      if (!companyUser) {
+        return res.status(403).json({
+          success: false,
+          message: "HR account is not linked to an active company employee",
+        });
+      }
+
+      companyUserId = companyUser.company_user_id;
+      companyId = companyUser.company_id;
+    }
+
     req.user = {
       user_id: user.user_id,
       vendor_id: vendorId,
+      company_user_id: companyUserId,
+      company_id: companyId,
       email: user.email,
       role: user.role,
     };

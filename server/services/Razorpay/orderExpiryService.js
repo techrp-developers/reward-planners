@@ -1,3 +1,7 @@
+const {
+  releaseWalletReservation,
+} = require("../rewards/ecommerceWalletService");
+
 async function expirePendingOrder(conn, orderId) {
   const [[order]] = await conn.query(
     `SELECT status
@@ -11,6 +15,8 @@ async function expirePendingOrder(conn, orderId) {
   if (!order || order.status !== "pending_payment") {
     return false;
   }
+
+  await releaseWalletReservation(conn, orderId);
 
   await conn.query(
     `UPDATE product_variants pv

@@ -15,8 +15,8 @@ const logisticRoutes = require("./logisticsRoute");
 const companyRoutes = require("./companyRoute");
 const maintenanceRoutes = require("./maintenanceRoute");
 const campaignRoutes = require("./campaignRoutes");
-const flashRoutes = require("./flashSaleRoute");
-const offerRoutes = require("./offerRoute");
+const employeeRoutes = require("./employeeRoutes");
+const companyWalletRoutes = require("./companyWalletRoutes");
 
 // dashboard Routes
 router.use("/auth", authRoutes);
@@ -34,7 +34,7 @@ router.use("/logistics", logisticRoutes);
 router.use("/company", companyRoutes);
 router.use("/maintenance", maintenanceRoutes);
 router.use("/campaign", campaignRoutes);
-router.use("/flash", flashRoutes);
-router.use("/offer", offerRoutes);
+router.use("/employees", employeeRoutes);
+router.use("/company-wallet", companyWalletRoutes);
 
 module.exports = router;

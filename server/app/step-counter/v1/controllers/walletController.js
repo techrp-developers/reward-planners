@@ -1,6 +1,7 @@
 const FitnessModel = require("../models/fitnessModel");
 const FitnessService = require("../service/fitnessService");
 const db = require("../../../../config/database");
+const { getErrorStatus, getSafeErrorMessage } = require("../utils/errorResponse");
 
 class WalletController {
   async getWalletHistory(req, res) {
@@ -19,7 +20,7 @@ class WalletController {
 
       res.json(data);
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(getErrorStatus(err)).json({ error: getSafeErrorMessage(err) });
     }
   }
 
@@ -39,7 +40,7 @@ class WalletController {
 
       res.json(data);
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(getErrorStatus(err)).json({ error: getSafeErrorMessage(err) });
     }
   }
 }

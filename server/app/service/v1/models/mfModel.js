@@ -1,9 +1,10 @@
 const db = require("../../../../config/database");
 
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
-function getPublicUrl(path) {
+function getPublicUrl(path, updatedAt) {
   if (!path) return null;
-  return `${CDN_BASE_URL}/${path}`;
+  const version = updatedAt ? `?v=${encodeURIComponent(updatedAt)}` : "";
+  return `${CDN_BASE_URL}/${path}${version}`;
 }
 
 class MfModel {
@@ -142,6 +143,7 @@ class MfModel {
       article_content,
       thumbnail,
       banner_image,
+      updated_at,
       cta_text,
       sort_order
     FROM content_articles
@@ -154,8 +156,8 @@ class MfModel {
 
     return rows.map((article) => ({
       ...article,
-      thumbnail: getPublicUrl(article.thumbnail),
-      banner_image: getPublicUrl(article.banner_image),
+      thumbnail: getPublicUrl(article.thumbnail, article.updated_at),
+      banner_image: getPublicUrl(article.banner_image, article.updated_at),
     }));
   }
 
@@ -174,8 +176,8 @@ class MfModel {
 
     const article = rows[0];
 
-    article.thumbnail = getPublicUrl(article.thumbnail);
-    article.banner_image = getPublicUrl(article.banner_image);
+    article.thumbnail = getPublicUrl(article.thumbnail, article.updated_at);
+    article.banner_image = getPublicUrl(article.banner_image, article.updated_at);
 
     return article;
   }
@@ -287,7 +289,8 @@ class MfModel {
           id,
           title,
           short_description,
-          thumbnail
+          thumbnail,
+          updated_at
         FROM content_articles
         WHERE section_id = ?
           AND status = 1
@@ -302,7 +305,7 @@ class MfModel {
           id: article.id,
           title: article.title,
           short_description: article.short_description,
-          thumbnail: getPublicUrl(article.thumbnail),
+          thumbnail: getPublicUrl(article.thumbnail, article.updated_at),
         }));
       }
 

@@ -135,7 +135,15 @@ class ServiceVariantModel {
         short_description,
         price,
         original_price,
-        image_url
+        image_url,
+        can_earn_reward,
+        earn_reward_type,
+        earn_reward_value,
+        max_earn_reward,
+        can_redeem_reward,
+        redemption_type,
+        redemption_value,
+        max_redemption_amount
        FROM service_variants
        WHERE service_id = ? AND status = 1
        ORDER BY id`,

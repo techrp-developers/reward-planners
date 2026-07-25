@@ -12,15 +12,6 @@ async function generateInvoice(parentOrderId) {
     [parentOrderId]
   );
 
-  if (existingInvoice) {
-    return {
-      success: true,
-      invoice_number: existingInvoice.invoice_number,
-      invoice_url: `/uploads/service-invoices/${existingInvoice.invoice_url}`,
-      total_amount: Number(existingInvoice.total_amount),
-    };
-  }
-
   // --------------------------------------------------
   // FETCH ORDERS
   // --------------------------------------------------
@@ -61,10 +52,32 @@ async function generateInvoice(parentOrderId) {
   // CALCULATE TOTAL
   // --------------------------------------------------
 
-  const total = orders.reduce(
+  const subtotal = orders.reduce(
     (sum, order) => sum + Number(order.price),
     0
   );
+  const rewardDiscount = orders.reduce(
+    (sum, order) => sum + Number(order.reward_coins_used || 0),
+    0
+  );
+  const total = Math.max(0, subtotal - rewardDiscount);
+
+  // Older cached PDFs may have the correct net total but not contain the
+  // reward-discount row. Reuse the cache only for invoices without rewards.
+  if (
+    existingInvoice &&
+    rewardDiscount === 0 &&
+    Number(existingInvoice.total_amount) === total
+  ) {
+    return {
+      success: true,
+      invoice_number: existingInvoice.invoice_number,
+      invoice_url: `/uploads/service-invoices/${existingInvoice.invoice_url}`,
+      subtotal,
+      reward_discount: rewardDiscount,
+      total_amount: total,
+    };
+  }
 
   // --------------------------------------------------
   // GENERATE FILE DETAILS
@@ -232,23 +245,29 @@ async function generateInvoice(parentOrderId) {
   position += 25;
 
   doc
-    .roundedRect(340, position, 210, 55, 8)
+    .roundedRect(300, position, 250, rewardDiscount > 0 ? 105 : 75, 8)
     .fillAndStroke(lightBg, borderColor);
 
   doc
     .fillColor(primaryColor)
-    .font("Helvetica-Bold")
-    .fontSize(14)
-    .text("Total Amount", 360, position + 15);
+    .font("Helvetica")
+    .fontSize(11)
+    .text("Subtotal", 320, position + 15)
+    .text(`Rs. ${subtotal.toFixed(2)}`, 430, position + 15, { align: "right", width: 100 });
+
+  if (rewardDiscount > 0) {
+    doc
+      .fillColor(successColor)
+      .text("Reward Discount", 320, position + 38)
+      .text(`- Rs. ${rewardDiscount.toFixed(2)}`, 430, position + 38, { align: "right", width: 100 });
+  }
 
   doc
     .fillColor(successColor)
+    .font("Helvetica-Bold")
     .fontSize(18)
-    .text(
-      `Rs. ${Number(total).toFixed(2)}`,
-      450,
-      position + 15
-    );
+    .text("Total", 320, position + (rewardDiscount > 0 ? 70 : 42))
+    .text(`Rs. ${Number(total).toFixed(2)}`, 420, position + (rewardDiscount > 0 ? 70 : 42), { align: "right", width: 110 });
 
   // --------------------------------------------------
   // FOOTER
@@ -300,22 +319,21 @@ async function generateInvoice(parentOrderId) {
   // SAVE IN DATABASE
   // --------------------------------------------------
 
-  await db.execute(
-    `INSERT INTO service_invoices 
-      (
-        parent_order_id,
-        invoice_number,
-        invoice_url,
-        total_amount
-      )
-     VALUES (?, ?, ?, ?)`,
-    [
-      parentOrderId,
-      invoiceNumber,
-      fileName,
-      total,
-    ]
-  );
+  if (existingInvoice) {
+    await db.execute(
+      `UPDATE service_invoices
+       SET invoice_number = ?, invoice_url = ?, total_amount = ?
+       WHERE parent_order_id = ?`,
+      [invoiceNumber, fileName, total, parentOrderId]
+    );
+  } else {
+    await db.execute(
+      `INSERT INTO service_invoices
+        (parent_order_id, invoice_number, invoice_url, total_amount)
+       VALUES (?, ?, ?, ?)`,
+      [parentOrderId, invoiceNumber, fileName, total]
+    );
+  }
 
   // --------------------------------------------------
   // RETURN RESPONSE
@@ -325,6 +343,8 @@ async function generateInvoice(parentOrderId) {
     success: true,
     invoice_number: invoiceNumber,
     invoice_url: `/uploads/service-invoices/${fileName}`,
+    subtotal,
+    reward_discount: rewardDiscount,
     total_amount: total,
   };
 }

@@ -1,5 +1,7 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, type FormEvent } from "react";
 import { Link } from "react-router-dom";
+import Swal from "sweetalert2";
+import { hrApi } from "../../../api/hrApi";
 import {
   FiSearch,
   FiPlus,
@@ -12,23 +14,44 @@ import {
   FiArrowLeft,
   FiEdit,
   FiTrash2,
+  FiBriefcase,
+  FiFileText,
+  FiX,
 } from "react-icons/fi";
 
 /* ================= TYPES ================= */
 
-type EmployeeStatus = "active" | "pending";
+type EmployeeStatus = "active" | "pending" | "inactive";
 type FilterType = "all" | EmployeeStatus;
 
 interface Employee {
   id: number;
   name: string;
+  email: string | null;
+  phone: string | null;
+  department: string | null;
+  role: string | null;
+  status: EmployeeStatus;
+  created_at: string;
+}
+
+interface EmployeeEditForm {
+  name: string;
   email: string;
   phone: string;
   department: string;
   role: string;
-  status: EmployeeStatus;
-  created_at: string;
+  status: "active" | "inactive";
 }
+
+const emptyEditForm: EmployeeEditForm = {
+  name: "",
+  email: "",
+  phone: "",
+  department: "",
+  role: "",
+  status: "active",
+};
 
 interface StatCardProps {
   label: string;
@@ -46,35 +69,181 @@ export default function EmployeeList() {
   const [search, setSearch] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<FilterType>("all");
   const [loading, setLoading] = useState<boolean>(true);
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [editForm, setEditForm] = useState<EmployeeEditForm>(emptyEditForm);
+  const [editLoading, setEditLoading] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [departments, setDepartments] = useState<string[]>([]);
+  const pageSize = 10;
+
+  const fetchEmployees = async () => {
+    try {
+      setLoading(true);
+      const response = await hrApi.get("/employees", {
+        params: { limit: 100 },
+      });
+      setEmployees(response.data?.data || []);
+    } catch (error: any) {
+      await Swal.fire(
+        "Unable to load employees",
+        error.response?.data?.message || "Please check that the local server is running.",
+        "error",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      const data: Employee[] = [
-        { id: 1, name: "Rahul Sharma", email: "rahul.sharma@company.com", phone: "+91 9876543210", department: "Human Resources", role: "HR Manager", status: "active", created_at: "2025-01-15" },
-        { id: 2, name: "Priya Patel", email: "priya.patel@company.com", phone: "+91 9123456780", department: "Engineering", role: "Senior Developer", status: "active", created_at: "2025-01-20" },
-        { id: 3, name: "Amit Kumar", email: "amit.kumar@company.com", phone: "+91 9988776655", department: "Marketing", role: "Marketing Lead", status: "pending", created_at: "2025-02-01" },
-        { id: 4, name: "Sneha Gupta", email: "sneha.gupta@company.com", phone: "+91 9876543211", department: "Finance", role: "Accountant", status: "active", created_at: "2025-02-05" },
-        { id: 5, name: "Vikram Singh", email: "vikram.singh@company.com", phone: "+91 9876543212", department: "Operations", role: "Operations Manager", status: "pending", created_at: "2025-02-10" },
-        { id: 6, name: "Anjali Verma", email: "anjali.verma@company.com", phone: "+91 9876543213", department: "IT", role: "System Administrator", status: "active", created_at: "2025-02-15" },
-        { id: 7, name: "Rajesh Khanna", email: "rajesh.khanna@company.com", phone: "+91 9876543214", department: "Sales", role: "Sales Executive", status: "pending", created_at: "2025-02-20" },
-        { id: 8, name: "Meera Nair", email: "meera.nair@company.com", phone: "+91 9876543215", department: "Customer Support", role: "Support Lead", status: "active", created_at: "2025-02-25" },
-      ];
-      setEmployees(data);
-      setLoading(false);
-    }, 500);
-    return () => clearTimeout(timer);
+    void fetchEmployees();
+    hrApi
+      .get("/employees/departments")
+      .then((response) =>
+        setDepartments((response.data?.data || []).map((item: { name: string }) => item.name)),
+      )
+      .catch((error) => console.error("Unable to load departments:", error));
   }, []);
 
   const filteredEmployees = useMemo(() => {
     return employees.filter((emp) => {
       const matchSearch =
         emp.name.toLowerCase().includes(search.toLowerCase()) ||
-        emp.email.toLowerCase().includes(search.toLowerCase()) ||
-        emp.department.toLowerCase().includes(search.toLowerCase());
+        (emp.email || "").toLowerCase().includes(search.toLowerCase()) ||
+        (emp.department || "").toLowerCase().includes(search.toLowerCase());
       const matchStatus = statusFilter === "all" || emp.status === statusFilter;
       return matchSearch && matchStatus;
     });
   }, [employees, search, statusFilter]);
+
+  const totalPages = Math.ceil(filteredEmployees.length / pageSize);
+  const paginatedEmployees = useMemo(
+    () => filteredEmployees.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    [filteredEmployees, currentPage],
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, statusFilter]);
+
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  const handleDelete = async (employee: Employee) => {
+    const confirmation = await Swal.fire({
+      title: "Deactivate employee?",
+      text: `${employee.name} will no longer be active.`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Deactivate",
+      confirmButtonColor: "#dc2626",
+    });
+
+    if (!confirmation.isConfirmed) return;
+
+    try {
+      await hrApi.delete(`/employees/${employee.id}`);
+      await fetchEmployees();
+      await Swal.fire("Deactivated", "Employee has been deactivated.", "success");
+    } catch (error: any) {
+      await Swal.fire(
+        "Unable to deactivate",
+        error.response?.data?.message || "Please try again.",
+        "error",
+      );
+    }
+  };
+
+  const openEditModal = async (employee: Employee) => {
+    setEditingEmployee(employee);
+    setEditLoading(true);
+
+    try {
+      const response = await hrApi.get(`/employees/${employee.id}`);
+      const data = response.data?.data;
+      setEditForm({
+        name: data?.name || "",
+        email: data?.email || "",
+        phone: data?.phone || "",
+        department: data?.department || "",
+        role: data?.role || "",
+        status: data?.status === "inactive" ? "inactive" : "active",
+      });
+    } catch (error: any) {
+      setEditingEmployee(null);
+      await Swal.fire(
+        "Unable to load employee",
+        error.response?.data?.message || "Please try again.",
+        "error",
+      );
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const closeEditModal = () => {
+    if (savingEdit) return;
+    setEditingEmployee(null);
+    setEditForm(emptyEditForm);
+  };
+
+  const handleEditSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editingEmployee) return;
+
+    try {
+      setSavingEdit(true);
+      await hrApi.put(`/employees/${editingEmployee.id}`, {
+        name: editForm.name,
+        email: editForm.email,
+        phone: editForm.phone,
+        department: editForm.department,
+        role: editForm.role,
+      });
+
+      if (editForm.status !== editingEmployee.status) {
+        await hrApi.patch(`/employees/${editingEmployee.id}/status`, {
+          status: editForm.status,
+        });
+      }
+
+      setEditingEmployee(null);
+      setEditForm(emptyEditForm);
+      await fetchEmployees();
+      await Swal.fire("Updated", "Employee updated successfully.", "success");
+    } catch (error: any) {
+      await Swal.fire(
+        "Unable to update employee",
+        error.response?.data?.message || "Please try again.",
+        "error",
+      );
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      const response = await hrApi.get("/employees/export", {
+        responseType: "blob",
+      });
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "employees.csv";
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error: any) {
+      await Swal.fire(
+        "Unable to export",
+        error.response?.data?.message || "Please try again.",
+        "error",
+      );
+    }
+  };
 
   if (loading) {
     return (
@@ -150,13 +319,14 @@ export default function EmployeeList() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as FilterType)}
-            className="px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500"
+            className="px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 cursor-pointer"
           >
             <option value="all">All Status</option>
             <option value="active">Active</option>
             <option value="pending">Pending</option>
+            <option value="inactive">Inactive</option>
           </select>
-          <button className="flex items-center gap-2 px-4 py-3 transition-colors border border-gray-200 rounded-xl hover:bg-gray-50">
+          <button onClick={handleExport} className="flex items-center gap-2 px-4 py-3 transition-colors border border-gray-200 rounded-xl hover:bg-gray-50 cursor-pointer">
             <FiUpload className="w-5 h-5" /> <span className="hidden sm:inline">Export</span>
           </button>
         </div>
@@ -164,59 +334,352 @@ export default function EmployeeList() {
 
       {/* TABLE */}
       <div className="overflow-hidden bg-white border border-gray-200 shadow-lg rounded-2xl">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="bg-gray-50">
-              <tr className="text-xs font-semibold tracking-wider text-gray-500 uppercase">
-                <th className="px-5 py-4">Employee</th>
-                <th className="px-5 py-4">Contact</th>
-                <th className="px-5 py-4">Department</th>
-                <th className="px-5 py-4">Role</th>
-                <th className="px-5 py-4">Status</th>
-                <th className="px-5 py-4">Joined</th>
-                <th className="px-5 py-4 text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filteredEmployees.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-5 py-12 text-center">
-                    <FiUser className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                    <p className="font-medium text-gray-500">No employees found</p>
-                  </td>
-                </tr>
-              ) : (
-                filteredEmployees.map((emp) => (
-                  <tr key={emp.id} className="transition-colors hover:bg-gray-50">
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center justify-center w-10 h-10 font-bold text-white rounded-full bg-gradient-to-r from-purple-500 to-pink-500">
-                          {emp.name.charAt(0)}
-                        </div>
-                        <span className="font-semibold text-gray-900">{emp.name}</span>
+        {filteredEmployees.length === 0 ? (
+          <div className="px-5 py-12 text-center">
+            <FiUser className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+            <p className="font-medium text-gray-500">No employees found</p>
+          </div>
+        ) : (
+          <>
+            {/* Mobile / Tablet card list */}
+            <div className="divide-y divide-gray-100 lg:hidden">
+              {paginatedEmployees.map((emp) => (
+                <div key={emp.id} className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-center w-10 h-10 font-bold text-white rounded-full shrink-0 bg-gradient-to-r from-purple-500 to-pink-500">
+                        {emp.name.charAt(0)}
                       </div>
-                    </td>
-                    <td className="px-5 py-4 text-sm text-gray-600">
-                      <div className="flex items-center gap-2"><FiMail className="w-3.5 h-3.5" /> {emp.email}</div>
-                      <div className="flex items-center gap-2 mt-0.5 text-gray-400"><FiPhone className="w-3.5 h-3.5" /> {emp.phone}</div>
-                    </td>
-                    <td className="px-5 py-4 text-sm font-medium text-gray-700">{emp.department}</td>
-                    <td className="px-5 py-4 text-sm text-gray-600">{emp.role}</td>
-                    <td className="px-5 py-4"><StatusBadge status={emp.status} /></td>
-                    <td className="px-5 py-4 text-sm text-gray-500">{emp.created_at}</td>
-                    <td className="px-5 py-4">
-                      <div className="flex items-center justify-center gap-2">
-                        <button className="p-2 text-gray-400 hover:text-purple-600"><FiEdit className="w-4 h-4" /></button>
-                        <button className="p-2 text-gray-400 hover:text-red-600"><FiTrash2 className="w-4 h-4" /></button>
+                      <div>
+                        <p className="font-semibold text-gray-900">{emp.name}</p>
+                        <p className="text-xs text-gray-500">
+                          {emp.role || "—"} · {emp.department || "—"}
+                        </p>
                       </div>
-                    </td>
+                    </div>
+                    <StatusBadge status={emp.status} />
+                  </div>
+                  <div className="flex flex-col gap-1 mt-3 text-sm">
+                    {emp.email ? (
+                      <a
+                        href={`mailto:${emp.email}`}
+                        className="flex items-center gap-2 text-gray-600 transition-colors hover:text-purple-600 hover:underline"
+                      >
+                        <FiMail className="w-3.5 h-3.5" /> {emp.email}
+                      </a>
+                    ) : (
+                      <div className="flex items-center gap-2 text-gray-400">
+                        <FiMail className="w-3.5 h-3.5" /> No email
+                      </div>
+                    )}
+                    {emp.phone ? (
+                      <a
+                        href={`tel:${emp.phone}`}
+                        className="flex items-center gap-2 text-gray-400 transition-colors hover:text-emerald-600 hover:underline"
+                      >
+                        <FiPhone className="w-3.5 h-3.5" /> {emp.phone}
+                      </a>
+                    ) : (
+                      <div className="flex items-center gap-2 text-gray-400">
+                        <FiPhone className="w-3.5 h-3.5" /> No phone
+                      </div>
+                    )}
+                    <p className="mt-1 text-xs text-gray-400">Joined {emp.created_at}</p>
+                  </div>
+                  <div className="flex items-center gap-2 pt-3 mt-3 border-t border-gray-50">
+                    <button
+                      onClick={() => void openEditModal(emp)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 border border-gray-200 rounded-lg hover:text-purple-600 hover:border-purple-200 cursor-pointer"
+                    >
+                      <FiEdit className="w-3.5 h-3.5" /> Edit
+                    </button>
+                    {emp.status !== "inactive" && (
+                      <button
+                        onClick={() => void handleDelete(emp)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 border border-gray-200 rounded-lg cursor-pointer hover:text-red-600 hover:border-red-200"
+                        aria-label={`Deactivate ${emp.name}`}
+                      >
+                        <FiTrash2 className="w-3.5 h-3.5" /> Deactivate
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop table */}
+            <div className="hidden overflow-x-auto lg:block">
+              <table className="w-full text-left">
+                <thead className="bg-gray-50">
+                  <tr className="text-xs font-semibold tracking-wider text-gray-500 uppercase">
+                    <th className="px-5 py-4">Employee</th>
+                    <th className="px-5 py-4">Contact</th>
+                    <th className="px-5 py-4">Department</th>
+                    <th className="px-5 py-4">Role</th>
+                    <th className="px-5 py-4">Status</th>
+                    <th className="px-5 py-4">Joined</th>
+                    <th className="px-5 py-4 text-center">Actions</th>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {paginatedEmployees.map((emp) => (
+                    <tr key={emp.id} className="transition-colors hover:bg-gray-50">
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center justify-center w-10 h-10 font-bold text-white rounded-full bg-gradient-to-r from-purple-500 to-pink-500">
+                            {emp.name.charAt(0)}
+                          </div>
+                          <span className="font-semibold text-gray-900">{emp.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-4 text-sm text-gray-600">
+                        {emp.email ? (
+                          <a
+                            href={`mailto:${emp.email}`}
+                            className="flex items-center gap-2 transition-colors hover:text-purple-600 hover:underline"
+                          >
+                            <FiMail className="w-3.5 h-3.5" /> {emp.email}
+                          </a>
+                        ) : (
+                          <div className="flex items-center gap-2 text-gray-400">
+                            <FiMail className="w-3.5 h-3.5" /> No email
+                          </div>
+                        )}
+                        {emp.phone ? (
+                          <a
+                            href={`tel:${emp.phone}`}
+                            className="flex items-center gap-2 mt-0.5 text-gray-400 transition-colors hover:text-emerald-600 hover:underline"
+                          >
+                            <FiPhone className="w-3.5 h-3.5" /> {emp.phone}
+                          </a>
+                        ) : (
+                          <div className="flex items-center gap-2 mt-0.5 text-gray-400">
+                            <FiPhone className="w-3.5 h-3.5" /> No phone
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-5 py-4 text-sm font-medium text-gray-700">{emp.department}</td>
+                      <td className="px-5 py-4 text-sm text-gray-600">{emp.role}</td>
+                      <td className="px-5 py-4"><StatusBadge status={emp.status} /></td>
+                      <td className="px-5 py-4 text-sm text-gray-500">{emp.created_at}</td>
+                      <td className="px-5 py-4">
+                        <div className="flex items-center justify-center gap-2">
+                          <button onClick={() => void openEditModal(emp)} className="p-2 text-gray-400 hover:text-purple-600 cursor-pointer"><FiEdit className="w-4 h-4" /></button>
+                          {emp.status !== "inactive" && (
+                            <button
+                              onClick={() => void handleDelete(emp)}
+                              className="p-2 text-gray-400 cursor-pointer hover:text-red-600"
+                              aria-label={`Deactivate ${emp.name}`}
+                            >
+                              <FiTrash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {totalPages > 1 && (
+          <div className="flex flex-col gap-3 px-5 py-4 border-t border-gray-100 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-gray-500">
+              Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filteredEmployees.length)} of {filteredEmployees.length} employees
+            </p>
+            <div className="flex items-center gap-1 overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.max(page - 1, 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-2 text-sm font-semibold text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              >
+                Previous
+              </button>
+              {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                <button
+                  type="button"
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  aria-current={currentPage === page ? "page" : undefined}
+                  className={`min-w-9 px-3 py-2 text-sm font-semibold rounded-lg border transition-colors cursor-pointer ${
+                    currentPage === page
+                      ? "text-white border-purple-600 bg-purple-600"
+                      : "text-gray-600 border-gray-200 hover:bg-gray-50"
+                  }`}
+                >
+                  {page}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.min(page + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="px-3 py-2 text-sm font-semibold text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+
+      {editingEmployee && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeEditModal();
+          }}
+        >
+          <div className="w-full max-w-2xl overflow-hidden bg-white shadow-2xl rounded-2xl">
+            <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Edit Employee</h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  Update employee information and account status
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeEditModal}
+                className="p-2 text-gray-400 rounded-lg hover:bg-gray-100 hover:text-gray-700"
+              >
+                <FiX className="w-5 h-5" />
+              </button>
+            </div>
+
+            {editLoading ? (
+              <div className="flex items-center justify-center h-72">
+                <div className="w-10 h-10 border-4 border-purple-200 rounded-full border-t-purple-600 animate-spin" />
+              </div>
+            ) : (
+              <form onSubmit={handleEditSubmit}>
+                <div className="grid grid-cols-1 gap-5 p-6 md:grid-cols-2">
+                  <EditField icon={FiUser} label="Full Name" required>
+                    <input
+                      value={editForm.name}
+                      onChange={(event) =>
+                        setEditForm((current) => ({ ...current, name: event.target.value }))
+                      }
+                      required
+                      className="w-full py-3 pl-11 pr-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                  </EditField>
+
+                  <EditField icon={FiMail} label="Email" required>
+                    <input
+                      type="email"
+                      value={editForm.email}
+                      onChange={(event) =>
+                        setEditForm((current) => ({ ...current, email: event.target.value }))
+                      }
+                      required
+                      className="w-full py-3 pl-11 pr-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                  </EditField>
+
+                  <EditField icon={FiPhone} label="Phone Number">
+                    <input
+                      type="tel"
+                      value={editForm.phone}
+                      onChange={(event) =>
+                        setEditForm((current) => ({ ...current, phone: event.target.value }))
+                      }
+                      className="w-full py-3 pl-11 pr-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                  </EditField>
+
+                  <EditField icon={FiBriefcase} label="Department">
+                    <select
+                      value={editForm.department}
+                      onChange={(event) =>
+                        setEditForm((current) => ({
+                          ...current,
+                          department: event.target.value,
+                        }))
+                      }
+                      className="w-full py-3 pl-11 pr-4 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    >
+                      <option value="">Select Department</option>
+                      {departments.map((department) => (
+                        <option key={department} value={department}>{department}</option>
+                      ))}
+                      {editForm.department && !departments.includes(editForm.department) && (
+                        <option value={editForm.department}>{editForm.department}</option>
+                      )}
+                    </select>
+                  </EditField>
+
+                  <div className="md:col-span-2">
+                    <EditField icon={FiFileText} label="Role / Position">
+                      <input
+                        value={editForm.role}
+                        onChange={(event) =>
+                          setEditForm((current) => ({ ...current, role: event.target.value }))
+                        }
+                        className="w-full py-3 pl-11 pr-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      />
+                    </EditField>
+                  </div>
+
+                  <div className="flex items-center justify-between p-4 border border-gray-200 md:col-span-2 rounded-xl">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">Employee Status</p>
+                      <p className="text-xs text-gray-500">
+                        {editForm.status === "active"
+                          ? "Employee is currently active"
+                          : "Employee is currently inactive"}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={editForm.status === "active"}
+                      aria-label="Toggle employee status"
+                      onClick={() =>
+                        setEditForm((current) => ({
+                          ...current,
+                          status: current.status === "active" ? "inactive" : "active",
+                        }))
+                      }
+                      className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 cursor-pointer ${
+                        editForm.status === "active" ? "bg-emerald-500" : "bg-gray-300"
+                      }`}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={`pointer-events-none absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200 ${
+                          editForm.status === "active" ? "translate-x-5" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50">
+                  <button
+                    type="button"
+                    onClick={closeEditModal}
+                    disabled={savingEdit}
+                    className="px-5 py-2.5 font-semibold text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-100 disabled:opacity-60 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingEdit}
+                    className="px-6 py-2.5 font-semibold text-white rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] disabled:opacity-60 cursor-pointer"
+                  >
+                    {savingEdit ? "Saving..." : "Save Changes"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -244,14 +707,43 @@ function StatCard({ label, value, icon: Icon, gradient, active, onClick }: StatC
 
 function StatusBadge({ status }: { status: EmployeeStatus }) {
   const isActive = status === "active";
+  const isPending = status === "pending";
   return (
     <span
       className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
-        isActive ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+        isActive
+          ? "bg-emerald-100 text-emerald-700"
+          : isPending
+            ? "bg-amber-100 text-amber-700"
+            : "bg-red-100 text-red-700"
       }`}
     >
       {isActive ? <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> : <FiClock className="w-3 h-3" />}
       {status.charAt(0).toUpperCase() + status.slice(1)}
     </span>
+  );
+}
+
+function EditField({
+  icon: Icon,
+  label,
+  required,
+  children,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="block mb-2 text-sm font-semibold text-gray-700">
+        {label} {required && <span className="text-red-500">*</span>}
+      </span>
+      <span className="relative block">
+        <Icon className="absolute z-10 w-5 h-5 text-gray-400 left-3.5 top-3.5" />
+        {children}
+      </span>
+    </label>
   );
 }
