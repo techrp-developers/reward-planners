@@ -2,11 +2,9 @@ const { parseAllowedUserIds } = require("./courierBookingPolicy");
 
 function shouldWaiveDeliveryFee({
   userId,
-  // TEMPORARY QA default for the customer's test account. Set the
-  // environment flag to "false" to restore normal delivery pricing.
-  enabled = process.env.ECOMMERCE_FREE_DELIVERY_TEST ?? "true",
+  enabled = process.env.ECOMMERCE_FREE_DELIVERY_TEST ?? "false",
   allowedUserIds =
-    process.env.ECOMMERCE_FREE_DELIVERY_TEST_USER_IDS ?? "24",
+    process.env.ECOMMERCE_FREE_DELIVERY_TEST_USER_IDS ?? "",
 }) {
   if (String(enabled).toLowerCase() !== "true") return false;
   return parseAllowedUserIds(allowedUserIds).has(Number(userId));
