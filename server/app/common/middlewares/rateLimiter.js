@@ -60,11 +60,11 @@ const checkoutLimiter = rateLimit({
 
 // ==========================
 // AUTH / OTP
-// 15 attempts per 5 min
+// 30 attempts per 5 min
 // ==========================
 const authLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
-  max: 15,
+  max: 30,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: makeKeyGenerator(),
