@@ -90,6 +90,43 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
     });
   }
 
+  function sendForgotPasswordOtpNotifications({ email, user, otp }) {
+    setImmediate(() => {
+      if (email) {
+        sendOtpMail({
+          email,
+          name: user.name,
+          otp,
+        }).catch((error) => {
+          console.error("Forgot password OTP email failed:", error);
+        });
+      }
+
+      if (!user.phone) return;
+
+      enqueueWhatsApp({
+        eventName: "onbord_forgot_pass",
+        ctx: {
+          phone: user.phone,
+          company_id: user.company_id ?? null,
+          customer_name: user.name || "User",
+          otp,
+        },
+      })
+        .then((result) => {
+          if (!result.ok) {
+            console.warn("Forgot password OTP WhatsApp not queued:", result);
+          }
+        })
+        .catch((error) => {
+          console.error(
+            "Forgot password OTP WhatsApp enqueue failed:",
+            error,
+          );
+        });
+    });
+  }
+
   // helper function
   const CDN_BASE_URL = "https://cdn.rewardplanners.com";
   function getPublicUrl(path) {
@@ -786,9 +823,9 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
 
         await AuthModel.storeActivationOTP(user.email, otp);
 
-        await sendOtpMail({
+        sendForgotPasswordOtpNotifications({
           email: user.email,
-          name: user.name,
+          user,
           otp,
         });
 
@@ -842,9 +879,9 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
 
         await AuthModel.storeActivationOTP(normalizedEmail, otp);
 
-        await sendOtpMail({
+        sendForgotPasswordOtpNotifications({
           email: normalizedEmail,
-          name: employee.name,
+          user: employee,
           otp,
         });
 
