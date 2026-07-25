@@ -9,6 +9,11 @@ const {
 const {
   canRequestItemCancellation,
 } = require("../utils/itemCancellationPolicy");
+const {
+  getCancellationGraceMinutes,
+  getCourierBookingEligibleAt,
+  isCourierBookingGraceActive,
+} = require("../utils/bookingGracePolicy");
 
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
 
@@ -29,17 +34,26 @@ function deriveHistoryStatus({
   storedStatus,
   activeItems,
   cancelledItems,
+  cancelledShipmentItems,
   deliveredItems,
   dispatchedItems,
   outForDeliveryItems,
 }) {
   if (storedStatus === "cancelled") return "cancelled";
   if (activeItems === 0 && cancelledItems > 0) return "cancelled";
+  if (
+    activeItems > 0 &&
+    cancelledShipmentItems === activeItems
+  ) {
+    return "cancelled";
+  }
   if (activeItems > 0 && deliveredItems === activeItems) return "delivered";
   if (deliveredItems > 0) return "partially_delivered";
   if (outForDeliveryItems > 0) return "out_for_delivery";
   if (dispatchedItems > 0) return "shipped";
-  if (cancelledItems > 0) return "partially_cancelled";
+  if (cancelledItems > 0 || cancelledShipmentItems > 0) {
+    return "partially_cancelled";
+  }
   return "processing";
 }
 
@@ -181,6 +195,10 @@ class orderModel {
         SUM(oi.fulfillment_status = 'cancelled') AS cancelled_items,
         SUM(
           oi.fulfillment_status <> 'cancelled'
+          AND os.shipping_status = 'cancelled'
+        ) AS cancelled_shipment_items,
+        SUM(
+          oi.fulfillment_status <> 'cancelled'
           AND os.shipping_status = 'delivered'
         ) AS delivered_items,
         SUM(
@@ -265,6 +283,9 @@ class orderModel {
         storedStatus: row.stored_status,
         activeItems: Number(row.active_items || 0),
         cancelledItems: Number(row.cancelled_items || 0),
+        cancelledShipmentItems: Number(
+          row.cancelled_shipment_items || 0,
+        ),
         deliveredItems: Number(row.delivered_items || 0),
         dispatchedItems: Number(row.dispatched_items || 0),
         outForDeliveryItems: Number(row.out_for_delivery_items || 0),
@@ -454,6 +475,7 @@ class orderModel {
       o.shipping_total,
       o.status,
       o.cancellation_status,
+      o.paid_at,
       o.created_at,
 
       ca.address_type,
@@ -742,6 +764,12 @@ class orderModel {
             0,
           );
 
+    const graceMinutes = getCancellationGraceMinutes();
+    const courierBookingEligibleAt = getCourierBookingEligibleAt(
+      order.paid_at,
+      graceMinutes,
+    );
+
     return {
       order: {
         order_id: order.order_id,
@@ -750,6 +778,14 @@ class orderModel {
         total_amount: order.total_amount,
         created_at: order.created_at,
         is_reward_credited: earnedCoins > 0,
+        cancellation_grace: {
+          active: isCourierBookingGraceActive({
+            paidAt: order.paid_at,
+            graceMinutes,
+          }),
+          minutes: graceMinutes,
+          courier_booking_eligible_at: courierBookingEligibleAt,
+        },
       },
 
       address: {

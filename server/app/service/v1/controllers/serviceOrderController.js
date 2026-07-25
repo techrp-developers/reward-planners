@@ -1899,8 +1899,12 @@ class ServiceOrderController {
     try {
       const { parentOrderId } = req.params;
 
-      const order =
-        await ServiceOrderModel.getOrderByParentIdAdmin(parentOrderId);
+      const [order, documents] = await Promise.all([
+        ServiceOrderModel.getOrderByParentIdAdmin(parentOrderId),
+        ServiceOrderDocumentModel.getUploadedDocsByParentOrderAdmin(
+          parentOrderId,
+        ),
+      ]);
 
       if (!order) {
         return res.status(404).json({
@@ -1911,7 +1915,10 @@ class ServiceOrderController {
 
       return res.json({
         success: true,
-        data: order,
+        data: {
+          ...order,
+          documents,
+        },
       });
     } catch (error) {
       return res.status(500).json({
