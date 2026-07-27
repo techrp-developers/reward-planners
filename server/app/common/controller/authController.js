@@ -20,6 +20,7 @@
 const { notifyUser } = require("../utils/notification");
 const { uploadToR2 } = require("../../../utils/r2upload");
 const { deleteFromR2 } = require("../../../utils/r2delete");
+const { getPublicUrl } = require("../../../utils/publicUrl");
 const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
 
   const ACCESS_EXPIRES = "1h";
@@ -125,13 +126,6 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
           );
         });
     });
-  }
-
-  // helper function
-  const CDN_BASE_URL = "https://cdn.rewardplanners.com";
-  function getPublicUrl(path) {
-    if (!path) return null;
-    return `${CDN_BASE_URL}/${path}`;
   }
 
   const thoughts = [
@@ -1419,6 +1413,8 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
     // Get user Info
     async getUserInfo(req, res) {
       try {
+        res.set("Cache-Control", "no-store");
+
         const userId = req.user?.user_id;
 
         if (!userId) {
@@ -1557,9 +1553,7 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
           message: "Profile updated successfully",
           data: {
             phone: updatedData.phone,
-            user_image: updatedData.user_image
-              ? getPublicUrl(updatedData.user_image)
-              : null,
+            user_image: getPublicUrl(updatedData.user_image, new Date()),
           },
         });
       } catch (error) {
