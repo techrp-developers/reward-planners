@@ -27,14 +27,34 @@ function getPublicUrl(path) {
 }
 
 function mapStatusToStep(status) {
-  if (["pending", "booking_in_progress", "booked"].includes(status)) return 0;
-  if (["picked_up", "in_transit"].includes(status)) return 1;
-  if (status === "out_for_delivery") return 2;
-  if (status === "delivered") return 3;
+  return mapShipmentStatusToStep(status);
+}
 
-  if (["ndr", "rto", "cancelled"].includes(status)) return 1;
-
-  return 0;
+function deriveHistoryStatus({
+  storedStatus,
+  activeItems,
+  cancelledItems,
+  cancelledShipmentItems,
+  deliveredItems,
+  dispatchedItems,
+  outForDeliveryItems,
+}) {
+  if (storedStatus === "cancelled") return "cancelled";
+  if (activeItems === 0 && cancelledItems > 0) return "cancelled";
+  if (
+    activeItems > 0 &&
+    cancelledShipmentItems === activeItems
+  ) {
+    return "cancelled";
+  }
+  if (activeItems > 0 && deliveredItems === activeItems) return "delivered";
+  if (deliveredItems > 0) return "partially_delivered";
+  if (outForDeliveryItems > 0) return "out_for_delivery";
+  if (dispatchedItems > 0) return "shipped";
+  if (cancelledItems > 0 || cancelledShipmentItems > 0) {
+    return "partially_cancelled";
+  }
+  return "processing";
 }
 
 function mapCancelEvent(event) {
@@ -157,6 +177,65 @@ class orderModel {
         o.status AS stored_status,
         o.created_at,
         COUNT(oi.order_item_id) AS item_count,
+        COALESCE(SUM(
+          CASE WHEN oi.fulfillment_status <> 'cancelled'
+               THEN oi.final_price ELSE 0 END
+        ), 0) AS active_item_total,
+        COALESCE((
+          SELECT SUM(os2.shipping_charges)
+          FROM order_shipments os2
+          WHERE os2.order_id = o.order_id
+            AND EXISTS (
+              SELECT 1 FROM eorder_items oi2
+              WHERE oi2.vendor_order_id = os2.vendor_order_id
+                AND oi2.fulfillment_status <> 'cancelled'
+            )
+        ), 0) AS active_shipping_total,
+        SUM(oi.fulfillment_status <> 'cancelled') AS active_items,
+        SUM(oi.fulfillment_status = 'cancelled') AS cancelled_items,
+        SUM(
+          oi.fulfillment_status <> 'cancelled'
+          AND os.shipping_status = 'cancelled'
+        ) AS cancelled_shipment_items,
+        SUM(
+          oi.fulfillment_status <> 'cancelled'
+          AND os.shipping_status = 'delivered'
+        ) AS delivered_items,
+        SUM(
+          oi.fulfillment_status <> 'cancelled'
+          AND os.shipping_status IN ('picked_up','in_transit')
+        ) AS dispatched_items,
+        SUM(
+          oi.fulfillment_status <> 'cancelled'
+          AND os.shipping_status = 'out_for_delivery'
+        ) AS out_for_delivery_items,
+        COALESCE(SUM(
+          CASE WHEN oi.fulfillment_status <> 'cancelled'
+               THEN oi.reward_coins_earned ELSE 0 END
+        ), 0) AS potential_coins,
+        COALESCE(SUM(
+          CASE WHEN oi.fulfillment_status <> 'cancelled'
+               THEN oi.reward_coins_used ELSE 0 END
+        ), 0) AS active_coins_used,
+        COALESCE(SUM(
+          CASE WHEN oi.fulfillment_status <> 'cancelled'
+               THEN oi.reward_discount ELSE 0 END
+        ), 0) AS active_discount,
+        COALESCE((
+          SELECT SUM(
+            CASE
+              WHEN wt.transaction_type = 'credit'
+                AND wt.reason_code = 'ORDER_REWARD' THEN wt.coins
+              WHEN wt.transaction_type = 'debit'
+                AND wt.reason_code = 'ORDER_REWARD_REVERSAL' THEN -wt.coins
+              ELSE 0
+            END
+          )
+          FROM wallet_transactions wt
+          WHERE wt.user_id = o.user_id
+            AND wt.reference_id = o.order_id
+            AND wt.reason_code IN ('ORDER_REWARD','ORDER_REWARD_REVERSAL')
+        ), 0) AS credited_coins,
 
         (
           SELECT p.product_name
@@ -198,14 +277,91 @@ class orderModel {
       params,
     );
 
-    const [[{ total }]] = await db.execute(
-      `
-      SELECT COUNT(*) AS total
-      FROM eorders o
-      ${whereClause}
-      `,
-      params,
-    );
+    const enrichedRows = rows.map((row) => ({
+      ...row,
+      derived_status: deriveHistoryStatus({
+        storedStatus: row.stored_status,
+        activeItems: Number(row.active_items || 0),
+        cancelledItems: Number(row.cancelled_items || 0),
+        cancelledShipmentItems: Number(
+          row.cancelled_shipment_items || 0,
+        ),
+        deliveredItems: Number(row.delivered_items || 0),
+        dispatchedItems: Number(row.dispatched_items || 0),
+        outForDeliveryItems: Number(row.out_for_delivery_items || 0),
+      }),
+    }));
+    const normalizedStatus =
+      status === "completed"
+        ? "delivered"
+        : status === "in_progress"
+          ? "processing"
+          : status;
+    const filteredRows =
+      normalizedStatus && normalizedStatus !== "all"
+        ? enrichedRows.filter(
+            (row) => row.derived_status === normalizedStatus,
+          )
+        : enrichedRows;
+    const total = filteredRows.length;
+    const pageRows = filteredRows.slice(offset, offset + limit);
+
+    let itemsByOrder = {};
+    if (pageRows.length) {
+      const [orderItems] = await db.query(
+        `SELECT oi.order_id, oi.order_item_id, oi.product_id, oi.variant_id,
+                oi.quantity, oi.final_price, oi.reward_coins_used,
+                oi.reward_coins_earned, oi.fulfillment_status,
+                p.product_name, p.brand_name,
+                os.shipping_status,
+                ic.status AS cancellation_status,
+                pr.review_id
+         FROM eorder_items oi
+         JOIN eproducts p ON p.product_id = oi.product_id
+         LEFT JOIN order_shipments os
+           ON os.vendor_order_id = oi.vendor_order_id
+         LEFT JOIN ecommerce_item_cancellations ic
+           ON ic.order_item_id = oi.order_item_id
+         LEFT JOIN product_reviews pr
+           ON pr.order_id = oi.order_id
+          AND pr.product_id = oi.product_id
+          AND pr.variant_id = oi.variant_id
+          AND pr.user_id = ?
+         WHERE oi.order_id IN (?)`,
+        [userId, pageRows.map((row) => row.order_id)],
+      );
+      itemsByOrder = orderItems.reduce((grouped, item) => {
+        if (!grouped[item.order_id]) grouped[item.order_id] = [];
+        grouped[item.order_id].push({
+          order_item_id: item.order_item_id,
+          product_id: item.product_id,
+          variant_id: item.variant_id,
+          product_name: item.product_name,
+          brand_name: item.brand_name,
+          quantity: item.quantity,
+          price: Number(item.final_price || 0),
+          status:
+            item.fulfillment_status === "cancelled"
+              ? "cancelled"
+              : item.shipping_status,
+          cancellation_status: item.cancellation_status || null,
+          reward_coins_used: Number(item.reward_coins_used || 0),
+          reward_coins_earned: 0,
+          reward_coins_potential:
+            item.fulfillment_status !== "cancelled"
+              ? Number(item.reward_coins_earned || 0)
+              : 0,
+          feedback: {
+            can_submit:
+              item.shipping_status === "delivered" &&
+              item.fulfillment_status !== "cancelled" &&
+              !item.review_id,
+            submitted: Boolean(item.review_id),
+          },
+        });
+        return grouped;
+      }, {});
+    }
 
     return {
       orders: pageRows.map((o) => ({
