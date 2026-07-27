@@ -2,13 +2,7 @@ const db = require("../../../config/database");
 const bcrypt = require("bcryptjs");
 const fs = require("fs");
 const path = require("path");
-
-// helper function
-const CDN_BASE_URL = "https://cdn.rewardplanners.com";
-function getPublicUrl(path) {
-  if (!path) return null;
-  return `${CDN_BASE_URL}/${path}`;
-}
+const { getPublicUrl } = require("../../../utils/publicUrl");
 
 class authModel {
   /* ======================================================
@@ -411,14 +405,16 @@ class authModel {
       cu.phone,
       cu.user_image,
       cu.created_at,
+      cu.updated_at,
 
       cw.balance AS reward_points,
 
       comp.company_name,
       comp.company_logo,
+      comp.updated_at AS company_updated_at,
 
       cu_emp.date_of_joining,
-      cu.company_id,
+      cu_emp.company_id,
       cu_emp.role,
       cu_emp.dob,
       cu_emp.department,
@@ -439,11 +435,11 @@ class authModel {
     LEFT JOIN customer_wallet cw
     ON cu.user_id = cw.user_id
 
-    LEFT JOIN companies comp
-    ON cu.company_id = comp.company_id
-
     LEFT JOIN company_users cu_emp
     ON cu.company_user_id = cu_emp.id
+
+    LEFT JOIN companies comp
+    ON cu_emp.company_id = comp.company_id
 
     LEFT JOIN customer_addresses ca
       ON cu.user_id = ca.user_id
@@ -471,14 +467,14 @@ class authModel {
       name: user.name,
       email: user.email,
       phone: user.phone,
-      userImage: user.user_image ? getPublicUrl(user.user_image) : null,
+      userImage: getPublicUrl(user.user_image, user.updated_at),
       created_at: user.created_at,
       rewardPoints: user.reward_points ?? 0,
 
-      company: user.company_name
+      company: user.company_id
         ? {
             name: user.company_name,
-            logo: user.company_logo ? getPublicUrl(user.company_logo) : null,
+            logo: getPublicUrl(user.company_logo, user.company_updated_at),
           }
         : null,
 
@@ -519,7 +515,8 @@ class authModel {
       cu_emp.department,
       cu_emp.role,
       cu_emp.dob,
-      c.user_image
+      c.user_image,
+      c.updated_at AS user_image_updated_at
     FROM customer c_logged
 
     INNER JOIN company_users cu_logged
@@ -547,7 +544,7 @@ class authModel {
       department: emp.department,
       role: emp.role,
       dob: emp.dob,
-      image: emp.user_image ? getPublicUrl(emp.user_image) : null,
+      image: getPublicUrl(emp.user_image, emp.user_image_updated_at),
     }));
   }
 
