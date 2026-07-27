@@ -38,6 +38,19 @@ interface Bundle {
   items: ServiceItem[];
 }
 
+interface OrderDocument {
+  id: number;
+  document_key: string;
+  document_name: string;
+  is_mandatory: boolean;
+  is_expirable: boolean;
+  uploaded: boolean;
+  uploaded_at: string | null;
+  expiry_date: string | null;
+  document_number: string | null;
+  file_url: string | null;
+}
+
 interface ServiceOrderDetails {
   parent_order_id: string;
   status: string;
@@ -46,6 +59,7 @@ interface ServiceOrderDetails {
   address: Address | null;
   items: ServiceItem[];
   bundles: Bundle[];
+  documents: OrderDocument[];
   total_amount: number;
 }
 
@@ -329,6 +343,83 @@ const ServiceOrderView: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* CUSTOMER DOCUMENTS */}
+      <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm mb-5">
+        <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">
+          Customer Documents
+        </h3>
+
+        {data.documents?.length ? (
+          <div className="overflow-x-auto rounded-xl border border-gray-100">
+            <table className="w-full text-sm">
+              <thead className="bg-purple-50/60">
+                <tr>
+                  {["Document", "Document Number", "Uploaded On", "Expiry", "File"].map(
+                    (heading) => (
+                      <th
+                        key={heading}
+                        className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-left text-gray-500"
+                      >
+                        {heading}
+                      </th>
+                    ),
+                  )}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {data.documents.map((document) => (
+                  <tr key={document.id} className="hover:bg-purple-50/30">
+                    <td className="px-4 py-3">
+                      <p className="font-semibold text-gray-800">
+                        {document.document_name}
+                      </p>
+                      {document.is_mandatory && (
+                        <span className="text-xs text-red-500">Mandatory</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {document.document_number || "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      {document.uploaded_at
+                        ? new Date(document.uploaded_at).toLocaleDateString(
+                            "en-IN",
+                          )
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      {document.expiry_date
+                        ? new Date(document.expiry_date).toLocaleDateString(
+                            "en-IN",
+                          )
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      {document.file_url ? (
+                        <a
+                          href={document.file_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex px-3 py-1.5 text-xs font-semibold text-white rounded-lg bg-[#852BAF] hover:bg-[#6f2492]"
+                        >
+                          View Document
+                        </a>
+                      ) : (
+                        "Unavailable"
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500">
+            No documents have been uploaded for this order.
+          </p>
+        )}
+      </div>
 
       {/* SERVICE ITEMS */}
       <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm mb-5">

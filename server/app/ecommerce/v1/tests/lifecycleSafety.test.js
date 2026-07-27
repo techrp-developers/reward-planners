@@ -4,6 +4,7 @@ const {
   acceptsFirstPaymentCapture,
   vendorStatusForShipment,
   canRequestCancellation,
+  canCancelShipment,
 } = require("../utils/lifecyclePolicy");
 const {
   makeRefundKey,
@@ -40,6 +41,13 @@ test("cancellation is limited to pre-shipment paid orders", () => {
   assert.equal(canRequestCancellation("shipped"), false);
   assert.equal(canRequestCancellation("delivered"), false);
   assert.equal(canRequestCancellation("pending_payment"), false);
+});
+
+test("shipment cancellation is hidden after dispatch or termination", () => {
+  assert.equal(canCancelShipment("booked"), true);
+  assert.equal(canCancelShipment("in_transit"), false);
+  assert.equal(canCancelShipment("delivered"), false);
+  assert.equal(canCancelShipment("cancelled"), false);
 });
 
 test("refund keys are deterministic and scoped", () => {

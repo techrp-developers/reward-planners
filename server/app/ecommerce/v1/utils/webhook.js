@@ -14,6 +14,14 @@ const {
   consumeWalletReservation,
 } = require("../../../../services/rewards/ecommerceWalletService");
 const { acceptsFirstPaymentCapture } = require("./lifecyclePolicy");
+const {
+  shouldSkipCourierBooking,
+} = require("./courierBookingPolicy");
+const {
+  getCancellationGraceMinutes,
+  getCourierBookingEligibleAt,
+  isCourierBookingGraceActive,
+} = require("./bookingGracePolicy");
 
 // booking payload
 async function buildXpressBookingPayload(orderId, vendorId) {
@@ -349,7 +357,7 @@ async function processShipmentsAfterPayment(orderId) {
     // ==========================
     const [[order]] = await conn.query(
       `
-      SELECT shipment_sync_status 
+      SELECT shipment_sync_status, user_id, paid_at
       FROM eorders 
       WHERE order_id = ?
     `,
@@ -357,6 +365,38 @@ async function processShipmentsAfterPayment(orderId) {
     );
 
     if (!order) return;
+
+    const graceMinutes = getCancellationGraceMinutes();
+    if (
+      isCourierBookingGraceActive({
+        paidAt: order.paid_at,
+        graceMinutes,
+      })
+    ) {
+      const eligibleAt = getCourierBookingEligibleAt(
+        order.paid_at,
+        graceMinutes,
+      );
+      console.log(
+        `[COURIER_GRACE_PERIOD] Holding order ${orderId} until ${eligibleAt.toISOString()}`,
+      );
+      return {
+        skipped: true,
+        reason: "cancellation_grace_period",
+        eligible_at: eligibleAt,
+      };
+    }
+
+    if (
+      shouldSkipCourierBooking({
+        userId: order.user_id,
+      })
+    ) {
+      console.warn(
+        `[COURIER_TEST_MODE] Skipping courier booking for order ${orderId}, user ${order.user_id}`,
+      );
+      return { skipped: true, reason: "courier_test_mode" };
+    }
 
     if (order?.shipment_sync_status === "completed") {
       return;
@@ -371,6 +411,11 @@ async function processShipmentsAfterPayment(orderId) {
         WHERE order_id = ?
         AND shipping_status IN ('pending', 'booking_failed')
         AND booking_in_progress = 0
+        AND NOT EXISTS (
+          SELECT 1 FROM eorder_items oi
+          WHERE oi.vendor_order_id = order_shipments.vendor_order_id
+            AND oi.fulfillment_status = 'cancellation_requested'
+        )
         AND (
           booking_last_attempt_at IS NULL
           OR booking_last_attempt_at < NOW() - INTERVAL 5 MINUTE

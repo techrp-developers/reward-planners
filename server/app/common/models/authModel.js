@@ -42,6 +42,10 @@ class authModel {
         email,
         phone,
         company_user_id,
+        (SELECT company_id
+           FROM company_users
+          WHERE id = customer.company_user_id
+          LIMIT 1) AS company_id,
         password,
         status,
         is_verified,
