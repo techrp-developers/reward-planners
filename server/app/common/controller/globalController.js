@@ -8,6 +8,7 @@ const { notifyUser } = require("../utils/notification");
 const { runNonBlocking } = require("../../../utils/nonBlocking");
 
 const LAUNCH_CAMPAIGN_COMPANY_ID = 7;
+const IOS_LAUNCH_COMPANY_ID = 5;
 
 class GlobalController {
   // get balance
@@ -213,7 +214,9 @@ class GlobalController {
   // IOS update campaign
   async iosUpdateCampaign(req, res) {
     try {
-      const employees = await GlobalModel.getCampaignRecipients();
+      const employees = await GlobalModel.getCampaignRecipients(
+        IOS_LAUNCH_COMPANY_ID,
+      );
 
       runNonBlocking(async () => {
         let queued = 0;
@@ -249,6 +252,7 @@ class GlobalController {
         }
 
         console.info("[IOS_UPDATE_CAMPAIGN_WA] Completed", {
+          company_id: IOS_LAUNCH_COMPANY_ID,
           total: employees.length,
           queued,
           failed,
@@ -259,6 +263,7 @@ class GlobalController {
       return res.json({
         success: true,
         message: "iOS update campaign queued",
+        company_id: IOS_LAUNCH_COMPANY_ID,
         total: employees.length,
       });
     } catch (err) {
