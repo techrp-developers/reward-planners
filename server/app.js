@@ -8,6 +8,10 @@ const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./config/swagger");
 
 require("dotenv").config();
+
+// Initialize Quiz Game DB Tables
+const setupQuizDB = require("./config/setupQuizDB");
+setupQuizDB();
 require("./services/ExpressBees/cron/shipmentCron");
 require("./services/Bbps/retryCron");
 require("./services/Razorpay/retryCron");
