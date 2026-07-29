@@ -37,14 +37,6 @@ router.post(
   (req, res) => authController.register(req, res, "warehouse_manager"),
 );
 
-router.post(
-  "/hr/register",
-  authLimiter,
-  authenticateToken,
-  authorizeRoles("admin"),
-  (req, res) => authController.register(req, res, "hr"),
-);
-
 /* ============================================================
     OTP
    ============================================================ */
@@ -78,10 +70,6 @@ router.post("/warehouse_manager/login", authLimiter, (req, res) =>
 
 router.post("/admin/login", authLimiter, (req, res) =>
   authController.login(req, res, "admin"),
-);
-
-router.post("/hr/login", authLimiter, (req, res) =>
-  authController.login(req, res, "hr"),
 );
 
 /* ============================================================

@@ -249,15 +249,18 @@ class RewardModel {
       reason_code,
     } = data;
 
+    // expiry_date is the caller's rule-based expiry when given (see
+    // reward-service.js, which derives it per-rule) — otherwise falls back to
+    // now + WALLET_EXPIRY_MONTHS (used by flows like flea market redemption
+    // that never pass one).
     const EXPIRY_MONTHS = parseInt(process.env.WALLET_EXPIRY_MONTHS || "3", 10);
-
-    const expiryDate = new Date();
-    expiryDate.setMonth(expiryDate.getMonth() + EXPIRY_MONTHS);
+    const defaultExpiryDate = new Date();
+    defaultExpiryDate.setMonth(defaultExpiryDate.getMonth() + EXPIRY_MONTHS);
 
     await conn.execute(
       `INSERT INTO wallet_transactions
-    (user_id, title, description, transaction_type, coins, balance_after, category, reference_id, expiry_date, reason_code, expiry_date)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    (user_id, title, description, transaction_type, coins, balance_after, category, reference_id, expiry_date, reason_code)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         user_id,
         title,
@@ -267,9 +270,8 @@ class RewardModel {
         balance_after || null,
         category,
         reference_id,
-        expiry_date || null,
+        expiry_date || defaultExpiryDate,
         reason_code || "ORDER_REWARD",
-        expiryDate,
       ],
     );
   }

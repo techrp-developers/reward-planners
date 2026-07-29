@@ -31,6 +31,9 @@ const gamesRoute = require("./app/games/v1/routes/indexRoute");
 //External Routes
 const mpsRoute = require("./mps-connect/common/routes/indexRoute");
 
+// Flea Market Route
+const fleaMarketRoute = require("./flea-market/routes/indexRoute");
+
 const app = express();
 
 // Middleware
@@ -40,10 +43,24 @@ app.use(
   }),
 );
 
+// CLIENT_URL supports a comma-separated list so staging/local/LAN origins
+// (e.g. a tablet hitting the LAN IP of the dev machine) can all be allowed
+// without hardcoding a single origin.
+const allowedOrigins = (process.env.CLIENT_URL || "http://localhost:5173")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 app.use(
   cors({
-    origin: "http://localhost:5173",
-    // origin: process.env.CLIENT_URL || "https://rewardplanners.com",
+    origin(origin, callback) {
+      // Allow non-browser requests (curl/Postman/server-to-server) that send no Origin header.
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS blocked for origin: ${origin}`));
+      }
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -104,6 +121,9 @@ app.use("/v1", gamesRoute);
 // External App Routes
 app.use("/mps", mpsRoute);
 
+// Flea Market Routes
+app.use("/api/flea-market", fleaMarketRoute);
+
 // 404 Handler
 app.use((req, res) => {
   res.status(404).json({
@@ -131,6 +151,8 @@ app.listen(PORT, () => {
   console.log("Reward Planners Backend Started!");
   console.log(`🔗 Server URL: http://localhost:${PORT}`);
   console.log(`Swagger docs at http://localhost:${PORT}/api-docs`);
+  console.log(`Flea Market API ready at http://localhost:${PORT}/api/flea-market`);
+  console.log("CORS allowed origins (parsed):", allowedOrigins);
   console.log("=================================\n");
 
   // ✅ Start worker inside same process (only when enabled)
