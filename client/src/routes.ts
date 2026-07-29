@@ -80,6 +80,19 @@ export const routes = {
   },
   fleaMarket: {
     dashboard: "/flea-market/dashboard",
+    changePassword: "/flea-market/change-password",
+    manageEvent: "/flea-market/manage-event",
+    billing: {
+      page: "/flea-market/billing",
+    },
+    allocations: "/flea-market/manager/allocations",
+    reports: {
+      vendorSales: "/flea-market/reports/vendor-sales",
+      purchaseHistory: "/flea-market/reports/purchase-history",
+    },
+    invoices: {
+      detail: "/flea-market/invoices/:invoiceId",
+    },
   },
   hr: {
     dashboard: "/hr/dashboard",

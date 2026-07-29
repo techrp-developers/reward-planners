@@ -10,10 +10,12 @@ import {
   FiCheckCircle,
   FiTrendingUp,
   FiTrendingDown,
-  FiUserPlus,
+  FiPackage,
+  FiBarChart2,
   FiAlertCircle,
 } from "react-icons/fi";
 import { useAuth } from "../../../common/auth/useAuth";
+import { routes } from "../../../routes";
 
 /* ================= TYPES ================= */
 
@@ -209,11 +211,11 @@ export default function FleaMarketDashboard() {
 
         <div className="flex items-center gap-3">
           <Link
-            to="/flea-market/vendors"
+            to={routes.fleaMarket.allocations}
             className="flex items-center gap-2 px-5 py-2.5 text-white font-semibold rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] hover:from-[#9B3DCF] hover:to-[#FD4F88] shadow-lg shadow-purple-500/30 transition-all duration-300 hover:scale-105"
           >
-            <FiUserPlus className="w-5 h-5" />
-            Register Vendor
+            <FiPackage className="w-5 h-5" />
+            Allocate Stock
           </Link>
         </div>
       </div>
@@ -434,10 +436,10 @@ export default function FleaMarketDashboard() {
           </div>
           <div className="p-4 border-t border-gray-50 bg-gray-50/50 rounded-b-2xl">
             <Link
-              to="/flea-market/stalls"
+              to={routes.fleaMarket.allocations}
               className="block w-full py-2 text-xs font-bold text-center text-purple-600 transition-colors hover:text-purple-800"
             >
-              Go to Stall Management
+              Go to Stock Allocation
             </Link>
           </div>
         </div>
@@ -457,7 +459,7 @@ export default function FleaMarketDashboard() {
               </div>
             </div>
             <Link
-              to="/flea-market/transactions"
+              to={routes.fleaMarket.reports.purchaseHistory}
               className="flex items-center gap-2 text-sm font-semibold text-purple-600 transition-colors hover:text-pink-600"
             >
               View All
@@ -527,42 +529,43 @@ export default function FleaMarketDashboard() {
       {/* ================= QUICK ACTIONS ================= */}
       <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
         <Link
-          to="/flea-market/stalls"
+          to={routes.fleaMarket.manageEvent}
           className="flex items-center gap-4 p-5 transition-all duration-300 bg-white border border-gray-100 shadow-md rounded-2xl hover:shadow-lg hover:border-purple-200 group"
         >
           <div className="p-3 transition-transform rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 group-hover:scale-110">
             <FiGrid className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h3 className="font-semibold text-gray-900">Manage Stalls</h3>
-            <p className="text-sm text-gray-500">Assign or vacate a stall</p>
+            <h3 className="font-semibold text-gray-900">Manage Event</h3>
+            <p className="text-sm text-gray-500">Schedule or update a flea market event</p>
           </div>
         </Link>
 
         <Link
-          to="/flea-market/vendors"
+          to={routes.fleaMarket.allocations}
           className="flex items-center gap-4 p-5 transition-all duration-300 bg-white border border-gray-100 shadow-md rounded-2xl hover:shadow-lg hover:border-emerald-200 group"
         >
           <div className="p-3 transition-transform rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 group-hover:scale-110">
-            <FiUserPlus className="w-6 h-6 text-white" />
+            <FiPackage className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h3 className="font-semibold text-gray-900">Register Vendor</h3>
-            <p className="text-sm text-gray-500">Onboard a new vendor</p>
+            <h3 className="font-semibold text-gray-900">Allocate Stock</h3>
+            <p className="text-sm text-gray-500">Assign vendor stock to an event</p>
           </div>
         </Link>
 
-        <div className="flex items-center gap-4 p-5 text-white shadow-lg bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl">
+        <Link
+          to={routes.fleaMarket.reports.vendorSales}
+          className="flex items-center gap-4 p-5 text-white transition-all duration-300 shadow-lg bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl hover:shadow-xl"
+        >
           <div className="p-3 rounded-xl bg-white/20">
-            <FiAlertCircle className="w-6 h-6" />
+            <FiBarChart2 className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="font-semibold">Vacant Stalls</h3>
-            <p className="text-sm text-purple-100">
-              {vacantStalls.length} stalls available to assign
-            </p>
+            <h3 className="font-semibold">Vendor Sales Report</h3>
+            <p className="text-sm text-purple-100">See vendor-wise selling history</p>
           </div>
-        </div>
+        </Link>
       </div>
     </div>
   );

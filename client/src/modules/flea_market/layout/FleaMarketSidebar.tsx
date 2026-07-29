@@ -1,16 +1,17 @@
 import { Link, useLocation } from "react-router-dom";
 import { useState } from "react";
 import {
+  FiCalendar,
   FiGrid,
-  FiGrid as FiStall,
-  FiUsers,
-  FiTag,
-  FiShoppingBag,
-  FiSettings,
+  FiUserCheck,
   FiLogOut,
+  FiBarChart2,
+  FiPackage,
+  FiClock,
 } from "react-icons/fi";
 import { HiOutlineUserCircle } from "react-icons/hi2";
 import { useAuth } from "../../../common/auth/useAuth";
+import { routes } from "../../../routes";
 
 /* ================= TYPES ================= */
 
@@ -20,19 +21,33 @@ interface NavLink {
   Icon: React.ElementType;
 }
 
+interface NavSection {
+  label?: string;
+  items: NavLink[];
+}
+
 interface FleaMarketSidebarProps {
   closeSidebar?: () => void;
 }
 
 /* ================= NAV ITEMS ================= */
 
-const navItems: NavLink[] = [
-  { label: "Dashboard", to: "/flea-market/dashboard", Icon: FiGrid },
-  { label: "Stalls", to: "/flea-market/stalls", Icon: FiStall },
-  { label: "Vendors", to: "/flea-market/vendors", Icon: FiUsers },
-  { label: "Listings", to: "/flea-market/listings", Icon: FiTag },
-  { label: "Transactions", to: "/flea-market/transactions", Icon: FiShoppingBag },
-  { label: "Settings", to: "/flea-market/settings", Icon: FiSettings },
+const navSections: NavSection[] = [
+  {
+    items: [
+      { label: "Dashboard", to: routes.fleaMarket.dashboard, Icon: FiGrid },
+      { label: "Manage Event", to: routes.fleaMarket.manageEvent, Icon: FiCalendar },
+      { label: "Billing", to: routes.fleaMarket.billing.page, Icon: FiUserCheck },
+      { label: "Allocations", to: routes.fleaMarket.allocations, Icon: FiPackage },
+    ],
+  },
+  {
+    label: "Reports",
+    items: [
+      { label: "Vendor Sales Report", to: routes.fleaMarket.reports.vendorSales, Icon: FiBarChart2 },
+      { label: "Purchase History", to: routes.fleaMarket.reports.purchaseHistory, Icon: FiClock },
+    ],
+  },
 ];
 
 /* ================= COMPONENT ================= */
@@ -63,24 +78,35 @@ export default function FleaMarketSidebar({ closeSidebar }: FleaMarketSidebarPro
 
       {/* Navigation */}
       <div className="flex-1 px-4 space-y-1.5 overflow-y-auto">
-        {navItems.map((item) => {
-          const isItemActive = isActive(item.to);
-          return (
-            <Link
-              key={item.to}
-              to={item.to}
-              onClick={closeSidebar}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${
-                isItemActive
-                  ? "bg-gradient-to-r from-[#852BAF] to-[#FC3F78] text-white shadow-md"
-                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
-              }`}
-            >
-              <item.Icon className="text-lg" />
-              {item.label}
-            </Link>
-          );
-        })}
+        {navSections.map((section, index) => (
+          <div key={section.label ?? index} className={section.label ? "pt-4" : ""}>
+            {section.label && (
+              <p className="px-4 pb-2 text-[10px] font-black tracking-wider text-gray-400 uppercase">
+                {section.label}
+              </p>
+            )}
+            <div className="space-y-1.5">
+              {section.items.map((item) => {
+                const isItemActive = isActive(item.to);
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    onClick={closeSidebar}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${
+                      isItemActive
+                        ? "bg-gradient-to-r from-[#852BAF] to-[#FC3F78] text-white shadow-md"
+                        : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+                    }`}
+                  >
+                    <item.Icon className="text-lg" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Profile */}
@@ -103,7 +129,7 @@ export default function FleaMarketSidebar({ closeSidebar }: FleaMarketSidebarPro
         {isProfileOpen && (
           <div className="mt-2 space-y-1">
             <Link
-              to="/flea-market/change-password"
+              to={routes.fleaMarket.changePassword}
               onClick={closeSidebar}
               className="flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-gray-100"
             >

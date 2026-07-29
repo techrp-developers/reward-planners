@@ -28,6 +28,18 @@ const ManagerDashboard = lazy(() => import("./modules/products/vendorManager/Das
 const HrDashboard = lazy(() => import("./modules/hr/dashboard/HrDashboard.tsx"));
 const WarehouseDashboard = lazy(() => import("./modules/warehouse_manager/dashboard/WarehouseDashboard.tsx"));
 const FleaMarketDashboard = lazy(() => import("./modules/flea_market/dashboard/FleaMarketDashboard.tsx"));
+const FleaMarketBillingPage = lazy(() => import("./modules/flea_market/component/billing/BillingPage.tsx"));
+const FleaMarketSchedulePage = lazy(() => import("./modules/flea_market/component/schedule/SchedulePage.tsx"));
+const FleaMarketAllocationPage = lazy(() => import("./modules/flea_market/component/allocations/AllocationPage.tsx"));
+const FleaMarketVendorSalesReportPage = lazy(
+  () => import("./modules/flea_market/component/reports/VendorSalesReportPage.tsx"),
+);
+const FleaMarketPurchaseHistoryPage = lazy(
+  () => import("./modules/flea_market/component/reports/PurchaseHistoryPage.tsx"),
+);
+const FleaMarketInvoiceDetailPage = lazy(
+  () => import("./modules/flea_market/component/invoices/InvoiceDetailPage.tsx"),
+);
 const EmployeeOnboarding = lazy(() => import("./modules/hr/onboarding/EmployeeOnboarding.tsx"));
 const EmployeeList = lazy(() => import("./modules/hr/employees/EmployeeList.tsx"));
 
@@ -529,6 +541,34 @@ export default function App() {
         <Route
           path={routes.fleaMarket.dashboard}
           element={<FleaMarketDashboard />}
+        />
+        <Route
+          path={routes.fleaMarket.changePassword}
+          element={<ChangePasswordPage />}
+        />
+        <Route
+          path={routes.fleaMarket.manageEvent}
+          element={<FleaMarketSchedulePage />}
+        />
+        <Route
+          path={routes.fleaMarket.billing.page}
+          element={<FleaMarketBillingPage />}
+        />
+        <Route
+          path={routes.fleaMarket.allocations}
+          element={<FleaMarketAllocationPage />}
+        />
+        <Route
+          path={routes.fleaMarket.reports.vendorSales}
+          element={<FleaMarketVendorSalesReportPage />}
+        />
+        <Route
+          path={routes.fleaMarket.reports.purchaseHistory}
+          element={<FleaMarketPurchaseHistoryPage />}
+        />
+        <Route
+          path={routes.fleaMarket.invoices.detail}
+          element={<FleaMarketInvoiceDetailPage />}
         />
       </Route>
 

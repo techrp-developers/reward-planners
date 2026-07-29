@@ -1,11 +1,18 @@
 import { Navigate, Outlet } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../../../common/auth/useAuth";
 import FleaMarketSidebar from "./FleaMarketSidebar";
+import { pingFleaMarketHealth } from "../api/fleaMarketClient";
 
 export default function FleaMarketLayout() {
   const { user, loading } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      void pingFleaMarketHealth();
+    }
+  }, []);
 
   if (loading) {
     return (
