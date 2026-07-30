@@ -48,7 +48,12 @@ export function updateLinePoints(
     .filter((line) => line.product.variantId !== variantId)
     .reduce((sum, line) => sum + line.pointsApplied, 0);
   const budgetForThisLine = Math.max(0, pointsBalance - othersApplied);
-  const safeValue = Number.isFinite(rawValue) ? rawValue : 0;
+  // Infinity is a deliberate signal meaning "redeem the max" — the checkbox
+  // uses it so a pending redemption replayed later (after a customer/wallet
+  // becomes known) always resolves against the real cap, not a value
+  // captured back when the cap was still unknown. Only NaN (e.g. a cleared
+  // number input) needs guarding against.
+  const safeValue = Number.isNaN(rawValue) ? 0 : rawValue;
 
   return lines.map((line) => {
     if (line.product.variantId !== variantId) return line;

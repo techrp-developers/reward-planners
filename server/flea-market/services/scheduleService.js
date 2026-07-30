@@ -1,6 +1,5 @@
 const locationModel = require("../models/locationModel");
 const scheduleModel = require("../models/scheduleModel");
-const allocationModel = require("../models/allocationModel");
 const { createError } = require("../utils/appError");
 
 const VALID_TRANSITIONS = {
@@ -108,13 +107,6 @@ class ScheduleService {
     }
 
     await scheduleModel.update(scheduleId, { status, startTime, endTime, notes });
-
-    // Allocated stock only becomes sellable once the event is actually
-    // underway — ties the allocation lifecycle to the manager explicitly
-    // starting the event, rather than guessing from the first sale.
-    if (status === "in_progress" && current.status !== "in_progress") {
-      await allocationModel.activateForSchedule(scheduleId);
-    }
 
     const rows = await scheduleModel.list(current.scheduled_date, undefined);
     const updated = rows.find((row) => row.schedule_id === scheduleId);

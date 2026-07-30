@@ -61,8 +61,11 @@ export interface CreatedProduct {
   productId: number;
   variantId: number;
   productName: string;
+  brandName: string | null;
+  sku: string | null;
   mrp: number;
   salePrice: number;
+  stock: number;
 }
 
 interface CreateProductResponse {

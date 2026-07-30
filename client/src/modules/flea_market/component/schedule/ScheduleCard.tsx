@@ -1,6 +1,4 @@
-import { Link } from "react-router-dom";
-import { FiBox, FiCalendar, FiClock, FiMapPin, FiPlayCircle, FiTrash2, FiXCircle } from "react-icons/fi";
-import { routes } from "../../../../routes";
+import { FiCalendar, FiClock, FiMapPin, FiPlayCircle, FiTrash2, FiXCircle } from "react-icons/fi";
 import type { FleaMarketSchedule, ScheduleStatus } from "../../api/fleaMarketScheduleApi";
 
 interface ScheduleCardProps {
@@ -71,16 +69,6 @@ function ScheduleCard({ schedule, isToday, busy, onStatusChange, onDelete, onSta
             <FiPlayCircle className="w-3.5 h-3.5" />
             Start Billing
           </button>
-        )}
-
-        {(schedule.status === "scheduled" || schedule.status === "in_progress") && (
-          <Link
-            to={`${routes.fleaMarket.allocations}?schedule_id=${schedule.scheduleId}`}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-50"
-          >
-            <FiBox className="w-3.5 h-3.5" />
-            Allocate Stock
-          </Link>
         )}
 
         {schedule.status === "scheduled" && (

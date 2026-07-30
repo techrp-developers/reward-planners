@@ -18,7 +18,14 @@ class ProductModel {
   // Manager-facing catalog search for the allocation page — unlike search()
   // above (customer billing search, scoped to what's allocated to today's
   // event), this searches the full master catalog so a manager can pick
-  // something to allocate in the first place.
+  // something to allocate in the first place. Also reused by
+  // VendorSalesReportPage's cross-vendor product filter (no vendorId there),
+  // so vendorId stays optional here — the allocation flow's "must pick a
+  // vendor first" rule is enforced by ProductPicker only ever calling this
+  // with one, not by this shared endpoint rejecting its absence.
+  // is_visible lives on product_variants, not eproducts — matches the same
+  // column checkoutService checks at actual sale time, so a manager can't
+  // allocate a variant that would just fail to sell later.
   async searchCatalog(query, vendorId, limit) {
     const like = `%${query}%`;
     const params = [like, like, like];
@@ -37,9 +44,10 @@ class ProductModel {
          p.product_name, p.brand_name, p.vendor_id
        FROM product_variants pv
        JOIN eproducts p ON p.product_id = pv.product_id
-       WHERE p.status = 'approved' AND p.is_deleted = 0
+       WHERE p.status = 'approved' AND p.is_deleted = 0 AND pv.is_visible = 1
          AND (p.product_name LIKE ? OR pv.sku LIKE ? OR p.brand_name LIKE ?)
          ${vendorClause}
+       ORDER BY p.product_name ASC
        LIMIT ?`,
       params,
     );

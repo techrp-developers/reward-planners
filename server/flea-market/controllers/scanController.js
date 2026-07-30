@@ -1,5 +1,5 @@
-const allocationModel = require("../models/allocationModel");
-const { barcodeToAllocationId } = require("../utils/barcode");
+const poolStockModel = require("../models/poolStockModel");
+const { barcodeToPoolId } = require("../utils/barcode");
 
 class ScanController {
   // Resolves a scanned barcode to a cart-addable item shaped exactly like a
@@ -7,39 +7,39 @@ class ScanController {
   // addProduct() path used for typed search, no parallel cart-add logic.
   async resolve(req, res) {
     try {
-      const allocationId = barcodeToAllocationId(req.params.barcodeValue);
-      if (allocationId === null) {
+      const poolId = barcodeToPoolId(req.params.barcodeValue);
+      if (poolId === null) {
         return res.status(404).json({ error: "BARCODE_NOT_FOUND" });
       }
 
-      const allocation = await allocationModel.findByIdForScan(allocationId);
-      if (!allocation) {
+      const pool = await poolStockModel.findByIdForScan(poolId);
+      if (!pool) {
         return res.status(404).json({ error: "BARCODE_NOT_FOUND" });
       }
 
-      if (allocation.status !== "active") {
+      if (pool.status !== "active") {
         return res.status(409).json({
-          error: "ALLOCATION_NOT_ACTIVE",
-          message: "This product is not allocated to today's active event",
+          error: "POOL_NOT_ACTIVE",
+          message: "This product's flea market stock pool is not active",
         });
       }
 
-      if (allocation.available_qty <= 0) {
+      if (pool.available_qty <= 0) {
         return res.status(409).json({ error: "OUT_OF_STOCK" });
       }
 
       return res.json({
         success: true,
         data: {
-          variantId: allocation.variant_id,
-          productId: allocation.product_id,
-          vendorId: allocation.vendor_id,
-          name: allocation.product_name,
-          brand: allocation.brand_name,
-          sku: allocation.sku,
-          mrp: Number(allocation.mrp),
-          salePrice: allocation.allocation_price != null ? Number(allocation.allocation_price) : Number(allocation.sale_price),
-          stock: allocation.available_qty,
+          variantId: pool.variant_id,
+          productId: pool.product_id,
+          vendorId: pool.vendor_id,
+          name: pool.product_name,
+          brand: pool.brand_name,
+          sku: pool.sku,
+          mrp: Number(pool.mrp),
+          salePrice: pool.allocation_price != null ? Number(pool.allocation_price) : Number(pool.sale_price),
+          stock: pool.available_qty,
         },
       });
     } catch (error) {

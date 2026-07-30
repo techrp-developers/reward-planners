@@ -12,6 +12,7 @@ import {
   FiDollarSign,
   FiMapPin,
   FiSmartphone,
+  FiUser,
 } from "react-icons/fi";
 import { routes } from "../../../../routes";
 import { SessionExpiredError, setFleaMarketLocationId, setFleaMarketSessionToken } from "../../api/fleaMarketClient";
@@ -27,7 +28,8 @@ import {
 } from "../../api/fleaMarketCheckoutApi";
 import { maskEmail, maskPhone } from "../../utils/mask";
 import { clampCartLines, getCartTotals, updateLinePoints, type CartLine } from "../../utils/cartMath";
-import CustomerVerify from "./CustomerVerify";
+import PickCustomerModal from "./PickCustomerModal";
+import VerifyIdentityModal from "./VerifyIdentityModal";
 import ProductSearch from "./ProductSearch";
 import Cart from "./Cart";
 import InvoiceView from "./InvoiceView";
@@ -72,6 +74,10 @@ const PAYMENT_MODE_OPTIONS: {
 
 type BillingStage = "billing" | "invoice";
 
+// "pick" = search+select a customer, no OTP. "verify" = OTP for an already-
+// known customer (either just picked, or an existing one needing re-proof).
+type ModalStage = "none" | "pick" | "verify";
+
 /* ================= COMPONENT ================= */
 
 function BillingPage() {
@@ -79,11 +85,28 @@ function BillingPage() {
   const routerLocation = useLocation();
   const billingState = (routerLocation.state as BillingRouteState | null) ?? null;
 
+  // No customer is required to search products or build a cart at all —
+  // product search/reward-eligibility/scan are location-scoped only (see
+  // requireFleaMarketLocation on the backend). A customer only gets attached
+  // when something that needs one is requested: redeeming points or checkout.
   const [customer, setCustomer] = useState<FleaMarketCustomer | null>(null);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [sessionExpiresAt, setSessionExpiresAt] = useState<number | null>(null);
-  const [needsReverify, setNeedsReverify] = useState(false);
   const [sessionWarning, setSessionWarning] = useState(false);
+  // Picked-from-search sessions can build a cart and check out for cash/card
+  // but can't redeem reward points until OTP-proven (see checkoutService's
+  // matching backend guard and VerifyIdentityModal below).
+  const [verified, setVerified] = useState(false);
+
+  const [modalStage, setModalStage] = useState<ModalStage>("none");
+  const [modalReason, setModalReason] = useState<string | undefined>(undefined);
+  const [modalIsReverify, setModalIsReverify] = useState(false);
+  // The redemption change that triggered the popup — replayed once OTP
+  // verification succeeds so the operator doesn't have to re-click the checkbox.
+  const [pendingRedeem, setPendingRedeem] = useState<{ variantId: number; rawValue: number } | null>(null);
+  // Checkout was requested with no customer attached yet — once one is
+  // picked, resume straight into payment instead of requiring a second click.
+  const [pendingCheckout, setPendingCheckout] = useState(false);
 
   const [cartLines, setCartLines] = useState<CartLine[]>([]);
   // Generated once per checkout ATTEMPT and reused across retries so the
@@ -120,15 +143,18 @@ function BillingPage() {
     setSessionWarning(false);
   }, []);
 
-  // Central handler for the interceptor's typed SessionExpiredError, wherever
-  // it's caught (product search, reward-eligibility fetch, checkout) — drops
-  // the UI back into CustomerVerify's reverify mode instead of a dead end.
+  // Only checkout/invoice still require a customer session, so this can only
+  // fire once a customer already exists — pops the OTP modal to re-verify
+  // them instead of a dead end. Cart stays put; only the (now-dead) token is
+  // dropped so no further request goes out with it while the modal is up.
   const handleSessionExpired = useCallback(() => {
-    setNeedsReverify(true);
-    setSessionToken(null);
     setFleaMarketSessionToken(null);
     setAwaitingPayment(false);
     setSessionWarning(false);
+    setVerified(false);
+    setModalReason("Your session expired. Please re-verify to continue billing this customer.");
+    setModalIsReverify(true);
+    setModalStage("verify");
   }, []);
 
   /* ================= SESSION EXPIRY WATCH ================= */
@@ -154,14 +180,85 @@ function BillingPage() {
 
   /* ================= HANDLERS: CUSTOMER ================= */
 
-  const handleVerified = useCallback((verifiedCustomer: FleaMarketCustomer, token: string) => {
-    setCustomer(verifiedCustomer);
-    setSessionToken(token);
-    setFleaMarketSessionToken(token);
-    setSessionExpiresAt(Date.now() + SESSION_TTL_MS);
-    setSessionWarning(false);
-    setNeedsReverify(false);
-    setCheckoutError("");
+  // Fired by PickCustomerModal — picked, not OTP-proven yet. If a redemption
+  // was pending, chain straight into OTP for the customer just picked;
+  // otherwise (manual pick, or checkout pick) just attach and close.
+  const handlePicked = useCallback(
+    (selectedCustomer: FleaMarketCustomer, token: string) => {
+      setCustomer(selectedCustomer);
+      setSessionToken(token);
+      setFleaMarketSessionToken(token);
+      setSessionExpiresAt(Date.now() + SESSION_TTL_MS);
+      setSessionWarning(false);
+      setVerified(false);
+      setCheckoutError("");
+
+      if (pendingRedeem) {
+        setModalReason("Verify the customer's identity to redeem reward points.");
+        setModalIsReverify(false);
+        setModalStage("verify");
+        return;
+      }
+
+      setModalStage("none");
+    },
+    [pendingRedeem],
+  );
+
+  // Fired by VerifyIdentityModal on OTP success — either a redeem request or
+  // a session-expiry reverify, both land here with a freshly OTP-proven session.
+  const handleVerified = useCallback(
+    (verifiedCustomer: FleaMarketCustomer, token: string) => {
+      setCustomer(verifiedCustomer);
+      setSessionToken(token);
+      setFleaMarketSessionToken(token);
+      setSessionExpiresAt(Date.now() + SESSION_TTL_MS);
+      setSessionWarning(false);
+      setVerified(true);
+      setModalStage("none");
+      setCheckoutError("");
+
+      if (pendingRedeem) {
+        setCartLines((prev) =>
+          updateLinePoints(prev, pendingRedeem.variantId, pendingRedeem.rawValue, verifiedCustomer.walletBalance),
+        );
+        setPendingRedeem(null);
+      }
+    },
+    [pendingRedeem],
+  );
+
+  const handleModalCancel = useCallback(() => {
+    setModalStage("none");
+    setPendingRedeem(null);
+    setPendingCheckout(false);
+  }, []);
+
+  // Cart requests verification instead of applying a redemption change
+  // directly: if no customer exists yet, pick one first (then chain into
+  // OTP); if one already exists but isn't OTP-proven, go straight to OTP.
+  const handleRequestVerification = useCallback(
+    (variantId: number, rawValue: number) => {
+      setPendingRedeem({ variantId, rawValue });
+
+      if (!customer) {
+        setModalReason("Select the customer redeeming reward points.");
+        setModalStage("pick");
+        return;
+      }
+
+      setModalReason("Verify the customer's identity to redeem reward points.");
+      setModalIsReverify(false);
+      setModalStage("verify");
+    },
+    [customer],
+  );
+
+  // Manual "+ Select Customer" affordance — lets an operator attach a
+  // regular's account up front if they want to, without forcing it.
+  const handleManualPickCustomer = useCallback(() => {
+    setModalReason(undefined);
+    setModalStage("pick");
   }, []);
 
   const resetJourney = useCallback(() => {
@@ -169,8 +266,13 @@ function BillingPage() {
     setSessionToken(null);
     setFleaMarketSessionToken(null);
     setSessionExpiresAt(null);
-    setNeedsReverify(false);
     setSessionWarning(false);
+    setVerified(false);
+    setModalStage("none");
+    setModalReason(undefined);
+    setModalIsReverify(false);
+    setPendingRedeem(null);
+    setPendingCheckout(false);
     setCartLines([]);
     setStage("billing");
     setAwaitingPayment(false);
@@ -180,21 +282,34 @@ function BillingPage() {
     setIdempotencyKey(generateIdempotencyKey());
   }, []);
 
+  // Cart items aren't customer-specific — only redeemed points are — so
+  // changing customer only needs to clear any redemption already applied,
+  // not the whole cart.
   const handleChangeCustomer = useCallback(() => {
-    if (cartLines.length > 0) {
-      const confirmed = window.confirm("Changing the customer will clear the current cart. Continue?");
+    const hasRedemption = cartLines.some((line) => line.pointsApplied > 0);
+    if (hasRedemption) {
+      const confirmed = window.confirm(
+        "Changing the customer will clear reward points already redeemed on this bill. Continue?",
+      );
       if (!confirmed) return;
+      setCartLines((prev) => prev.map((line) => ({ ...line, pointsApplied: 0 })));
     }
-    resetJourney();
-  }, [cartLines.length, resetJourney]);
+
+    setCustomer(null);
+    setSessionToken(null);
+    setFleaMarketSessionToken(null);
+    setSessionExpiresAt(null);
+    setSessionWarning(false);
+    setVerified(false);
+  }, [cartLines]);
 
   /* ================= HANDLERS: CART ================= */
-  // showCustomerVerify (guarded via early return below) guarantees `customer`
-  // is set whenever these run, so `.walletBalance` is always a real balance.
+  // Product search, quantity changes, and non-redeeming edits never require
+  // a customer — `customer?.walletBalance ?? 0` degrades to "nothing
+  // redeemable" until one is attached, which is exactly correct.
 
   const handleProductSelected = useCallback(async (product: FleaMarketProduct) => {
-    if (!customer) return;
-
+    const walletBalance = customer?.walletBalance ?? 0;
     const existingIndex = cartLines.findIndex((line) => line.product.variantId === product.variantId);
 
     if (existingIndex >= 0) {
@@ -203,7 +318,7 @@ function BillingPage() {
           prev.map((line) =>
             line.product.variantId === product.variantId ? { ...line, quantity: line.quantity + 1 } : line,
           ),
-          customer.walletBalance,
+          walletBalance,
         ),
       );
       return;
@@ -233,7 +348,7 @@ function BillingPage() {
                 }
               : line,
           ),
-          customer.walletBalance,
+          walletBalance,
         ),
       );
     } catch (error) {
@@ -255,12 +370,11 @@ function BillingPage() {
 
   const handleIncrement = useCallback(
     (variantId: number) => {
-      if (!customer) return;
-
+      const walletBalance = customer?.walletBalance ?? 0;
       setCartLines((prev) =>
         clampCartLines(
           prev.map((line) => (line.product.variantId === variantId ? { ...line, quantity: line.quantity + 1 } : line)),
-          customer.walletBalance,
+          walletBalance,
         ),
       );
     },
@@ -269,14 +383,13 @@ function BillingPage() {
 
   const handleDecrement = useCallback(
     (variantId: number) => {
-      if (!customer) return;
-
+      const walletBalance = customer?.walletBalance ?? 0;
       setCartLines((prev) =>
         clampCartLines(
           prev
             .map((line) => (line.product.variantId === variantId ? { ...line, quantity: line.quantity - 1 } : line))
             .filter((line) => line.quantity > 0),
-          customer.walletBalance,
+          walletBalance,
         ),
       );
     },
@@ -289,8 +402,8 @@ function BillingPage() {
 
   const handlePointsChange = useCallback(
     (variantId: number, rawValue: number) => {
-      if (!customer) return;
-      setCartLines((prev) => updateLinePoints(prev, variantId, rawValue, customer.walletBalance));
+      const walletBalance = customer?.walletBalance ?? 0;
+      setCartLines((prev) => updateLinePoints(prev, variantId, rawValue, walletBalance));
     },
     [customer],
   );
@@ -357,7 +470,7 @@ function BillingPage() {
     );
   }, [customer, sessionToken, isSessionValid, handleSessionExpired, cartLines, idempotencyKey, checkoutMutation]);
 
-  const handleCheckoutClick = useCallback(() => {
+  const proceedToPayment = useCallback(() => {
     if (!customer || !sessionToken) return;
 
     if (!isSessionValid()) {
@@ -377,6 +490,29 @@ function BillingPage() {
     performCheckout();
   }, [customer, sessionToken, isSessionValid, handleSessionExpired, cartLines, performCheckout]);
 
+  const handleCheckoutClick = useCallback(() => {
+    if (cartLines.length === 0) return;
+
+    if (!customer) {
+      setModalReason("Select the customer for this invoice.");
+      setModalIsReverify(false);
+      setModalStage("pick");
+      setPendingCheckout(true);
+      return;
+    }
+
+    proceedToPayment();
+  }, [cartLines.length, customer, proceedToPayment]);
+
+  // Resumes checkout automatically once a customer lands from the
+  // checkout-triggered pick popup — no second click needed.
+  useEffect(() => {
+    if (pendingCheckout && customer && sessionToken) {
+      setPendingCheckout(false);
+      proceedToPayment();
+    }
+  }, [pendingCheckout, customer, sessionToken, proceedToPayment]);
+
   const handleStartNewBill = useCallback(() => {
     resetJourney();
   }, [resetJourney]);
@@ -391,9 +527,10 @@ function BillingPage() {
   );
 
   /* ================= HANDLERS: BARCODE SCANNER ================= */
-  // Only meaningful while actively building a cart — not during customer
-  // verification, payment collection, or the post-checkout invoice view.
-  const scanningEnabled = Boolean(customer && sessionToken && !needsReverify && stage === "billing" && !awaitingPayment);
+  // Only meaningful while actively building a cart — not during a customer
+  // popup, payment collection, or the post-checkout invoice view. No
+  // customer is required to scan (see requireFleaMarketLocation).
+  const scanningEnabled = Boolean(modalStage === "none" && stage === "billing" && !awaitingPayment);
 
   useEffect(() => {
     if (!scanningEnabled) return;
@@ -454,25 +591,9 @@ function BillingPage() {
     return null;
   }
 
-  /* ================= RENDER: STAGE 1 (unverified / expired) ================= */
-
-  if (!customer || !sessionToken || needsReverify) {
-    return (
-      <CustomerVerify
-        companyId={billingState.companyId}
-        onVerified={handleVerified}
-        reverifyCustomer={needsReverify ? customer : null}
-        reverifyReason={
-          needsReverify ? "Your session expired. Please re-verify to continue billing this customer." : undefined
-        }
-        onCancelReverify={handleChangeCustomer}
-      />
-    );
-  }
-
   /* ================= RENDER: STAGE 3 (invoice) ================= */
 
-  if (stage === "invoice" && checkoutResult) {
+  if (stage === "invoice" && checkoutResult && customer) {
     return (
       <InvoiceView
         invoices={checkoutResult.invoices}
@@ -485,7 +606,8 @@ function BillingPage() {
     );
   }
 
-  /* ================= RENDER: STAGE 2 (cart / payment) ================= */
+  /* ================= RENDER: STAGE 1/2 (product search / cart / payment) ================= */
+  // No gate on a customer existing — billing opens straight here.
 
   const { finalPayable } = getCartTotals(cartLines);
 
@@ -503,45 +625,66 @@ function BillingPage() {
         </div>
       )}
 
-      {/* Confirmed customer bar */}
-      <div className="flex items-center justify-between gap-4 p-4 bg-white border border-gray-100 shadow-md rounded-2xl">
-        <div className="flex items-center gap-3">
-          <Avatar name={customer.name} size="md" variant="brand" />
-          <div>
-            <p className="flex items-center gap-2 text-sm font-bold text-gray-900">
-              {customer.name}
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 flex items-center gap-1">
-                <FiCheckCircle className="w-3 h-3" />
-                Verified
-              </span>
-            </p>
-            <p className="mt-1 text-xs text-gray-500">
-              {customer.phone ? maskPhone(customer.phone) : "No phone"} ·{" "}
-              {customer.email ? maskEmail(customer.email) : "No email"}
-            </p>
+      {customer ? (
+        <div className="flex items-center justify-between gap-4 p-4 bg-white border border-gray-100 shadow-md rounded-2xl">
+          <div className="flex items-center gap-3">
+            <Avatar name={customer.name} size="md" variant="brand" />
+            <div>
+              <p className="flex items-center gap-2 text-sm font-bold text-gray-900">
+                {customer.name}
+                {verified ? (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 flex items-center gap-1">
+                    <FiCheckCircle className="w-3 h-3" />
+                    Verified
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 flex items-center gap-1">
+                    Unverified — cash/card only
+                  </span>
+                )}
+              </p>
+              <p className="mt-1 text-xs text-gray-500">
+                {customer.phone ? maskPhone(customer.phone) : "No phone"} ·{" "}
+                {customer.email ? maskEmail(customer.email) : "No email"}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <p className="flex items-center justify-end gap-1 text-sm font-bold text-amber-600">
+                <FiAward className="w-4 h-4" />
+                {customer.walletBalance}
+              </p>
+              <p className="text-[11px] text-gray-400">Reward points</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleChangeCustomer}
+              className="flex items-center gap-1 text-sm font-bold text-purple-600 transition-colors hover:text-purple-800"
+            >
+              <FiArrowLeft className="w-4 h-4" />
+              Change Customer
+            </button>
           </div>
         </div>
-
-        <div className="flex items-center gap-4">
-          <div className="text-right">
-            <p className="flex items-center justify-end gap-1 text-sm font-bold text-amber-600">
-              <FiAward className="w-4 h-4" />
-              {customer.walletBalance}
-            </p>
-            <p className="text-[11px] text-gray-400">Reward points</p>
+      ) : (
+        <div className="flex items-center justify-between gap-4 p-4 bg-white border border-dashed border-gray-200 rounded-2xl">
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <FiUser className="w-4 h-4 shrink-0" />
+            No customer attached yet — you'll be asked when you redeem points or check out.
           </div>
           <button
             type="button"
-            onClick={handleChangeCustomer}
-            className="flex items-center gap-1 text-sm font-bold text-purple-600 transition-colors hover:text-purple-800"
+            onClick={handleManualPickCustomer}
+            className="text-sm font-bold text-purple-600 transition-colors hover:text-purple-800 shrink-0"
           >
-            <FiArrowLeft className="w-4 h-4" />
-            Change Customer
+            + Select Customer
           </button>
         </div>
-      </div>
+      )}
 
-      {awaitingPayment ? (
+      {awaitingPayment && customer ? (
         <SectionCard
           icon={FiCreditCard}
           title="Collect Payment"
@@ -592,16 +735,37 @@ function BillingPage() {
 
           <Cart
             customer={customer}
+            verified={verified}
             lines={cartLines}
             onIncrement={handleIncrement}
             onDecrement={handleDecrement}
             onRemove={handleRemove}
             onPointsChange={handlePointsChange}
+            onRequestVerification={handleRequestVerification}
             onCheckout={handleCheckoutClick}
             checkingOut={checkoutMutation.isPending}
             checkoutError={checkoutError}
           />
         </>
+      )}
+
+      <PickCustomerModal
+        open={modalStage === "pick"}
+        companyId={billingState.companyId}
+        reason={modalReason}
+        onSelected={handlePicked}
+        onCancel={handleModalCancel}
+      />
+
+      {customer && (
+        <VerifyIdentityModal
+          open={modalStage === "verify"}
+          customer={customer}
+          isReverify={modalIsReverify}
+          reason={modalReason}
+          onVerified={handleVerified}
+          onCancel={handleModalCancel}
+        />
       )}
     </div>
   );

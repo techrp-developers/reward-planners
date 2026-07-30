@@ -49,7 +49,12 @@ export default function FleaMarketLayout() {
       )}
 
       {/* Main Content */}
-      <div className="flex flex-col flex-1">
+      {/* min-w-0 overrides the flex default of min-width:auto, which lets a
+          flex item refuse to shrink below its content's intrinsic width —
+          without this, wide content two levels down (e.g. an un-wrapped
+          button row) silently forces this whole column wider than the
+          viewport regardless of the overflow-x-hidden below. */}
+      <div className="flex flex-col flex-1 min-w-0">
         <header className="flex items-center justify-between px-4 bg-white shadow-sm h-14 md:hidden">
           <button
             onClick={() => setSidebarOpen(true)}
@@ -60,7 +65,11 @@ export default function FleaMarketLayout() {
           <h1 className="font-semibold text-gray-800">Flea Market Dashboard</h1>
         </header>
 
-        <main className="flex-1 p-4 overflow-y-auto md:p-6 md:ml-0">
+        {/* overflow-x-hidden so a wide table/element on any page scrolls
+            within its own container, never the whole page — the sidebar is
+            positioned relative to the viewport, not the document, so page-
+            level horizontal scroll drags content underneath it. */}
+        <main className="flex-1 min-w-0 p-4 overflow-y-auto overflow-x-hidden md:p-6 md:ml-0">
           <Outlet />
         </main>
       </div>

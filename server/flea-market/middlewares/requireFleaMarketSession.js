@@ -22,6 +22,10 @@ const requireFleaMarketSession = async (req, res, next) => {
       companyId: session.company_id,
       locationId: session.location_id,
       operatorId: session.operator_id,
+      // OTP-proven vs. just picked from search — gates reward point
+      // redemption (see checkoutService), not product search or checkout
+      // itself, which both work for either kind of session.
+      verified: Boolean(session.otp_verified_at),
     };
 
     // 15-minute inactivity window: any authenticated request extends it.

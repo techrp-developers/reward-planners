@@ -9,7 +9,7 @@ const invoiceRoute = require("./invoiceRoute");
 const scheduleRoute = require("./scheduleRoute");
 const companyRoute = require("./companyRoute");
 const vendorRoute = require("./vendorRoute");
-const allocationRoute = require("./allocationRoute");
+const poolStockRoute = require("./poolStockRoute");
 const reportRoute = require("./reportRoute");
 const scanRoute = require("./scanRoute");
 
@@ -26,7 +26,7 @@ router.use("/invoices", invoiceRoute);
 router.use("/schedules", scheduleRoute);
 router.use("/companies", companyRoute);
 router.use("/vendors", vendorRoute);
-router.use("/allocations", allocationRoute);
+router.use("/vendor-stock", poolStockRoute);
 router.use("/reports", reportRoute);
 router.use("/scan", scanRoute);
 

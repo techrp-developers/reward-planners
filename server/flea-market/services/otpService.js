@@ -47,6 +47,36 @@ async function loadContext(userId, locationId) {
 }
 
 class OtpService {
+  // Picking a customer from search — no OTP proof yet. Enough to build a
+  // cart (product search is location-scoped, not identity-scoped) and to
+  // attribute the eventual invoice to a real customer for purchase history,
+  // but not enough to redeem reward points (see requireFleaMarketSession's
+  // `verified` flag and checkoutService's redemption guard).
+  async selectCustomer({ userId, locationId }) {
+    const { customer, location } = await loadContext(userId, locationId);
+
+    const sessionToken = generateSessionToken();
+    await sessionModel.createUnverified({
+      sessionId: sessionToken,
+      userId: customer.user_id,
+      companyId: location.company_id,
+      locationId: location.location_id,
+    });
+
+    const [[wallet]] = await db.execute(`SELECT balance FROM customer_wallet WHERE user_id = ?`, [customer.user_id]);
+
+    return {
+      sessionToken,
+      customer: {
+        userId: customer.user_id,
+        name: customer.name,
+        phone: customer.phone,
+        email: customer.email,
+        walletBalance: wallet?.balance ?? 0,
+      },
+    };
+  }
+
   async sendOtp({ userId, channel, locationId }) {
     const { customer } = await loadContext(userId, locationId);
     const otp = generateNumericOtp();

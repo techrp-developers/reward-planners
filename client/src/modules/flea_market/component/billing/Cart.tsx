@@ -8,12 +8,21 @@ import { EmptyState, ErrorState } from "../ui/EmptyState";
 /* ================= TYPES ================= */
 
 interface CartProps {
-  customer: FleaMarketCustomer;
+  // Null until something requires one (redemption or checkout) — cart
+  // building never requires a customer (see requireFleaMarketLocation).
+  customer: FleaMarketCustomer | null;
+  // Gates redemption, not checkout — an unverified customer can still buy for
+  // cash/card, they just can't touch reward points (see checkoutService's
+  // matching backend guard).
+  verified: boolean;
   lines: CartLine[];
   onIncrement: (variantId: number) => void;
   onDecrement: (variantId: number) => void;
   onRemove: (variantId: number) => void;
   onPointsChange: (variantId: number, rawValue: number) => void;
+  // Fired instead of onPointsChange when an unverified customer tries to
+  // redeem — BillingPage pops the OTP modal and replays the change on success.
+  onRequestVerification: (variantId: number, rawValue: number) => void;
   onCheckout: () => void;
   checkingOut: boolean;
   checkoutError?: string;
@@ -22,10 +31,17 @@ interface CartProps {
 interface CartLineItemProps {
   line: CartLine;
   lineMaxRedeemable: number;
+  // Whether a customer (and therefore a real wallet balance) exists yet —
+  // lineMaxRedeemable is computed against a 0 placeholder balance until then,
+  // which must NOT be read as "nothing redeemable" or the checkbox would be
+  // permanently disabled before any customer is ever picked.
+  hasCustomer: boolean;
+  verified: boolean;
   onIncrement: (variantId: number) => void;
   onDecrement: (variantId: number) => void;
   onRemove: (variantId: number) => void;
   onPointsChange: (variantId: number, rawValue: number) => void;
+  onRequestVerification: (variantId: number, rawValue: number) => void;
 }
 
 /* ================= LINE ITEM ================= */
@@ -34,11 +50,29 @@ interface CartLineItemProps {
 const CartLineItem = memo(function CartLineItem({
   line,
   lineMaxRedeemable,
+  hasCustomer,
+  verified,
   onIncrement,
   onDecrement,
   onRemove,
   onPointsChange,
+  onRequestVerification,
 }: CartLineItemProps) {
+  // Unverified customers can build a cart and pay cash/card, but touching
+  // redemption pops the pick/OTP popup instead of applying the points
+  // directly. rawValue is captured as typed for the number input, but the
+  // checkbox always passes Infinity for "on" — updateLinePoints clamps it to
+  // whatever the real cap turns out to be once a customer/wallet is known,
+  // so replaying a pending redemption after verification is always correct
+  // even though the cap was unknown at the moment the checkbox was clicked.
+  const handlePointsChange = (rawValue: number) => {
+    if (rawValue > 0 && !verified) {
+      onRequestVerification(line.product.variantId, rawValue);
+      return;
+    }
+    onPointsChange(line.product.variantId, rawValue);
+  };
+
   return (
     <div className="p-3 transition-colors border border-gray-100 rounded-xl hover:border-gray-200">
       <div className="flex items-center justify-between gap-3">
@@ -102,26 +136,29 @@ const CartLineItem = memo(function CartLineItem({
             <input
               type="checkbox"
               checked={line.pointsApplied > 0}
-              onChange={(e) => onPointsChange(line.product.variantId, e.target.checked ? lineMaxRedeemable : 0)}
-              disabled={lineMaxRedeemable === 0}
+              onChange={(e) => handlePointsChange(e.target.checked ? Infinity : 0)}
+              disabled={hasCustomer && lineMaxRedeemable === 0}
               title={
-                lineMaxRedeemable === 0
+                hasCustomer && lineMaxRedeemable === 0
                   ? "No reward points available to redeem for this line"
-                  : "Redeem the maximum allowed for this line"
+                  : verified
+                    ? "Redeem the maximum allowed for this line"
+                    : "Select and verify the customer to redeem points"
               }
               className="w-3.5 h-3.5 shrink-0 accent-amber-500 disabled:opacity-40"
             />
             <input
               type="number"
               min={0}
-              max={lineMaxRedeemable}
+              max={hasCustomer ? lineMaxRedeemable : undefined}
               value={line.pointsApplied}
-              disabled={lineMaxRedeemable === 0}
-              onChange={(e) => onPointsChange(line.product.variantId, Number(e.target.value))}
+              disabled={hasCustomer && lineMaxRedeemable === 0}
+              onChange={(e) => handlePointsChange(Number(e.target.value))}
               className="w-24 px-2 py-1 text-xs bg-white border border-amber-200 rounded-lg outline-none disabled:bg-gray-50 disabled:opacity-60"
             />
             <span className="text-[11px] text-gray-400">
-              pts redeemed · up to {lineMaxRedeemable.toLocaleString()} for this line
+              {hasCustomer ? `pts redeemed · up to ${lineMaxRedeemable.toLocaleString()} for this line` : "pts redeemed"}
+              {!verified && " · verification required"}
             </span>
           </>
         ) : (
@@ -136,28 +173,31 @@ const CartLineItem = memo(function CartLineItem({
 
 function Cart({
   customer,
+  verified,
   lines,
   onIncrement,
   onDecrement,
   onRemove,
   onPointsChange,
+  onRequestVerification,
   onCheckout,
   checkingOut,
   checkoutError,
 }: CartProps) {
+  const walletBalance = customer?.walletBalance ?? 0;
   const { totalMrp, totalSellingPrice, totalPointsRedeemed, finalPayable } = useMemo(() => getCartTotals(lines), [lines]);
   const vendorGroups = useMemo(() => getVendorGroups(lines), [lines]);
   const linesWithCaps = useMemo(
     () =>
       lines.map((line) => ({
         line,
-        lineMaxRedeemable: getLineMaxRedeemable(lines, line.product.variantId, customer.walletBalance),
+        lineMaxRedeemable: getLineMaxRedeemable(lines, line.product.variantId, walletBalance),
       })),
-    [lines, customer.walletBalance],
+    [lines, walletBalance],
   );
 
-  const remainingBalance = customer.walletBalance - totalPointsRedeemed;
-  const pointsExceedBalance = totalPointsRedeemed > customer.walletBalance;
+  const remainingBalance = walletBalance - totalPointsRedeemed;
+  const pointsExceedBalance = totalPointsRedeemed > walletBalance;
   const checkoutDisabled = lines.length === 0 || pointsExceedBalance || checkingOut;
 
   return (
@@ -179,10 +219,13 @@ function Cart({
               key={line.product.variantId}
               line={line}
               lineMaxRedeemable={lineMaxRedeemable}
+              hasCustomer={Boolean(customer)}
+              verified={verified}
               onIncrement={onIncrement}
               onDecrement={onDecrement}
               onRemove={onRemove}
               onPointsChange={onPointsChange}
+              onRequestVerification={onRequestVerification}
             />
           ))}
 
@@ -212,8 +255,9 @@ function Cart({
             )}
 
             <p className="text-[11px] text-gray-400">
-              {remainingBalance.toLocaleString()} / {customer.walletBalance.toLocaleString()} pts remaining after this
-              bill.
+              {customer
+                ? `${remainingBalance.toLocaleString()} / ${walletBalance.toLocaleString()} pts remaining after this bill.`
+                : "Select a customer to see reward points."}
             </p>
 
             {pointsExceedBalance && (

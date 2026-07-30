@@ -1,17 +1,17 @@
-const allocationModel = require("../models/allocationModel");
+const poolStockModel = require("../models/poolStockModel");
 const productModel = require("../models/productModel");
 const rewardEligibilityService = require("../services/rewardEligibilityService");
-const { allocationIdToBarcode } = require("../utils/barcode");
+const { poolIdToBarcode } = require("../utils/barcode");
 const { createError } = require("../utils/appError");
 
-async function buildLabelData(allocationRow) {
-  // allocationRow comes from allocationModel's joined queries (vendor_name,
+async function buildLabelData(poolRow) {
+  // poolRow comes from poolStockModel's joined queries (vendor_name,
   // product_name, sku already attached) — but reward calculation needs the
   // fuller variant row (category/subcategory/is_discount_eligible), which
   // those joins don't carry, so fetch it once here.
-  const variant = await productModel.findVariantDetail(allocationRow.variant_id);
+  const variant = await productModel.findVariantDetail(poolRow.variant_id);
   if (!variant) {
-    throw createError(404, `Variant ${allocationRow.variant_id} not found`);
+    throw createError(404, `Variant ${poolRow.variant_id} not found`);
   }
 
   const [redeemInfo, earnRewardPoints] = await Promise.all([
@@ -19,15 +19,14 @@ async function buildLabelData(allocationRow) {
     rewardEligibilityService.computeEarnPoints(variant),
   ]);
 
-  const sellingPrice =
-    allocationRow.allocation_price != null ? Number(allocationRow.allocation_price) : Number(variant.sale_price);
+  const sellingPrice = poolRow.allocation_price != null ? Number(poolRow.allocation_price) : Number(variant.sale_price);
 
   return {
-    allocationId: allocationRow.allocation_id,
-    barcodeValue: allocationIdToBarcode(allocationRow.allocation_id),
-    vendorName: allocationRow.vendor_name,
-    productName: allocationRow.product_name,
-    sku: allocationRow.sku,
+    poolId: poolRow.pool_id,
+    barcodeValue: poolIdToBarcode(poolRow.pool_id),
+    vendorName: poolRow.vendor_name,
+    productName: poolRow.product_name,
+    sku: poolRow.sku,
     mrp: Number(variant.mrp),
     sellingPrice,
     earnRewardPoints,
@@ -36,17 +35,20 @@ async function buildLabelData(allocationRow) {
 }
 
 class LabelDataService {
-  async getLabelData(allocationId) {
-    const allocation = await allocationModel.findByIdJoined(allocationId);
-    if (!allocation) {
-      throw createError(404, "Allocation not found");
+  async getLabelData(poolId) {
+    const pool = await poolStockModel.findByIdJoined(poolId);
+    if (!pool) {
+      throw createError(404, "Pool not found");
     }
-    return buildLabelData(allocation);
+    return buildLabelData(pool);
   }
 
-  async getLabelDataForSchedule(scheduleId) {
-    const allocations = await allocationModel.findByScheduleId(scheduleId);
-    return Promise.all(allocations.map(buildLabelData));
+  // Bulk print target — since only one event ever runs at a time and pooled
+  // stock isn't schedule-scoped, "everything on-site right now" is simply
+  // every currently-active pool, not something tied to one schedule_id.
+  async getAllActiveLabelData() {
+    const pools = await poolStockModel.findAllActive();
+    return Promise.all(pools.map(buildLabelData));
   }
 }
 

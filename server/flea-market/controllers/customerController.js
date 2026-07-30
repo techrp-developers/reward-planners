@@ -57,6 +57,20 @@ class CustomerController {
     }
   }
 
+  // Picks a customer from search without requiring OTP — enough to build a cart,
+  // not enough to redeem reward points (see otpService.selectCustomer).
+  async selectCustomer(req, res) {
+    try {
+      const locationId = Number(req.header("X-Location-Id"));
+      const { userId } = req.body;
+
+      const result = await otpService.selectCustomer({ userId, locationId });
+      return res.json({ success: true, data: result });
+    } catch (error) {
+      return sendServiceError(res, error, "Failed to select customer");
+    }
+  }
+
   async verifyOtp(req, res) {
     try {
       const locationId = Number(req.header("X-Location-Id"));

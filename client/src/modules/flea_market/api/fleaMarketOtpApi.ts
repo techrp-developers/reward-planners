@@ -36,6 +36,15 @@ interface VerifyOtpApiResponse {
   data: OtpVerifyResult;
 }
 
+// Same shape as verify-otp's result — a session token either way, just one
+// with otp_verified_at set and one without (see SelectCustomerResult).
+export type SelectCustomerResult = OtpVerifyResult;
+
+interface SelectCustomerApiResponse {
+  success: true;
+  data: SelectCustomerResult;
+}
+
 // Body shape of a non-2xx response from any of the OTP endpoints (400/423/429).
 export interface FleaMarketOtpErrorBody {
   success: false;
@@ -53,6 +62,14 @@ export function getOtpErrorBody(error: unknown): FleaMarketOtpErrorBody | null {
 }
 
 /* ================= CALLS ================= */
+
+// Picks a customer from search without requiring OTP — enough to build a cart
+// and attribute the eventual invoice, not enough to redeem reward points
+// (checkoutService rejects redemption unless the session came from verifyOtp).
+export async function selectCustomer(userId: number): Promise<SelectCustomerResult> {
+  const { data } = await fleaMarketClient.post<SelectCustomerApiResponse>("/customer/select", { userId });
+  return data.data;
+}
 
 export async function sendOtp(userId: number, channel: OtpChannel): Promise<OtpSendResult> {
   const { data } = await fleaMarketClient.post<SendOtpApiResponse>("/customer/send-otp", {

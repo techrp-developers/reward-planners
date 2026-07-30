@@ -11,6 +11,22 @@ class SessionModel {
     );
   }
 
+  // A customer picked from search but not yet OTP-proven — enough to build a
+  // cart and scope product search to the location, not enough to redeem
+  // reward points or touch the wallet (see requireFleaMarketSession's
+  // `verified` flag and checkoutService's redemption guard). Verifying later
+  // creates a brand new session via create() above rather than upgrading
+  // this row in place — cart state lives client-side, so swapping the token
+  // mid-build is harmless and keeps the two code paths independent.
+  async createUnverified({ sessionId, userId, companyId, locationId, operatorId }) {
+    await db.execute(
+      `INSERT INTO flea_market_sessions
+        (session_id, user_id, company_id, location_id, operator_id, otp_verified_at, expires_at, status)
+       VALUES (?, ?, ?, ?, ?, NULL, DATE_ADD(NOW(), INTERVAL ? MINUTE), 'active')`,
+      [sessionId, userId, companyId, locationId, operatorId || null, SESSION_TTL_MINUTES],
+    );
+  }
+
   // Accepts 'completed' sessions too (not just 'active') — checkout marks a
   // session completed, but the customer still needs it to fetch the
   // resulting invoice(s) via GET /invoices/:id right after. Only a truly

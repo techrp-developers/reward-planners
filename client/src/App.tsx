@@ -30,7 +30,7 @@ const WarehouseDashboard = lazy(() => import("./modules/warehouse_manager/dashbo
 const FleaMarketDashboard = lazy(() => import("./modules/flea_market/dashboard/FleaMarketDashboard.tsx"));
 const FleaMarketBillingPage = lazy(() => import("./modules/flea_market/component/billing/BillingPage.tsx"));
 const FleaMarketSchedulePage = lazy(() => import("./modules/flea_market/component/schedule/SchedulePage.tsx"));
-const FleaMarketAllocationPage = lazy(() => import("./modules/flea_market/component/allocations/AllocationPage.tsx"));
+const FleaMarketStockPage = lazy(() => import("./modules/flea_market/component/allocations/StockPage.tsx"));
 const FleaMarketVendorSalesReportPage = lazy(
   () => import("./modules/flea_market/component/reports/VendorSalesReportPage.tsx"),
 );
@@ -72,6 +72,7 @@ const NotFoundPage = lazy(() => import("./common/auth/NotFound.tsx"));
 // Vendor Orders
 const OrderSummary = lazy(() => import("./modules/products/vendor/OrderSummary.tsx"));
 const OrderDetail = lazy(() => import("./modules/products/vendor/OrderDetail.tsx"));
+const VendorFleaMarketPurchasesPage = lazy(() => import("./modules/products/vendor/VendorFleaMarketPurchasesPage.tsx"));
 
 // Manager Order
 const OrderList = lazy(() => import("./modules/products/vendorManager/order/OrderList.tsx"));
@@ -258,6 +259,8 @@ export default function App() {
         <Route path={routes.vendor.orders.summary} element={<OrderSummary />} />
 
         <Route path={routes.vendor.orders.details} element={<OrderDetail />} />
+
+        <Route path={routes.vendor.fleaMarketPurchases} element={<VendorFleaMarketPurchasesPage />} />
       </Route>
 
       {/* ========== MANAGER ========== */}
@@ -555,8 +558,8 @@ export default function App() {
           element={<FleaMarketBillingPage />}
         />
         <Route
-          path={routes.fleaMarket.allocations}
-          element={<FleaMarketAllocationPage />}
+          path={routes.fleaMarket.stock}
+          element={<FleaMarketStockPage />}
         />
         <Route
           path={routes.fleaMarket.reports.vendorSales}

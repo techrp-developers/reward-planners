@@ -63,37 +63,6 @@ function normalizePurchaseHistoryFilters(query) {
   };
 }
 
-function buildAllocationWhere(filters) {
-  const conditions = ["fs.company_id = ?"];
-  const params = [filters.companyId];
-
-  if (filters.scheduleId) {
-    conditions.push("fs.schedule_id = ?");
-    params.push(filters.scheduleId);
-  } else {
-    if (filters.fromDate) {
-      conditions.push("fs.scheduled_date >= ?");
-      params.push(filters.fromDate);
-    }
-    if (filters.toDate) {
-      conditions.push("fs.scheduled_date <= ?");
-      params.push(filters.toDate);
-    }
-  }
-
-  if (filters.vendorId) {
-    conditions.push("fsa.vendor_id = ?");
-    params.push(filters.vendorId);
-  }
-
-  if (filters.productId) {
-    conditions.push("fsa.product_id = ?");
-    params.push(filters.productId);
-  }
-
-  return { where: conditions.join(" AND "), params };
-}
-
 function buildInvoiceWhere(filters) {
   const conditions = ["i.source = 'flea_market'", "fs.company_id = ?"];
   const params = [filters.companyId];
@@ -256,39 +225,149 @@ class ReportService {
     return this.getVendorPointsRedeemed(normalizeFilters(rawQuery));
   }
 
+  // Pooled stock isn't per-event anymore, so "allocated/sold/damaged" per
+  // event can no longer come from one allocation row — this reassembles the
+  // same report shape from three sources instead: sold+revenue from
+  // invoice_items/invoices (the actual sale record, already event-scoped via
+  // invoices.schedule_id), damaged/topped-up from flea_market_stock_logs
+  // (action-tagged, event-scoped via schedule_id when recorded live — see
+  // poolStockService.resolveLogScheduleId). "Allocated" now means "topped up
+  // during this event/range," the closest honest equivalent — the frontend
+  // column is labelled "Topped Up" accordingly. returnedQty is always 0:
+  // returns are a whole-program action, never tied to one event, so there's
+  // nothing meaningful to attribute here.
   async getVendorSales(filters) {
-    const { where, params } = buildAllocationWhere(filters);
-    const [rows] = await db.execute(
+    const scheduleConditions = ["fs.company_id = ?"];
+    const scheduleParams = [filters.companyId];
+    if (filters.scheduleId) {
+      scheduleConditions.push("fs.schedule_id = ?");
+      scheduleParams.push(filters.scheduleId);
+    } else {
+      if (filters.fromDate) {
+        scheduleConditions.push("fs.scheduled_date >= ?");
+        scheduleParams.push(filters.fromDate);
+      }
+      if (filters.toDate) {
+        scheduleConditions.push("fs.scheduled_date <= ?");
+        scheduleParams.push(filters.toDate);
+      }
+    }
+
+    const soldConditions = ["i.source = 'flea_market'", ...scheduleConditions];
+    const soldParams = [...scheduleParams];
+    if (filters.vendorId) {
+      soldConditions.push("i.vendor_id = ?");
+      soldParams.push(filters.vendorId);
+    }
+    if (filters.productId) {
+      soldConditions.push("ii.product_id = ?");
+      soldParams.push(filters.productId);
+    }
+
+    const [soldRows] = await db.execute(
       `SELECT
-         v.vendor_id,
-         v.company_name AS vendor_name,
-         ep.product_id,
-         ep.product_name,
-         ep.brand_name,
-         pv.variant_id,
-         pv.sku,
-         fs.schedule_id,
-         fs.scheduled_date,
-         c.company_name AS client_company_name,
-         fsa.allocated_qty,
-         fsa.sold_qty,
-         fsa.damaged_qty,
-         fsa.returned_qty,
-         fsa.allocation_price,
-         pv.sale_price AS catalog_sale_price,
-         COALESCE(fsa.allocation_price, pv.sale_price) AS effective_price,
-         (fsa.sold_qty * COALESCE(fsa.allocation_price, pv.sale_price)) AS gross_revenue,
-         ROUND((fsa.sold_qty / NULLIF(fsa.allocated_qty, 0)) * 100, 1) AS sell_through_pct
-       FROM flea_market_stock_allocations fsa
-       JOIN vendors v ON v.vendor_id = fsa.vendor_id
-       JOIN eproducts ep ON ep.product_id = fsa.product_id
-       JOIN product_variants pv ON pv.variant_id = fsa.variant_id
-       JOIN flea_market_schedules fs ON fs.schedule_id = fsa.schedule_id
+         i.vendor_id, v.company_name AS vendor_name,
+         ii.product_id, COALESCE(ep.product_name, ii.product_name) AS product_name, ep.brand_name,
+         ii.variant_id, ii.sku,
+         fs.schedule_id, fs.scheduled_date, c.company_name AS client_company_name,
+         SUM(ii.quantity) AS sold_qty,
+         SUM(ii.line_total) AS gross_revenue
+       FROM invoice_items ii
+       JOIN invoices i ON i.invoice_id = ii.invoice_id
+       JOIN vendors v ON v.vendor_id = i.vendor_id
+       LEFT JOIN eproducts ep ON ep.product_id = ii.product_id
+       JOIN flea_market_schedules fs ON fs.schedule_id = i.schedule_id
        JOIN companies c ON c.company_id = fs.company_id
-       WHERE ${where}
-       ORDER BY gross_revenue DESC`,
-      params,
+       WHERE ${soldConditions.join(" AND ")}
+       GROUP BY i.vendor_id, ii.product_id, ii.variant_id, fs.schedule_id`,
+      soldParams,
     );
+
+    async function getLogQuantities(action) {
+      const conditions = [`l.action = '${action}'`, ...scheduleConditions];
+      const params = [...scheduleParams];
+      if (filters.vendorId) {
+        conditions.push("fvs.vendor_id = ?");
+        params.push(filters.vendorId);
+      }
+      if (filters.productId) {
+        conditions.push("fvs.product_id = ?");
+        params.push(filters.productId);
+      }
+
+      const [rows] = await db.execute(
+        `SELECT
+           fvs.vendor_id, v.company_name AS vendor_name,
+           fvs.product_id, ep.product_name, ep.brand_name,
+           fvs.variant_id, pv.sku,
+           fs.schedule_id, fs.scheduled_date, c.company_name AS client_company_name,
+           SUM(l.quantity) AS quantity
+         FROM flea_market_stock_logs l
+         JOIN flea_market_vendor_stock fvs ON fvs.pool_id = l.pool_id
+         JOIN vendors v ON v.vendor_id = fvs.vendor_id
+         JOIN eproducts ep ON ep.product_id = fvs.product_id
+         JOIN product_variants pv ON pv.variant_id = fvs.variant_id
+         JOIN flea_market_schedules fs ON fs.schedule_id = l.schedule_id
+         JOIN companies c ON c.company_id = fs.company_id
+         WHERE ${conditions.join(" AND ")}
+         GROUP BY fvs.vendor_id, fvs.product_id, fvs.variant_id, fs.schedule_id`,
+        params,
+      );
+      return rows;
+    }
+
+    const [damagedRows, toppedUpRows] = await Promise.all([getLogQuantities("damage"), getLogQuantities("allocated")]);
+
+    // Merge all three sources by (vendor, variant, schedule) — any one
+    // source alone is enough to populate display metadata for a merged row.
+    const merged = new Map();
+    function keyFor(row) {
+      return `${row.vendor_id}:${row.variant_id}:${row.schedule_id}`;
+    }
+    function ensureRow(row) {
+      const key = keyFor(row);
+      if (!merged.has(key)) {
+        merged.set(key, {
+          vendor_id: row.vendor_id,
+          vendor_name: row.vendor_name,
+          product_id: row.product_id,
+          product_name: row.product_name,
+          brand_name: row.brand_name,
+          variant_id: row.variant_id,
+          sku: row.sku,
+          schedule_id: row.schedule_id,
+          scheduled_date: row.scheduled_date,
+          client_company_name: row.client_company_name,
+          allocated_qty: 0,
+          sold_qty: 0,
+          damaged_qty: 0,
+          returned_qty: 0,
+          gross_revenue: 0,
+        });
+      }
+      return merged.get(key);
+    }
+
+    for (const row of soldRows) {
+      const entry = ensureRow(row);
+      entry.sold_qty = numberValue(row.sold_qty);
+      entry.gross_revenue = numberValue(row.gross_revenue);
+    }
+    for (const row of damagedRows) {
+      ensureRow(row).damaged_qty = numberValue(row.quantity);
+    }
+    for (const row of toppedUpRows) {
+      ensureRow(row).allocated_qty = numberValue(row.quantity);
+    }
+
+    const rows = Array.from(merged.values()).map((row) => ({
+      ...row,
+      allocation_price: null,
+      catalog_sale_price: row.sold_qty > 0 ? row.gross_revenue / row.sold_qty : 0,
+      effective_price: row.sold_qty > 0 ? row.gross_revenue / row.sold_qty : 0,
+      sell_through_pct: row.allocated_qty > 0 ? Math.round((row.sold_qty / row.allocated_qty) * 1000) / 10 : 0,
+    }));
+    rows.sort((a, b) => b.gross_revenue - a.gross_revenue);
 
     const mappedRows = rows.map(mapSalesRow);
     const vendorIds = new Set(mappedRows.map((row) => row.vendorId));

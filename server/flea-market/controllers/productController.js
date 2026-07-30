@@ -1,8 +1,7 @@
 const productModel = require("../models/productModel");
 const rewardEligibilityService = require("../services/rewardEligibilityService");
 const productQuickCreateService = require("../services/productQuickCreateService");
-const allocationModel = require("../models/allocationModel");
-const scheduleModel = require("../models/scheduleModel");
+const poolStockModel = require("../models/poolStockModel");
 
 function sendServiceError(res, error, fallbackMessage) {
   const statusCode = error.statusCode || 500;
@@ -65,8 +64,11 @@ class ProductController {
           productId: result.productId,
           variantId: result.variantId,
           productName: result.productName,
+          brandName: result.brandName,
+          sku: result.sku,
           mrp: result.mrp,
           salePrice: result.salePrice,
+          stock: result.stock,
         },
       });
     } catch (error) {
@@ -74,21 +76,15 @@ class ProductController {
     }
   }
 
-  // Customer billing search — deliberately searches flea_market_stock_allocations
-  // (what was physically allocated to TODAY's event at this location), not the
-  // raw catalog. That's the whole point of the allocation layer: an operator
-  // can only sell what's actually on-site for this event.
+  // Customer billing search — deliberately searches flea_market_vendor_stock
+  // (what a vendor has physically brought to the flea market), not the raw
+  // catalog. Only one event ever runs at a time and pooled stock isn't
+  // schedule-scoped, so this no longer gates on "today's event" at all — an
+  // operator can search and sell whenever a pool has stock, live event or not.
   async search(req, res) {
     try {
       const query = String(req.query.q || "").trim();
-      const { locationId } = req.fleaMarketSession;
-
-      const schedule = await scheduleModel.findGateEntryForLocationToday(locationId);
-      if (!schedule) {
-        return res.json({ success: true, data: [] });
-      }
-
-      const rows = await allocationModel.findActiveByScheduleId(schedule.schedule_id, query, SEARCH_LIMIT);
+      const rows = await poolStockModel.findActivePools(query, SEARCH_LIMIT);
 
       return res.json({
         success: true,

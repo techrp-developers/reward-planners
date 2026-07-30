@@ -1,10 +1,12 @@
 const express = require("express");
 const router = express.Router();
 const productController = require("../controllers/productController");
-const requireFleaMarketSession = require("../middlewares/requireFleaMarketSession");
+const requireFleaMarketLocation = require("../middlewares/requireFleaMarketLocation");
 
-router.get("/search", requireFleaMarketSession, productController.search);
-router.get("/:variantId/reward-eligibility", requireFleaMarketSession, productController.rewardEligibility);
+// Location-scoped, not customer-scoped — an operator can search and price a
+// cart before any customer is picked (see requireFleaMarketLocation).
+router.get("/search", requireFleaMarketLocation, productController.search);
+router.get("/:variantId/reward-eligibility", requireFleaMarketLocation, productController.rewardEligibility);
 
 // Manager-facing (allocation page) — master-catalog search/create, not scoped
 // to a customer session. No auth middleware yet, matching schedule/location/

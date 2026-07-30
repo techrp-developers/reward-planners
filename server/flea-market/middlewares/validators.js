@@ -38,6 +38,12 @@ const validateVerifyOtp = [
   validate,
 ];
 
+const validateSelectCustomer = [
+  locationHeaderCheck,
+  body("userId").isInt({ min: 1 }).withMessage("Valid userId required"),
+  validate,
+];
+
 const validateReverify = [
   locationHeaderCheck,
   body("userId").isInt({ min: 1 }).withMessage("Valid userId required"),
@@ -112,31 +118,50 @@ const validateQuickCreateProduct = [
   validate,
 ];
 
-const validateAllocate = [
-  body("scheduleId").isInt({ min: 1 }).withMessage("Valid scheduleId required"),
+// scheduleId is optional here (unlike the old per-event allocate) — a
+// top-up can happen between events at the warehouse level, not just live
+// during one. See poolStockService.resolveLogScheduleId for how it's used.
+const validateTopUp = [
   body("variantId").isInt({ min: 1 }).withMessage("Valid variantId required"),
   body("vendorId").optional({ values: "falsy" }).isInt({ min: 1 }),
   body("productId").optional({ values: "falsy" }).isInt({ min: 1 }),
   body("allocatedQty").isInt({ min: 1 }).withMessage("allocatedQty must be a positive integer"),
   body("allocationPrice").optional({ values: "falsy" }).isFloat({ min: 0 }),
+  body("scheduleId").optional({ values: "falsy" }).isInt({ min: 1 }),
   validate,
 ];
 
 const validateDamageOrAdjust = [
   body("quantity").isInt().withMessage("quantity must be an integer"),
   body("remarks").isString().trim().isLength({ min: 1, max: 255 }).withMessage("remarks are required"),
+  body("scheduleId").optional({ values: "falsy" }).isInt({ min: 1 }),
+  validate,
+];
+
+const validateReturn = [
+  body("returnQty").isInt({ min: 1 }).withMessage("returnQty must be a positive integer"),
+  body("remarks").isString().trim().isLength({ min: 1, max: 255 }).withMessage("remarks are required"),
+  body("closePool").optional().isBoolean(),
+  validate,
+];
+
+const validateUpdatePrice = [
+  body("allocationPrice").optional({ values: "falsy" }).isFloat({ min: 0 }).withMessage("allocationPrice must be a non-negative number"),
   validate,
 ];
 
 module.exports = {
   validateSendOtp,
   validateVerifyOtp,
+  validateSelectCustomer,
   validateReverify,
   validateCheckout,
   validateCreateSchedule,
   validateUpdateSchedule,
   validateQuickCreateVendor,
   validateQuickCreateProduct,
-  validateAllocate,
+  validateTopUp,
   validateDamageOrAdjust,
+  validateReturn,
+  validateUpdatePrice,
 };

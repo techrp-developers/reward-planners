@@ -80,7 +80,7 @@ function downloadCsv(vendors: VendorSalesVendor[]) {
     "Vendor",
     "Product",
     "SKU",
-    "Allocated",
+    "Topped Up",
     "Sold",
     "Damaged",
     "Returned",
@@ -210,7 +210,7 @@ export default function VendorSalesTable({ vendors }: VendorSalesTableProps) {
             <button
               type="button"
               onClick={() => setSearchText("")}
-              className="absolute -translate-y-1/2 right-2 top-1/2 text-gray-400 hover:text-gray-600"
+              className="absolute text-gray-400 -translate-y-1/2 right-2 top-1/2 hover:text-gray-600"
             >
               <FiX className="w-4 h-4" />
             </button>
@@ -257,7 +257,7 @@ export default function VendorSalesTable({ vendors }: VendorSalesTableProps) {
                   <SortHeader label="Vendor" column="vendorName" sortKey={sortKey} sortDirection={sortDirection} onSort={handleSort} />
                   <SortHeader label="Product" column="productName" sortKey={sortKey} sortDirection={sortDirection} onSort={handleSort} />
                   <SortHeader label="SKU" column="sku" sortKey={sortKey} sortDirection={sortDirection} onSort={handleSort} />
-                  <SortHeader label="Allocated" column="allocatedQty" sortKey={sortKey} sortDirection={sortDirection} onSort={handleSort} />
+                  <SortHeader label="Topped Up" column="allocatedQty" sortKey={sortKey} sortDirection={sortDirection} onSort={handleSort} />
                   <SortHeader label="Sold" column="soldQty" sortKey={sortKey} sortDirection={sortDirection} onSort={handleSort} />
                   <SortHeader label="Damaged" column="damagedQty" sortKey={sortKey} sortDirection={sortDirection} onSort={handleSort} />
                   <SortHeader label="Returned" column="returnedQty" sortKey={sortKey} sortDirection={sortDirection} onSort={handleSort} />
@@ -279,7 +279,7 @@ export default function VendorSalesTable({ vendors }: VendorSalesTableProps) {
                           <button
                             type="button"
                             onClick={() => toggleVendor(vendor.vendorId)}
-                            className="flex items-center w-full gap-2 min-w-0"
+                            className="flex items-center w-full min-w-0 gap-2"
                           >
                             {collapsed ? (
                               <FiChevronRight className="w-4 h-4 shrink-0" />

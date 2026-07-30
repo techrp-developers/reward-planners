@@ -6,10 +6,12 @@ export type LabelPrintFormat = "thermal" | "a4sheet";
 // the rest of the manager-facing flea market routes.
 const BASE = "/api/flea-market";
 
-export function getLabelPrintUrl(allocationId: number, format: LabelPrintFormat): string {
-  return `${BASE}/allocations/${allocationId}/label/print?format=${format}`;
+export function getLabelPrintUrl(poolId: number, format: LabelPrintFormat): string {
+  return `${BASE}/vendor-stock/${poolId}/label/print?format=${format}`;
 }
 
-export function getScheduleLabelsPrintUrl(scheduleId: number, format: LabelPrintFormat): string {
-  return `${BASE}/schedules/${scheduleId}/labels/print?format=${format}`;
+// Bulk print target — every currently-active pool, not scoped to one event
+// (pools aren't schedule-scoped anymore).
+export function getAllLabelsPrintUrl(format: LabelPrintFormat): string {
+  return `${BASE}/vendor-stock/labels/print?format=${format}`;
 }

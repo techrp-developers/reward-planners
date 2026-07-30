@@ -19,6 +19,7 @@ export const routes = {
       details: "/vendor/orders/details/:orderId",
     },
     productManagerList: "/vendor/product-managers",
+    fleaMarketPurchases: "/vendor/flea-market/purchases",
   },
    manager: {
     dashboard: "/manager/dashboard",
@@ -85,7 +86,7 @@ export const routes = {
     billing: {
       page: "/flea-market/billing",
     },
-    allocations: "/flea-market/manager/allocations",
+    stock: "/flea-market/manager/stock",
     reports: {
       vendorSales: "/flea-market/reports/vendor-sales",
       purchaseHistory: "/flea-market/reports/purchase-history",

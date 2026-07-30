@@ -14,6 +14,7 @@ import {
   FiShield,
   FiCheckCircle,
   FiClock,
+  FiBox,
 } from "react-icons/fi";
 import { api } from "../../../common/api/api";
 import { useAuth } from "../../../common/auth/useAuth";
@@ -87,6 +88,11 @@ export default function VendorNavbar() {
       label: "Orders",
       to: "/vendor/orders/summary",
       Icon: FiShoppingCart,
+    },
+    isApproved && {
+      label: "Flea Market Purchases",
+      to: "/vendor/flea-market/purchases",
+      Icon: FiBox,
     },
   ].filter(Boolean) as NavItem[];
 

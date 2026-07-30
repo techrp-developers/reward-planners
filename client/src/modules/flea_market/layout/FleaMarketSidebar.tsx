@@ -6,8 +6,8 @@ import {
   FiUserCheck,
   FiLogOut,
   FiBarChart2,
-  FiPackage,
   FiClock,
+  FiBox,
 } from "react-icons/fi";
 import { HiOutlineUserCircle } from "react-icons/hi2";
 import { useAuth } from "../../../common/auth/useAuth";
@@ -38,7 +38,7 @@ const navSections: NavSection[] = [
       { label: "Dashboard", to: routes.fleaMarket.dashboard, Icon: FiGrid },
       { label: "Manage Event", to: routes.fleaMarket.manageEvent, Icon: FiCalendar },
       { label: "Billing", to: routes.fleaMarket.billing.page, Icon: FiUserCheck },
-      { label: "Allocations", to: routes.fleaMarket.allocations, Icon: FiPackage },
+      { label: "Add Stock", to: routes.fleaMarket.stock, Icon: FiBox },
     ],
   },
   {
@@ -60,7 +60,13 @@ export default function FleaMarketSidebar({ closeSidebar }: FleaMarketSidebarPro
   const isActive = (path: string) => pathname === path;
 
   return (
-    <nav className="fixed top-0 left-0 flex flex-col w-64 h-full bg-white border-r border-gray-100 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+    // No fixed/static positioning here — the wrapper in FleaMarketLayout.tsx
+    // already handles that across breakpoints (fixed overlay on mobile,
+    // static flex item on desktop). This nav being independently fixed too
+    // caused it to stay pinned to the viewport even when the page scrolled
+    // horizontally (e.g. from a wide table), visually overlapping content
+    // that had shifted left underneath it.
+    <nav className="flex flex-col w-64 h-full bg-white border-r border-gray-100 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
       {/* Branding */}
       <div className="px-8 py-10">
         <div className="flex items-center gap-3">

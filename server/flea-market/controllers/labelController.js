@@ -40,26 +40,23 @@ async function sendLabelsPdf(res, labels, format, filename) {
 class LabelController {
   async getSingle(req, res) {
     try {
-      const allocationId = Number(req.params.allocationId);
-      if (!Number.isInteger(allocationId) || allocationId <= 0) {
-        return res.status(400).json({ success: false, message: "allocationId must be a positive integer" });
+      const poolId = Number(req.params.poolId);
+      if (!Number.isInteger(poolId) || poolId <= 0) {
+        return res.status(400).json({ success: false, message: "poolId must be a positive integer" });
       }
 
-      const data = await labelDataService.getLabelData(allocationId);
+      const data = await labelDataService.getLabelData(poolId);
       return res.json({ success: true, data });
     } catch (error) {
       return sendServiceError(res, error, "Failed to fetch label data");
     }
   }
 
-  async getForSchedule(req, res) {
+  // Bulk target — every currently-active pool, not scoped to any one event
+  // (pools aren't schedule-scoped anymore).
+  async getAll(req, res) {
     try {
-      const scheduleId = Number(req.params.scheduleId);
-      if (!Number.isInteger(scheduleId) || scheduleId <= 0) {
-        return res.status(400).json({ success: false, message: "scheduleId must be a positive integer" });
-      }
-
-      const data = await labelDataService.getLabelDataForSchedule(scheduleId);
+      const data = await labelDataService.getAllActiveLabelData();
       return res.json({ success: true, data });
     } catch (error) {
       return sendServiceError(res, error, "Failed to fetch label data");
@@ -68,31 +65,27 @@ class LabelController {
 
   async printSingle(req, res) {
     try {
-      const allocationId = Number(req.params.allocationId);
-      if (!Number.isInteger(allocationId) || allocationId <= 0) {
-        return res.status(400).json({ success: false, message: "allocationId must be a positive integer" });
+      const poolId = Number(req.params.poolId);
+      if (!Number.isInteger(poolId) || poolId <= 0) {
+        return res.status(400).json({ success: false, message: "poolId must be a positive integer" });
       }
       const format = resolveFormat(req, res);
       if (!format) return;
 
-      const label = await labelDataService.getLabelData(allocationId);
+      const label = await labelDataService.getLabelData(poolId);
       return await sendLabelsPdf(res, [label], format, `label-${label.barcodeValue}.pdf`);
     } catch (error) {
       return sendServiceError(res, error, "Failed to generate label PDF");
     }
   }
 
-  async printForSchedule(req, res) {
+  async printAll(req, res) {
     try {
-      const scheduleId = Number(req.params.scheduleId);
-      if (!Number.isInteger(scheduleId) || scheduleId <= 0) {
-        return res.status(400).json({ success: false, message: "scheduleId must be a positive integer" });
-      }
       const format = resolveFormat(req, res);
       if (!format) return;
 
-      const labels = await labelDataService.getLabelDataForSchedule(scheduleId);
-      return await sendLabelsPdf(res, labels, format, `labels-schedule-${scheduleId}.pdf`);
+      const labels = await labelDataService.getAllActiveLabelData();
+      return await sendLabelsPdf(res, labels, format, `labels-vendor-stock.pdf`);
     } catch (error) {
       return sendServiceError(res, error, "Failed to generate label PDFs");
     }
