@@ -8,12 +8,18 @@ const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./config/swagger");
 
 require("dotenv").config();
+
+// Initialize Quiz Game DB Tables
+const setupQuizDB = require("./config/setupQuizDB");
+setupQuizDB();
 require("./services/ExpressBees/cron/shipmentCron");
 require("./services/Bbps/retryCron");
 require("./services/Bbps/refundCron");
 require("./services/Razorpay/retryCron");
 require("./services/Maintenance/maintenanceCron");
 require("./services/Razorpay/orderExpiryCron");
+require("./services/Todo/todoReminderCron");
+require("./services/Todo/birthdayReminderCron");
 
 // dashboard Route
 const dashboardRoute = require("./routes/indexRoute");
