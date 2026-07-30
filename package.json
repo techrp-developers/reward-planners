@@ -1,6 +1,0 @@
-{
-  "dependencies": {
-    "dotenv": "^17.4.2",
-    "qrcode": "^1.5.4"
-  }
-}
