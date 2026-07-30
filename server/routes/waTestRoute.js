@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { enqueueWhatsApp } = require("../services/whatsapp/waEnqueueService");
+const { sendBirthdayWishes } = require("../services/Todo/birthdayReminderCron");
 
 // POST /api/wa/test
 // Supports both payload styles:
@@ -49,6 +50,15 @@ router.post("/test", async (req, res) => {
       ok: false,
       error: String(e?.message || e),
     });
+  }
+});
+
+router.get("/test-birthday", async (req, res) => {
+  try {
+    await sendBirthdayWishes();
+    return res.json({ ok: true, message: "Birthday wishes check triggered!" });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message });
   }
 });
 

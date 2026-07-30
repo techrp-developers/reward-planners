@@ -17,6 +17,8 @@ require("./services/Bbps/retryCron");
 require("./services/Razorpay/retryCron");
 require("./services/Maintenance/maintenanceCron");
 require("./services/Razorpay/orderExpiryCron");
+require("./services/Todo/todoReminderCron");
+require("./services/Todo/birthdayReminderCron");
 
 // dashboard Route
 const dashboardRoute = require("./routes/indexRoute");
