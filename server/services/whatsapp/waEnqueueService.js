@@ -223,6 +223,7 @@ function buildBodyValues(templateKey, ctx) {
       return [name];
 
     case "reward_planners_ios_launch":
+    case "flea_market_inamdar":
       return [name];
 
     case "create_account_notification":

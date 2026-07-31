@@ -36,4 +36,12 @@ router.post(
   GlobalController.iosUpdateCampaign,
 );
 
+// Flea Market Inamdar event
+router.post(
+  "/campaign-flea-market-inamdar",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  GlobalController.fleaMarketInamdarCampaign,
+);
+
 module.exports = router;

@@ -9,6 +9,7 @@ const { runNonBlocking } = require("../../../utils/nonBlocking");
 
 const LAUNCH_CAMPAIGN_COMPANY_ID = 7;
 const IOS_LAUNCH_COMPANY_ID = 5;
+const FLEA_MARKET_INAMDAR_COMPANY_ID = 5;
 
 class GlobalController {
   // get balance
@@ -264,6 +265,69 @@ class GlobalController {
         success: true,
         message: "iOS update campaign queued",
         company_id: IOS_LAUNCH_COMPANY_ID,
+        total: employees.length,
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  // Flea Market Inamdar event campaign
+  async fleaMarketInamdarCampaign(req, res) {
+    try {
+      const employees = await GlobalModel.getCampaignRecipients(
+        FLEA_MARKET_INAMDAR_COMPANY_ID,
+      );
+
+      runNonBlocking(async () => {
+        let queued = 0;
+        let failed = 0;
+        let skipped = 0;
+
+        for (const employee of employees) {
+          if (!employee.contact) {
+            skipped += 1;
+            continue;
+          }
+
+          const waResult = await enqueueWhatsApp({
+            eventName: "flea_market_inamdar",
+            ctx: {
+              phone: employee.contact,
+              company_id: employee.company_id,
+              customer_name: employee.name || "Employee",
+              contact: employee.contact,
+            },
+          });
+
+          if (waResult.ok) {
+            queued += 1;
+          } else {
+            failed += 1;
+            console.warn("[FLEA_MARKET_INAMDAR_WA] WhatsApp not queued:", {
+              employee_id: employee.id,
+              phone: employee.contact,
+              result: waResult,
+            });
+          }
+        }
+
+        console.info("[FLEA_MARKET_INAMDAR_WA] Completed", {
+          company_id: FLEA_MARKET_INAMDAR_COMPANY_ID,
+          total: employees.length,
+          queued,
+          failed,
+          skipped,
+        });
+      }, "Flea Market Inamdar WhatsApp");
+
+      return res.json({
+        success: true,
+        message: "Flea Market Inamdar campaign queued",
+        company_id: FLEA_MARKET_INAMDAR_COMPANY_ID,
         total: employees.length,
       });
     } catch (err) {
