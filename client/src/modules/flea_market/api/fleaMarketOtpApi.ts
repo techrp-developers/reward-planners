@@ -3,7 +3,7 @@ import { fleaMarketClient } from "./fleaMarketClient";
 
 /* ================= TYPES ================= */
 
-export type OtpChannel = "sms" | "email";
+export type OtpChannel = "whatsapp" | "email";
 
 // The fully-verified customer, as returned by verify-otp/reverify — includes
 // the wallet balance, which isn't known until this point (see

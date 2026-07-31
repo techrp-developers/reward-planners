@@ -118,7 +118,7 @@ function VerifyIdentityModal({ open, customer, isReverify = false, reason, onVer
           setOtpError("");
           setOtpLockedUntil(null);
           setStage("otp");
-          toast.success(`OTP sent via ${channel === "sms" ? "SMS" : "email"}`);
+          toast.success(`OTP sent via ${channel === "whatsapp" ? "WhatsApp" : "email"}`);
         },
         onError: (error) => {
           console.error("Failed to send OTP:", error);
@@ -223,18 +223,18 @@ function VerifyIdentityModal({ open, customer, isReverify = false, reason, onVer
             {hasPhone && (
               <button
                 type="button"
-                onClick={() => handleSendOtp("sms")}
+                onClick={() => handleSendOtp("whatsapp")}
                 disabled={sendOtpMutation.isPending}
                 className="flex items-center justify-between w-full gap-3 p-3 text-left transition-colors border border-gray-100 rounded-xl hover:bg-gray-50 hover:border-purple-200 disabled:opacity-60"
               >
                 <span className="flex items-center gap-3">
                   <FiSmartphone className="w-5 h-5 text-purple-600" />
                   <span>
-                    <span className="block text-sm font-bold text-gray-800">Send OTP via SMS</span>
+                    <span className="block text-sm font-bold text-gray-800">Send OTP via WhatsApp</span>
                     <span className="block text-xs text-gray-400">{maskPhone(customer.phone ?? "")}</span>
                   </span>
                 </span>
-                {sendOtpMutation.isPending && sendOtpMutation.variables?.channel === "sms" && <Spinner />}
+                {sendOtpMutation.isPending && sendOtpMutation.variables?.channel === "whatsapp" && <Spinner />}
               </button>
             )}
 
