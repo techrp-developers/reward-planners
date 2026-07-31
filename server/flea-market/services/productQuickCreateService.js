@@ -31,8 +31,13 @@ class ProductQuickCreateService {
   // transaction commits — the product exists either way, so a mapping
   // failure is surfaced via rewardMappingFailed rather than rolling back
   // product creation.
-  async quickCreate({ vendorId, productName, brandName, categoryId, subcategoryId, mrp, salePrice, initialStock, rewardRuleId }) {
-    if (mrp == null || salePrice == null || initialStock == null) {
+  // `variants` (optional array, see productModel.createQuick) is the
+  // multi-variant path; when absent, the old flat mrp/salePrice/initialStock
+  // fields drive a single variant exactly as before — full backward
+  // compatibility, nothing about the single-variant caller's shape changes.
+  async quickCreate({ vendorId, productName, brandName, categoryId, subcategoryId, mrp, salePrice, initialStock, rewardRuleId, variants }) {
+    const hasVariants = Array.isArray(variants) && variants.length > 0;
+    if (!hasVariants && (mrp == null || salePrice == null || initialStock == null)) {
       throw createError(400, "mrp, salePrice and initialStock are required");
     }
 
@@ -42,7 +47,7 @@ class ProductQuickCreateService {
       await conn.beginTransaction();
 
       result = await productModel.createQuick(
-        { vendorId, productName, brandName, categoryId, subcategoryId, mrp, salePrice, initialStock },
+        { vendorId, productName, brandName, categoryId, subcategoryId, mrp, salePrice, initialStock, variants },
         conn,
       );
 
@@ -57,6 +62,8 @@ class ProductQuickCreateService {
       conn.release();
     }
 
+    // Reward mapping stays product-level and is called exactly once
+    // regardless of how many variants were created — unchanged.
     let rewardMappingFailed = false;
     if (rewardRuleId) {
       try {
@@ -72,13 +79,21 @@ class ProductQuickCreateService {
       }
     }
 
+    // Top-level mrp/salePrice/stock mirror the FIRST variant — this is what
+    // makes the response backward compatible for every existing caller,
+    // which only ever created (and reads) a single variant.
+    const firstVariant = result.variants[0];
+
     return {
-      ...result,
+      productId: result.productId,
+      variantId: result.variantId,
+      sku: result.sku,
       productName,
       brandName: brandName || null,
-      mrp: Number(mrp),
-      salePrice: Number(salePrice),
-      stock: Number(initialStock),
+      mrp: firstVariant.mrp,
+      salePrice: firstVariant.salePrice,
+      stock: firstVariant.stock,
+      variants: result.variants,
       rewardMappingFailed,
     };
   }

@@ -1,4 +1,13 @@
 const db = require("../../config/database");
+const { getPublicUrl } = require("../utils/publicUrl");
+
+const HERO_IMAGE_JOIN = `
+  LEFT JOIN product_images pimg ON pimg.image_id = (
+    SELECT pi2.image_id FROM product_images pi2
+    WHERE pi2.product_id = p.product_id
+    ORDER BY pi2.sort_order ASC
+    LIMIT 1
+  )`;
 
 // Matches the exact scheme the main catalog's productModel.generateSKU uses
 // (RP-<productId>-<6 char random base36>) — kept as a local copy since this
@@ -81,10 +90,22 @@ class ProductModel {
 
   // Quick-create path used by the allocation page's "+ Add New Product" —
   // product_variants.variant_attributes is NOT NULL with no default, so an
-  // empty JSON object stands in (this flow doesn't collect variant options).
-  // SKU is always auto-generated (never accepted from the client) so every
-  // quick-created product gets one, consistent with the main catalog's flow.
-  async createQuick({ vendorId, productName, brandName, categoryId, subcategoryId, mrp, salePrice, initialStock }, conn) {
+  // empty JSON object stands in when no label is given.
+  // SKU is auto-generated per variant whenever omitted (never required from
+  // the client), consistent with the main catalog's RP-<productId>-<random>
+  // scheme. generateUniqueSku re-checks via the SAME connection/transaction
+  // each time, so an earlier variant's just-inserted (still uncommitted) sku
+  // is already visible to the next variant's check — no separate in-memory
+  // dedupe set needed for the omitted-sku case. An explicitly duplicated sku
+  // across two variants in the same request instead hits product_variants'
+  // real UNIQUE KEY and rolls back the whole product — same as the existing
+  // single-variant ER_DUP_ENTRY handling in productQuickCreateService.
+  //
+  // `variants` (optional array) is the multi-variant path; when absent, the
+  // old flat mrp/salePrice/initialStock fields drive a single variant,
+  // unchanged from before — full backward compatibility for every existing
+  // caller.
+  async createQuick({ vendorId, productName, brandName, categoryId, subcategoryId, mrp, salePrice, initialStock, variants }, conn) {
     const [productResult] = await conn.execute(
       `INSERT INTO eproducts
         (vendor_id, category_id, subcategory_id, brand_name, product_name, status, is_deleted, is_searchable, is_visible, created_via)
@@ -93,15 +114,34 @@ class ProductModel {
     );
     const productId = productResult.insertId;
 
-    const sku = await generateUniqueSku(conn, productId);
+    const variantInputs =
+      Array.isArray(variants) && variants.length > 0 ? variants : [{ mrp, salePrice, initialStock }];
 
-    const [variantResult] = await conn.execute(
-      `INSERT INTO product_variants (sku, product_id, variant_attributes, mrp, sale_price, stock, is_visible)
-       VALUES (?, ?, '{}', ?, ?, ?, 1)`,
-      [sku, productId, mrp, salePrice, initialStock],
-    );
+    const createdVariants = [];
+    for (const v of variantInputs) {
+      const sku = v.sku ? String(v.sku).trim() : await generateUniqueSku(conn, productId);
+      const variantAttributes = v.label ? JSON.stringify({ size: v.label }) : "{}";
 
-    return { productId, variantId: variantResult.insertId, sku };
+      const [variantResult] = await conn.execute(
+        `INSERT INTO product_variants (sku, product_id, variant_attributes, mrp, sale_price, stock, is_visible)
+         VALUES (?, ?, ?, ?, ?, ?, 1)`,
+        [sku, productId, variantAttributes, v.mrp, v.salePrice, v.initialStock],
+      );
+
+      createdVariants.push({
+        variantId: variantResult.insertId,
+        sku,
+        label: v.label || null,
+        mrp: Number(v.mrp),
+        salePrice: Number(v.salePrice),
+        stock: Number(v.initialStock),
+      });
+    }
+
+    // Backward-compatible shape: productId/variantId/sku at the top level
+    // still describe the FIRST (and, for every pre-existing caller, only)
+    // variant, plus the new `variants` array for multi-variant callers.
+    return { productId, variantId: createdVariants[0].variantId, sku: createdVariants[0].sku, variants: createdVariants };
   }
 
   async findVariantForUpdate(variantId, conn) {
@@ -132,6 +172,78 @@ class ProductModel {
   // the master pool.
   async incrementStock(variantId, qty, conn) {
     await conn.execute(`UPDATE product_variants SET stock = stock + ? WHERE variant_id = ?`, [qty, variantId]);
+  }
+
+  // "All Products" overview — every catalog product (existing + quick-
+  // created), one row per variant since pricing/stock live there, not on
+  // eproducts. current_stock prefers an active flea market pool's
+  // available_qty (what's actually sellable at the flea market right now)
+  // and falls back to the master product_variants.stock for anything never
+  // yet topped up into a pool — a variant can have at most one active pool
+  // row (unique per vendor+variant, and vendor is fixed per product), so
+  // this LEFT JOIN never fans out.
+  buildOverviewFilter(query, vendorId, params) {
+    const conditions = ["p.status = 'approved'", "p.is_deleted = 0"];
+    if (query) {
+      const like = `%${query}%`;
+      conditions.push("(p.product_name LIKE ? OR p.brand_name LIKE ? OR pv.sku LIKE ?)");
+      params.push(like, like, like);
+    }
+    if (vendorId) {
+      conditions.push("p.vendor_id = ?");
+      params.push(vendorId);
+    }
+    return conditions.join(" AND ");
+  }
+
+  async findAllForOverview({ query, vendorId, limit, offset }) {
+    const params = [];
+    const where = this.buildOverviewFilter(query, vendorId, params);
+    params.push(limit, offset);
+
+    const [rows] = await db.execute(
+      `SELECT
+         p.product_id, p.brand_name, p.product_name, p.category_id, p.subcategory_id, p.is_discount_eligible,
+         pv.variant_id, pv.sku, pv.mrp, pv.sale_price,
+         COALESCE(fvs.available_qty, pv.stock) AS current_stock,
+         pimg.image_url
+       FROM eproducts p
+       JOIN product_variants pv ON pv.product_id = p.product_id
+       LEFT JOIN flea_market_vendor_stock fvs ON fvs.variant_id = pv.variant_id AND fvs.status = 'active'
+       ${HERO_IMAGE_JOIN}
+       WHERE ${where}
+       ORDER BY p.product_name ASC, pv.variant_id ASC
+       LIMIT ? OFFSET ?`,
+      params,
+    );
+    return rows.map((row) => ({ ...row, hero_image: getPublicUrl(row.image_url) }));
+  }
+
+  async countAllForOverview({ query, vendorId }) {
+    const params = [];
+    const where = this.buildOverviewFilter(query, vendorId, params);
+    const [[row]] = await db.execute(
+      `SELECT COUNT(*) AS total
+       FROM eproducts p
+       JOIN product_variants pv ON pv.product_id = p.product_id
+       WHERE ${where}`,
+      params,
+    );
+    return Number(row.total);
+  }
+
+  // Filter-dropdown source — only vendors that actually have a listed
+  // product, not every vendor in the system (most of whom would just be
+  // empty filter results here).
+  async findVendorsWithProducts() {
+    const [rows] = await db.execute(
+      `SELECT DISTINCT v.vendor_id, v.company_name
+       FROM eproducts p
+       JOIN vendors v ON v.vendor_id = p.vendor_id
+       WHERE p.status = 'approved' AND p.is_deleted = 0
+       ORDER BY v.company_name ASC`,
+    );
+    return rows;
   }
 }
 

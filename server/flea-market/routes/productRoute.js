@@ -14,4 +14,9 @@ router.get("/:variantId/reward-eligibility", requireFleaMarketLocation, productC
 router.get("/catalog-search", productController.catalogSearch);
 router.post("/", require("../middlewares/validators").validateQuickCreateProduct, productController.quickCreate);
 
+// Manager-facing "All Products" overview — live pricing + reward breakdown
+// across the whole catalog, not customer billing, so no location scoping.
+router.get("/all/filter-options", productController.listAllFilterOptions);
+router.get("/all", productController.listAll);
+
 module.exports = router;

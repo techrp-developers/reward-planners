@@ -40,6 +40,7 @@ class ScanController {
           mrp: Number(pool.mrp),
           salePrice: pool.allocation_price != null ? Number(pool.allocation_price) : Number(pool.sale_price),
           stock: pool.available_qty,
+          heroImage: pool.hero_image,
         },
       });
     } catch (error) {

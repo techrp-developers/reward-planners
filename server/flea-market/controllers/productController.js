@@ -2,6 +2,7 @@ const productModel = require("../models/productModel");
 const rewardEligibilityService = require("../services/rewardEligibilityService");
 const productQuickCreateService = require("../services/productQuickCreateService");
 const poolStockModel = require("../models/poolStockModel");
+const allProductsService = require("../services/allProductsService");
 
 function sendServiceError(res, error, fallbackMessage) {
   const statusCode = error.statusCode || 500;
@@ -45,7 +46,7 @@ class ProductController {
 
   async quickCreate(req, res) {
     try {
-      const { vendorId, productName, brandName, categoryId, subcategoryId, mrp, salePrice, initialStock, rewardRuleId } = req.body;
+      const { vendorId, productName, brandName, categoryId, subcategoryId, mrp, salePrice, initialStock, rewardRuleId, variants } = req.body;
       const result = await productQuickCreateService.quickCreate({
         vendorId,
         productName,
@@ -56,6 +57,7 @@ class ProductController {
         salePrice,
         initialStock,
         rewardRuleId,
+        variants,
       });
 
       return res.status(201).json({
@@ -69,6 +71,11 @@ class ProductController {
           mrp: result.mrp,
           salePrice: result.salePrice,
           stock: result.stock,
+          // Present for every response, single-variant included — a
+          // one-element array for the backward-compatible single-variant
+          // path, so callers can switch to reading this uniformly if they
+          // choose to, without breaking anything reading the flat fields.
+          variants: result.variants,
           rewardMappingFailed: result.rewardMappingFailed,
         },
       });
@@ -99,6 +106,7 @@ class ProductController {
           mrp: Number(row.mrp),
           salePrice: row.allocation_price != null ? Number(row.allocation_price) : Number(row.sale_price),
           stock: row.available_qty,
+          heroImage: row.hero_image,
         })),
       });
     } catch (error) {
@@ -121,6 +129,35 @@ class ProductController {
       const statusCode = error.statusCode || 500;
       if (statusCode >= 500) console.error("[flea-market][reward-eligibility] error:", error);
       return res.status(statusCode).json({ success: false, message: error.message || "Failed to compute reward eligibility" });
+    }
+  }
+
+  // "All Products" overview — every catalog product (existing + quick-
+  // created), with live pricing and a per-row reward breakdown. Manager-
+  // facing master data view, not customer billing — no location scoping.
+  async listAll(req, res) {
+    try {
+      const { q, vendor_id, page, limit } = req.query;
+      const result = await allProductsService.list({
+        q: q ? String(q).trim() : "",
+        vendorId: vendor_id ? Number(vendor_id) : null,
+        page,
+        limit,
+      });
+      return res.json({ success: true, ...result });
+    } catch (error) {
+      console.error("[flea-market][products-all] error:", error);
+      return res.status(500).json({ success: false, message: "Failed to load products" });
+    }
+  }
+
+  async listAllFilterOptions(req, res) {
+    try {
+      const data = await allProductsService.filterOptions();
+      return res.json({ success: true, data });
+    } catch (error) {
+      console.error("[flea-market][products-all] filter-options error:", error);
+      return res.status(500).json({ success: false, message: "Failed to load filter options" });
     }
   }
 }

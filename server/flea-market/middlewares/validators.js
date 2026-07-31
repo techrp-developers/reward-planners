@@ -105,16 +105,38 @@ const validateQuickCreateVendor = [
   validate,
 ];
 
+// `variants` (optional array) is the multi-variant path — when absent, the
+// flat mrp/salePrice/initialStock fields are required exactly as before
+// (backward compatible, unchanged validation for every existing caller).
+// When present, each variant is validated the same way individually instead.
+const hasVariantsArray = (req) => Array.isArray(req.body.variants) && req.body.variants.length > 0;
+
 const validateQuickCreateProduct = [
   body("vendorId").isInt({ min: 1 }).withMessage("Valid vendorId required"),
   body("productName").isString().trim().isLength({ min: 1, max: 255 }).withMessage("productName is required"),
   body("brandName").optional({ values: "falsy" }).isString().isLength({ max: 255 }),
   body("categoryId").optional({ values: "falsy" }).isInt({ min: 1 }),
   body("subcategoryId").optional({ values: "falsy" }).isInt({ min: 1 }),
-  body("mrp").isFloat({ min: 0 }).withMessage("Valid mrp required"),
-  body("salePrice").isFloat({ min: 0 }).withMessage("Valid salePrice required"),
-  body("initialStock").isInt({ min: 0 }).withMessage("Valid initialStock required"),
+  body("mrp").if((_, { req }) => !hasVariantsArray(req)).isFloat({ min: 0 }).withMessage("Valid mrp required"),
+  body("salePrice").if((_, { req }) => !hasVariantsArray(req)).isFloat({ min: 0 }).withMessage("Valid salePrice required"),
+  body("initialStock").if((_, { req }) => !hasVariantsArray(req)).isInt({ min: 0 }).withMessage("Valid initialStock required"),
   body("rewardRuleId").optional({ values: "falsy" }).isInt({ min: 1 }),
+
+  body("variants").optional().isArray({ min: 1 }).withMessage("variants must be a non-empty array"),
+  body("variants.*.label").optional({ values: "falsy" }).isString().isLength({ max: 100 }),
+  body("variants.*.sku").optional({ values: "falsy" }).isString().isLength({ max: 190 }),
+  body("variants.*.mrp").isFloat({ min: 0 }).withMessage("Valid mrp required for each variant"),
+  body("variants.*.salePrice").isFloat({ min: 0 }).withMessage("Valid salePrice required for each variant"),
+  body("variants.*.initialStock").isInt({ min: 0 }).withMessage("Valid initialStock required for each variant"),
+  body("variants").custom((variants) => {
+    if (!Array.isArray(variants)) return true;
+    for (const v of variants) {
+      if (v && v.mrp != null && v.salePrice != null && Number(v.salePrice) > Number(v.mrp)) {
+        throw new Error("salePrice cannot exceed mrp for a variant");
+      }
+    }
+    return true;
+  }),
   validate,
 ];
 

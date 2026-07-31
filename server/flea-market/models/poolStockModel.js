@@ -1,4 +1,18 @@
 const db = require("../../config/database");
+const { getPublicUrl } = require("../utils/publicUrl");
+
+// Primary/hero image only — same "lowest sort_order row in product_images"
+// convention server/app/ecommerce/v1/models/productModel.js already uses for
+// its own listing thumbnails. Product-level only (not variant-level): a
+// flea market listing shows one row per product, so a single representative
+// image is enough — never required at product creation, purely display.
+const HERO_IMAGE_JOIN = `
+  LEFT JOIN product_images pimg ON pimg.image_id = (
+    SELECT pi2.image_id FROM product_images pi2
+    WHERE pi2.product_id = p.product_id
+    ORDER BY pi2.sort_order ASC
+    LIMIT 1
+  )`;
 
 // Persistent per-(vendor,variant) stock pool — replaces the old per-event
 // flea_market_stock_allocations model. Only one flea market event ever runs
@@ -107,16 +121,18 @@ class PoolStockModel {
          fvs.pool_id, fvs.variant_id, fvs.product_id, fvs.vendor_id,
          fvs.allocation_price, fvs.available_qty,
          p.product_name, p.brand_name,
-         pv.sku, pv.mrp, pv.sale_price
+         pv.sku, pv.mrp, pv.sale_price,
+         pimg.image_url
        FROM flea_market_vendor_stock fvs
        JOIN eproducts p ON p.product_id = fvs.product_id
        JOIN product_variants pv ON pv.variant_id = fvs.variant_id
+       ${HERO_IMAGE_JOIN}
        WHERE fvs.status = 'active' AND fvs.available_qty > 0
          AND (p.product_name LIKE ? OR pv.sku LIKE ? OR p.brand_name LIKE ?)
        LIMIT ?`,
       [like, like, like, limit],
     );
-    return rows;
+    return rows.map((row) => ({ ...row, hero_image: getPublicUrl(row.image_url) }));
   }
 
   // For the barcode scan endpoint — unlike findActivePools, this doesn't
@@ -127,14 +143,17 @@ class PoolStockModel {
       `SELECT
          fvs.pool_id, fvs.variant_id, fvs.product_id, fvs.vendor_id, fvs.status, fvs.available_qty, fvs.allocation_price,
          p.product_name, p.brand_name,
-         pv.sku, pv.mrp, pv.sale_price
+         pv.sku, pv.mrp, pv.sale_price,
+         pimg.image_url
        FROM flea_market_vendor_stock fvs
        JOIN eproducts p ON p.product_id = fvs.product_id
        JOIN product_variants pv ON pv.variant_id = fvs.variant_id
+       ${HERO_IMAGE_JOIN}
        WHERE fvs.pool_id = ?`,
       [poolId],
     );
-    return rows[0];
+    const row = rows[0];
+    return row ? { ...row, hero_image: getPublicUrl(row.image_url) } : row;
   }
 
   async findActiveByVariant(variantId, conn = db) {
