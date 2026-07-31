@@ -53,8 +53,10 @@ export interface CreateProductPayload {
   subcategoryId?: number;
   mrp: number;
   salePrice: number;
-  sku?: string;
   initialStock: number;
+  // Optional — when given, the product is instantly mapped to this reward
+  // rule (product-level target) so it's redeemable right away.
+  rewardRuleId?: number;
 }
 
 export interface CreatedProduct {
@@ -62,10 +64,15 @@ export interface CreatedProduct {
   variantId: number;
   productName: string;
   brandName: string | null;
+  // Always auto-generated server-side (RP-<productId>-<random>) — never
+  // null in practice, but typed to match the raw createQuick() result shape.
   sku: string | null;
   mrp: number;
   salePrice: number;
   stock: number;
+  // True only if rewardRuleId was passed AND the mapping call itself failed
+  // — the product/variant were still created successfully either way.
+  rewardMappingFailed?: boolean;
 }
 
 interface CreateProductResponse {
