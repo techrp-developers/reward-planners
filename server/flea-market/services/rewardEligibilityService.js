@@ -49,4 +49,45 @@ async function getEligibilityForVariant(variantId) {
   return computeEligibility(variant);
 }
 
-module.exports = { computeEligibility, computeEarnPoints, getEligibilityForVariant };
+// Batched sibling of computeEligibility+computeEarnPoints — for a whole PAGE
+// of variants (AllProductsPage) instead of one at a time. Fetches every
+// candidate rule for the WHOLE page in a single query (RewardModel.
+// getProductRewardsBatch) instead of one query per variant per side (earn +
+// redeem), then runs the exact same resolveRedemption/calculateReward pure
+// functions per variant — no duplicated reward math, only the fetch is batched.
+async function computeEligibilityAndEarnBatch(variants) {
+  const rulesByKey = await RewardModel.getProductRewardsBatch(
+    variants.map((variant) => ({
+      productId: variant.product_id,
+      variantId: variant.variant_id,
+      categoryId: variant.category_id,
+      subcategoryId: variant.subcategory_id,
+      isDiscountEligible: variant.is_discount_eligible,
+    })),
+  );
+
+  return variants.map((variant) => {
+    const itemTotal = Number(variant.sale_price);
+    const rules = rulesByKey.get(`${variant.product_id}:${variant.variant_id ?? ""}`) ?? [];
+
+    const redemption = resolveRedemption(itemTotal, rules);
+    const maxRedeemablePoints = calculateRedeemableCoins(itemTotal, redemption);
+    const earnPoints = calculateReward(itemTotal, rules);
+
+    return {
+      variantId: variant.variant_id,
+      canRedeem: maxRedeemablePoints > 0,
+      maxRedeemablePoints,
+      earnPoints,
+      mrp: Number(variant.mrp),
+      salePrice: itemTotal,
+    };
+  });
+}
+
+module.exports = {
+  computeEligibility,
+  computeEarnPoints,
+  computeEligibilityAndEarnBatch,
+  getEligibilityForVariant,
+};
