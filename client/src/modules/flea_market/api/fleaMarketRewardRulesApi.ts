@@ -10,6 +10,10 @@ export interface FleaMarketRewardRule {
   name: string;
   rewardType: string;
   rewardValue: number;
+  redemptionType: string;
+  redemptionValue: number;
+  minOrderAmount: number;
+  maxOrderAmount: number | null;
 }
 
 interface RewardRulesResponse {

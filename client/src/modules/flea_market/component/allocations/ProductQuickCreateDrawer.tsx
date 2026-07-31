@@ -1,14 +1,31 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import Drawer from "../ui/Drawer";
 import { ErrorState } from "../ui/EmptyState";
 import { createProduct, type CreatedProduct } from "../../api/fleaMarketProductsApi";
-import { listRewardRules } from "../../api/fleaMarketRewardRulesApi";
+import { listRewardRules, type FleaMarketRewardRule } from "../../api/fleaMarketRewardRulesApi";
 
 function formatRuleValue(rewardType: string, rewardValue: number): string {
   return rewardType === "percentage" ? `${rewardValue}%` : `₹${rewardValue}`;
+}
+
+function formatOrderRange(rule: FleaMarketRewardRule): string {
+  return rule.maxOrderAmount != null
+    ? `₹${rule.minOrderAmount}–${rule.maxOrderAmount}`
+    : `₹${rule.minOrderAmount}+`;
+}
+
+// resolveRedemption (server/app/ecommerce/v1/utils/rewardCalculate.js) only
+// ever applies a rule when the item's price falls inside its
+// min/max_order_amount band — a rule mapped outside that band is a no-op at
+// checkout, which is exactly what made "the selected rule" appear unused.
+// Filtering here to only what would actually apply keeps every choice real.
+function ruleAppliesToPrice(rule: FleaMarketRewardRule, price: number): boolean {
+  if (price < rule.minOrderAmount) return false;
+  if (rule.maxOrderAmount != null && price > rule.maxOrderAmount) return false;
+  return true;
 }
 
 interface ProductQuickCreateDrawerProps {
@@ -31,12 +48,32 @@ function ProductQuickCreateDrawer({ open, vendorId, onClose, onCreated }: Produc
 
   // Same rules the vendor-manager's Reward Mapping screen offers, fetched
   // through a flea-market-scoped endpoint since this module has no real JWT
-  // to call the vendor_manager-only /reward/get-rule route with.
+  // to call the vendor_manager-only /reward/get-rule route with. Already
+  // filtered server-side to redemption-capable rules only (see
+  // rewardRuleModel.findAllRedeemable) — the price-band filter below narrows
+  // it further to what would actually apply to THIS product.
   const rewardRulesQuery = useQuery({
     queryKey: ["flea-market", "reward-rules"],
     queryFn: () => listRewardRules(),
     enabled: open,
   });
+
+  const parsedSalePrice = Number(salePrice);
+  const hasSalePrice = salePrice.trim() !== "" && Number.isFinite(parsedSalePrice) && parsedSalePrice >= 0;
+
+  const applicableRules = useMemo(() => {
+    if (!hasSalePrice) return [];
+    return (rewardRulesQuery.data ?? []).filter((rule) => ruleAppliesToPrice(rule, parsedSalePrice));
+  }, [rewardRulesQuery.data, hasSalePrice, parsedSalePrice]);
+
+  // Derived, not stored: a rule picked while typing a different Sale Price
+  // can stop applying the moment the price changes, so the raw rewardRuleId
+  // state is only ever trusted once it's confirmed still in applicableRules
+  // — everywhere else (select value, submit payload) uses this instead,
+  // rather than submitting a mapping that would be a no-op at checkout.
+  const effectiveRewardRuleId = applicableRules.some((rule) => String(rule.rewardRuleId) === rewardRuleId)
+    ? rewardRuleId
+    : "";
 
   const mutation = useMutation({
     mutationFn: () => {
@@ -48,7 +85,7 @@ function ProductQuickCreateDrawer({ open, vendorId, onClose, onCreated }: Produc
         mrp: Number(mrp),
         salePrice: Number(salePrice),
         initialStock: Number(initialStock),
-        rewardRuleId: rewardRuleId ? Number(rewardRuleId) : undefined,
+        rewardRuleId: effectiveRewardRuleId ? Number(effectiveRewardRuleId) : undefined,
       });
     },
   });
@@ -73,7 +110,7 @@ function ProductQuickCreateDrawer({ open, vendorId, onClose, onCreated }: Produc
     mutation.mutate(undefined, {
       onSuccess: (product) => {
         toast.success(`Product "${product.productName}" created`);
-        if (rewardRuleId && product.rewardMappingFailed) {
+        if (effectiveRewardRuleId && product.rewardMappingFailed) {
           toast.warning("Product created, but the reward rule mapping failed — set it from Reward Mapping instead.");
         }
         onCreated(product);
@@ -135,21 +172,29 @@ function ProductQuickCreateDrawer({ open, vendorId, onClose, onCreated }: Produc
               Redeem Reward Rule <span className="text-gray-400">(optional)</span>
             </label>
             <select
-              value={rewardRuleId}
+              value={effectiveRewardRuleId}
               onChange={(e) => setRewardRuleId(e.target.value)}
-              disabled={rewardRulesQuery.isLoading}
+              disabled={rewardRulesQuery.isLoading || !hasSalePrice}
               className={inputClass}
             >
               <option value="">No rule — map it later</option>
-              {rewardRulesQuery.data?.map((rule) => (
+              {applicableRules.map((rule) => (
                 <option key={rule.rewardRuleId} value={rule.rewardRuleId}>
-                  {rule.name} ({formatRuleValue(rule.rewardType, rule.rewardValue)})
+                  {rule.name} ({formatRuleValue(rule.rewardType, rule.rewardValue)}, {formatOrderRange(rule)})
                 </option>
               ))}
             </select>
-            <p className="mt-1 text-[11px] text-gray-400">
-              Instantly maps this product to the selected rule so it's redeemable right away.
-            </p>
+            {!hasSalePrice ? (
+              <p className="mt-1 text-[11px] text-gray-400">Enter a Sale Price to see which rules apply.</p>
+            ) : applicableRules.length === 0 ? (
+              <p className="mt-1 text-[11px] text-amber-600">
+                No redeemable rule covers ₹{salePrice} — leave unmapped or adjust the price.
+              </p>
+            ) : (
+              <p className="mt-1 text-[11px] text-gray-400">
+                Only rules that actually apply to a ₹{salePrice} item are shown — picking one maps it instantly.
+              </p>
+            )}
           </div>
 
           {mutation.isError && (
