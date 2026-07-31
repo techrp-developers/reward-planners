@@ -1,0 +1,36 @@
+-- Repoints flea_market_stock_logs from the old per-event allocation table to
+-- the new persistent pool table (flea_market_vendor_stock), and records which
+-- live event (if any) each log entry happened during.
+--
+-- This file is DESCRIPTIVE — the actual migration is data-driven (needs the
+-- old allocation_id -> vendor_id/variant_id -> new pool_id mapping, and must
+-- backfill schedule_id from the old table BEFORE the column is dropped), so
+-- it was executed via scripts/migrate-allocations-to-vendor-stock.js rather
+-- than as a standalone .sql script. The net schema effect on
+-- flea_market_stock_logs was:
+--
+--   1. schedule_id (int, nullable, FK -> flea_market_schedules) already
+--      existed live before this migration (added outside any checked-in
+--      migration, always NULL, never written by application code). This
+--      migration is what makes it official and starts populating it: NULL
+--      means "not tied to a specific live event" (a warehouse-level
+--      top-up/return between events); non-NULL means "this action happened
+--      during that event" — REQUIRED for sale/damage actions (enforced in
+--      application code per action type, not a DB constraint, since only
+--      some actions are event-bound).
+--   2. allocation_id (int, FK -> flea_market_stock_allocations) was renamed
+--      to pool_id (int NOT NULL, FK -> flea_market_vendor_stock, ON DELETE
+--      CASCADE) after backfilling every row's value via
+--      (old allocation_id -> vendor_id/variant_id -> new pool_id).
+--
+-- Equivalent DDL, for reference (already applied via the script above):
+--   ALTER TABLE flea_market_stock_logs ADD COLUMN pool_id INT NULL AFTER allocation_id;
+--   UPDATE flea_market_stock_logs l
+--     JOIN flea_market_stock_allocations a ON a.allocation_id = l.allocation_id
+--     JOIN flea_market_vendor_stock fvs ON fvs.vendor_id = a.vendor_id AND fvs.variant_id = a.variant_id
+--     SET l.pool_id = fvs.pool_id;
+--   ALTER TABLE flea_market_stock_logs DROP FOREIGN KEY flea_market_stock_logs_ibfk_1;
+--   ALTER TABLE flea_market_stock_logs DROP COLUMN allocation_id;
+--   ALTER TABLE flea_market_stock_logs MODIFY COLUMN pool_id INT NOT NULL;
+--   ALTER TABLE flea_market_stock_logs
+--     ADD CONSTRAINT fk_logs_pool FOREIGN KEY (pool_id) REFERENCES flea_market_vendor_stock (pool_id) ON DELETE CASCADE;

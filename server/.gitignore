@@ -3,3 +3,4 @@ node_modules
 uploads
 files
 server/config/firebase-service-account.json
+dist
