@@ -1,12 +1,18 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { FiChevronLeft, FiChevronRight, FiList, FiSearch } from "react-icons/fi";
+import { FiChevronLeft, FiChevronRight, FiDownload, FiList, FiSearch, FiUpload } from "react-icons/fi";
 import { useDebounce } from "../../../../common/hooks/useDebounce";
-import { fetchAllProducts, fetchAllProductsFilterOptions, type AllProductsFilters } from "../../api/fleaMarketAllProductsApi";
+import {
+  fetchAllProducts,
+  fetchAllProductsFilterOptions,
+  getExportCsvUrl,
+  type AllProductsFilters,
+} from "../../api/fleaMarketAllProductsApi";
 import SectionCard from "../ui/SectionCard";
 import Avatar from "../ui/Avatar";
 import { EmptyState, ErrorState } from "../ui/EmptyState";
 import Skeleton from "../ui/Skeleton";
+import ImportProductsModal from "./ImportProductsModal";
 
 const inputClass =
   "w-full px-3 py-2 mt-1 text-sm bg-white border border-slate-200 rounded-lg outline-none focus:border-transparent focus:ring-4 focus:ring-[#852BAF]/15";
@@ -37,6 +43,7 @@ export default function AllProductsPage() {
   const [search, setSearch] = useState("");
   const [vendorId, setVendorId] = useState<number | "">("");
   const [page, setPage] = useState(1);
+  const [importModalOpen, setImportModalOpen] = useState(false);
   const limit = 25;
 
   const debouncedSearch = useDebounce(search, 400);
@@ -68,20 +75,45 @@ export default function AllProductsPage() {
     setPage(1);
   };
 
+  const handleExport = () => {
+    window.open(getExportCsvUrl({ q: filters.q, vendorId: filters.vendorId }), "_blank", "noopener,noreferrer");
+  };
+
   const pagination = productsQuery.data?.pagination;
   const rows = productsQuery.data?.rows ?? [];
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <span className="flex items-center justify-center w-10 h-10 text-white rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78]">
-          <FiList className="w-5 h-5" />
-        </span>
-        <div>
-          <h1 className="text-xl font-black text-gray-900">All Products</h1>
-          <p className="text-sm text-gray-500">
-            Every product in the catalog — existing and quick-created — with live pricing and reward eligibility.
-          </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className="flex items-center justify-center w-10 h-10 text-white rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78]">
+            <FiList className="w-5 h-5" />
+          </span>
+          <div>
+            <h1 className="text-xl font-black text-gray-900">All Products</h1>
+            <p className="text-sm text-gray-500">
+              Every product in the catalog — existing and quick-created — with live pricing and reward eligibility.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleExport}
+            title="Export the currently filtered products as CSV"
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-bold text-purple-700 border border-purple-200 rounded-xl hover:bg-purple-50"
+          >
+            <FiDownload className="w-4 h-4" />
+            Export CSV
+          </button>
+          <button
+            type="button"
+            onClick={() => setImportModalOpen(true)}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-bold text-white rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] hover:from-[#9B3DCF] hover:to-[#FD4F88] shadow-md shadow-purple-500/20"
+          >
+            <FiUpload className="w-4 h-4" />
+            Import Products
+          </button>
         </div>
       </div>
 
@@ -213,6 +245,8 @@ export default function AllProductsPage() {
           </div>
         </div>
       )}
+
+      <ImportProductsModal open={importModalOpen} onClose={() => setImportModalOpen(false)} />
     </div>
   );
 }
