@@ -12,6 +12,7 @@ const vendorRoute = require("./vendorRoute");
 const poolStockRoute = require("./poolStockRoute");
 const reportRoute = require("./reportRoute");
 const scanRoute = require("./scanRoute");
+const rewardRuleRoute = require("./rewardRuleRoute");
 
 router.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
@@ -29,5 +30,6 @@ router.use("/vendors", vendorRoute);
 router.use("/vendor-stock", poolStockRoute);
 router.use("/reports", reportRoute);
 router.use("/scan", scanRoute);
+router.use("/reward-rules", rewardRuleRoute);
 
 module.exports = router;

@@ -45,7 +45,7 @@ class ProductController {
 
   async quickCreate(req, res) {
     try {
-      const { vendorId, productName, brandName, categoryId, subcategoryId, mrp, salePrice, sku, initialStock } = req.body;
+      const { vendorId, productName, brandName, categoryId, subcategoryId, mrp, salePrice, initialStock, rewardRuleId } = req.body;
       const result = await productQuickCreateService.quickCreate({
         vendorId,
         productName,
@@ -54,8 +54,8 @@ class ProductController {
         subcategoryId,
         mrp,
         salePrice,
-        sku,
         initialStock,
+        rewardRuleId,
       });
 
       return res.status(201).json({
@@ -69,6 +69,7 @@ class ProductController {
           mrp: result.mrp,
           salePrice: result.salePrice,
           stock: result.stock,
+          rewardMappingFailed: result.rewardMappingFailed,
         },
       });
     } catch (error) {

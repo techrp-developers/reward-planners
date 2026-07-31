@@ -113,8 +113,8 @@ const validateQuickCreateProduct = [
   body("subcategoryId").optional({ values: "falsy" }).isInt({ min: 1 }),
   body("mrp").isFloat({ min: 0 }).withMessage("Valid mrp required"),
   body("salePrice").isFloat({ min: 0 }).withMessage("Valid salePrice required"),
-  body("sku").optional({ values: "falsy" }).isString().isLength({ max: 190 }),
   body("initialStock").isInt({ min: 0 }).withMessage("Valid initialStock required"),
+  body("rewardRuleId").optional({ values: "falsy" }).isInt({ min: 1 }),
   validate,
 ];
 

@@ -1,5 +1,30 @@
 const db = require("../../config/database");
 
+// Matches the exact scheme the main catalog's productModel.generateSKU uses
+// (RP-<productId>-<6 char random base36>) — kept as a local copy since this
+// module doesn't import from server/models, but the format must stay
+// consistent with every other SKU in product_variants.
+function generateSku(productId) {
+  const randomPart = Math.random().toString(36).substring(2, 8).toUpperCase();
+  return `RP-${productId}-${randomPart}`;
+}
+
+async function generateUniqueSku(conn, productId) {
+  let sku;
+  let exists = true;
+  let attempts = 0;
+
+  while (exists && attempts < 10) {
+    sku = generateSku(productId);
+    const [rows] = await conn.execute(`SELECT 1 FROM product_variants WHERE sku = ? LIMIT 1`, [sku]);
+    exists = rows.length > 0;
+    attempts++;
+  }
+
+  if (exists) throw new Error("SKU generation failed");
+  return sku;
+}
+
 class ProductModel {
   async findVariantDetail(variantId) {
     const [rows] = await db.execute(
@@ -57,7 +82,9 @@ class ProductModel {
   // Quick-create path used by the allocation page's "+ Add New Product" —
   // product_variants.variant_attributes is NOT NULL with no default, so an
   // empty JSON object stands in (this flow doesn't collect variant options).
-  async createQuick({ vendorId, productName, brandName, categoryId, subcategoryId, mrp, salePrice, sku, initialStock }, conn) {
+  // SKU is always auto-generated (never accepted from the client) so every
+  // quick-created product gets one, consistent with the main catalog's flow.
+  async createQuick({ vendorId, productName, brandName, categoryId, subcategoryId, mrp, salePrice, initialStock }, conn) {
     const [productResult] = await conn.execute(
       `INSERT INTO eproducts
         (vendor_id, category_id, subcategory_id, brand_name, product_name, status, is_deleted, is_searchable, is_visible, created_via)
@@ -66,13 +93,15 @@ class ProductModel {
     );
     const productId = productResult.insertId;
 
+    const sku = await generateUniqueSku(conn, productId);
+
     const [variantResult] = await conn.execute(
       `INSERT INTO product_variants (sku, product_id, variant_attributes, mrp, sale_price, stock, is_visible)
        VALUES (?, ?, '{}', ?, ?, ?, 1)`,
-      [sku || null, productId, mrp, salePrice, initialStock],
+      [sku, productId, mrp, salePrice, initialStock],
     );
 
-    return { productId, variantId: variantResult.insertId };
+    return { productId, variantId: variantResult.insertId, sku };
   }
 
   async findVariantForUpdate(variantId, conn) {
