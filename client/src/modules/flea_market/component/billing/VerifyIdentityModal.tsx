@@ -118,7 +118,11 @@ function VerifyIdentityModal({ open, customer, isReverify = false, reason, onVer
           setOtpError("");
           setOtpLockedUntil(null);
           setStage("otp");
-          toast.success(`OTP sent via ${channel === "whatsapp" ? "WhatsApp" : "email"}`);
+          toast.success(
+            hasPhone && hasEmail
+              ? "OTP sent via WhatsApp and email"
+              : `OTP sent via ${hasPhone ? "WhatsApp" : "email"}`,
+          );
         },
         onError: (error) => {
           console.error("Failed to send OTP:", error);
@@ -139,7 +143,7 @@ function VerifyIdentityModal({ open, customer, isReverify = false, reason, onVer
   const isExpired = otpExpiresAt !== null && now > otpExpiresAt;
 
   const handleOtpChange = (value: string) => {
-    setOtp(value.replace(/\D/g, "").slice(0, 6));
+    setOtp(value.replace(/\D/g, "").slice(0, 4));
     if (otpError) setOtpError("");
   };
 
@@ -148,8 +152,8 @@ function VerifyIdentityModal({ open, customer, isReverify = false, reason, onVer
 
     if (isLocked || isExpired || !otpChannel) return;
 
-    if (otp.length !== 6) {
-      setOtpError("Enter the 6-digit OTP.");
+    if (otp.length !== 4) {
+      setOtpError("Enter the 4-digit OTP.");
       return;
     }
 
@@ -220,39 +224,31 @@ function VerifyIdentityModal({ open, customer, isReverify = false, reason, onVer
           {channelError && <ErrorState className="mb-4" message={channelError} />}
 
           <div className="space-y-2">
-            {hasPhone && (
+            {(hasPhone || hasEmail) && (
               <button
                 type="button"
-                onClick={() => handleSendOtp("whatsapp")}
+                onClick={() => handleSendOtp(hasPhone ? "whatsapp" : "email")}
                 disabled={sendOtpMutation.isPending}
                 className="flex items-center justify-between w-full gap-3 p-3 text-left transition-colors border border-gray-100 rounded-xl hover:bg-gray-50 hover:border-purple-200 disabled:opacity-60"
               >
                 <span className="flex items-center gap-3">
-                  <FiSmartphone className="w-5 h-5 text-purple-600" />
+                  {hasPhone ? (
+                    <FiSmartphone className="w-5 h-5 text-purple-600" />
+                  ) : (
+                    <FiMail className="w-5 h-5 text-purple-600" />
+                  )}
                   <span>
-                    <span className="block text-sm font-bold text-gray-800">Send OTP via WhatsApp</span>
-                    <span className="block text-xs text-gray-400">{maskPhone(customer.phone ?? "")}</span>
+                    <span className="block text-sm font-bold text-gray-800">
+                      {hasPhone && hasEmail ? "Send OTP via WhatsApp & Email" : `Send OTP via ${hasPhone ? "WhatsApp" : "Email"}`}
+                    </span>
+                    <span className="block text-xs text-gray-400">
+                      {[hasPhone ? maskPhone(customer.phone ?? "") : "", hasEmail ? maskEmail(customer.email ?? "") : ""]
+                        .filter(Boolean)
+                        .join(" • ")}
+                    </span>
                   </span>
                 </span>
-                {sendOtpMutation.isPending && sendOtpMutation.variables?.channel === "whatsapp" && <Spinner />}
-              </button>
-            )}
-
-            {hasEmail && (
-              <button
-                type="button"
-                onClick={() => handleSendOtp("email")}
-                disabled={sendOtpMutation.isPending}
-                className="flex items-center justify-between w-full gap-3 p-3 text-left transition-colors border border-gray-100 rounded-xl hover:bg-gray-50 hover:border-purple-200 disabled:opacity-60"
-              >
-                <span className="flex items-center gap-3">
-                  <FiMail className="w-5 h-5 text-purple-600" />
-                  <span>
-                    <span className="block text-sm font-bold text-gray-800">Send OTP via Email</span>
-                    <span className="block text-xs text-gray-400">{maskEmail(customer.email ?? "")}</span>
-                  </span>
-                </span>
-                {sendOtpMutation.isPending && sendOtpMutation.variables?.channel === "email" && <Spinner />}
+                {sendOtpMutation.isPending && <Spinner />}
               </button>
             )}
 
@@ -300,7 +296,7 @@ function VerifyIdentityModal({ open, customer, isReverify = false, reason, onVer
                   maxLength={6}
                   value={otp}
                   onChange={(e) => handleOtpChange(e.target.value)}
-                  placeholder="Enter 6-digit OTP"
+                  placeholder="Enter 4-digit OTP"
                   className="w-full text-lg tracking-[0.4em] text-gray-800 bg-transparent outline-none placeholder:tracking-normal placeholder:text-gray-400"
                 />
                 {otp && (
@@ -349,7 +345,7 @@ function VerifyIdentityModal({ open, customer, isReverify = false, reason, onVer
 
               <button
                 type="submit"
-                disabled={verifyOtpMutation.isPending || otp.length !== 6 || isExpired}
+                disabled={verifyOtpMutation.isPending || otp.length !== 4 || isExpired}
                 className="w-full py-2.5 mt-4 text-sm font-bold text-white rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] hover:from-[#9B3DCF] hover:to-[#FD4F88] shadow-md shadow-purple-500/20 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {verifyOtpMutation.isPending ? "Verifying..." : "Verify & Continue"}

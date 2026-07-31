@@ -18,6 +18,34 @@ const csvUpload = multer({
   },
 });
 
+// Companies available when assigning a customer (HR is limited to its company)
+router.get(
+  "/assignable-companies",
+  ...guard,
+  employeeController.assignableCompanies.bind(employeeController),
+);
+
+// Check whether a company user exists by email and/or phone
+router.post(
+  "/check-existence",
+  ...guard,
+  employeeController.checkExistence.bind(employeeController),
+);
+
+// Check whether the company user has created a customer profile
+router.post(
+  "/check-activation",
+  ...guard,
+  employeeController.checkActivation.bind(employeeController),
+);
+
+// Add a company user/customer assignment; name, email and phone are required
+router.post(
+  "/assign-customer",
+  ...guard,
+  employeeController.assignCustomer.bind(employeeController),
+);
+
 // Export record
 router.get("/export", ...guard, employeeController.exportCsv.bind(employeeController));
 

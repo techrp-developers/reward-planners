@@ -33,7 +33,7 @@ const validateSendOtp = [
 const validateVerifyOtp = [
   locationHeaderCheck,
   body("userId").isInt({ min: 1 }).withMessage("Valid userId required"),
-  body("otp").isString().isLength({ min: 4, max: 10 }).withMessage("Valid otp required"),
+  body("otp").isString().matches(/^\d{4}$/).withMessage("OTP must be exactly 4 digits"),
   body("channel").isIn(["whatsapp", "sms", "email"]).withMessage("channel must be whatsapp or email"),
   validate,
 ];
@@ -48,7 +48,7 @@ const validateReverify = [
   locationHeaderCheck,
   body("userId").isInt({ min: 1 }).withMessage("Valid userId required"),
   body("channel").optional().isIn(["whatsapp", "sms", "email"]).withMessage("channel must be whatsapp or email"),
-  body("otp").optional().isString().isLength({ min: 4, max: 10 }).withMessage("Valid otp required"),
+  body("otp").optional().isString().matches(/^\d{4}$/).withMessage("OTP must be exactly 4 digits"),
   validate,
 ];
 

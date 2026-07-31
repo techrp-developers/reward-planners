@@ -36,6 +36,19 @@ async function constraintExists(table, constraintName) {
   return rows[0].c > 0;
 }
 
+async function foreignKeysForColumn(table, column) {
+  const [rows] = await db.execute(
+    `SELECT CONSTRAINT_NAME
+     FROM information_schema.KEY_COLUMN_USAGE
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = ?
+       AND COLUMN_NAME = ?
+       AND REFERENCED_TABLE_NAME IS NOT NULL`,
+    [table, column],
+  );
+  return rows.map((row) => row.CONSTRAINT_NAME);
+}
+
 async function snapshot(table) {
   const [[row]] = await db.execute(
     `SELECT COUNT(*) AS rowCount, COALESCE(SUM(allocated_qty),0) AS totalAllocated,
@@ -114,6 +127,10 @@ async function main() {
   }
 
   console.log("\n=== Step 3: backfill logs.schedule_id from old allocation_id (before repointing) ===");
+  if (!(await columnExists("flea_market_stock_logs", "schedule_id"))) {
+    await db.execute(`ALTER TABLE flea_market_stock_logs ADD COLUMN schedule_id INT UNSIGNED NULL AFTER allocation_id`);
+    console.log("Added flea_market_stock_logs.schedule_id.");
+  }
   if ((await columnExists("flea_market_stock_logs", "allocation_id")) && (await tableExists("flea_market_stock_allocations"))) {
     const [result] = await db.execute(`
       UPDATE flea_market_stock_logs l
@@ -146,9 +163,10 @@ async function main() {
   }
 
   console.log("\n=== Step 5: drop old allocation_id FK/column, make pool_id NOT NULL + FK'd ===");
-  if (await constraintExists("flea_market_stock_logs", "flea_market_stock_logs_ibfk_1")) {
-    await db.execute(`ALTER TABLE flea_market_stock_logs DROP FOREIGN KEY flea_market_stock_logs_ibfk_1`);
-    console.log("Dropped old allocation_id FK.");
+  const allocationForeignKeys = await foreignKeysForColumn("flea_market_stock_logs", "allocation_id");
+  for (const constraintName of allocationForeignKeys) {
+    await db.execute(`ALTER TABLE flea_market_stock_logs DROP FOREIGN KEY \`${constraintName}\``);
+    console.log(`Dropped old allocation_id FK ${constraintName}.`);
   }
   if (await columnExists("flea_market_stock_logs", "allocation_id")) {
     await db.execute(`ALTER TABLE flea_market_stock_logs DROP COLUMN allocation_id`);
@@ -174,6 +192,14 @@ async function main() {
         ADD CONSTRAINT fk_logs_pool FOREIGN KEY (pool_id) REFERENCES flea_market_vendor_stock (pool_id) ON DELETE CASCADE
     `);
     console.log("Added fk_logs_pool.");
+  }
+  if (!(await constraintExists("flea_market_stock_logs", "fk_logs_schedule"))) {
+    await db.execute(`
+      ALTER TABLE flea_market_stock_logs
+        ADD CONSTRAINT fk_logs_schedule FOREIGN KEY (schedule_id)
+        REFERENCES flea_market_schedules (schedule_id) ON DELETE SET NULL
+    `);
+    console.log("Added fk_logs_schedule.");
   }
 
   console.log("\n=== Step 6: archive old allocations table ===");

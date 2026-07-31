@@ -4,8 +4,13 @@ const ACTIVE_STATUSES = ["scheduled", "in_progress"];
 
 class ScheduleModel {
   async list(date, status) {
-    const conditions = ["fs.scheduled_date = ?"];
-    const params = [date];
+    const conditions = [];
+    const params = [];
+
+    if (date) {
+      conditions.push("fs.scheduled_date = ?");
+      params.push(date);
+    }
 
     if (status) {
       conditions.push("fs.status = ?");
@@ -17,8 +22,8 @@ class ScheduleModel {
        FROM flea_market_schedules fs
        JOIN companies c ON c.company_id = fs.company_id
        JOIN flea_market_locations fl ON fl.location_id = fs.location_id
-       WHERE ${conditions.join(" AND ")}
-       ORDER BY fs.start_time ASC`,
+       ${conditions.length ? `WHERE ${conditions.join(" AND ")}` : ""}
+       ORDER BY fs.scheduled_date DESC, fs.start_time ASC`,
       params,
     );
     return rows;

@@ -29,7 +29,8 @@ function SchedulePage() {
   const location = useLocation();
   const redirectMessage = (location.state as { message?: string } | null)?.message;
 
-  const [date, setDate] = useState(todayDateString());
+  // No date means "all events", so existing records are visible when the page opens.
+  const [date, setDate] = useState("");
   const [schedules, setSchedules] = useState<FleaMarketSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -99,8 +100,6 @@ function SchedulePage() {
     navigate(routes.fleaMarket.billing.page, { state });
   };
 
-  const isToday = date === todayDateString();
-
   return (
     <div className="space-y-6">
       {redirectMessage && (
@@ -139,7 +138,9 @@ function SchedulePage() {
         </div>
       </div>
 
-      {showForm && <ScheduleForm defaultDate={date} onCreated={handleCreated} onClose={() => setShowForm(false)} />}
+      {showForm && (
+        <ScheduleForm defaultDate={date || todayDateString()} onCreated={handleCreated} onClose={() => setShowForm(false)} />
+      )}
 
       {loading && (
         <div className="flex items-center justify-center gap-2 py-10 text-sm text-gray-500">
@@ -166,7 +167,9 @@ function SchedulePage() {
       )}
 
       {!loading && !error && schedules.length === 0 && (
-        <p className="py-10 text-sm text-center text-gray-400">No events for {date}.</p>
+        <p className="py-10 text-sm text-center text-gray-400">
+          {date ? `No events for ${date}.` : "No events found."}
+        </p>
       )}
 
       {!loading && !error && schedules.length > 0 && (
@@ -175,7 +178,7 @@ function SchedulePage() {
             <ScheduleCard
               key={schedule.scheduleId}
               schedule={schedule}
-              isToday={isToday}
+              isToday={String(schedule.scheduledDate).slice(0, 10) === todayDateString()}
               busy={busyId === schedule.scheduleId}
               onStatusChange={(scheduleId, status) => void handleStatusChange(scheduleId, status)}
               onDelete={(scheduleId) => void handleDelete(scheduleId)}

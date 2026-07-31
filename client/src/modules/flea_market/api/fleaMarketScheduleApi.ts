@@ -30,9 +30,9 @@ export async function getSchedule(scheduleId: number): Promise<FleaMarketSchedul
   return data.data;
 }
 
-export async function listSchedules(date: string, status?: ScheduleStatus): Promise<FleaMarketSchedule[]> {
+export async function listSchedules(date?: string, status?: ScheduleStatus): Promise<FleaMarketSchedule[]> {
   const { data } = await fleaMarketClient.get<ScheduleListResponse>("/schedules", {
-    params: { date, ...(status ? { status } : {}) },
+    params: { ...(date ? { date } : {}), ...(status ? { status } : {}) },
   });
   return data.data;
 }

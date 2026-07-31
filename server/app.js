@@ -59,11 +59,26 @@ const allowedOrigins = (process.env.CLIENT_URL || "http://localhost:5173")
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+function isAllowedOrigin(origin) {
+  if (allowedOrigins.includes(origin)) return true;
+
+  if (process.env.NODE_ENV !== "production") {
+    try {
+      const { hostname } = new URL(origin);
+      return hostname === "localhost" || hostname === "127.0.0.1";
+    } catch {
+      return false;
+    }
+  }
+
+  return false;
+}
+
 app.use(
   cors({
     origin(origin, callback) {
       // Allow non-browser requests (curl/Postman/server-to-server) that send no Origin header.
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin || isAllowedOrigin(origin)) {
         callback(null, true);
       } else {
         callback(new Error(`CORS blocked for origin: ${origin}`));
@@ -71,7 +86,13 @@ app.use(
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Location-Id",
+      "X-Session-Token",
+      "Idempotency-Key",
+    ],
   }),
 );
 

@@ -52,6 +52,19 @@ function validateEmployee(employee) {
   return null;
 }
 
+function getIdentity(body = {}) {
+  return {
+    email: String(body.email || "").trim().toLowerCase() || null,
+    phone: String(body.phone || body.contact || "").trim() || null,
+  };
+}
+
+function validateIdentity(identity) {
+  if (!identity.email && !identity.phone) return "Email or phone is required";
+  if (identity.email && !EMAIL_PATTERN.test(identity.email)) return "Invalid email";
+  return null;
+}
+
 function escapeCsv(value) {
   if (value === null || value === undefined) return "";
   const text = String(value);
@@ -59,6 +72,125 @@ function escapeCsv(value) {
 }
 
 class EmployeeController {
+  async assignableCompanies(req, res) {
+    try {
+      const companyId = req.user?.role === "hr" ? Number(req.user.company_id) : null;
+      const companies = await EmployeeModel.getAssignableCompanies(companyId);
+      return res.json({ success: true, data: companies });
+    } catch (error) {
+      console.error("Assignable companies error:", error);
+      return res.status(500).json({ success: false, message: "Unable to fetch companies" });
+    }
+  }
+
+  async checkExistence(req, res) {
+    try {
+      const identity = getIdentity(req.body);
+      const validationError = validateIdentity(identity);
+      if (validationError) {
+        return res.status(400).json({ success: false, message: validationError });
+      }
+
+      const employee = await EmployeeModel.findByIdentity({
+        ...identity,
+        companyId: req.user?.role === "hr" ? Number(req.user.company_id) : null,
+      });
+      return res.json({
+        success: true,
+        data: {
+          exists: Boolean(employee),
+          company_user: employee
+            ? {
+                id: employee.id,
+                company_id: employee.company_id,
+                company_name: employee.company_name,
+                name: employee.name,
+                email: employee.email,
+                phone: employee.phone,
+                status: Number(employee.company_user_status),
+              }
+            : null,
+        },
+      });
+    } catch (error) {
+      console.error("Check company user existence error:", error);
+      return res.status(500).json({ success: false, message: "Unable to check company user" });
+    }
+  }
+
+  async checkActivation(req, res) {
+    try {
+      const identity = getIdentity(req.body);
+      const validationError = validateIdentity(identity);
+      if (validationError) {
+        return res.status(400).json({ success: false, message: validationError });
+      }
+
+      const employee = await EmployeeModel.findByIdentity({
+        ...identity,
+        companyId: req.user?.role === "hr" ? Number(req.user.company_id) : null,
+      });
+      if (!employee) {
+        return res.status(404).json({ success: false, message: "Company user not found" });
+      }
+
+      const activated = employee.customer_id !== null && employee.customer_id !== undefined;
+      return res.json({
+        success: true,
+        data: {
+          company_user_id: employee.id,
+          customer_id: employee.customer_id || null,
+          account_activated: activated,
+          customer_profile: activated
+            ? {
+                status: Number(employee.customer_status),
+                is_verified: Number(employee.customer_is_verified),
+              }
+            : null,
+        },
+      });
+    } catch (error) {
+      console.error("Check account activation error:", error);
+      return res.status(500).json({ success: false, message: "Unable to check account activation" });
+    }
+  }
+
+  async assignCustomer(req, res) {
+    try {
+      const employee = normalizeEmployee({ ...req.body, company_id: getCompanyId(req) });
+      const validationError = validateEmployee(employee);
+      if (validationError) {
+        return res.status(400).json({ success: false, message: validationError });
+      }
+      if (!employee.phone) {
+        return res.status(400).json({ success: false, message: "Employee phone is required" });
+      }
+      if (!(await EmployeeModel.companyExists(employee.company_id))) {
+        return res.status(404).json({ success: false, message: "Active company not found" });
+      }
+
+      const duplicate = await EmployeeModel.findDuplicate(employee);
+      if (duplicate) {
+        return res.status(409).json({
+          success: false,
+          message: "A company user with this email or phone already exists",
+          data: { company_user_id: duplicate.id },
+        });
+      }
+
+      const employeeId = await EmployeeModel.create(employee);
+      const created = await EmployeeModel.findById(employeeId, employee.company_id);
+      return res.status(201).json({
+        success: true,
+        message: "Customer assigned to company successfully",
+        data: created,
+      });
+    } catch (error) {
+      console.error("Assign customer error:", error);
+      return res.status(500).json({ success: false, message: "Unable to assign customer" });
+    }
+  }
+
   async departments(req, res) {
     try {
       const companyId = getCompanyId(req);

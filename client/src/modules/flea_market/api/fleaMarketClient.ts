@@ -1,5 +1,9 @@
 import axios, { AxiosError } from "axios";
 
+export const FLEA_MARKET_API_BASE_URL = (
+  import.meta.env.VITE_FLEA_MARKET_API_URL || "http://localhost:5000/api/flea-market"
+).replace(/\/$/, "");
+
 /**
  * Thrown centrally by the response interceptor whenever the backend reports
  * { error: "SESSION_EXPIRED", reauthRequired: true } on a 401. Callers should
@@ -25,7 +29,7 @@ export function setFleaMarketLocationId(locationId: number | null): void {
 }
 
 export const fleaMarketClient = axios.create({
-  baseURL: "/api/flea-market",
+  baseURL: FLEA_MARKET_API_BASE_URL,
 });
 
 // Injects the session/location context on every call instead of every call
@@ -66,7 +70,8 @@ export async function pingFleaMarketHealth(): Promise<void> {
     await fleaMarketClient.get("/health");
   } catch (error) {
     console.error(
-      "[flea-market] Backend health check failed - is the server running and is VITE_DEV_API_PROXY_TARGET correct?",
+      "[flea-market] Backend health check failed - is the server running and is VITE_FLEA_MARKET_API_URL correct?",
+      `API URL: ${FLEA_MARKET_API_BASE_URL}`,
       error,
     );
   }

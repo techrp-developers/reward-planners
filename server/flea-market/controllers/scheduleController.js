@@ -1,9 +1,5 @@
 const scheduleService = require("../services/scheduleService");
 
-function todayDateString() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function sendServiceError(res, error, fallbackMessage) {
   const statusCode = error.statusCode || 500;
   if (statusCode >= 500) {
@@ -18,7 +14,7 @@ function sendServiceError(res, error, fallbackMessage) {
 class ScheduleController {
   async list(req, res) {
     try {
-      const date = String(req.query.date || todayDateString());
+      const date = req.query.date ? String(req.query.date) : undefined;
       const status = req.query.status ? String(req.query.status) : undefined;
 
       const data = await scheduleService.listSchedules(date, status);

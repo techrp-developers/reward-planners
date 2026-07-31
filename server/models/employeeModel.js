@@ -1,6 +1,24 @@
 const db = require("../config/database");
 
 class EmployeeModel {
+  async getAssignableCompanies(companyId = null) {
+    const params = [];
+    let companyFilter = "";
+    if (companyId) {
+      companyFilter = "AND company_id = ?";
+      params.push(companyId);
+    }
+
+    const [rows] = await db.execute(
+      `SELECT company_id, company_name, company_email, company_phone, company_logo
+       FROM companies
+       WHERE status = 1 ${companyFilter}
+       ORDER BY company_name ASC`,
+      params,
+    );
+    return rows;
+  }
+
   async getCompanyProfile(companyId) {
     const [[company]] = await db.execute(
       `SELECT company_id, company_name, company_logo
@@ -202,6 +220,49 @@ class EmployeeModel {
       `SELECT id, name, email, contact
        FROM company_users
        WHERE (${conditions.join(" OR ")}) ${exclusion}
+       LIMIT 1`,
+      params,
+    );
+    return employee;
+  }
+
+  async findByIdentity({ email, phone, companyId = null }, conn = db) {
+    const conditions = [];
+    const params = [];
+
+    if (email) {
+      conditions.push("LOWER(TRIM(cu.email)) = ?");
+      params.push(email.toLowerCase());
+    }
+    if (phone) {
+      conditions.push("TRIM(cu.contact) = ?");
+      params.push(phone);
+    }
+    if (!conditions.length) return null;
+
+    let companyFilter = "";
+    if (companyId) {
+      companyFilter = "AND cu.company_id = ?";
+      params.push(companyId);
+    }
+
+    const [[employee]] = await conn.execute(
+      `SELECT
+         cu.id,
+         cu.company_id,
+         co.company_name,
+         cu.name,
+         cu.email,
+         cu.contact AS phone,
+         cu.status AS company_user_status,
+         c.user_id AS customer_id,
+         c.status AS customer_status,
+         c.is_verified AS customer_is_verified
+       FROM company_users cu
+       INNER JOIN companies co ON co.company_id = cu.company_id
+       LEFT JOIN customer c ON c.company_user_id = cu.id
+       WHERE (${conditions.join(" OR ")}) ${companyFilter}
+       ORDER BY cu.id DESC
        LIMIT 1`,
       params,
     );
