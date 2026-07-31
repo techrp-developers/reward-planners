@@ -213,7 +213,16 @@ class CheckoutService {
           coins: totalPoints,
           balance_after: newBalance,
           category: "reward",
-          reference_id: idempotencyKey,
+          // wallet_transactions.reference_id is an INT column (matches the
+          // main app's reference_id: order_id convention) — idempotencyKey is
+          // a UUID string, so passing it here got silently truncated to its
+          // leading digits on insert, colliding with any other checkout whose
+          // UUID happened to start with the same digits. invoices[0].invoiceId
+          // is a real auto-increment int and unique per checkout: retries of
+          // a failed attempt roll back (so it's never reused), and a
+          // genuinely completed checkout is replayed via
+          // buildResultFromExistingInvoices without re-inserting anything.
+          reference_id: invoices[0].invoiceId,
           reason_code: "REDEEM",
         });
       }
