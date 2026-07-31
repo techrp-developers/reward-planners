@@ -3,6 +3,8 @@ const rewardEligibilityService = require("../services/rewardEligibilityService")
 const productQuickCreateService = require("../services/productQuickCreateService");
 const poolStockModel = require("../models/poolStockModel");
 const allProductsService = require("../services/allProductsService");
+const productImportService = require("../services/productImportService");
+const productExportService = require("../services/productExportService");
 
 function sendServiceError(res, error, fallbackMessage) {
   const statusCode = error.statusCode || 500;
@@ -158,6 +160,48 @@ class ProductController {
     } catch (error) {
       console.error("[flea-market][products-all] filter-options error:", error);
       return res.status(500).json({ success: false, message: "Failed to load filter options" });
+    }
+  }
+
+  // Bulk product creation from an uploaded CSV — header validation and
+  // malformed-file errors are hard failures (4xx, nothing processed); once
+  // the file itself is valid, individual bad products are reported inline
+  // in the results array rather than failing the whole request, so good
+  // rows in the same file still get created.
+  async importCsv(req, res) {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ success: false, message: "No file uploaded — expected a 'file' field." });
+      }
+
+      const result = await productImportService.importCsv(req.file.buffer);
+      return res.json({ success: true, ...result });
+    } catch (error) {
+      const statusCode = error.statusCode || 500;
+      if (statusCode >= 500) console.error("[flea-market][products-import] error:", error);
+      return res.status(statusCode).json({ success: false, message: error.message || "Failed to import products" });
+    }
+  }
+
+  // CSV export — same (q, vendor_id) filter the "All Products" list uses,
+  // same column order the import endpoint expects (round-trip capable).
+  async exportCsv(req, res) {
+    try {
+      const { q, vendor_id } = req.query;
+      const csv = await productExportService.exportCsv({
+        q: q ? String(q).trim() : "",
+        vendorId: vendor_id ? Number(vendor_id) : null,
+      });
+
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="products-export-${new Date().toISOString().slice(0, 10)}.csv"`,
+      );
+      return res.status(200).send(csv);
+    } catch (error) {
+      console.error("[flea-market][products-export] error:", error);
+      return res.status(500).json({ success: false, message: "Failed to export products" });
     }
   }
 }
