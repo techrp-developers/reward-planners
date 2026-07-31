@@ -47,6 +47,10 @@ function ProductSearch({ onProductSelected, onSessionExpired }: ProductSearchPro
     queryKey: ["flea-market", "products", "search", trimmedSearch],
     queryFn: () => searchProducts(trimmedSearch),
     enabled: searchEnabled,
+    // Never serve a cached result here — selling the last unit of something
+    // must be reflected on the very next search, not up to staleTime later
+    // (global default is 10s; this query overrides it to 0).
+    staleTime: 0,
   });
 
   useEffect(() => {
