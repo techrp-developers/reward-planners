@@ -31,6 +31,7 @@ const FleaMarketDashboard = lazy(() => import("./modules/flea_market/dashboard/F
 const FleaMarketBillingPage = lazy(() => import("./modules/flea_market/component/billing/BillingPage.tsx"));
 const FleaMarketSchedulePage = lazy(() => import("./modules/flea_market/component/schedule/SchedulePage.tsx"));
 const FleaMarketStockPage = lazy(() => import("./modules/flea_market/component/allocations/StockPage.tsx"));
+const FleaMarketAllProductsPage = lazy(() => import("./modules/flea_market/component/products/AllProductsPage.tsx"));
 const FleaMarketVendorSalesReportPage = lazy(
   () => import("./modules/flea_market/component/reports/VendorSalesReportPage.tsx"),
 );
@@ -560,6 +561,10 @@ export default function App() {
         <Route
           path={routes.fleaMarket.stock}
           element={<FleaMarketStockPage />}
+        />
+        <Route
+          path={routes.fleaMarket.allProducts}
+          element={<FleaMarketAllProductsPage />}
         />
         <Route
           path={routes.fleaMarket.reports.vendorSales}

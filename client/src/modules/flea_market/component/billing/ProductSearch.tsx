@@ -236,7 +236,7 @@ function ProductSearch({ onProductSelected, onSessionExpired }: ProductSearchPro
                       }`}
                     >
                       <div className="flex items-center min-w-0 gap-3">
-                        <Avatar name={product.name} />
+                        <Avatar name={product.name} imageUrl={product.heroImage} />
                         <div className="min-w-0">
                           <p className="text-sm font-bold text-gray-800 truncate">{product.name}</p>
                           <p className="text-[11px] text-gray-400 mt-0.5 truncate">

@@ -87,6 +87,7 @@ export const routes = {
       page: "/flea-market/billing",
     },
     stock: "/flea-market/manager/stock",
+    allProducts: "/flea-market/manager/products",
     reports: {
       vendorSales: "/flea-market/reports/vendor-sales",
       purchaseHistory: "/flea-market/reports/purchase-history",

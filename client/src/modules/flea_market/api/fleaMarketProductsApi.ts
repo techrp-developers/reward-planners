@@ -12,6 +12,9 @@ export interface FleaMarketProduct {
   mrp: number;
   salePrice: number;
   stock: number;
+  // Only populated by the billing search endpoint (searchProducts) — display
+  // only, optional everywhere, never required at product creation.
+  heroImage?: string | null;
 }
 
 interface ProductSearchApiResponse {
@@ -45,31 +48,49 @@ export async function searchCatalogProducts(query: string, vendorId?: number): P
   return data.data;
 }
 
+export interface CreateProductVariantInput {
+  label?: string;
+  mrp: number;
+  salePrice: number;
+  initialStock: number;
+}
+
 export interface CreateProductPayload {
   vendorId: number;
   productName: string;
   brandName?: string;
   categoryId?: number;
   subcategoryId?: number;
-  mrp: number;
-  salePrice: number;
-  initialStock: number;
   // Optional — when given, the product is instantly mapped to this reward
   // rule (product-level target) so it's redeemable right away.
   rewardRuleId?: number;
+  // Always sent by ProductQuickCreateDrawer, one entry per row — the backend
+  // also still accepts the old flat mrp/salePrice/initialStock shape for any
+  // other caller, but this client only ever uses the array form now.
+  variants: CreateProductVariantInput[];
+}
+
+export interface CreatedProductVariant {
+  variantId: number;
+  sku: string;
+  label: string | null;
+  mrp: number;
+  salePrice: number;
+  stock: number;
 }
 
 export interface CreatedProduct {
   productId: number;
+  // Top-level variantId/sku/mrp/salePrice/stock mirror variants[0] — kept so
+  // any single-variant-shaped consumer keeps working unmodified.
   variantId: number;
   productName: string;
   brandName: string | null;
-  // Always auto-generated server-side (RP-<productId>-<random>) — never
-  // null in practice, but typed to match the raw createQuick() result shape.
   sku: string | null;
   mrp: number;
   salePrice: number;
   stock: number;
+  variants: CreatedProductVariant[];
   // True only if rewardRuleId was passed AND the mapping call itself failed
   // — the product/variant were still created successfully either way.
   rewardMappingFailed?: boolean;

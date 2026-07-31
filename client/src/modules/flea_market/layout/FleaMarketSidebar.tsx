@@ -8,6 +8,7 @@ import {
   FiBarChart2,
   FiClock,
   FiBox,
+  FiList,
 } from "react-icons/fi";
 import { HiOutlineUserCircle } from "react-icons/hi2";
 import { useAuth } from "../../../common/auth/useAuth";
@@ -39,6 +40,7 @@ const navSections: NavSection[] = [
       { label: "Manage Event", to: routes.fleaMarket.manageEvent, Icon: FiCalendar },
       { label: "Billing", to: routes.fleaMarket.billing.page, Icon: FiUserCheck },
       { label: "Add Stock", to: routes.fleaMarket.stock, Icon: FiBox },
+      { label: "All Products", to: routes.fleaMarket.allProducts, Icon: FiList },
     ],
   },
   {
