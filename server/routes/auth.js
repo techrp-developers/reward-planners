@@ -56,6 +56,10 @@ router.post("/reset-password", authLimiter, authController.resetPassword);
    LOGIN (SEPARATE FOR EACH ROLE)
    ============================================================ */
 
+router.post("/hr/login", authLimiter, (req, res) =>
+  authController.login(req, res, "hr"),
+);
+
 router.post("/vendor/login", authLimiter, (req, res) =>
   authController.login(req, res, "vendor"),
 );
