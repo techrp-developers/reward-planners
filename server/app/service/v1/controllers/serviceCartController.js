@@ -44,6 +44,50 @@ class ServiceCartController {
         price: variant.price,
       });
 
+      // -------------------------------
+      // SERVICE BUNDLE UPSELL PUSH
+      // -------------------------------
+      try {
+        const [bundleInfo] = await db.execute(
+          `
+          SELECT sbi.bundle_id, sb.name AS bundle_name, sbi2.service_id AS related_service_id, s2.name AS related_service_name
+          FROM service_bundle_items sbi
+          JOIN service_bundles sb ON sbi.bundle_id = sb.id
+          JOIN service_bundle_items sbi2 ON sbi.bundle_id = sbi2.bundle_id
+          JOIN services s2 ON sbi2.service_id = s2.id
+          WHERE sbi.service_id = ? AND sbi2.service_id != ?
+          LIMIT 1
+          `,
+          [service_id, service_id]
+        );
+
+        if (bundleInfo && bundleInfo.length > 0) {
+          const upsell = bundleInfo[0];
+          // Check if user already has the related service in service_cart_items
+          const [[alreadyInCart]] = await db.execute(
+            `SELECT id FROM service_cart_items WHERE cart_id = ? AND service_id = ? LIMIT 1`,
+            [cart.id, upsell.related_service_id]
+          );
+
+          if (!alreadyInCart) {
+            const { notifyUser } = require("../../../common/utils/notification");
+            notifyUser({
+              userId,
+              module: "service",
+              type: "service_bundle_upsell",
+              title: "Get the complete package! 📦",
+              message: `Save by adding ${upsell.related_service_name} to complete your ${upsell.bundle_name} pack!`,
+              icon: "gift",
+              reference_type: "service_bundle",
+              reference_id: String(upsell.bundle_id),
+              action_url: "/services",
+            }, "service bundle upsell notification");
+          }
+        }
+      } catch (upsellErr) {
+        console.error("Bundle upsell check failed:", upsellErr.message);
+      }
+
       res.json({
         success: true,
         message: "Added to cart",

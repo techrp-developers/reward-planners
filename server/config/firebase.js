@@ -1,19 +1,34 @@
+const fs = require("fs");
+const path = require("path");
 const { initializeApp, cert, getApps } = require("firebase-admin/app");
+
+function normalizeCredentials(credentials) {
+  if (credentials.private_key) {
+    credentials.private_key = credentials.private_key.replace(/\\n/g, "\n");
+  }
+
+  return credentials;
+}
 
 function getFirebaseCredentials() {
   const rawCredentials = process.env.FIREBASE_SERVICE_ACCOUNT;
 
-  if (!rawCredentials) {
-    throw new Error("Missing FIREBASE_SERVICE_ACCOUNT environment variable.");
+  if (rawCredentials) {
+    return normalizeCredentials(JSON.parse(rawCredentials));
   }
 
-  const parsedCredentials = JSON.parse(rawCredentials);
+  const configuredPath =
+    process.env.FIREBASE_SERVICE_ACCOUNT_PATH ||
+    path.join(__dirname, "firebase-service-account.json");
 
-  if (parsedCredentials.private_key) {
-    parsedCredentials.private_key = parsedCredentials.private_key.replace(/\\n/g, "\n");
+  if (!fs.existsSync(configuredPath)) {
+    throw new Error(
+      "Missing Firebase credentials. Set FIREBASE_SERVICE_ACCOUNT or FIREBASE_SERVICE_ACCOUNT_PATH.",
+    );
   }
 
-  return parsedCredentials;
+  const fileCredentials = JSON.parse(fs.readFileSync(configuredPath, "utf8"));
+  return normalizeCredentials(fileCredentials);
 }
 
 try {

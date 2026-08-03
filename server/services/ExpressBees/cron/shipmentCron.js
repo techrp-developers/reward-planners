@@ -1,7 +1,7 @@
 const cron = require("node-cron");
 const xpressService = require("../xpressbees_service");
 const db = require("../../../config/database");
-const NotificationModel = require("../../../app/common/models/notificationModel");
+const { notifyUser } = require("../../../app/common/utils/notification");
 const {
   processShipmentsAfterPayment,
 } = require("../../../app/ecommerce/v1/utils/webhook");
@@ -155,20 +155,49 @@ async function syncOrderStatus(orderId) {
   );
 
   // =====================
-  // NOTIFICATION (ONLY ON DELIVERY)
+  // NOTIFICATION ON STATUS CHANGE
   // =====================
-  if (finalStatus === "delivered" && result.affectedRows > 0) {
-    NotificationModel.create({
-      user_id: userId,
-      module: "ecommerce",
-      type: "delivery",
-      title: "Order delivered",
-      message: "Your package has been delivered successfully.",
-      icon: "package-check",
-      reference_type: "order",
-      reference_id: orderId,
-      action_url: `/orders/order-details/${orderId}`,
-    }).catch((err) => console.error("Delivery notification failed:", err));
+  if (result.affectedRows > 0) {
+    let title = "";
+    let message = "";
+    let icon = "package";
+
+    if (finalStatus === "shipped") {
+      title = "Order shipped 🚚";
+      message = "Your order has been shipped and is on the way.";
+      icon = "truck";
+    } else if (finalStatus === "out_for_delivery") {
+      title = "Out for delivery 🛵";
+      message = "Your order is out for delivery today.";
+      icon = "truck";
+    } else if (finalStatus === "delivered") {
+      title = "Order delivered 🎉";
+      message = "Your package has been delivered successfully.";
+      icon = "package-check";
+    } else if (finalStatus === "rto") {
+      title = "Order returned ⚠️";
+      message = "Your package is being returned to the warehouse.";
+      icon = "x-circle";
+    }
+
+    if (title) {
+      try {
+        const { notifyUser } = require("../../../app/common/utils/notification");
+        notifyUser({
+          userId,
+          module: "ecommerce",
+          type: finalStatus,
+          title,
+          message,
+          icon,
+          reference_type: "order",
+          reference_id: orderId,
+          action_url: `/orders/order-details/${orderId}`,
+        }, `shipment status ${finalStatus} notification`);
+      } catch (err) {
+        console.error(`[shipmentCron] Failed to send notification for status ${finalStatus}:`, err.message);
+      }
+    }
   }
 }
 
@@ -328,7 +357,7 @@ async function updateShipmentTracking(shipment) {
         );
 
         if (userId) {
-          NotificationModel.create({
+          notifyUser({
             user_id: userId,
             module: "ecommerce",
             type: "ndr",
@@ -340,7 +369,7 @@ async function updateShipmentTracking(shipment) {
             reference_id: shipment.order_id,
             action_url: `/orders/order-details/${shipment.order_id}`,
             priority: "high",
-          }).catch((err) => console.error("NDR notification failed:", err));
+          }, "NDR notification");
         }
       }
     }
@@ -413,7 +442,7 @@ async function updateShipmentTracking(shipment) {
           );
 
           if (!existingNotif.length && userId) {
-            NotificationModel.create({
+            notifyUser({
               user_id: userId,
               module: "ecommerce",
               type: "rto",
@@ -424,7 +453,7 @@ async function updateShipmentTracking(shipment) {
               reference_type: "order",
               reference_id: shipment.order_id,
               action_url: `/orders/order-details/${shipment.order_id}`,
-            }).catch((err) => console.error("RTO notification failed:", err));
+            }, "RTO notification");
           }
         } else {
           await conn.rollback();

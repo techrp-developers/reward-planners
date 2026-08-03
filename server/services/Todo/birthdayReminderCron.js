@@ -12,14 +12,14 @@ cron.schedule("0 9 * * *", async () => {
 
 async function sendBirthdayWishes() {
   try {
-    // Query users whose birthday is today (using company_emp table and date_of_birth column)
+    // Query users whose birthday is today (using company_users table and dob column)
     const [users] = await db.query(
       `
       SELECT c.user_id, c.name, c.fcm_token
       FROM customer c
-      INNER JOIN company_emp e ON c.company_user_id = e.id
-      WHERE MONTH(e.date_of_birth) = MONTH(CURDATE())
-        AND DAY(e.date_of_birth) = DAY(CURDATE())
+      INNER JOIN company_users e ON c.company_user_id = e.id
+      WHERE MONTH(e.dob) = MONTH(CURDATE())
+        AND DAY(e.dob) = DAY(CURDATE())
         AND c.status = 1
         AND c.fcm_token IS NOT NULL
         AND c.fcm_token != ''
@@ -40,6 +40,11 @@ async function sendBirthdayWishes() {
         notification: {
           title: `Happy Birthday, ${user.name}! 🎂`,
           body: `Wishing you a fantastic day filled with joy and success! 🎉 - Reward Planners`,
+        },
+        data: {
+          module: "birthday",
+          type: "birthday_wish",
+          screen: "Dashboard",
         },
         android: {
           notification: {
