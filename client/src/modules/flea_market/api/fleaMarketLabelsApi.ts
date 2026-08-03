@@ -9,11 +9,11 @@ export type LabelPrintFormat = "thermal" | "a4sheet";
 const BASE = FLEA_MARKET_API_BASE_URL;
 
 export function getLabelPrintUrl(poolId: number, format: LabelPrintFormat): string {
-  return `${BASE}/vendor-stock/${poolId}/label/print?format=${format}`;
+  return `${BASE}/vendor-stock/${poolId}/label/print?format=${format}&_=${Date.now()}`;
 }
 
 // Bulk print target — every currently-active pool, not scoped to one event
 // (pools aren't schedule-scoped anymore).
 export function getAllLabelsPrintUrl(format: LabelPrintFormat): string {
-  return `${BASE}/vendor-stock/labels/print?format=${format}`;
+  return `${BASE}/vendor-stock/labels/print?format=${format}&_=${Date.now()}`;
 }

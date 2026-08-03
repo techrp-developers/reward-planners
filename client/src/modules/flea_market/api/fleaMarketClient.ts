@@ -1,7 +1,8 @@
 import axios, { AxiosError } from "axios";
 
 export const FLEA_MARKET_API_BASE_URL = (
-  import.meta.env.VITE_FLEA_MARKET_API_URL || "http://localhost:5000/api/flea-market"
+  import.meta.env.VITE_FLEA_MARKET_API_URL ||
+  (import.meta.env.DEV ? "http://localhost:5000/api/flea-market" : "/api/crm/api/flea-market")
 ).replace(/\/$/, "");
 
 /**
@@ -36,6 +37,17 @@ export const fleaMarketClient = axios.create({
 // site threading it through manually.
 fleaMarketClient.interceptors.request.use((config) => {
   config.headers = config.headers ?? {};
+
+  // The live CRM reverse proxy currently gives API responses a browser cache
+  // lifetime. Give every read a unique URL so lists, searches, stock, reports,
+  // invoices, and health checks always reflect the current database state.
+  if (config.method?.toLowerCase() === "get") {
+    if (config.params instanceof URLSearchParams) {
+      config.params.set("_", String(Date.now()));
+    } else {
+      config.params = { ...(config.params ?? {}), _: Date.now() };
+    }
+  }
 
   if (currentSessionToken) {
     config.headers["X-Session-Token"] = currentSessionToken;

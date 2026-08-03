@@ -151,7 +151,21 @@ app.use("/v1", gamesRoute);
 app.use("/mps", mpsRoute);
 
 // Flea Market Routes
-app.use("/api/flea-market", fleaMarketRoute);
+app.use(
+  "/api/flea-market",
+  (req, res, next) => {
+    // API responses (especially deployment-time 404s) must never be cached by
+    // Cloudflare, otherwise a newly deployed route can keep appearing missing.
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    res.setHeader("CDN-Cache-Control", "no-store");
+    res.setHeader("Cloudflare-CDN-Cache-Control", "no-store");
+    res.setHeader("Surrogate-Control", "no-store");
+    next();
+  },
+  fleaMarketRoute,
+);
 
 // 404 Handler
 app.use((req, res) => {

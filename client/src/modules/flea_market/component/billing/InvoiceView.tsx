@@ -201,13 +201,9 @@ function InvoiceViewImpl({
                   <p className="text-sm font-bold text-gray-900">Invoice {invoice.invoiceNumber}</p>
                   {detail && <p className="text-xs text-gray-400">{new Date(detail.issuedAt).toLocaleString()}</p>}
                 </div>
-                <div className="flex items-center gap-1.5 pl-4 border-l border-gray-100 shrink-0">
-                  <img src={RPlogo} alt="Reward Planners" className="w-5 h-5" />
-                  <span className="text-[10px] font-semibold leading-tight text-gray-400">
-                    Powered by
-                    <br />
-                    Reward Planners
-                  </span>
+                <div className="flex items-center gap-3 pl-4 border-l border-gray-100 shrink-0">
+                  <img src={RPlogo} alt="Reward Planners" className="object-contain w-16 h-12" />
+                  <span className="text-sm font-bold leading-tight text-purple-700">Reward Planners</span>
                 </div>
               </div>
             </div>

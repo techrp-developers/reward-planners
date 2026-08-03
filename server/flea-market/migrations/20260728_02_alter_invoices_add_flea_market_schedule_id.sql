@@ -1,7 +1,7 @@
 -- Directly traces flea-market invoices to the schedule/event that produced
 -- them. This replaces fragile report-time inference through session/location/date.
 ALTER TABLE invoices
-  ADD COLUMN schedule_id INT NULL;
+  ADD COLUMN schedule_id INT UNSIGNED NULL;
 
 ALTER TABLE invoices
   ADD KEY idx_invoices_fm_schedule (schedule_id);
