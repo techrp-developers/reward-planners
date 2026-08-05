@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { api } from "../../common/api/api";
 import {
   ArrowLeft, ArrowRight, BadgeCheck, Building2, Check, CheckCircle2,
   KeyRound, Loader2, MapPin, ShieldCheck, UserRound,
 } from "lucide-react";
 
 type FormData = Record<string, string | boolean>;
+type StateOption = { state_id: number; state_name: string };
 
 const steps = [
   { title: "Company", icon: Building2 },
@@ -24,6 +26,7 @@ const initialData: FormData = {
   officeSame: true, repName: "", designation: "", repEmail: "", repPhone: "", repPan: "",
   aadhaarLast4: "", identityConsent: false, terms: false, privacy: false, dataConsent: false,
   communicationConsent: false, adminName: "", adminEmail: "", password: "", confirmPassword: "",
+  aadhaarVerified: false,
 };
 
 const fields: Record<number, Array<{ name: string; label: string; type?: string; required?: boolean; placeholder?: string }>> = {
@@ -57,17 +60,50 @@ export default function ClientOnboarding() {
     try { return JSON.parse(localStorage.getItem("rp-client-onboarding") || "null"); } catch { return null; }
   }, []);
   const [step, setStep] = useState<number>(saved?.step ?? 0);
+  const [highestStep, setHighestStep] = useState<number>(saved?.highestStep ?? saved?.step ?? 0);
   const [data, setData] = useState<FormData>({ ...initialData, ...(saved?.data ?? {}) });
   const [error, setError] = useState("");
-  const [verified, setVerified] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [states, setStates] = useState<StateOption[]>([]);
+  const [statesLoading, setStatesLoading] = useState(true);
+  const [statesError, setStatesError] = useState("");
 
   useEffect(() => {
-    if (step < 6) localStorage.setItem("rp-client-onboarding", JSON.stringify({ step, data }));
-  }, [step, data]);
+    let active = true;
+    const loadStates = async () => {
+      try {
+        const response = await api.get("/auth/all-states");
+        if (active && response.data?.success && Array.isArray(response.data.data)) {
+          setStates(response.data.data);
+        }
+      } catch {
+        if (active) setStatesError("Unable to load states. Please refresh and try again.");
+      } finally {
+        if (active) setStatesLoading(false);
+      }
+    };
+    void loadStates();
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("rp-client-onboarding", JSON.stringify({
+      step,
+      highestStep,
+      data,
+      savedAt: new Date().toISOString(),
+      completed: step === 6,
+    }));
+  }, [step, highestStep, data]);
 
   const update = (name: string, value: string | boolean) => {
-    setData((current) => ({ ...current, [name]: value }));
+    setData((current) => ({
+      ...current,
+      [name]: value,
+      ...(name === "aadhaarLast4" && value !== current.aadhaarLast4
+        ? { aadhaarVerified: false }
+        : {}),
+    }));
     setError("");
   };
 
@@ -75,7 +111,7 @@ export default function ClientOnboarding() {
     const required = (fields[step] || []).filter((field) => field.required);
     if (required.some((field) => !String(data[field.name] ?? "").trim())) return "Please complete all required fields.";
     if (step === 0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(data.officialEmail))) return "Enter a valid official email.";
-    if (step === 3 && !verified) return "Complete Aadhaar verification before continuing.";
+    if (step === 3 && !data.aadhaarVerified) return "Complete Aadhaar verification before continuing.";
     if (step === 4 && ![data.terms, data.privacy, data.dataConsent, data.communicationConsent].every(Boolean)) return "Accept all mandatory legal agreements.";
     if (step === 5 && data.password !== data.confirmPassword) return "Passwords do not match.";
     if (step === 5 && String(data.password).length < 8) return "Password must contain at least 8 characters.";
@@ -85,8 +121,9 @@ export default function ClientOnboarding() {
   const next = () => {
     const message = validate();
     if (message) return setError(message);
-    if (step === 5) localStorage.removeItem("rp-client-onboarding");
-    setStep((current) => Math.min(current + 1, 6));
+    const nextStep = Math.min(step + 1, 6);
+    setHighestStep((current) => Math.max(current, nextStep));
+    setStep(nextStep);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -95,7 +132,18 @@ export default function ClientOnboarding() {
       setError("Provide the last 4 Aadhaar digits and authorize verification."); return;
     }
     setVerifying(true); setError("");
-    window.setTimeout(() => { setVerifying(false); setVerified(true); }, 900);
+    window.setTimeout(() => {
+      setVerifying(false);
+      update("aadhaarVerified", true);
+    }, 900);
+  };
+
+  const startOver = () => {
+    localStorage.removeItem("rp-client-onboarding");
+    setData(initialData);
+    setStep(0);
+    setHighestStep(0);
+    setError("");
   };
 
   const renderFields = () => (
@@ -103,11 +151,28 @@ export default function ClientOnboarding() {
       {(fields[step] || []).map((field) => (
         <label key={field.name} className="block text-sm font-semibold text-slate-700">
           {field.label}{field.required && <span className="text-pink-500"> *</span>}
-          <input
-            type={field.type || "text"} value={String(data[field.name] ?? "")}
-            onChange={(event) => update(field.name, event.target.value)} placeholder={field.placeholder}
-            className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 font-normal outline-none transition focus:border-purple-400 focus:ring-4 focus:ring-purple-100"
-          />
+          {field.name === "state" ? (
+            <>
+              <select
+                value={String(data.state ?? "")}
+                onChange={(event) => update("state", event.target.value)}
+                disabled={statesLoading || Boolean(statesError)}
+                className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 font-normal outline-none transition focus:border-purple-400 focus:ring-4 focus:ring-purple-100 disabled:cursor-not-allowed disabled:bg-slate-50"
+              >
+                <option value="">{statesLoading ? "Loading states…" : "Select state"}</option>
+                {states.map((state) => (
+                  <option key={state.state_id} value={state.state_id}>{state.state_name}</option>
+                ))}
+              </select>
+              {statesError && <span className="mt-1 block text-xs font-normal text-red-600">{statesError}</span>}
+            </>
+          ) : (
+            <input
+              type={field.type || "text"} value={String(data[field.name] ?? "")}
+              onChange={(event) => update(field.name, event.target.value)} placeholder={field.placeholder}
+              className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 font-normal outline-none transition focus:border-purple-400 focus:ring-4 focus:ring-purple-100"
+            />
+          )}
         </label>
       ))}
       {step === 1 && (
@@ -130,8 +195,8 @@ export default function ClientOnboarding() {
           <input maxLength={4} inputMode="numeric" value={String(data.aadhaarLast4)} onChange={(e) => update("aadhaarLast4", e.target.value.replace(/\D/g, ""))} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 tracking-[.45em] outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100" placeholder="0000" />
         </label>
         <label className="flex items-start gap-3 text-sm text-slate-600"><input type="checkbox" checked={Boolean(data.identityConsent)} onChange={(e) => update("identityConsent", e.target.checked)} className="mt-1 h-4 w-4 accent-purple-600" />I authorize Reward Planner to verify my identity through an approved provider.</label>
-        <button type="button" onClick={verifyIdentity} disabled={verifying || verified} className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 font-bold text-white disabled:bg-emerald-600">
-          {verifying ? <><Loader2 className="h-5 w-5 animate-spin" /> Verifying…</> : verified ? <><Check className="h-5 w-5" /> Verification complete</> : <><ShieldCheck className="h-5 w-5" /> Verify Aadhaar</>}
+        <button type="button" onClick={verifyIdentity} disabled={verifying || Boolean(data.aadhaarVerified)} className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 font-bold text-white disabled:bg-emerald-600">
+          {verifying ? <><Loader2 className="h-5 w-5 animate-spin" /> Verifying…</> : data.aadhaarVerified ? <><Check className="h-5 w-5" /> Verification complete</> : <><ShieldCheck className="h-5 w-5" /> Verify Aadhaar</>}
         </button>
       </div>
     );
@@ -155,7 +220,10 @@ export default function ClientOnboarding() {
           <div><span className="text-slate-500">Status</span><strong className="block text-emerald-600">Ready</strong></div>
           <div><span className="text-slate-500">Next step</span><strong className="block text-slate-900">Organization setup</strong></div>
         </div>
-        <button onClick={() => navigate("/login", { state: { message: "Client onboarding completed successfully." } })} className="mt-7 rounded-full bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-8 py-3 font-bold text-white shadow-lg">Return to login</button>
+        <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
+          <button onClick={() => navigate("/login", { state: { message: "Client onboarding completed successfully." } })} className="rounded-full bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-8 py-3 font-bold text-white shadow-lg">Return to login</button>
+          <button type="button" onClick={startOver} className="rounded-full border border-slate-200 px-6 py-3 font-semibold text-slate-600 hover:bg-slate-50">Start over</button>
+        </div>
       </div>
     );
   };
@@ -172,7 +240,27 @@ export default function ClientOnboarding() {
         <div className="overflow-hidden rounded-3xl bg-white shadow-xl shadow-slate-200/70 lg:grid lg:grid-cols-[280px_1fr]">
           <aside className="bg-gradient-to-b from-[#852BAF] to-[#5b217d] p-6 text-white">
             <div className="mb-8 flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-xl bg-white/15"><Building2 /></div><div><strong className="block">Client onboarding</strong><span className="text-xs text-purple-200">Progress saves automatically</span></div></div>
-            <div className="space-y-2">{steps.map((item, index) => { const Icon = item.icon; return <div key={item.title} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm ${index === step ? "bg-white text-purple-800" : index < step ? "text-white" : "text-purple-200"}`}><span className={`grid h-7 w-7 place-items-center rounded-full ${index < step ? "bg-emerald-400 text-white" : index === step ? "bg-purple-100" : "bg-white/10"}`}>{index < step ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}</span>{item.title}</div>; })}</div>
+            <div className="space-y-2">{steps.map((item, index) => {
+              const Icon = item.icon;
+              const isAvailable = index <= highestStep;
+              const isCompleted = index < highestStep;
+              return (
+                <button
+                  key={item.title}
+                  type="button"
+                  disabled={!isAvailable}
+                  onClick={() => { setStep(index); setError(""); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${index === step ? "bg-white text-purple-800 shadow-sm" : isCompleted ? "text-white hover:bg-white/10" : "cursor-not-allowed text-purple-200"}`}
+                  aria-label={`${item.title}${isCompleted ? " (completed, click to edit)" : ""}`}
+                >
+                  <span className={`grid h-7 w-7 place-items-center rounded-full ${isCompleted ? "bg-emerald-400 text-white" : index === step ? "bg-purple-100" : "bg-white/10"}`}>
+                    {isCompleted ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
+                  </span>
+                  <span className="flex-1">{item.title}</span>
+                  {isCompleted && <span className="text-[10px] font-semibold uppercase tracking-wide text-purple-100">Edit</span>}
+                </button>
+              );
+            })}</div>
           </aside>
           <main className="p-6 sm:p-10">
             <div className="mb-8"><span className="text-xs font-bold uppercase tracking-widest text-purple-600">Step {step + 1} of {steps.length}</span><h1 className="mt-2 text-3xl font-extrabold text-slate-900">{steps[step].title}</h1><p className="mt-2 text-slate-500">{descriptions[step]}</p></div>
