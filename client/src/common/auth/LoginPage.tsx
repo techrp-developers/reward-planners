@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "./useAuth";
 import logoImage from "../assets/logo.svg";
-import { User, Lock, Eye, EyeOff, Briefcase } from "lucide-react";
+import { User, Lock, Eye, EyeOff, Briefcase, Building2, ArrowRight } from "lucide-react";
 
 type Role =
   | "vendor"
@@ -106,6 +106,22 @@ export default function LoginPage() {
 
         <div className="relative w-full px-10 py-5 bg-white">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_circle_at_50%_0%,rgba(133,43,175,0.05),transparent_45%)]" />
+
+          <Link
+            to="/client-onboarding"
+            className="relative mb-5 flex w-full items-center justify-between rounded-2xl border border-purple-100 bg-gradient-to-r from-purple-50 to-pink-50 px-4 py-3 text-left transition hover:border-purple-200 hover:shadow-md"
+          >
+            <span className="flex items-center gap-3">
+              <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-[#852BAF] to-[#FC3F78] text-white shadow-sm">
+                <Building2 className="h-5 w-5" />
+              </span>
+              <span>
+                <span className="block text-sm font-bold text-slate-900">Client Onboarding</span>
+                <span className="block text-xs text-slate-500">Register your organization</span>
+              </span>
+            </span>
+            <ArrowRight className="h-5 w-5 text-purple-600" />
+          </Link>
 
           {/* Header */}
           <h2 className="relative text-3xl font-extrabold text-center text-gray-900">

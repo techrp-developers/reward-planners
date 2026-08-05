@@ -11,6 +11,7 @@ const RegisterPage = lazy(() => import("./common/auth/RegisterPage.tsx"));
 const ForgotPassword = lazy(() => import("./common/auth/ForgotPassword.tsx"));
 const ResetPassword = lazy(() => import("./common/auth/ResetPassword.tsx"));
 const VerifyOtpPage = lazy(() => import("./common/auth/VerifyOtpPage.tsx"));
+const ClientOnboarding = lazy(() => import("./modules/clientOnboarding/ClientOnboarding.tsx"));
 
 /* Layouts */
 const VendorLayout = lazy(() => import("./modules/products/vendor/VendorLayout.tsx"));
@@ -206,6 +207,7 @@ export default function App() {
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/verify-otp" element={<VerifyOtpPage />} />
+        <Route path="/client-onboarding" element={<ClientOnboarding />} />
       </Route>
 
       {/* ========== VENDOR ========== */}
