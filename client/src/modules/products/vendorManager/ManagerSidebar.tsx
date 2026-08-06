@@ -62,6 +62,12 @@ export default function ManagerNavbar() {
       badgeCount: unreadCountByCategory("vendor_onboarding"),
     },
     {
+      label: "Employees",
+      to: routes.manager.employees,
+      Icon: FiUserCheck,
+      type: "link",
+    },
+    {
       label: "Products",
       to: routes.manager.products,
       Icon: FiPackage,

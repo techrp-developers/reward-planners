@@ -3,6 +3,78 @@ const db = require("../config/database");
 const ExcelJS = require("exceljs");
 
 class ManagerController {
+  async employeeDirectoryCompanies(req, res) {
+    try {
+      const [companies] = await db.execute(`
+        SELECT
+          co.company_id,
+          co.company_name,
+          co.company_email,
+          co.company_phone,
+          co.company_logo,
+          co.status,
+          co.created_at,
+          co.updated_at,
+          COUNT(DISTINCT cu.id) AS total_employee_count,
+          COUNT(DISTINCT CASE WHEN c.status = 1 THEN c.user_id END) AS active_employee_count
+        FROM companies co
+        LEFT JOIN company_users cu ON cu.company_id = co.company_id
+        LEFT JOIN customer c ON c.company_id = co.company_id
+        GROUP BY
+          co.company_id, co.company_name, co.company_email, co.company_phone,
+          co.company_logo, co.status, co.created_at, co.updated_at
+        ORDER BY co.company_id DESC
+      `);
+
+      return res.json({
+        success: true,
+        count: companies.length,
+        data: companies.map((company) => ({
+          ...company,
+          total_employee_count: Number(company.total_employee_count || 0),
+          active_employee_count: Number(company.active_employee_count || 0),
+          company_logo: company.company_logo
+            ? company.company_logo.startsWith("http")
+              ? company.company_logo
+              : `https://cdn.rewardplanners.com/${company.company_logo}`
+            : null,
+        })),
+      });
+    } catch (error) {
+      console.error("Employee directory companies error:", error);
+      return res.status(500).json({ success: false, message: "Failed to fetch companies" });
+    }
+  }
+
+  async employeeDirectoryCustomers(req, res) {
+    try {
+      const [customers] = await db.execute(`
+        SELECT
+          c.user_id,
+          c.company_id,
+          c.company_user_id,
+          c.name,
+          c.email,
+          c.phone,
+          c.status,
+          c.is_verified,
+          c.last_login_at,
+          co.company_name,
+          cu.department,
+          cu.role AS company_role
+        FROM customer c
+        LEFT JOIN companies co ON co.company_id = c.company_id
+        LEFT JOIN company_users cu ON cu.id = c.company_user_id
+        ORDER BY c.user_id DESC
+      `);
+
+      return res.json({ success: true, count: customers.length, data: customers });
+    } catch (error) {
+      console.error("Employee directory customers error:", error);
+      return res.status(500).json({ success: false, message: "Failed to fetch employees" });
+    }
+  }
+
   // ========== BASIC STATS FOR CARDS ==========
   async getDashboardStats(req, res) {
     try {

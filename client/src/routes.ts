@@ -25,6 +25,7 @@ export const routes = {
     dashboard: "/manager/dashboard",
     changePassword: "/manager/change-password",
     vendors: "/manager/vendors",
+    employees: "/manager/employees",
     products: "/manager/products",
     productView: "/manager/product/:id",
     vendorReview: "/manager/vendor-review/:id",
