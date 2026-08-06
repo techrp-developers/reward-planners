@@ -1,8 +1,73 @@
 const ManagerModel = require("../models/managerModel");
 const db = require("../config/database");
 const ExcelJS = require("exceljs");
+const EmployeeModel = require("../models/employeeModel");
+
+const COMPANY_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 class ManagerController {
+  async createCompanyEmployee(req, res) {
+    try {
+      const employee = {
+        company_id: Number(req.body.company_id),
+        name: String(req.body.name || "").trim(),
+        email: String(req.body.email || "").trim().toLowerCase(),
+        phone: String(req.body.phone || req.body.contact || "").trim(),
+        department: String(req.body.department || "").trim() || null,
+        role: String(req.body.role || "").trim() || null,
+        date_of_joining: req.body.date_of_joining || null,
+        dob: req.body.dob || null,
+        address1: String(req.body.address1 || "").trim() || null,
+        address2: String(req.body.address2 || "").trim() || null,
+        reporting_manager: String(req.body.reporting_manager || "").trim() || null,
+        ctc:
+          req.body.ctc === "" || req.body.ctc === null || req.body.ctc === undefined
+            ? null
+            : Number(req.body.ctc),
+        status: 1,
+      };
+
+      if (!employee.company_id || employee.company_id < 1) {
+        return res.status(400).json({ success: false, message: "A valid company is required" });
+      }
+      if (!employee.name) {
+        return res.status(400).json({ success: false, message: "Employee name is required" });
+      }
+      if (!employee.email || !COMPANY_EMAIL_PATTERN.test(employee.email)) {
+        return res.status(400).json({ success: false, message: "A valid employee email is required" });
+      }
+      if (!employee.phone) {
+        return res.status(400).json({ success: false, message: "Employee phone is required" });
+      }
+      if (employee.ctc !== null && (!Number.isFinite(employee.ctc) || employee.ctc < 0)) {
+        return res.status(400).json({ success: false, message: "CTC must be a non-negative number" });
+      }
+      if (!(await EmployeeModel.companyExists(employee.company_id))) {
+        return res.status(404).json({ success: false, message: "Active company not found" });
+      }
+
+      const duplicate = await EmployeeModel.findDuplicate(employee);
+      if (duplicate) {
+        return res.status(409).json({
+          success: false,
+          message: "An employee with this email or phone already exists",
+          data: { company_user_id: duplicate.id },
+        });
+      }
+
+      const employeeId = await EmployeeModel.create(employee);
+      const created = await EmployeeModel.findById(employeeId, employee.company_id);
+      return res.status(201).json({
+        success: true,
+        message: "Employee added successfully and is pending account activation",
+        data: created,
+      });
+    } catch (error) {
+      console.error("Create company employee error:", error);
+      return res.status(500).json({ success: false, message: "Failed to add employee" });
+    }
+  }
+
   async employeeDirectoryCompanies(req, res) {
     try {
       const [companies] = await db.execute(`

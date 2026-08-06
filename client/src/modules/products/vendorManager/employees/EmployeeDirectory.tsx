@@ -39,10 +39,34 @@ interface CompanyForm {
   company_phone: string;
 }
 
+interface EmployeeForm {
+  company_id: string;
+  name: string;
+  email: string;
+  phone: string;
+  department: string;
+  role: string;
+  date_of_joining: string;
+  reporting_manager: string;
+  ctc: string;
+}
+
 const emptyCompanyForm: CompanyForm = {
   company_name: "",
   company_email: "",
   company_phone: "",
+};
+
+const emptyEmployeeForm: EmployeeForm = {
+  company_id: "",
+  name: "",
+  email: "",
+  phone: "",
+  department: "",
+  role: "",
+  date_of_joining: "",
+  reporting_manager: "",
+  ctc: "",
 };
 
 const text = (value: unknown) => String(value ?? "").toLowerCase();
@@ -71,6 +95,10 @@ export default function EmployeeDirectory() {
   const [savingCompany, setSavingCompany] = useState(false);
   const [deletingCompanyId, setDeletingCompanyId] = useState<number | null>(null);
   const [companyFormError, setCompanyFormError] = useState("");
+  const [employeeModalOpen, setEmployeeModalOpen] = useState(false);
+  const [employeeForm, setEmployeeForm] = useState<EmployeeForm>(emptyEmployeeForm);
+  const [savingEmployee, setSavingEmployee] = useState(false);
+  const [employeeFormError, setEmployeeFormError] = useState("");
   const query = useDebounce(search.trim().toLowerCase(), 250);
 
   async function fetchCompanies() {
@@ -188,6 +216,27 @@ export default function EmployeeDirectory() {
     }
   }
 
+  function openCreateEmployee() {
+    setEmployeeForm(emptyEmployeeForm);
+    setEmployeeFormError("");
+    setEmployeeModalOpen(true);
+  }
+
+  async function saveEmployee(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSavingEmployee(true);
+    setEmployeeFormError("");
+    try {
+      await api.post("/manager/employee-directory/employees", employeeForm);
+      setEmployeeModalOpen(false);
+    } catch (requestError) {
+      console.error("Unable to add employee:", requestError);
+      setEmployeeFormError("Unable to add the employee. The email or phone may already exist.");
+    } finally {
+      setSavingEmployee(false);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       <section className="flex flex-col gap-4 rounded-2xl border border-purple-100 bg-white/70 p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
@@ -218,6 +267,7 @@ export default function EmployeeDirectory() {
               <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${tab}...`} className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-[#852BAF] focus:bg-white focus:ring-4 focus:ring-purple-100" />
             </label>
             {tab === "companies" && <button onClick={openCreateCompany} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#C64EFE] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:shadow-md"><FiPlus /> Add Company</button>}
+            {tab === "employees" && <button onClick={openCreateEmployee} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#C64EFE] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:shadow-md"><FiPlus /> Add Employee</button>}
           </div>
         </div>
 
@@ -276,6 +326,23 @@ export default function EmployeeDirectory() {
               <label className="block"><span className="mb-1.5 block text-xs font-bold text-gray-700">Company logo</span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => setCompanyLogo(event.target.files?.[0] ?? null)} className="w-full rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-500 file:mr-3 file:rounded-lg file:border-0 file:bg-purple-50 file:px-3 file:py-1.5 file:font-bold file:text-[#852BAF]" /><span className="mt-1 block text-[11px] text-gray-400">PNG, JPG or WebP, maximum 5 MB.</span></label>
               {companyFormError && <p className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">{companyFormError}</p>}
               <div className="flex justify-end gap-3 border-t border-gray-100 pt-4"><button type="button" onClick={() => setCompanyModalOpen(false)} disabled={savingCompany} className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-bold text-gray-600 hover:bg-gray-50">Cancel</button><button type="submit" disabled={savingCompany} className="rounded-xl bg-gradient-to-r from-[#852BAF] to-[#C64EFE] px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">{savingCompany ? "Saving..." : editingCompany ? "Update Company" : "Create Company"}</button></div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {employeeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-gray-950/45 p-4 backdrop-blur-sm">
+          <div className="my-6 w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5"><div><h2 className="text-lg font-extrabold text-gray-900">Add Employee</h2><p className="mt-0.5 text-xs text-gray-500">The employee can activate their customer account afterward.</p></div><button onClick={() => setEmployeeModalOpen(false)} disabled={savingEmployee} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"><FiX size={20} /></button></div>
+            <form onSubmit={saveEmployee} className="space-y-4 p-6">
+              <label className="block"><span className="mb-1.5 block text-xs font-bold text-gray-700">Company *</span><select required value={employeeForm.company_id} onChange={(event) => setEmployeeForm((current) => ({ ...current, company_id: event.target.value }))} className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-[#852BAF] focus:ring-4 focus:ring-purple-100"><option value="">Select a company</option>{companies.map((company) => <option key={company.company_id} value={company.company_id}>{company.company_name}</option>)}</select></label>
+              <div className="grid gap-4 sm:grid-cols-2"><label className="block"><span className="mb-1.5 block text-xs font-bold text-gray-700">Employee name *</span><input required value={employeeForm.name} onChange={(event) => setEmployeeForm((current) => ({ ...current, name: event.target.value }))} className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-[#852BAF] focus:ring-4 focus:ring-purple-100" /></label><label className="block"><span className="mb-1.5 block text-xs font-bold text-gray-700">Email *</span><input required type="email" value={employeeForm.email} onChange={(event) => setEmployeeForm((current) => ({ ...current, email: event.target.value }))} className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-[#852BAF] focus:ring-4 focus:ring-purple-100" /></label></div>
+              <div className="grid gap-4 sm:grid-cols-2"><label className="block"><span className="mb-1.5 block text-xs font-bold text-gray-700">Phone *</span><input required value={employeeForm.phone} onChange={(event) => setEmployeeForm((current) => ({ ...current, phone: event.target.value }))} className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-[#852BAF] focus:ring-4 focus:ring-purple-100" /></label><label className="block"><span className="mb-1.5 block text-xs font-bold text-gray-700">Department</span><input value={employeeForm.department} onChange={(event) => setEmployeeForm((current) => ({ ...current, department: event.target.value }))} className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-[#852BAF] focus:ring-4 focus:ring-purple-100" /></label></div>
+              <div className="grid gap-4 sm:grid-cols-2"><label className="block"><span className="mb-1.5 block text-xs font-bold text-gray-700">Role</span><input value={employeeForm.role} onChange={(event) => setEmployeeForm((current) => ({ ...current, role: event.target.value }))} className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-[#852BAF] focus:ring-4 focus:ring-purple-100" /></label><label className="block"><span className="mb-1.5 block text-xs font-bold text-gray-700">Date of joining</span><input type="date" value={employeeForm.date_of_joining} onChange={(event) => setEmployeeForm((current) => ({ ...current, date_of_joining: event.target.value }))} className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-[#852BAF] focus:ring-4 focus:ring-purple-100" /></label></div>
+              <div className="grid gap-4 sm:grid-cols-2"><label className="block"><span className="mb-1.5 block text-xs font-bold text-gray-700">Reporting manager</span><input value={employeeForm.reporting_manager} onChange={(event) => setEmployeeForm((current) => ({ ...current, reporting_manager: event.target.value }))} className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-[#852BAF] focus:ring-4 focus:ring-purple-100" /></label><label className="block"><span className="mb-1.5 block text-xs font-bold text-gray-700">CTC</span><input type="number" min="0" step="0.01" value={employeeForm.ctc} onChange={(event) => setEmployeeForm((current) => ({ ...current, ctc: event.target.value }))} className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-[#852BAF] focus:ring-4 focus:ring-purple-100" /></label></div>
+              {employeeFormError && <p className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">{employeeFormError}</p>}
+              <div className="flex justify-end gap-3 border-t border-gray-100 pt-4"><button type="button" onClick={() => setEmployeeModalOpen(false)} disabled={savingEmployee} className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-bold text-gray-600 hover:bg-gray-50">Cancel</button><button type="submit" disabled={savingEmployee} className="rounded-xl bg-gradient-to-r from-[#852BAF] to-[#C64EFE] px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">{savingEmployee ? "Adding..." : "Add Employee"}</button></div>
             </form>
           </div>
         </div>
