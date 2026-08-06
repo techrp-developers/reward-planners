@@ -20,6 +20,7 @@ class ManagerController {
         FROM companies co
         LEFT JOIN company_users cu ON cu.company_id = co.company_id
         LEFT JOIN customer c ON c.company_id = co.company_id
+        WHERE co.status = 1
         GROUP BY
           co.company_id, co.company_name, co.company_email, co.company_phone,
           co.company_logo, co.status, co.created_at, co.updated_at
