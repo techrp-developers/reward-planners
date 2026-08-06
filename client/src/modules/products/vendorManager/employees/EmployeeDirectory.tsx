@@ -257,7 +257,7 @@ export default function EmployeeDirectory() {
           <div className="inline-flex w-fit rounded-xl bg-gray-100 p-1">
             {(["companies", "employees"] as Tab[]).map((item) => (
               <button key={item} onClick={() => { setTab(item); setSearch(""); }} className={`rounded-lg px-5 py-2 text-sm font-bold capitalize transition ${tab === item ? "bg-white text-[#852BAF] shadow-sm" : "text-gray-500 hover:text-gray-800"}`}>
-                {item}
+                {item === "employees" ? "Activated Employees" : "Companies"}
               </button>
             ))}
           </div>
