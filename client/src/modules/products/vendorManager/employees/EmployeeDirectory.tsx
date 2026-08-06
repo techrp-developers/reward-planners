@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { FiBriefcase, FiEdit2, FiPlus, FiSearch, FiTrash2, FiUsers, FiX } from "react-icons/fi";
+import { FiBriefcase, FiEdit2, FiEye, FiPlus, FiSearch, FiTrash2, FiUsers, FiX } from "react-icons/fi";
+import { Link } from "react-router-dom";
 import { api } from "../../../../common/api/api";
 import { useDebounce } from "../../../../common/hooks/useDebounce";
 import { confirmDialog } from "../../../../common/utils/confirmDialog";
@@ -234,7 +235,7 @@ export default function EmployeeDirectory() {
                   <td className="px-5 py-4"><p className="text-gray-700">{company.company_email || "—"}</p><p className="text-xs text-gray-400">{company.company_phone || "—"}</p></td>
                   <td className="px-5 py-4 font-semibold text-gray-700">{company.total_employee_count}</td><td className="px-5 py-4 font-semibold text-gray-700">{company.active_employee_count}</td>
                   <td className="px-5 py-4"><Badge active={Number(company.status) === 1} label={Number(company.status) === 1 ? "Active" : "Inactive"} /></td>
-                  <td className="px-5 py-4 text-right"><div className="inline-flex items-center gap-2"><button onClick={() => openEditCompany(company)} className="inline-flex items-center gap-1.5 rounded-lg border border-purple-100 px-3 py-2 text-xs font-bold text-[#852BAF] transition hover:bg-purple-50"><FiEdit2 /> Edit</button><button onClick={() => void deleteCompany(company)} disabled={deletingCompanyId === company.company_id || Number(company.status) !== 1} className="inline-flex items-center gap-1.5 rounded-lg border border-red-100 px-3 py-2 text-xs font-bold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"><FiTrash2 /> {deletingCompanyId === company.company_id ? "Deleting..." : "Delete"}</button></div></td>
+                  <td className="px-5 py-4 text-right"><div className="inline-flex items-center gap-2"><Link to={`/manager/companies/${company.company_id}/employees`} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-100 px-3 py-2 text-xs font-bold text-blue-600 transition hover:bg-blue-50"><FiEye /> Employees</Link><button onClick={() => openEditCompany(company)} className="inline-flex items-center gap-1.5 rounded-lg border border-purple-100 px-3 py-2 text-xs font-bold text-[#852BAF] transition hover:bg-purple-50"><FiEdit2 /> Edit</button><button onClick={() => void deleteCompany(company)} disabled={deletingCompanyId === company.company_id || Number(company.status) !== 1} className="inline-flex items-center gap-1.5 rounded-lg border border-red-100 px-3 py-2 text-xs font-bold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"><FiTrash2 /> {deletingCompanyId === company.company_id ? "Deleting..." : "Delete"}</button></div></td>
                 </tr>)}
               </tbody>
             </table>

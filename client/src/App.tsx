@@ -29,6 +29,9 @@ const ManagerDashboard = lazy(() => import("./modules/products/vendorManager/Das
 const ManagerEmployeeDirectory = lazy(
   () => import("./modules/products/vendorManager/employees/EmployeeDirectory.tsx"),
 );
+const ManagerCompanyEmployees = lazy(
+  () => import("./modules/products/vendorManager/employees/CompanyEmployees.tsx"),
+);
 const HrDashboard = lazy(() => import("./modules/hr/dashboard/HrDashboard.tsx"));
 const WarehouseDashboard = lazy(() => import("./modules/warehouse_manager/dashboard/WarehouseDashboard.tsx"));
 const FleaMarketDashboard = lazy(() => import("./modules/flea_market/dashboard/FleaMarketDashboard.tsx"));
@@ -280,6 +283,7 @@ export default function App() {
         <Route path={routes.manager.dashboard} element={<ManagerDashboard />} />
         <Route path={routes.manager.vendors} element={<VendorApprovalList />} />
         <Route path={routes.manager.employees} element={<ManagerEmployeeDirectory />} />
+        <Route path={routes.manager.companyEmployees} element={<ManagerCompanyEmployees />} />
         <Route
           path={routes.manager.changePassword}
           element={<ChangePasswordPage />}

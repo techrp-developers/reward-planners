@@ -76,6 +76,70 @@ class ManagerController {
     }
   }
 
+  async companyEmployees(req, res) {
+    try {
+      const companyId = Number(req.params.companyId);
+      if (!Number.isInteger(companyId) || companyId < 1) {
+        return res.status(400).json({ success: false, message: "Invalid company ID" });
+      }
+
+      const [[company]] = await db.execute(
+        `SELECT company_id, company_name, company_email, company_phone, company_logo, status
+         FROM companies
+         WHERE company_id = ?
+         LIMIT 1`,
+        [companyId],
+      );
+      if (!company) {
+        return res.status(404).json({ success: false, message: "Company not found" });
+      }
+
+      const [employees] = await db.execute(
+        `SELECT
+           cu.id,
+           cu.company_id,
+           cu.name,
+           cu.email,
+           cu.contact AS phone,
+           cu.department,
+           cu.role,
+           cu.date_of_joining,
+           cu.dob,
+           cu.reporting_manager,
+           cu.ctc,
+           cu.status,
+           cu.created_at,
+           c.user_id AS customer_id,
+           c.status AS customer_status,
+           c.is_verified AS customer_is_verified,
+           c.last_login_at
+         FROM company_users cu
+         LEFT JOIN customer c ON c.company_user_id = cu.id
+         WHERE cu.company_id = ?
+         ORDER BY cu.name ASC, cu.id DESC`,
+        [companyId],
+      );
+
+      return res.json({
+        success: true,
+        data: {
+          company: {
+            ...company,
+            company_logo: company.company_logo
+              ? company.company_logo.startsWith("http")
+                ? company.company_logo
+                : `https://cdn.rewardplanners.com/${company.company_logo}`
+              : null,
+          },
+          employees,
+        },
+      });
+    } catch (error) {
+      console.error("Company employees error:", error);
+      return res.status(500).json({ success: false, message: "Failed to fetch company employees" });
+    }
+  }
+
   // ========== BASIC STATS FOR CARDS ==========
   async getDashboardStats(req, res) {
     try {

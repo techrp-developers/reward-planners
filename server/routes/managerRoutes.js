@@ -19,6 +19,13 @@ router.get(
   managerController.employeeDirectoryCustomers.bind(managerController),
 );
 
+router.get(
+  "/employee-directory/companies/:companyId/employees",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  managerController.companyEmployees.bind(managerController),
+);
+
 // Manager Stats API
 router.get(
   "/stats",
