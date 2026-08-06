@@ -54,15 +54,45 @@ function validateEmployee(employee) {
 
 function getIdentity(body = {}) {
   return {
+    search: String(body.search || body.query || "").trim() || null,
+    name: String(body.name || body.fullName || "").trim() || null,
     email: String(body.email || "").trim().toLowerCase() || null,
     phone: String(body.phone || body.contact || "").trim() || null,
   };
 }
 
 function validateIdentity(identity) {
-  if (!identity.email && !identity.phone) return "Email or phone is required";
-  if (identity.email && !EMAIL_PATTERN.test(identity.email)) return "Invalid email";
+  if (!identity.search && !identity.name && !identity.email && !identity.phone) {
+    return "Name, email, phone, or search is required";
+  }
   return null;
+}
+
+function formatCompanyUser(employee) {
+  return {
+    id: employee.id,
+    company_id: employee.company_id,
+    company_name: employee.company_name,
+    name: employee.name,
+    email: employee.email,
+    phone: employee.phone,
+    status: Number(employee.company_user_status),
+  };
+}
+
+function formatActivation(employee) {
+  const activated = employee.customer_id !== null && employee.customer_id !== undefined;
+  return {
+    ...formatCompanyUser(employee),
+    customer_id: employee.customer_id || null,
+    account_activated: activated,
+    customer_profile: activated
+      ? {
+          status: Number(employee.customer_status),
+          is_verified: Number(employee.customer_is_verified),
+        }
+      : null,
+  };
 }
 
 function escapeCsv(value) {
@@ -91,25 +121,16 @@ class EmployeeController {
         return res.status(400).json({ success: false, message: validationError });
       }
 
-      const employee = await EmployeeModel.findByIdentity({
+      const employees = await EmployeeModel.searchByIdentity({
         ...identity,
         companyId: req.user?.role === "hr" ? Number(req.user.company_id) : null,
       });
       return res.json({
         success: true,
         data: {
-          exists: Boolean(employee),
-          company_user: employee
-            ? {
-                id: employee.id,
-                company_id: employee.company_id,
-                company_name: employee.company_name,
-                name: employee.name,
-                email: employee.email,
-                phone: employee.phone,
-                status: Number(employee.company_user_status),
-              }
-            : null,
+          exists: employees.length > 0,
+          count: employees.length,
+          company_users: employees.map(formatCompanyUser),
         },
       });
     } catch (error) {
@@ -126,27 +147,19 @@ class EmployeeController {
         return res.status(400).json({ success: false, message: validationError });
       }
 
-      const employee = await EmployeeModel.findByIdentity({
+      const employees = await EmployeeModel.searchByIdentity({
         ...identity,
         companyId: req.user?.role === "hr" ? Number(req.user.company_id) : null,
       });
-      if (!employee) {
+      if (!employees.length) {
         return res.status(404).json({ success: false, message: "Company user not found" });
       }
 
-      const activated = employee.customer_id !== null && employee.customer_id !== undefined;
       return res.json({
         success: true,
         data: {
-          company_user_id: employee.id,
-          customer_id: employee.customer_id || null,
-          account_activated: activated,
-          customer_profile: activated
-            ? {
-                status: Number(employee.customer_status),
-                is_verified: Number(employee.customer_is_verified),
-              }
-            : null,
+          count: employees.length,
+          company_users: employees.map(formatActivation),
         },
       });
     } catch (error) {

@@ -226,19 +226,35 @@ class EmployeeModel {
     return employee;
   }
 
-  async findByIdentity({ email, phone, companyId = null }, conn = db) {
+  async searchByIdentity(
+    { search, name, email, phone, companyId = null },
+    conn = db,
+  ) {
     const conditions = [];
     const params = [];
 
+    if (search) {
+      const pattern = `%${search}%`;
+      conditions.push(`(
+        LOWER(cu.name) LIKE LOWER(?) OR
+        LOWER(cu.email) LIKE LOWER(?) OR
+        cu.contact LIKE ?
+      )`);
+      params.push(pattern, pattern, pattern);
+    }
+    if (name) {
+      conditions.push("LOWER(cu.name) LIKE LOWER(?)");
+      params.push(`%${name}%`);
+    }
     if (email) {
-      conditions.push("LOWER(TRIM(cu.email)) = ?");
-      params.push(email.toLowerCase());
+      conditions.push("LOWER(cu.email) LIKE LOWER(?)");
+      params.push(`%${email}%`);
     }
     if (phone) {
-      conditions.push("TRIM(cu.contact) = ?");
-      params.push(phone);
+      conditions.push("cu.contact LIKE ?");
+      params.push(`%${phone}%`);
     }
-    if (!conditions.length) return null;
+    if (!conditions.length) return [];
 
     let companyFilter = "";
     if (companyId) {
@@ -246,7 +262,7 @@ class EmployeeModel {
       params.push(companyId);
     }
 
-    const [[employee]] = await conn.execute(
+    const [employees] = await conn.execute(
       `SELECT
          cu.id,
          cu.company_id,
@@ -262,11 +278,11 @@ class EmployeeModel {
        INNER JOIN companies co ON co.company_id = cu.company_id
        LEFT JOIN customer c ON c.company_user_id = cu.id
        WHERE (${conditions.join(" OR ")}) ${companyFilter}
-       ORDER BY cu.id DESC
-       LIMIT 1`,
+       ORDER BY cu.name ASC, cu.id DESC
+       LIMIT 25`,
       params,
     );
-    return employee;
+    return employees;
   }
 
   async create(data, conn = db) {
