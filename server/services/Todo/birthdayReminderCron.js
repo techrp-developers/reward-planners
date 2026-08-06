@@ -1,18 +1,16 @@
 const cron = require("node-cron");
 const db = require("../../config/database");
-const { getMessaging } = require("firebase-admin/messaging");
-require("../../config/firebase");
+const { notifyUser } = require("../../app/common/utils/notification");
 
 // Run every day at 9:00 AM: "0 9 * * *"
 // For testing purposes, you can change this to "* * * * *" to run every minute
 cron.schedule("0 9 * * *", async () => {
-  console.log("🎂 [Cron] Checking for employee birthdays today...");
+  console.log("[Cron] Checking for employee birthdays today...");
   await sendBirthdayWishes();
 });
 
 async function sendBirthdayWishes() {
   try {
-    // Query users whose birthday is today (using company_users table and dob column)
     const [users] = await db.query(
       `
       SELECT c.user_id, c.name, c.fcm_token
@@ -33,38 +31,26 @@ async function sendBirthdayWishes() {
 
     console.log(`[Cron] Found ${users.length} user(s) celebrating birthdays today.`);
 
-    const messaging = getMessaging();
-
     for (const user of users) {
-      const message = {
-        notification: {
-          title: `Happy Birthday, ${user.name}! 🎂`,
-          body: `Wishing you a fantastic day filled with joy and success! 🎉 - Reward Planners`,
-        },
-        data: {
+      notifyUser(
+        {
+          userId: user.user_id,
           module: "birthday",
           type: "birthday_wish",
+          title: `Happy Birthday, ${user.name}!`,
+          message: "Wishing you a fantastic day filled with joy and success! - Reward Planners",
+          icon: "gift",
+          reference_type: "birthday",
+          reference_id: String(user.user_id),
+          action_url: "/profile",
           screen: "Dashboard",
         },
-        android: {
-          notification: {
-            sound: "default",
-          },
-        },
-        token: user.fcm_token,
-      };
-
-      try {
-        const response = await messaging.send(message);
-        console.log(`[Cron] Birthday wish sent successfully to ${user.name} (ID: ${user.user_id}):`, response);
-      } catch (fcmError) {
-        console.error(`[Cron] Failed to send birthday wish to ${user.name}:`, fcmError.message);
-      }
+        "birthday wish notification",
+      );
     }
   } catch (error) {
     console.error("[Cron] Error running birthday reminder job:", error);
   }
 }
 
-// Export the function so it can be manually triggered (for testing API routes)
 module.exports = { sendBirthdayWishes };
