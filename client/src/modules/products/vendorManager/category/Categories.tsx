@@ -11,6 +11,7 @@ import {
 } from "react-icons/fi";
 import { api } from "../../../../common/api/api";
 import { confirmDialog } from "../../../../common/utils/confirmDialog";
+import { getPageNumbers } from "../../../../common/utils/pagination";
 import Swal from "sweetalert2";
 // import imageCompression from "browser-image-compression";
 // const API_BASEIMAGE_URL = "https://rewardplanners.com/api/crm";
@@ -55,6 +56,8 @@ export default function CategoryManagement() {
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage,
   );
+
+  const pageNumbers = getPageNumbers(currentPage, totalPages);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -440,9 +443,15 @@ export default function CategoryManagement() {
               Previous
             </button>
 
-            {Array.from({ length: totalPages }, (_, i) => i + 1)
-              .slice(Math.max(0, currentPage - 3), currentPage + 2)
-              .map((page) => (
+            {pageNumbers.map((page, i) =>
+              page === "..." ? (
+                <span
+                  key={`ellipsis-${i}`}
+                  className="px-2 py-2 text-sm font-semibold text-gray-400"
+                >
+                  ...
+                </span>
+              ) : (
                 <button
                   key={page}
                   onClick={() => setCurrentPage(page)}
@@ -454,7 +463,8 @@ export default function CategoryManagement() {
                 >
                   {page}
                 </button>
-              ))}
+              ),
+            )}
 
             <button
               disabled={currentPage === totalPages}

@@ -3,6 +3,7 @@ import Swal from "sweetalert2";
 import { FiTrash2, FiEye, FiPlus, FiX, FiSave, FiLayers } from "react-icons/fi";
 import { api } from "../../../../common/api/api";
 import { confirmDialog } from "../../../../common/utils/confirmDialog";
+import { getPageNumbers } from "../../../../common/utils/pagination";
 import "datatables.net";
 import "datatables.net-responsive";
 import AttributeValueManager from "./attributeValueManager";
@@ -69,6 +70,8 @@ export default function CategoryAttributeManagement() {
     (currentPage - 1) * rowsPerPage,
     currentPage * rowsPerPage,
   );
+
+  const pageNumbers = getPageNumbers(currentPage, totalPages);
 
   const [form, setForm] = useState({
     attribute_key: "",
@@ -393,15 +396,24 @@ export default function CategoryAttributeManagement() {
               >
                 Prev
               </button>
-              {Array.from({ length: totalPages }, (_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setCurrentPage(i + 1)}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition cursor-pointer ${currentPage === i + 1 ? "bg-gradient-to-r from-[#852BAF] to-[#FC3F78] text-white border-transparent shadow-sm" : "bg-white border-gray-200 text-gray-600 hover:border-[#852BAF] hover:text-[#852BAF]"}`}
-                >
-                  {i + 1}
-                </button>
-              ))}
+              {pageNumbers.map((page, i) =>
+                page === "..." ? (
+                  <span
+                    key={`ellipsis-${i}`}
+                    className="px-2 py-1.5 text-xs font-semibold text-gray-400"
+                  >
+                    ...
+                  </span>
+                ) : (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition cursor-pointer ${currentPage === page ? "bg-gradient-to-r from-[#852BAF] to-[#FC3F78] text-white border-transparent shadow-sm" : "bg-white border-gray-200 text-gray-600 hover:border-[#852BAF] hover:text-[#852BAF]"}`}
+                  >
+                    {page}
+                  </button>
+                ),
+              )}
               <button
                 disabled={currentPage === totalPages || totalPages === 0}
                 onClick={() => setCurrentPage((p) => p + 1)}
