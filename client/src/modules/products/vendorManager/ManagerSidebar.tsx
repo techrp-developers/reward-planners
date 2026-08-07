@@ -73,24 +73,24 @@ export default function ManagerNavbar() {
       Icon: FiPackage,
       type: "link",
     },
-    {
-      label: "Service Partners",
-      Icon: FiHeart,
-      type: "dropdown",
-      children: [
-        { label: "All Partners", to: routes.manager.servicePartners.list },
-        ...serviceCategories.map((c) => ({
-          label: c.name,
-          to: `${routes.manager.servicePartners.list}?category=${encodeURIComponent(c.name)}`,
-        })),
-      ],
-    },
-    {
-      label: "Partner Managers",
-      to: routes.manager.partnerManagers.list,
-      Icon: FiUserCheck,
-      type: "link",
-    },
+    // {
+    //   label: "Service Partners",
+    //   Icon: FiHeart,
+    //   type: "dropdown",
+    //   children: [
+    //     { label: "All Partners", to: routes.manager.servicePartners.list },
+    //     ...serviceCategories.map((c) => ({
+    //       label: c.name,
+    //       to: `${routes.manager.servicePartners.list}?category=${encodeURIComponent(c.name)}`,
+    //     })),
+    //   ],
+    // },
+    // {
+    //   label: "Partner Managers",
+    //   to: routes.manager.partnerManagers.list,
+    //   Icon: FiUserCheck,
+    //   type: "link",
+    // },
     {
       label: "Category",
       Icon: FiTag,
