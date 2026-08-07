@@ -2,22 +2,11 @@ import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "./useAuth";
 import logoImage from "../assets/logo.svg";
-import { User, Lock, Eye, EyeOff, Briefcase, Building2, ArrowRight } from "lucide-react";
-
-type Role =
-  | "vendor"
-  | "vendor_manager"
-  | "admin"
-  | "warehouse_manager"
-  | "hr"
-  | "service_manager"
-  | "service_partner"
-  | "flea_market_manager";
+import { User, Lock, Eye, EyeOff, Building2, ArrowRight } from "lucide-react";
 
 interface LoginForm {
   email: string;
   password: string;
-  role: Role;
 }
 
 type LocationState = {
@@ -35,7 +24,6 @@ export default function LoginPage() {
   const [formData, setFormData] = useState<LoginForm>({
     email: "",
     password: "",
-    role: "vendor",
   });
 
   const location = useLocation();
@@ -44,9 +32,7 @@ export default function LoginPage() {
 
   /* ================= HANDLERS ================= */
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
-  ) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setError("");
 
     const { name, value } = e.target;
@@ -62,11 +48,7 @@ export default function LoginPage() {
     setError("");
 
     try {
-      await login(
-        formData.email.trim(),
-        formData.password,
-        formData.role,
-      );
+      await login(formData.email.trim(), formData.password);
     } catch (err) {
       setError("Login failed. Please check your credentials.");
       console.error(err);
@@ -178,40 +160,6 @@ export default function LoginPage() {
                     }
                     autoComplete="email"
                   />
-                </div>
-              </div>
-
-              {/* Login As / Role Field */}
-              <div className="relative">
-                <label className="text-sm font-semibold tracking-wide text-slate-700">
-                  Login As
-                </label>
-
-                <div
-                  className="mt-2 flex items-center gap-3 w-full px-4 py-2.5 rounded-xl bg-white
-                 border border-slate-200 shadow-sm
-                 transition-all duration-300
-                 focus-within:border-transparent
-                 focus-within:ring-4 focus-within:ring-[#852BAF]/15
-                 focus-within:shadow-lg focus-within:shadow-[#852BAF]/10"
-                >
-                  <Briefcase className="w-5 h-5 text-gray-600" />
-
-                  <select
-                    name="role"
-                    value={formData.role}
-                    onChange={handleChange}
-                    className="w-full text-gray-800 bg-transparent outline-none cursor-pointer"
-                  >
-                    <option value="vendor">Vendor</option>
-                    <option value="vendor_manager">Vendor Manager</option>
-                    <option value="admin">Admin</option>
-                    <option value="warehouse_manager">Warehouse Manager</option>
-                    <option value="hr">HR</option>
-                    <option value="service_manager">Service Manager</option>
-                    <option value="service_partner">Service Partner</option>
-                    <option value="flea_market_manager">Flea Market Manager</option>
-                  </select>
                 </div>
               </div>
 

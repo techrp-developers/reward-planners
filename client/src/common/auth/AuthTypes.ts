@@ -19,7 +19,7 @@ export interface AuthContextType {
   loading: boolean;
   initializing: boolean;
   error: string | null;
-  login: (email: string, password: string, role: User["role"]) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   register: (
     name: string,
     email: string,

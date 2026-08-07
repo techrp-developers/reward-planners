@@ -49,20 +49,6 @@ const STATIC_WAREHOUSE_MANAGER = {
   },
 };
 
-// Static local login for Flea Market so the new flea_market module/dashboard
-// can be checked without a real backend user row.
-const STATIC_FLEA_MARKET_MANAGER = {
-  email: "fleamarket@rewardsplanners.com",
-  password: "FleaMarket@123",
-  token: "flea-market-manager-static-token",
-  user: {
-    user_id: 10003,
-    name: "Flea Market Manager",
-    email: "fleamarket@rewardsplanners.com",
-    role: "flea_market_manager" as const,
-  },
-};
-
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const navigate = useNavigate();
 
@@ -161,7 +147,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return "/";
   }
 };
-  const login = async (email: string, password: string, role: User["role"]) => {
+  const login = async (email: string, password: string) => {
     setError(null);
 
     // Services module: static local auth, no backend call. Kept isolated
@@ -206,23 +192,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
-    if (
-      email.trim().toLowerCase() === STATIC_FLEA_MARKET_MANAGER.email &&
-      password === STATIC_FLEA_MARKET_MANAGER.password
-    ) {
-      setLoading(true);
-      localStorage.setItem("token", STATIC_FLEA_MARKET_MANAGER.token);
-      localStorage.setItem("user", JSON.stringify(STATIC_FLEA_MARKET_MANAGER.user));
-      setUser(STATIC_FLEA_MARKET_MANAGER.user);
-      setLoading(false);
-      navigate(resolveDashboard("flea_market_manager"), { replace: true });
-      return;
-    }
-
     try {
       setLoading(true);
 
-      const { data } = await api.post(`/auth/${resolveRoute(role)}/login`, {
+      // Role is no longer chosen on the login form — the backend looks the
+      // user up by email and returns whichever role is on their account, and
+      // we route to that role's dashboard below.
+      const { data } = await api.post(`/auth/login`, {
         email,
         password,
       });
