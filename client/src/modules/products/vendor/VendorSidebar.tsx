@@ -12,7 +12,6 @@ import {
   FiShoppingCart,
   FiLock,
   FiShield,
-  FiCheckCircle,
   FiClock,
   FiBox,
 } from "react-icons/fi";
@@ -68,14 +67,7 @@ export default function VendorNavbar() {
 
   const navItems: NavItem[] = [
     { label: "Dashboard", to: "/vendor/dashboard", Icon: FiLayout },
-    !isApproved
-      ? { label: "Onboarding", to: "/vendor/onboarding", Icon: FiBriefcase }
-      : {
-          label: "Verified Partner",
-          to: "#",
-          Icon: FiCheckCircle,
-          isDisabled: true,
-        },
+    !isApproved && { label: "Onboarding", to: "/vendor/onboarding", Icon: FiBriefcase },
     isApproved && {
       label: "Products",
       Icon: FiTag,
