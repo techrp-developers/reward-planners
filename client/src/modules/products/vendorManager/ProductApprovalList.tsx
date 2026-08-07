@@ -37,7 +37,7 @@ type BackendProductStatus =
 
 type ProductStatus = "pending" | "approved" | "rejected" | "resubmission";
 
-type SortColumn = "product_id" | "product_name";
+type SortColumn = "product_id" | "product_name" | "created_at";
 
 interface ProductDocument {
   document_id: number;
@@ -178,6 +178,7 @@ const StatCard = ({ title, value, icon: Icon, color }: StatCardProps) => {
 const SORT_FIELD_MAP: Record<SortColumn, string> = {
   product_id: "product_id",
   product_name: "product_name",
+  created_at: "created_at",
 };
 
 /* ================================
@@ -732,6 +733,15 @@ export default function ProductManagerList() {
                   Status
                 </th>
 
+                <th
+                  onClick={() => handleSort("created_at")}
+                  className="px-4 py-4 text-xs font-bold tracking-wider text-gray-500 uppercase cursor-pointer"
+                >
+                  <div className="flex items-center">
+                    Created {getSortIcon("created_at")}
+                  </div>
+                </th>
+
                 <th className="px-4 py-4 text-xs font-bold tracking-wider text-gray-500 uppercase">
                   Actions
                 </th>
@@ -766,6 +776,16 @@ export default function ProductManagerList() {
 
                   <td className="px-4 py-4">
                     <StatusChip status={product.status} />
+                  </td>
+
+                  <td className="px-4 py-4 text-sm text-gray-500 whitespace-nowrap">
+                    {product.created_at
+                      ? new Date(product.created_at).toLocaleDateString("en-IN", {
+                          day: "numeric",
+                          month: "long",
+                          year: "numeric",
+                        })
+                      : "—"}
                   </td>
 
                   <td className="px-4 py-4">

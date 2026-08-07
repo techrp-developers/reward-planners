@@ -1309,6 +1309,7 @@ export default function ProductManagerList() {
                   "Rejection Reason",
                   "Visibility",
                   "Searchable",
+                  "Created",
                   "Action",
                 ].map((head) => (
                   <th
@@ -1435,6 +1436,19 @@ export default function ProductManagerList() {
                         {product.is_searchable ? "Listed" : "Hidden"}
                       </span>
                     </div>
+                  </td>
+
+                  {/* CREATED */}
+                  <td className="px-4 py-3.5">
+                    <span className="text-xs font-medium text-gray-500 whitespace-nowrap">
+                      {product.created_at
+                        ? new Date(product.created_at).toLocaleDateString("en-IN", {
+                            day: "numeric",
+                            month: "long",
+                            year: "numeric",
+                          })
+                        : "—"}
+                    </span>
                   </td>
 
                   {/* ACTIONS */}
