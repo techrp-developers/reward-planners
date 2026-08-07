@@ -11,7 +11,9 @@ require("dotenv").config();
 
 // Initialize Quiz Game DB Tables
 const setupQuizDB = require("./config/setupQuizDB");
+const setupTodoReminderDB = require("./config/setupTodoReminderDB");
 setupQuizDB();
+setupTodoReminderDB();
 require("./services/ExpressBees/cron/shipmentCron");
 require("./services/Bbps/retryCron");
 require("./services/Razorpay/retryCron");
@@ -89,6 +91,8 @@ app.use(
 if (process.env.NODE_ENV !== "production") {
   app.use("/api/wa", require("./routes/waTestRoute"));
 }
+
+app.use("/api/push", require("./routes/pushNotificationRoute"));
 // Serve uploads folder
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 

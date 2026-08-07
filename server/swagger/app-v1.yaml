@@ -115,31 +115,58 @@ components:
     TodoCreateRequest:
       type: object
       required:
+        - task_date
+        - start_time
+        - end_time
         - title
       properties:
-        title:
-          type: string
-        description:
-          type: string
-        due_date:
+        task_date:
           type: string
           format: date
-        priority:
+        start_time:
           type: string
-          enum: [low, medium, high]
+          example: "09:30 AM"
+        end_time:
+          type: string
+          example: "10:30 AM"
+        title:
+          type: string
+        subtitle:
+          type: string
+        reminder_time:
+          type: string
+          example: "09:15 AM"
+        reminder_date:
+          type: string
+          format: date-time
+          description: Alternative reminder input accepted by the backend; time portion is used.
+        reminder:
+          type: string
+          description: Alternative reminder input accepted by the backend; supports values like `15 min before`.
     TodoUpdateRequest:
       type: object
       properties:
-        title:
-          type: string
-        description:
-          type: string
-        due_date:
+        task_date:
           type: string
           format: date
-        priority:
+        start_time:
           type: string
-          enum: [low, medium, high]
+          example: "09:30 AM"
+        end_time:
+          type: string
+          example: "10:30 AM"
+        title:
+          type: string
+        subtitle:
+          type: string
+        reminder_time:
+          type: string
+          example: "09:15 AM"
+        reminder_date:
+          type: string
+          format: date-time
+        reminder:
+          type: string
     TodoCompleteRequest:
       type: object
       required:
@@ -159,11 +186,17 @@ components:
     TodoReminderRequest:
       type: object
       required:
-        - reminder_date
+        - reminder_time
       properties:
+        reminder_time:
+          type: string
+          example: "09:15 AM"
         reminder_date:
           type: string
           format: date-time
+        reminder:
+          type: string
+          description: Supports relative values like `15 min before`.
     BBPSCreateOrderRequest:
       type: object
       required:

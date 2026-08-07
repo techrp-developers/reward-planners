@@ -358,7 +358,7 @@ async function updateShipmentTracking(shipment) {
 
         if (userId) {
           notifyUser({
-            user_id: userId,
+            userId,
             module: "ecommerce",
             type: "ndr",
             title: "Delivery failed",
@@ -443,7 +443,7 @@ async function updateShipmentTracking(shipment) {
 
           if (!existingNotif.length && userId) {
             notifyUser({
-              user_id: userId,
+              userId,
               module: "ecommerce",
               type: "rto",
               title: "Order returned",
