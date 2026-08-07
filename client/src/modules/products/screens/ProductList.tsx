@@ -349,7 +349,7 @@ const ActionModal = ({
       className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
        style={{ background: "rgba(2, 6, 23, 0.45)" }}
     >
-      <div className="w-full max-w-md p-6">
+      <div className="w-full max-w-md p-6 bg-white shadow-xl rounded-2xl">
         <div className="flex items-center mb-4">
           <div
             className={`w-10 h-10 rounded-full flex items-center justify-center mr-3 ${config.iconBg}`}

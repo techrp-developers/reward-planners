@@ -37,12 +37,12 @@
 
 /* ── Row stagger ── */
 .row-animate {
-  animation: rowEntrance 0.35s ease both;
+  animation: rowEntrance 0.35s ease;
 }
 
 /* ── Stats / section card scale-in ── */
 .stats-card-enter {
-  animation: scaleIn 0.32s ease both;
+  animation: scaleIn 0.32s ease;
 }
 
 /* ── Sidebar active link glow ── */
@@ -80,9 +80,16 @@
   border-radius: 10px;
 }
 
-/* ── Page-level fade-slide entrance ── */
+/* ── Page-level fade-slide entrance ──
+   No `both` fill-mode: retaining the end keyframe's transform forever turns
+   this wrapper into a containing block for `position: fixed` descendants
+   (any non-`none` transform does, per spec — even translateY(0)), which
+   hijacks every `fixed inset-0` modal rendered inside a routed page and
+   centers it against the wrapper's full scroll height instead of the
+   viewport. Dropping `both` lets the transform revert to none once the
+   0.4s animation finishes. */
 .page-enter {
-  animation: fadeSlideUp 0.4s ease both;
+  animation: fadeSlideUp 0.4s ease;
 }
 
 /* ── Toggle switch smooth transition ── */
