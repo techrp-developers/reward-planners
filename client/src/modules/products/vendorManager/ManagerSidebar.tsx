@@ -199,13 +199,13 @@ export default function ManagerNavbar() {
       </div>
 
       {/* ── MANAGER BADGE ── */}
-      <div className="px-4 mb-2">
+      {/* <div className="px-4 mb-2">
         <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold bg-purple-50 text-purple-700 border border-purple-100">
           <FiGrid className="shrink-0" size={13} />
           <span>Manager Console</span>
           <div className="ml-auto w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
         </div>
-      </div>
+      </div> */}
 
       {/* ── NOTIFICATIONS ── */}
       <div className="px-4 mb-2">
