@@ -12,14 +12,14 @@ import {
   FiShoppingCart,
   FiGift,
   FiLock,
-  FiHeart,
+  // FiHeart,
   FiUserCheck,
 } from "react-icons/fi";
 import { FaFileAlt, FaBolt } from "react-icons/fa";
 import { useAuth } from "../../../common/auth/useAuth";
 import { routes } from "../../../routes";
 import logo from "../../../common/assets/logo.svg";
-import { serviceCategories } from "../../service/serviceManager/shared/serviceCategories";
+// import { serviceCategories } from "../../service/serviceManager/shared/serviceCategories";
 import { useNotification } from "../../../common/notifications/useNotification";
 import NotificationBell from "../../../common/notifications/components/NotificationBell";
 
