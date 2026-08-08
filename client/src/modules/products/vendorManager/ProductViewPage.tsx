@@ -137,6 +137,36 @@ const SectionHeader = ({ icon: Icon, title, description }: any) => (
   </div>
 );
 
+function ImageLightbox({
+  src,
+  onClose,
+}: {
+  src: string;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <button
+        onClick={onClose}
+        aria-label="Close"
+        className="absolute flex items-center justify-center w-10 h-10 text-white transition-colors rounded-full cursor-pointer top-5 right-5 bg-white/10 hover:bg-white/20"
+      >
+        <FaTimes />
+      </button>
+
+      <img
+        src={src}
+        alt="Full size preview"
+        onClick={(e) => e.stopPropagation()}
+        className="object-contain max-w-full max-h-full rounded-lg shadow-2xl"
+      />
+    </div>
+  );
+}
+
 export default function ReviewProductPage() {
   // FIXED: use the correct param name from route
   const { id: productId } = useParams<{ id: string }>();
@@ -145,6 +175,7 @@ export default function ReviewProductPage() {
   const [product, setProduct] = useState<ProductView | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const [productAttributes, setProductAttributes] = useState<
     Record<string, string[]>
   >({});
@@ -833,19 +864,24 @@ export default function ReviewProductPage() {
             description="Single cover image for product listing"
           />
           {coverImage ? (
-            <div className="relative w-36 h-36 overflow-hidden border border-gray-200 rounded-2xl group shadow-sm">
+            <div
+              onClick={() => setLightboxImage(resolveImageUrl(coverImage))}
+              className="relative w-36 h-36 overflow-hidden border border-gray-200 rounded-2xl group shadow-sm cursor-pointer"
+            >
               <img
                 src={resolveImageUrl(coverImage)}
                 alt="Cover Image"
-                className="object-cover w-full h-full"
+                className="object-cover w-full h-full transition-transform group-hover:scale-105"
               />
               <button
-                onClick={() =>
-                  downloadFile(resolveImageUrl(coverImage), "cover-image.jpg")
-                }
-                className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer rounded-2xl"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  downloadFile(resolveImageUrl(coverImage), "cover-image.jpg");
+                }}
+                title="Download"
+                className="absolute top-2 right-2 flex items-center justify-center w-8 h-8 text-white transition-opacity bg-black/50 rounded-full opacity-0 group-hover:opacity-100 cursor-pointer"
               >
-                <FaDownload className="text-white text-lg" />
+                <FaDownload className="text-xs" />
               </button>
             </div>
           ) : (
@@ -968,6 +1004,13 @@ export default function ReviewProductPage() {
           </div>
         </div>
       </div>
+
+      {lightboxImage && (
+        <ImageLightbox
+          src={lightboxImage}
+          onClose={() => setLightboxImage(null)}
+        />
+      )}
     </div>
   );
 }
