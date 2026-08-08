@@ -630,6 +630,8 @@ export default function ProductManagerList() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [brandInput, setBrandInput] = useState("");
+  const [brandFilter, setBrandFilter] = useState("");
   const [sortBy, setSortBy] = useState<string>("created_at");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
@@ -656,6 +658,7 @@ export default function ProductManagerList() {
   });
 
   const debounceRef = useRef<number | null>(null);
+  const brandDebounceRef = useRef<number | null>(null);
 
   // Modal state
   const [modalState, setModalState] = useState<{
@@ -760,6 +763,7 @@ export default function ProductManagerList() {
           limit: pagination.itemsPerPage,
           status: statusFilter !== "all" ? statusFilter : undefined,
           search: searchQuery ? searchQuery : undefined,
+          brand: brandFilter ? brandFilter : undefined,
           sortBy,
           sortOrder,
         };
@@ -809,6 +813,7 @@ export default function ProductManagerList() {
       pagination.itemsPerPage,
       statusFilter,
       searchQuery,
+      brandFilter,
       sortBy,
       sortOrder,
     ],
@@ -844,7 +849,7 @@ export default function ProductManagerList() {
 
     debounceRef.current = window.setTimeout(() => {
       setPagination((p) => ({ ...p, currentPage: 1 }));
-      fetchProducts();
+      setSearchQuery(searchInput.trim());
     }, 450);
 
     return () => {
@@ -852,7 +857,24 @@ export default function ProductManagerList() {
         clearTimeout(debounceRef.current);
       }
     };
-  }, [searchQuery]);
+  }, [searchInput]);
+
+  useEffect(() => {
+    if (brandDebounceRef.current) {
+      clearTimeout(brandDebounceRef.current);
+    }
+
+    brandDebounceRef.current = window.setTimeout(() => {
+      setPagination((p) => ({ ...p, currentPage: 1 }));
+      setBrandFilter(brandInput.trim());
+    }, 450);
+
+    return () => {
+      if (brandDebounceRef.current) {
+        clearTimeout(brandDebounceRef.current);
+      }
+    };
+  }, [brandInput]);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -961,12 +983,6 @@ export default function ProductManagerList() {
       product: null,
       actionType: "approve",
     });
-  };
-
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setPagination((prev) => ({ ...prev, currentPage: 1 }));
-    setSearchQuery(searchInput.trim());
   };
 
   const handleClearSearch = () => {
@@ -1210,14 +1226,14 @@ export default function ProductManagerList() {
           className="flex flex-col gap-3 mb-6 md:flex-row p-4 rounded-2xl"
           style={{ background: "rgba(133,43,175,0.03)", border: "1px solid rgba(133,43,175,0.08)" }}
         >
-          <form onSubmit={handleSearchSubmit} className="flex-1">
+          <div className="w-80">
             <div className="relative">
               <input
                 type="text"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="Search by product name..."
-                className="w-full py-2.5 pl-10 pr-[90px] text-sm font-medium border rounded-xl outline-none transition-all duration-200 focus:ring-2 focus:ring-[#852BAF]/30 focus:border-[#852BAF] bg-white"
+                className="w-full py-2.5 pl-10 pr-16 text-sm font-medium border rounded-xl outline-none transition-all duration-200 focus:ring-2 focus:ring-[#852BAF]/30 focus:border-[#852BAF] bg-white"
                 style={{ borderColor: "rgba(133,43,175,0.2)" }}
               />
               <FaSearch className="absolute left-3 top-3 text-[#852BAF]/40 pointer-events-none text-sm" />
@@ -1226,23 +1242,27 @@ export default function ProductManagerList() {
                 <button
                   type="button"
                   onClick={handleClearSearch}
-                  className="absolute right-[72px] top-1.5 px-2 py-1 text-gray-500 rounded-lg text-xs font-semibold bg-gray-100 hover:bg-gray-200 cursor-pointer transition-colors"
+                  className="absolute right-1.5 top-1.5 px-2 py-1.5 text-gray-500 rounded-lg text-xs font-semibold bg-gray-100 hover:bg-gray-200 cursor-pointer transition-colors"
                 >
                   ✕ Clear
                 </button>
               )}
-
-              <button
-                type="submit"
-                className="absolute right-1.5 top-1.5 px-3 py-1.5 text-white rounded-lg text-xs font-bold cursor-pointer transition-all duration-200 active:scale-95 hover:opacity-90"
-                style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }}
-              >
-                Search
-              </button>
             </div>
-          </form>
+          </div>
 
           <div className="flex gap-3">
+            <div className="relative">
+              <input
+                type="text"
+                value={brandInput}
+                onChange={(e) => setBrandInput(e.target.value)}
+                placeholder="Filter by brand..."
+                className="w-80 py-2.5 pl-9 pr-3 text-sm font-medium border rounded-xl outline-none transition-all duration-200 focus:ring-2 focus:ring-[#852BAF]/30 focus:border-[#852BAF] bg-white"
+                style={{ borderColor: "rgba(133,43,175,0.2)" }}
+              />
+              <FaSearch className="absolute left-3 top-3 text-[#852BAF]/40 pointer-events-none text-sm" />
+            </div>
+
             <div className="relative">
               <select
                 value={statusFilter}

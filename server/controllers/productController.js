@@ -903,6 +903,7 @@ class ProductController {
 
       const search = req.query.search || "";
       const status = req.query.status || "";
+      const brand = req.query.brand || "";
       const sortBy = req.query.sortBy || "created_at";
       const sortOrder =
         req.query.sortOrder?.toUpperCase() === "ASC" ? "ASC" : "DESC";
@@ -911,6 +912,7 @@ class ProductController {
         await ProductModel.getProductsByVendor(vendorId, {
           search,
           status,
+          brand,
           sortBy,
           sortOrder,
           limit,

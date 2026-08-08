@@ -1149,7 +1149,7 @@ class ProductModel {
   // Get all products for a specific vendor
   async getProductsByVendor(
     vendorId,
-    { search, status, sortBy, sortOrder, limit, offset },
+    { search, status, brand, sortBy, sortOrder, limit, offset },
   ) {
     try {
       let where = `WHERE p.vendor_id = ? AND p.is_deleted = 0`;
@@ -1163,6 +1163,11 @@ class ProductModel {
       if (search) {
         where += ` AND p.product_name LIKE ?`;
         params.push(`%${search}%`);
+      }
+
+      if (brand) {
+        where += ` AND p.brand_name LIKE ?`;
+        params.push(`%${brand}%`);
       }
 
       const sortableColumns = ["created_at", "product_name", "brand_name"];
