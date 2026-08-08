@@ -139,8 +139,8 @@ class GlobalModel {
     return rows;
   }
 
-  // all the employees
-  async getCampaignRecipients() {
+  // Active campaign recipients for a single company
+  async getCampaignRecipients(companyId) {
     const [rows] = await db.execute(
       `SELECT
         id,
@@ -148,9 +148,11 @@ class GlobalModel {
         name,
         contact
      FROM company_users
-     WHERE status = 1
+     WHERE company_id = ?
+       AND status = 1
        AND contact IS NOT NULL
        AND TRIM(contact) <> ''`,
+      [companyId],
     );
 
     return rows;

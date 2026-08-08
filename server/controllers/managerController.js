@@ -1,8 +1,210 @@
 const ManagerModel = require("../models/managerModel");
 const db = require("../config/database");
 const ExcelJS = require("exceljs");
+const EmployeeModel = require("../models/employeeModel");
+
+const COMPANY_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 class ManagerController {
+  async createCompanyEmployee(req, res) {
+    try {
+      const employee = {
+        company_id: Number(req.body.company_id),
+        name: String(req.body.name || "").trim(),
+        email: String(req.body.email || "").trim().toLowerCase(),
+        phone: String(req.body.phone || req.body.contact || "").trim(),
+        department: String(req.body.department || "").trim() || null,
+        role: String(req.body.role || "").trim() || null,
+        date_of_joining: req.body.date_of_joining || null,
+        dob: req.body.dob || null,
+        address1: String(req.body.address1 || "").trim() || null,
+        address2: String(req.body.address2 || "").trim() || null,
+        reporting_manager: String(req.body.reporting_manager || "").trim() || null,
+        ctc:
+          req.body.ctc === "" || req.body.ctc === null || req.body.ctc === undefined
+            ? null
+            : Number(req.body.ctc),
+        status: 1,
+      };
+
+      if (!employee.company_id || employee.company_id < 1) {
+        return res.status(400).json({ success: false, message: "A valid company is required" });
+      }
+      if (!employee.name) {
+        return res.status(400).json({ success: false, message: "Employee name is required" });
+      }
+      if (!employee.email || !COMPANY_EMAIL_PATTERN.test(employee.email)) {
+        return res.status(400).json({ success: false, message: "A valid employee email is required" });
+      }
+      if (!employee.phone) {
+        return res.status(400).json({ success: false, message: "Employee phone is required" });
+      }
+      if (employee.ctc !== null && (!Number.isFinite(employee.ctc) || employee.ctc < 0)) {
+        return res.status(400).json({ success: false, message: "CTC must be a non-negative number" });
+      }
+      if (!(await EmployeeModel.companyExists(employee.company_id))) {
+        return res.status(404).json({ success: false, message: "Active company not found" });
+      }
+
+      const duplicate = await EmployeeModel.findDuplicate(employee);
+      if (duplicate) {
+        return res.status(409).json({
+          success: false,
+          message: "An employee with this email or phone already exists",
+          data: { company_user_id: duplicate.id },
+        });
+      }
+
+      const employeeId = await EmployeeModel.create(employee);
+      const created = await EmployeeModel.findById(employeeId, employee.company_id);
+      return res.status(201).json({
+        success: true,
+        message: "Employee added successfully and is pending account activation",
+        data: created,
+      });
+    } catch (error) {
+      console.error("Create company employee error:", error);
+      return res.status(500).json({ success: false, message: "Failed to add employee" });
+    }
+  }
+
+  async employeeDirectoryCompanies(req, res) {
+    try {
+      const [companies] = await db.execute(`
+        SELECT
+          co.company_id,
+          co.company_name,
+          co.company_email,
+          co.company_phone,
+          co.company_logo,
+          co.status,
+          co.created_at,
+          co.updated_at,
+          COUNT(DISTINCT cu.id) AS total_employee_count,
+          COUNT(DISTINCT CASE WHEN c.status = 1 THEN c.user_id END) AS active_employee_count
+        FROM companies co
+        LEFT JOIN company_users cu ON cu.company_id = co.company_id
+        LEFT JOIN customer c ON c.company_id = co.company_id
+        WHERE co.status = 1
+        GROUP BY
+          co.company_id, co.company_name, co.company_email, co.company_phone,
+          co.company_logo, co.status, co.created_at, co.updated_at
+        ORDER BY co.company_id DESC
+      `);
+
+      return res.json({
+        success: true,
+        count: companies.length,
+        data: companies.map((company) => ({
+          ...company,
+          total_employee_count: Number(company.total_employee_count || 0),
+          active_employee_count: Number(company.active_employee_count || 0),
+          company_logo: company.company_logo
+            ? company.company_logo.startsWith("http")
+              ? company.company_logo
+              : `https://cdn.rewardplanners.com/${company.company_logo}`
+            : null,
+        })),
+      });
+    } catch (error) {
+      console.error("Employee directory companies error:", error);
+      return res.status(500).json({ success: false, message: "Failed to fetch companies" });
+    }
+  }
+
+  async employeeDirectoryCustomers(req, res) {
+    try {
+      const [customers] = await db.execute(`
+        SELECT
+          c.user_id,
+          c.company_id,
+          c.company_user_id,
+          c.name,
+          c.email,
+          c.phone,
+          c.status,
+          c.is_verified,
+          c.last_login_at,
+          co.company_name,
+          cu.department,
+          cu.role AS company_role
+        FROM customer c
+        LEFT JOIN companies co ON co.company_id = c.company_id
+        LEFT JOIN company_users cu ON cu.id = c.company_user_id
+        ORDER BY c.user_id DESC
+      `);
+
+      return res.json({ success: true, count: customers.length, data: customers });
+    } catch (error) {
+      console.error("Employee directory customers error:", error);
+      return res.status(500).json({ success: false, message: "Failed to fetch employees" });
+    }
+  }
+
+  async companyEmployees(req, res) {
+    try {
+      const companyId = Number(req.params.companyId);
+      if (!Number.isInteger(companyId) || companyId < 1) {
+        return res.status(400).json({ success: false, message: "Invalid company ID" });
+      }
+
+      const [[company]] = await db.execute(
+        `SELECT company_id, company_name, company_email, company_phone, company_logo, status
+         FROM companies
+         WHERE company_id = ?
+         LIMIT 1`,
+        [companyId],
+      );
+      if (!company) {
+        return res.status(404).json({ success: false, message: "Company not found" });
+      }
+
+      const [employees] = await db.execute(
+        `SELECT
+           cu.id,
+           cu.company_id,
+           cu.name,
+           cu.email,
+           cu.contact AS phone,
+           cu.department,
+           cu.role,
+           cu.date_of_joining,
+           cu.dob,
+           cu.reporting_manager,
+           cu.ctc,
+           cu.status,
+           cu.created_at,
+           c.user_id AS customer_id,
+           c.status AS customer_status,
+           c.is_verified AS customer_is_verified,
+           c.last_login_at
+         FROM company_users cu
+         LEFT JOIN customer c ON c.company_user_id = cu.id
+         WHERE cu.company_id = ?
+         ORDER BY cu.name ASC, cu.id DESC`,
+        [companyId],
+      );
+
+      return res.json({
+        success: true,
+        data: {
+          company: {
+            ...company,
+            company_logo: company.company_logo
+              ? company.company_logo.startsWith("http")
+                ? company.company_logo
+                : `https://cdn.rewardplanners.com/${company.company_logo}`
+              : null,
+          },
+          employees,
+        },
+      });
+    } catch (error) {
+      console.error("Company employees error:", error);
+      return res.status(500).json({ success: false, message: "Failed to fetch company employees" });
+    }
+  }
+
   // ========== BASIC STATS FOR CARDS ==========
   async getDashboardStats(req, res) {
     try {

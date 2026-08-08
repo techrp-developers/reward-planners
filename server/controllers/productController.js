@@ -745,6 +745,8 @@ class ProductController {
       const sortBy = req.query.sortBy || "created_at";
       const sortOrder =
         req.query.sortOrder?.toUpperCase() === "ASC" ? "ASC" : "DESC";
+      const vendorId = req.query.vendorId || "";
+      const brand = req.query.brand || "";
 
       const { products, totalItems, stats } =
         await ProductModel.getAllProductDetails({
@@ -755,6 +757,8 @@ class ProductController {
           limit,
           offset,
           role,
+          vendorId,
+          brand,
         });
 
       const normalizedProducts = products.map((p) => ({

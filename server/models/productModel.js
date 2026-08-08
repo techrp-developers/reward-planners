@@ -970,6 +970,8 @@ class ProductModel {
     limit,
     offset,
     role,
+    vendorId,
+    brand,
   }) {
     try {
       const conditions = ["p.is_deleted = 0"];
@@ -983,6 +985,16 @@ class ProductModel {
       if (search) {
         conditions.push("p.product_name LIKE ?");
         params.push(`%${search}%`);
+      }
+
+      if (vendorId) {
+        conditions.push("p.vendor_id = ?");
+        params.push(vendorId);
+      }
+
+      if (brand) {
+        conditions.push("p.brand_name LIKE ?");
+        params.push(`%${brand}%`);
       }
 
       if (role === "vendor_manager" || role === "admin") {

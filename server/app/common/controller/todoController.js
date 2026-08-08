@@ -1,4 +1,12 @@
 const TodoModel = require("../models/todoModel");
+const {
+  getCustomReminderInputs,
+  replaceReminderSchedule,
+  cancelReminderScheduleByTodoId,
+  cancelReminderScheduleByTodoIds,
+  deleteReminderScheduleByTodoId,
+  deleteReminderScheduleByTodoIds,
+} = require("../../../services/Todo/todoReminderService");
 
 function formatTodoTime(value) {
   if (!value) return null;
@@ -55,6 +63,134 @@ function normalizeTodoTime(value) {
   return null;
 }
 
+function timeToSeconds(value) {
+  if (!value) return null;
+
+  const match = String(value).match(/^(\d{2}):(\d{2}):(\d{2})$/);
+  if (!match) return null;
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const seconds = Number(match[3]);
+
+  return (hours * 3600) + (minutes * 60) + seconds;
+}
+
+function secondsToTime(totalSeconds) {
+  const secondsInDay = 24 * 60 * 60;
+  const normalizedSeconds = ((totalSeconds % secondsInDay) + secondsInDay) % secondsInDay;
+  const hours = Math.floor(normalizedSeconds / 3600);
+  const minutes = Math.floor((normalizedSeconds % 3600) / 60);
+  const seconds = normalizedSeconds % 60;
+
+  return [hours, minutes, seconds]
+    .map((part) => String(part).padStart(2, "0"))
+    .join(":");
+}
+
+function resolveRelativeReminderTime(reminderValue, baseStartTime) {
+  if (!reminderValue || !baseStartTime) return null;
+
+  const normalizedLabel = String(reminderValue).trim().toLowerCase();
+  const startSeconds = timeToSeconds(baseStartTime);
+
+  if (startSeconds == null) return null;
+
+  const presets = {
+    "at time of event": 0,
+    "at time": 0,
+    "on time": 0,
+    "5 min before": 5,
+    "10 min before": 10,
+    "15 min before": 15,
+    "30 min before": 30,
+    "45 min before": 45,
+    "1 hour before": 60,
+    "2 hours before": 120,
+  };
+
+  if (Object.prototype.hasOwnProperty.call(presets, normalizedLabel)) {
+    return secondsToTime(startSeconds - (presets[normalizedLabel] * 60));
+  }
+
+  const relativeMatch = normalizedLabel.match(/^(\d+)\s*(minute|minutes|min|hour|hours|hr|hrs)\s*before$/);
+  if (!relativeMatch) return null;
+
+  const amount = Number(relativeMatch[1]);
+  const unit = relativeMatch[2];
+  const totalMinutes = /hour|hr/.test(unit) ? amount * 60 : amount;
+
+  return secondsToTime(startSeconds - (totalMinutes * 60));
+}
+
+function extractTimeFromDateTime(value) {
+  if (!value) return null;
+
+  const normalized = String(value).trim();
+  const match = normalized.match(/(?:T|\s)(\d{2}:\d{2})(?::(\d{2}))?/);
+
+  if (!match) return null;
+
+  return `${match[1]}:${match[2] || "00"}`;
+}
+
+function resolveReminderTimeInput(reminderValue, baseStartTime) {
+  if (reminderValue == null || reminderValue === "") return null;
+
+  const directTime = normalizeTodoTime(reminderValue);
+  if (directTime) return directTime;
+
+  const extractedTime = extractTimeFromDateTime(reminderValue);
+  if (extractedTime) {
+    const normalizedExtractedTime = normalizeTodoTime(extractedTime);
+    if (normalizedExtractedTime) return normalizedExtractedTime;
+  }
+
+  return resolveRelativeReminderTime(reminderValue, baseStartTime);
+}
+
+function normalizeReminderEntry(reminderValue, baseStartTime) {
+  const normalizedTime = resolveReminderTimeInput(reminderValue, baseStartTime);
+
+  if (!normalizedTime) {
+    return null;
+  }
+
+  return {
+    time: normalizedTime,
+    label: String(reminderValue).trim(),
+  };
+}
+
+function resolveReminderEntries(payload, baseStartTime, fallbackReminderInputs = []) {
+  const rawReminderValues = Array.isArray(payload.reminders) && payload.reminders.length
+    ? payload.reminders
+    : (() => {
+        const singleReminder = payload.reminder_time ?? payload.reminder_date ?? payload.reminder;
+        return singleReminder != null && singleReminder !== ""
+          ? [singleReminder]
+          : fallbackReminderInputs;
+      })();
+
+  const normalizedEntries = [];
+  const seenTimes = new Set();
+
+  for (const value of rawReminderValues) {
+    const normalizedEntry = normalizeReminderEntry(value, baseStartTime);
+
+    if (!normalizedEntry) {
+      return null;
+    }
+
+    if (!seenTimes.has(normalizedEntry.time)) {
+      seenTimes.add(normalizedEntry.time);
+      normalizedEntries.push(normalizedEntry);
+    }
+  }
+
+  return normalizedEntries;
+}
+
 const formatTodoForFrontend = (todo) => {
   const startTime = formatTodoTime(todo.start_time);
   const endTime = formatTodoTime(todo.end_time);
@@ -95,6 +231,8 @@ const TodoController = {
         title,
         subtitle,
         reminder_time,
+        reminder_date,
+        reminder,
       } = req.body;
 
       if (!task_date) {
@@ -113,7 +251,11 @@ const TodoController = {
 
       const normalizedStartTime = normalizeTodoTime(start_time);
       const normalizedEndTime = normalizeTodoTime(end_time);
-      const normalizedReminderTime = normalizeTodoTime(reminder_time);
+      const normalizedReminderEntries = resolveReminderEntries(
+        req.body,
+        normalizedStartTime,
+      );
+      const normalizedReminderTime = normalizedReminderEntries?.[0]?.time || null;
 
       if (!normalizedStartTime || !normalizedEndTime) {
         return res.status(400).json({
@@ -122,10 +264,10 @@ const TodoController = {
         });
       }
 
-      if (reminder_time && !normalizedReminderTime) {
+      if (normalizedReminderEntries === null) {
         return res.status(400).json({
           success: false,
-          message: "reminder_time must be a valid time",
+          message: "Reminder must be a valid time, datetime, or supported relative value",
         });
       }
 
@@ -145,6 +287,9 @@ const TodoController = {
         subtitle,
         reminder_time: normalizedReminderTime,
       });
+
+      const createdTodo = await TodoModel.getTodoById(todoId, userId);
+      await replaceReminderSchedule(createdTodo, normalizedReminderEntries || []);
 
       return res.status(201).json({
         success: true,
@@ -212,6 +357,29 @@ const TodoController = {
 
       const updateData = { ...req.body };
 
+      if (
+        updateData.reminder_time === undefined &&
+        updateData.reminder_date !== undefined
+      ) {
+        updateData.reminder_time = updateData.reminder_date;
+      }
+
+      if (
+        updateData.reminder_time === undefined &&
+        updateData.reminder !== undefined
+      ) {
+        updateData.reminder_time = updateData.reminder;
+      }
+
+      const existingTodo = await TodoModel.getTodoById(id, userId);
+
+      if (!existingTodo) {
+        return res.status(404).json({
+          success: false,
+          message: "Todo not found",
+        });
+      }
+
       if (updateData.start_time !== undefined) {
         updateData.start_time = normalizeTodoTime(updateData.start_time);
       }
@@ -220,14 +388,36 @@ const TodoController = {
         updateData.end_time = normalizeTodoTime(updateData.end_time);
       }
 
-      if (updateData.reminder_time !== undefined) {
-        updateData.reminder_time = normalizeTodoTime(updateData.reminder_time);
-      }
+      let fallbackReminderInputs = [];
 
       if (
-        updateData.start_time === null ||
-        updateData.end_time === null ||
-        (req.body.reminder_time && updateData.reminder_time === null)
+        req.body.reminders === undefined &&
+        req.body.reminder_time === undefined &&
+        req.body.reminder_date === undefined &&
+        req.body.reminder === undefined
+      ) {
+        fallbackReminderInputs = await getCustomReminderInputs(id);
+
+        if (!fallbackReminderInputs.length && existingTodo.reminder_time) {
+          fallbackReminderInputs = [existingTodo.reminder_time];
+        }
+      }
+
+      const normalizedReminderEntries = resolveReminderEntries(
+        updateData,
+        updateData.start_time || existingTodo.start_time,
+        fallbackReminderInputs,
+      );
+      updateData.reminder_time = normalizedReminderEntries?.[0]?.time || null;
+
+      if (
+        (req.body.start_time !== undefined && updateData.start_time === null) ||
+        (req.body.end_time !== undefined && updateData.end_time === null) ||
+        ((req.body.reminders !== undefined ||
+          req.body.reminder_time !== undefined ||
+          req.body.reminder_date !== undefined ||
+          req.body.reminder !== undefined) &&
+          normalizedReminderEntries === null)
       ) {
         return res.status(400).json({
           success: false,
@@ -243,6 +433,9 @@ const TodoController = {
           message: "Todo not found",
         });
       }
+
+      const updatedTodo = await TodoModel.getTodoById(id, userId);
+      await replaceReminderSchedule(updatedTodo, normalizedReminderEntries || []);
 
       return res.status(200).json({
         success: true,
@@ -280,6 +473,8 @@ const TodoController = {
         });
       }
 
+      await cancelReminderScheduleByTodoId(id);
+
       return res.status(200).json({
         success: true,
         message: "Todo marked as completed",
@@ -314,7 +509,9 @@ const TodoController = {
         });
       }
 
+      const validTodoIds = await TodoModel.getTodoIdsByUser(ids, userId);
       await TodoModel.markMultipleCompleted(ids, userId);
+      await cancelReminderScheduleByTodoIds(validTodoIds);
 
       return res.status(200).json({
         success: true,
@@ -332,7 +529,6 @@ const TodoController = {
   async updateReminder(req, res) {
     try {
       const { id } = req.params;
-      const { reminder_time } = req.body;
 
       const userId = req.user?.user_id;
       // const userId = 1;
@@ -344,12 +540,25 @@ const TodoController = {
         });
       }
 
-      const normalizedReminderTime = normalizeTodoTime(reminder_time);
+      const existingTodo = await TodoModel.getTodoById(id, userId);
 
-      if (reminder_time && !normalizedReminderTime) {
+      if (!existingTodo) {
+        return res.status(404).json({
+          success: false,
+          message: "Todo not found",
+        });
+      }
+
+      const normalizedReminderEntries = resolveReminderEntries(
+        req.body,
+        existingTodo.start_time,
+      );
+      const normalizedReminderTime = normalizedReminderEntries?.[0]?.time || null;
+
+      if (normalizedReminderEntries === null) {
         return res.status(400).json({
           success: false,
-          message: "reminder_time must be a valid time",
+          message: "Reminder must be a valid time, datetime, or supported relative value",
         });
       }
 
@@ -359,12 +568,8 @@ const TodoController = {
         normalizedReminderTime,
       );
 
-      if (result.affectedRows === 0) {
-        return res.status(404).json({
-          success: false,
-          message: "Todo not found",
-        });
-      }
+      const updatedTodo = await TodoModel.getTodoById(id, userId);
+      await replaceReminderSchedule(updatedTodo, normalizedReminderEntries || []);
 
       return res.status(200).json({
         success: true,
@@ -402,6 +607,8 @@ const TodoController = {
         });
       }
 
+      await deleteReminderScheduleByTodoId(id);
+
       return res.status(200).json({
         success: true,
         message: "Todo deleted successfully",
@@ -436,7 +643,9 @@ const TodoController = {
         });
       }
 
+      const validTodoIds = await TodoModel.getTodoIdsByUser(ids, userId);
       await TodoModel.deleteMultipleTodos(ids, userId);
+      await deleteReminderScheduleByTodoIds(validTodoIds);
 
       return res.status(200).json({
         success: true,

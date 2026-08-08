@@ -19,6 +19,13 @@ class ServiceBundleModel {
       bi.is_required,
 
       s.name AS service_name,
+      s.rating,
+      (
+        SELECT COUNT(*)
+        FROM service_feedback sf
+        JOIN service_orders so ON so.id = sf.service_order_id
+        WHERE so.service_id = s.id
+      ) AS review_count,
       sv.variant_name,
       sv.price,
       sv.title,
@@ -38,6 +45,8 @@ class ServiceBundleModel {
 
     return rows.map((item) => ({
       ...item,
+      rating: Number(item.rating || 0),
+      review_count: Number(item.review_count || 0),
       image_url: item.image_url,
     }));
   }

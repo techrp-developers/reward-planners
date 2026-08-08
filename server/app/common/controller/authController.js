@@ -23,8 +23,8 @@ const { deleteFromR2 } = require("../../../utils/r2delete");
 const { getPublicUrl } = require("../../../utils/publicUrl");
 const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
 
-  const ACCESS_EXPIRES = "1h";
-  const REFRESH_EXPIRES_DAYS = 7;
+  const ACCESS_EXPIRES = "30d";
+  const REFRESH_EXPIRES_DAYS = 90;
 
   function generateOTP() {
     return Math.floor(1000 + Math.random() * 9000).toString();

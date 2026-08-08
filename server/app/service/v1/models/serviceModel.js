@@ -36,7 +36,13 @@ class ServiceModel {
     let sql = `
       SELECT 
         s.*,
-        c.name AS category_name
+        c.name AS category_name,
+        (
+          SELECT COUNT(*)
+          FROM service_feedback sf
+          JOIN service_orders so ON so.id = sf.service_order_id
+          WHERE so.service_id = s.id
+        ) AS review_count
       FROM services s
       JOIN service_categories c ON c.id = s.category_id
       WHERE s.status = 1
@@ -72,6 +78,8 @@ class ServiceModel {
 
     return rows.map((service) => ({
       ...service,
+      rating: Number(service.rating || 0),
+      review_count: Number(service.review_count || 0),
       service_image: getPublicUrl(service.service_image, service.updated_at),
     }));
   }
@@ -81,7 +89,13 @@ class ServiceModel {
       `
       SELECT
         s.*,
-        c.name AS category_name
+        c.name AS category_name,
+        (
+          SELECT COUNT(*)
+          FROM service_feedback sf
+          JOIN service_orders so ON so.id = sf.service_order_id
+          WHERE so.service_id = s.id
+        ) AS review_count
       FROM services s
       JOIN service_categories c ON c.id = s.category_id
       WHERE s.id = ?
@@ -94,6 +108,8 @@ class ServiceModel {
 
     return {
       ...service,
+      rating: Number(service.rating || 0),
+      review_count: Number(service.review_count || 0),
       service_image: getPublicUrl(service.service_image, service.updated_at),
     };
   }
@@ -154,6 +170,13 @@ class ServiceModel {
       description,
       price,
       estimated_days,
+      rating,
+      (
+        SELECT COUNT(*)
+        FROM service_feedback sf
+        JOIN service_orders so ON so.id = sf.service_order_id
+        WHERE so.service_id = services.id
+      ) AS review_count,
       service_image,
       updated_at
     FROM services
@@ -165,13 +188,27 @@ class ServiceModel {
 
     return rows.map((service) => ({
       ...service,
+      rating: Number(service.rating || 0),
+      review_count: Number(service.review_count || 0),
       service_image: getPublicUrl(service.service_image, service.updated_at),
     }));
   }
 
   async findBasicById(id) {
     const [rows] = await db.execute(
-      `SELECT id, name, description, service_image, updated_at
+      `SELECT
+        id,
+        name,
+        description,
+        rating,
+        (
+          SELECT COUNT(*)
+          FROM service_feedback sf
+          JOIN service_orders so ON so.id = sf.service_order_id
+          WHERE so.service_id = services.id
+        ) AS review_count,
+        service_image,
+        updated_at
      FROM services
      WHERE id = ? AND status = 1`,
       [id],
@@ -183,6 +220,8 @@ class ServiceModel {
 
     return {
       ...service,
+      rating: Number(service.rating || 0),
+      review_count: Number(service.review_count || 0),
       service_image: getPublicUrl(service.service_image, service.updated_at),
     };
   }
@@ -233,6 +272,12 @@ class ServiceModel {
           s.name,
           s.description,
           s.rating,
+          (
+            SELECT COUNT(*)
+            FROM service_feedback sf
+            JOIN service_orders so ON so.id = sf.service_order_id
+            WHERE so.service_id = s.id
+          ) AS review_count,
           s.total_orders,
           s.show_enquiry,
           s.service_image,
@@ -297,6 +342,8 @@ class ServiceModel {
             enquiry: Boolean(item.show_enquiry),
 
             rating: Number(item.rating || 0),
+
+            review_count: Number(item.review_count || 0),
 
             total_orders: Number(item.total_orders || 0),
 
@@ -401,6 +448,12 @@ class ServiceModel {
       s.name,
       s.description,
       s.rating,
+      (
+        SELECT COUNT(*)
+        FROM service_feedback sf
+        JOIN service_orders so ON so.id = sf.service_order_id
+        WHERE so.service_id = s.id
+      ) AS review_count,
       s.total_orders,
       s.show_enquiry,
       s.service_image,
@@ -470,6 +523,12 @@ class ServiceModel {
         s.name,
         s.description,
         s.rating,
+        (
+          SELECT COUNT(*)
+          FROM service_feedback sf
+          JOIN service_orders so ON so.id = sf.service_order_id
+          WHERE so.service_id = s.id
+        ) AS review_count,
         s.total_orders,
         s.show_enquiry,
         s.service_image,
@@ -530,6 +589,8 @@ class ServiceModel {
       enquiry: Boolean(item.show_enquiry),
 
       rating: Number(item.rating || 0),
+
+      review_count: Number(item.review_count || 0),
 
       total_orders: Number(item.total_orders || 0),
 
@@ -744,6 +805,12 @@ class ServiceModel {
       s.name,
       s.status,
       s.rating,
+      (
+        SELECT COUNT(*)
+        FROM service_feedback sf
+        JOIN service_orders so ON so.id = sf.service_order_id
+        WHERE so.service_id = s.id
+      ) AS review_count,
       s.total_orders,
       s.service_image,
       srs.relation_type,
@@ -761,7 +828,11 @@ class ServiceModel {
       [serviceId],
     );
 
-    return rows;
+    return rows.map((service) => ({
+      ...service,
+      rating: Number(service.rating || 0),
+      review_count: Number(service.review_count || 0),
+    }));
   }
 
   async updateRelatedService(id, data) {
@@ -797,6 +868,12 @@ class ServiceModel {
       s.name,
       s.description,
       s.rating,
+      (
+        SELECT COUNT(*)
+        FROM service_feedback sf
+        JOIN service_orders so ON so.id = sf.service_order_id
+        WHERE so.service_id = s.id
+      ) AS review_count,
       s.total_orders,
       s.show_enquiry,
       s.service_image,
@@ -851,6 +928,8 @@ class ServiceModel {
 
       rating: Number(item.rating || 0),
 
+      review_count: Number(item.review_count || 0),
+
       total_orders: Number(item.total_orders || 0),
 
       price: Number(item.price),
@@ -883,6 +962,12 @@ class ServiceModel {
       s.name,
       s.description,
       s.rating,
+      (
+        SELECT COUNT(*)
+        FROM service_feedback sf
+        JOIN service_orders so ON so.id = sf.service_order_id
+        WHERE so.service_id = s.id
+      ) AS review_count,
       s.total_orders,
       s.show_enquiry,
       s.service_image,
@@ -942,6 +1027,8 @@ class ServiceModel {
 
       rating: Number(item.rating || 0),
 
+      review_count: Number(item.review_count || 0),
+
       total_orders: Number(item.total_orders || 0),
 
       price: Number(item.price),
@@ -977,6 +1064,13 @@ class ServiceModel {
     SELECT
       id,
       name AS title,
+      rating,
+      (
+        SELECT COUNT(*)
+        FROM service_feedback sf
+        JOIN service_orders so ON so.id = sf.service_order_id
+        WHERE so.service_id = services.id
+      ) AS review_count,
       service_image AS image,
       updated_at,
       'service' AS type
@@ -991,6 +1085,8 @@ class ServiceModel {
 
     return rows.map(({ updated_at, ...service }) => ({
       ...service,
+      rating: Number(service.rating || 0),
+      review_count: Number(service.review_count || 0),
       image: getPublicUrl(service.image, updated_at),
       navigation: {
         destination: "service_details",

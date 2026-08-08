@@ -1,33 +1,6 @@
 const db = require("../../../../config/database");
 const CartModel = require("../models/serviceCartModel");
 
-function parseSelectedItemIds(selectedItems) {
-  if (!selectedItems) return [];
-
-  const values = Array.isArray(selectedItems) ? selectedItems : [selectedItems];
-
-  return values
-    .flatMap((value) => {
-      if (typeof value === "number") return [value];
-      if (typeof value !== "string") return [];
-
-      const trimmed = value.trim();
-
-      if (!trimmed) return [];
-
-      try {
-        const parsed = JSON.parse(trimmed);
-        if (Array.isArray(parsed)) return parsed;
-      } catch (err) {
-        // Fall through to comma-separated parsing.
-      }
-
-      return trimmed.split(",");
-    })
-    .map((value) => Number(value))
-    .filter((value) => Number.isInteger(value) && value > 0);
-}
-
 class ServiceCartController {
   async addToCart(req, res) {
     try {
@@ -70,6 +43,50 @@ class ServiceCartController {
         variant_id,
         price: variant.price,
       });
+
+      // -------------------------------
+      // SERVICE BUNDLE UPSELL PUSH
+      // -------------------------------
+      try {
+        const [bundleInfo] = await db.execute(
+          `
+          SELECT sbi.bundle_id, sb.name AS bundle_name, sbi2.service_id AS related_service_id, s2.name AS related_service_name
+          FROM service_bundle_items sbi
+          JOIN service_bundles sb ON sbi.bundle_id = sb.id
+          JOIN service_bundle_items sbi2 ON sbi.bundle_id = sbi2.bundle_id
+          JOIN services s2 ON sbi2.service_id = s2.id
+          WHERE sbi.service_id = ? AND sbi2.service_id != ?
+          LIMIT 1
+          `,
+          [service_id, service_id]
+        );
+
+        if (bundleInfo && bundleInfo.length > 0) {
+          const upsell = bundleInfo[0];
+          // Check if user already has the related service in service_cart_items
+          const [[alreadyInCart]] = await db.execute(
+            `SELECT id FROM service_cart_items WHERE cart_id = ? AND service_id = ? LIMIT 1`,
+            [cart.id, upsell.related_service_id]
+          );
+
+          if (!alreadyInCart) {
+            const { notifyUser } = require("../../../common/utils/notification");
+            notifyUser({
+              userId,
+              module: "service",
+              type: "service_bundle_upsell",
+              title: "Get the complete package! 📦",
+              message: `Save by adding ${upsell.related_service_name} to complete your ${upsell.bundle_name} pack!`,
+              icon: "gift",
+              reference_type: "service_bundle",
+              reference_id: String(upsell.bundle_id),
+              action_url: "/services",
+            }, "service bundle upsell notification");
+          }
+        }
+      } catch (upsellErr) {
+        console.error("Bundle upsell check failed:", upsellErr.message);
+      }
 
       res.json({
         success: true,
@@ -152,23 +169,12 @@ class ServiceCartController {
         });
       }
 
-      const itemIds = new Set(items.map((i) => Number(i.id)));
-      const selectedItemIds = parseSelectedItemIds(selected_items).filter((id) =>
-        itemIds.has(id),
-      );
-      const requiredItems = items
-        .filter((i) => i.is_required === 1)
-        .map((i) => Number(i.id));
-      const selectedSet = new Set([
-        ...requiredItems,
-        ...selectedItemIds,
-      ]);
       const hasOptional = items.some((i) => i.is_required === 0);
 
       if (
         bundle.type === "custom" &&
         hasOptional &&
-        selectedItemIds.length === 0
+        (!selected_items || selected_items.length === 0)
       ) {
         return res.status(400).json({
           success: false,
@@ -176,26 +182,21 @@ class ServiceCartController {
         });
       }
 
-      const isFullBundleSelected = selectedSet.size === items.length;
+      const selectedSet = new Set(selected_items || []);
       const insertedItems = [];
 
       for (let item of items) {
         //  if custom bundle → apply selection
         if (bundle.type === "custom") {
-          if (item.is_required === 0 && !selectedSet.has(Number(item.id))) {
+          if (item.is_required === 0 && !selectedSet.has(item.id)) {
             continue;
           }
         }
 
-        let finalPrice;
-
-        if (bundle.type === "fixed") {
-          finalPrice = Number(item.bundle_price);
-        } else {
-          finalPrice = isFullBundleSelected
+        let finalPrice =
+          bundle.type === "fixed"
             ? Number(item.bundle_price)
             : Number(item.individual_price);
-        }
 
         // add to cart
         await CartModel.addItem(cart.id, {
@@ -243,21 +244,12 @@ class ServiceCartController {
       const total =
         cartData.individual_items.reduce((s, i) => s + Number(i.price), 0) +
         cartData.bundles.reduce((s, b) => s + Number(b.bundle_total), 0);
-      const allItems = [
-        ...cartData.individual_items,
-        ...cartData.bundles.flatMap((bundle) => bundle.items),
-      ];
-      const rewards = {
-        earn_coins: allItems.reduce((sum, item) => sum + Number(item.rewards?.earn_coins || 0), 0),
-        max_redeem_coins: allItems.reduce((sum, item) => sum + Number(item.rewards?.max_redeem_coins || 0), 0),
-      };
 
       res.json({
         success: true,
         data: {
           ...cartData,
           total,
-          rewards,
         },
       });
     } catch (err) {

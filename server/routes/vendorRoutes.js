@@ -5,6 +5,7 @@ const upload = require("../middleware/mediaUpload/uploadVendor");
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 const vendorController = require("../controllers/vendorController");
 const { productUpload } = require("../middleware/mediaUpload/productUpload");
+const vendorFleaMarketPurchasesController = require("../controllers/vendorFleaMarketPurchasesController");
 
 const router = express.Router();
 
@@ -204,6 +205,22 @@ router.get(
   authenticateToken,
   authorizeRoles("vendor"),
   vendorController.getMyOnboardingData,
+);
+
+// Vendor-facing view of their own flea market sales — which product, at
+// which event, bought by which (masked) customer. Scoped server-side to
+// req.user.vendor_id, never a query param.
+router.get(
+  "/flea-market/purchases/filter-options",
+  authenticateToken,
+  authorizeRoles("vendor"),
+  vendorFleaMarketPurchasesController.filterOptions,
+);
+router.get(
+  "/flea-market/purchases",
+  authenticateToken,
+  authorizeRoles("vendor"),
+  vendorFleaMarketPurchasesController.purchases,
 );
 
 // Get vendor by ID

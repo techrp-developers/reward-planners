@@ -1,6 +1,24 @@
 const db = require("../config/database");
 
 class EmployeeModel {
+  async getAssignableCompanies(companyId = null) {
+    const params = [];
+    let companyFilter = "";
+    if (companyId) {
+      companyFilter = "AND company_id = ?";
+      params.push(companyId);
+    }
+
+    const [rows] = await db.execute(
+      `SELECT company_id, company_name, company_email, company_phone, company_logo
+       FROM companies
+       WHERE status = 1 ${companyFilter}
+       ORDER BY company_name ASC`,
+      params,
+    );
+    return rows;
+  }
+
   async getCompanyProfile(companyId) {
     const [[company]] = await db.execute(
       `SELECT company_id, company_name, company_logo
@@ -206,6 +224,65 @@ class EmployeeModel {
       params,
     );
     return employee;
+  }
+
+  async searchByIdentity(
+    { search, name, email, phone, companyId = null },
+    conn = db,
+  ) {
+    const conditions = [];
+    const params = [];
+
+    if (search) {
+      const pattern = `%${search}%`;
+      conditions.push(`(
+        LOWER(cu.name) LIKE LOWER(?) OR
+        LOWER(cu.email) LIKE LOWER(?) OR
+        cu.contact LIKE ?
+      )`);
+      params.push(pattern, pattern, pattern);
+    }
+    if (name) {
+      conditions.push("LOWER(cu.name) LIKE LOWER(?)");
+      params.push(`%${name}%`);
+    }
+    if (email) {
+      conditions.push("LOWER(cu.email) LIKE LOWER(?)");
+      params.push(`%${email}%`);
+    }
+    if (phone) {
+      conditions.push("cu.contact LIKE ?");
+      params.push(`%${phone}%`);
+    }
+    if (!conditions.length) return [];
+
+    let companyFilter = "";
+    if (companyId) {
+      companyFilter = "AND cu.company_id = ?";
+      params.push(companyId);
+    }
+
+    const [employees] = await conn.execute(
+      `SELECT
+         cu.id,
+         cu.company_id,
+         co.company_name,
+         cu.name,
+         cu.email,
+         cu.contact AS phone,
+         cu.status AS company_user_status,
+         c.user_id AS customer_id,
+         c.status AS customer_status,
+         c.is_verified AS customer_is_verified
+       FROM company_users cu
+       INNER JOIN companies co ON co.company_id = cu.company_id
+       LEFT JOIN customer c ON c.company_user_id = cu.id
+       WHERE (${conditions.join(" OR ")}) ${companyFilter}
+       ORDER BY cu.name ASC, cu.id DESC
+       LIMIT 25`,
+      params,
+    );
+    return employees;
   }
 
   async create(data, conn = db) {

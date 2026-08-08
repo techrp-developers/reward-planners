@@ -37,6 +37,14 @@ router.post(
   (req, res) => authController.register(req, res, "warehouse_manager"),
 );
 
+router.post(
+  "/flea_market_manager/register",
+  authLimiter,
+  authenticateToken,
+  authorizeRoles("admin"),
+  (req, res) => authController.register(req, res, "flea_market_manager"),
+);
+
 /* ============================================================
     OTP
    ============================================================ */
@@ -56,6 +64,10 @@ router.post("/reset-password", authLimiter, authController.resetPassword);
    LOGIN (SEPARATE FOR EACH ROLE)
    ============================================================ */
 
+router.post("/hr/login", authLimiter, (req, res) =>
+  authController.login(req, res, "hr"),
+);
+
 router.post("/vendor/login", authLimiter, (req, res) =>
   authController.login(req, res, "vendor"),
 );
@@ -68,9 +80,20 @@ router.post("/warehouse_manager/login", authLimiter, (req, res) =>
   authController.login(req, res, "warehouse_manager"),
 );
 
+router.post("/flea_market_manager/login", authLimiter, (req, res) =>
+  authController.login(req, res, "flea_market_manager"),
+);
+
 router.post("/admin/login", authLimiter, (req, res) =>
   authController.login(req, res, "admin"),
 );
+
+/* ============================================================
+   LOGIN (ROLE RESOLVED FROM DB — used by the client login form,
+   which no longer asks the user to pick a role up front)
+   ============================================================ */
+
+router.post("/login", authLimiter, (req, res) => authController.login(req, res));
 
 /* ============================================================
    PASSWORD RESET

@@ -5,6 +5,34 @@ const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 const managerController = require("../controllers/managerController");
 const CategoryAttributeController = require("../controllers/categoryAttributeController");
 
+router.get(
+  "/employee-directory/companies",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  managerController.employeeDirectoryCompanies.bind(managerController),
+);
+
+router.get(
+  "/employee-directory/customers",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  managerController.employeeDirectoryCustomers.bind(managerController),
+);
+
+router.get(
+  "/employee-directory/companies/:companyId/employees",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  managerController.companyEmployees.bind(managerController),
+);
+
+router.post(
+  "/employee-directory/employees",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  managerController.createCompanyEmployee.bind(managerController),
+);
+
 // Manager Stats API
 router.get(
   "/stats",
