@@ -103,6 +103,15 @@ export default function WarehouseSidebar({ closeSidebar }: WarehouseSidebarProps
         {isProfileOpen && (
           <div className="mt-2 space-y-1">
             <Link
+              to="/warehouse/profile"
+              onClick={closeSidebar}
+              className="flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-gray-100"
+            >
+              <HiOutlineUserCircle className="text-lg" />
+              Profile
+            </Link>
+
+            <Link
               to="/warehouse/change-password"
               onClick={closeSidebar}
               className="flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-gray-100"

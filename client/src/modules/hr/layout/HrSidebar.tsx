@@ -4,6 +4,7 @@ import {
   FiGrid,
   FiUsers,
   FiUserPlus,
+  FiUser,
   FiLogOut,
   FiGift,
   FiChevronDown,
@@ -225,6 +226,15 @@ const navItems: NavItem[] = [
             }}
           />
           <div className="space-y-0.5">
+            <Link
+              to="/hr/profile"
+              onClick={closeSidebar}
+              className="flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-white/80 hover:text-[#852BAF] rounded-xl transition-all duration-150"
+            >
+              <FiUser className="text-base text-gray-400 shrink-0" />
+              Profile
+            </Link>
+
             <Link
               to="/hr/change-password"
               onClick={closeSidebar}

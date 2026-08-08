@@ -14,6 +14,7 @@ import {
   FiShield,
   FiClock,
   FiBox,
+  FiUser,
 } from "react-icons/fi";
 import { api } from "../../../common/api/api";
 import { useAuth } from "../../../common/auth/useAuth";
@@ -340,6 +341,13 @@ export default function VendorNavbar() {
             }}
           />
           <div className="space-y-0.5">
+            <Link
+              to="/vendor/profile"
+              className="flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-white/80 hover:text-[#852BAF] rounded-xl transition-all duration-150"
+            >
+              <FiUser className="text-base text-gray-400 shrink-0" />
+              Profile
+            </Link>
             <Link
               to="/vendor/change-password"
               className="flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-white/80 hover:text-[#852BAF] rounded-xl transition-all duration-150"

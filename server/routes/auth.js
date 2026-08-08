@@ -106,6 +106,8 @@ router.post("/password/reset", authLimiter, authController.passwordReset);
 
 router.get("/me", authenticateToken, authController.getProfile);
 
+router.put("/profile", authenticateToken, authController.updateProfile);
+
 router.post("/logout", authenticateToken, authController.logout);
 
 /* ============================================================

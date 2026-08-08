@@ -30,5 +30,6 @@ export interface AuthContextType {
   verifyOtp: (email: string, otp: string) => Promise<void>;
   resendOtp: (email: string) => Promise<void>;
   logout: () => void;
+  updateUser: (partial: Partial<User>) => void;
 }
       

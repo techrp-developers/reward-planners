@@ -60,6 +60,7 @@ const SubSubCategoryManagement = lazy(() => import("./modules/products/vendorMan
 const ProductViewPage = lazy(() => import("./modules/products/vendorManager/ProductViewPage.tsx"));
 const Onboarding = lazy(() => import("./modules/products/vendor/Onboarding.tsx"));
 const ChangePasswordPage = lazy(() => import("./common/auth/changePassword.tsx"));
+const EditProfilePage = lazy(() => import("./common/auth/EditProfile.tsx"));
 const ProductListingDynamic = lazy(() => import("./modules/products/screens/ProductAdd.tsx"));
 const ProductManagerList = lazy(() => import("./modules/products/screens/ProductList.tsx"));
 const ProductManage = lazy(() => import("./modules/products/screens/ProductManage.tsx"));
@@ -227,6 +228,8 @@ export default function App() {
           element={<ChangePasswordPage />}
         />
 
+        <Route path={routes.vendor.profile} element={<EditProfilePage />} />
+
         <Route
           path={routes.vendor.products.add}
           element={<ProductListingDynamic />}
@@ -288,6 +291,7 @@ export default function App() {
           path={routes.manager.changePassword}
           element={<ChangePasswordPage />}
         />
+        <Route path={routes.manager.profile} element={<EditProfilePage />} />
         <Route
           path={routes.manager.products}
           element={<ProductApprovalList />}
@@ -452,6 +456,7 @@ export default function App() {
           path={routes.admin.changePassword}
           element={<ChangePasswordPage />}
         />
+        <Route path={routes.admin.profile} element={<EditProfilePage />} />
         <Route
           path={routes.admin.products}
           element={<AdminProductApprovalList />}
@@ -562,6 +567,11 @@ export default function App() {
           path={routes.warehouse.dashboard}
           element={<WarehouseDashboard />}
         />
+        <Route
+          path={routes.warehouse.changePassword}
+          element={<ChangePasswordPage />}
+        />
+        <Route path={routes.warehouse.profile} element={<EditProfilePage />} />
       </Route>
 
       {/* ========== FLEA MARKET ========== */}
@@ -574,6 +584,7 @@ export default function App() {
           path={routes.fleaMarket.changePassword}
           element={<ChangePasswordPage />}
         />
+        <Route path={routes.fleaMarket.profile} element={<EditProfilePage />} />
         <Route
           path={routes.fleaMarket.manageEvent}
           element={<FleaMarketSchedulePage />}
@@ -613,6 +624,7 @@ export default function App() {
           path={routes.hr.changePassword}
           element={<ChangePasswordPage />}
         />
+        <Route path={routes.hr.profile} element={<EditProfilePage />} />
         <Route path={routes.hr.rewards} element={<ManageRewards />} />
       </Route>
 

@@ -137,6 +137,15 @@ export default function FleaMarketSidebar({ closeSidebar }: FleaMarketSidebarPro
         {isProfileOpen && (
           <div className="mt-2 space-y-1">
             <Link
+              to={routes.fleaMarket.profile}
+              onClick={closeSidebar}
+              className="flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-gray-100"
+            >
+              <HiOutlineUserCircle className="text-lg" />
+              Profile
+            </Link>
+
+            <Link
               to={routes.fleaMarket.changePassword}
               onClick={closeSidebar}
               className="flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-gray-100"

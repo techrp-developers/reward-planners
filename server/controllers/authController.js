@@ -532,6 +532,58 @@ const authController = {
   },
 
   /* ============================================================
+       UPDATE PROFILE (name, email, phone)
+     ============================================================ */
+  updateProfile: async (req, res) => {
+    try {
+      const userId = req.user.user_id;
+      const { name, phone } = req.body;
+      const normalizedEmail = normalizeEmail(req.body.email);
+
+      if (!name || !name.trim() || !normalizedEmail) {
+        return res.status(400).json({
+          success: false,
+          message: "Name and email are required",
+        });
+      }
+
+      const [existing] = await db.execute(
+        "SELECT user_id FROM eusers WHERE email = ? AND user_id != ?",
+        [normalizedEmail, userId],
+      );
+
+      if (existing.length > 0) {
+        return res.status(409).json({
+          success: false,
+          message: "Email is already in use by another account",
+        });
+      }
+
+      await db.execute(
+        "UPDATE eusers SET name = ?, email = ?, phone = ? WHERE user_id = ?",
+        [name.trim(), normalizedEmail, phone || null, userId],
+      );
+
+      const [rows] = await db.execute(
+        "SELECT user_id, name, email, role, phone FROM eusers WHERE user_id = ?",
+        [userId],
+      );
+
+      return res.json({
+        success: true,
+        message: "Profile updated successfully",
+        data: rows[0],
+      });
+    } catch (err) {
+      console.error("Update Profile Error:", err);
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  },
+
+  /* ============================================================
        LOGOUT
      ============================================================ */
   logout: (req, res) => {

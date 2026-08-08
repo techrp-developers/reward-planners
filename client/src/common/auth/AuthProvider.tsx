@@ -353,6 +353,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     navigate("/login");
   };
 
+  const updateUser = (partial: Partial<User>) => {
+    setUser((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, ...partial };
+      localStorage.setItem("user", JSON.stringify(next));
+      return next;
+    });
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -365,6 +374,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         verifyOtp,
         resendOtp,
         logout,
+        updateUser,
       }}
     >
       {children}

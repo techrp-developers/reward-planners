@@ -5,6 +5,7 @@ export const routes = {
     dashboard: "/vendor/dashboard",
     onboarding: "/vendor/onboarding",
     changePassword: "/vendor/change-password",
+    profile: "/vendor/profile",
    products: {
     add: "/vendor/products/add",
     list: "/vendor/products/list",
@@ -24,6 +25,7 @@ export const routes = {
    manager: {
     dashboard: "/manager/dashboard",
     changePassword: "/manager/change-password",
+    profile: "/manager/profile",
     vendors: "/manager/vendors",
     employees: "/manager/employees",
     companyEmployees: "/manager/companies/:companyId/employees",
@@ -73,6 +75,7 @@ export const routes = {
   admin: {
     dashboard: "/admin/dashboard",
     changePassword: "/admin/change-password",
+    profile: "/admin/profile",
     vendors: "/admin/vendors",
     products: "/admin/products",
     services: "/admin/services",
@@ -82,10 +85,13 @@ export const routes = {
   },
   warehouse: {
     dashboard: "/warehouse/dashboard",
+    changePassword: "/warehouse/change-password",
+    profile: "/warehouse/profile",
   },
   fleaMarket: {
     dashboard: "/flea-market/dashboard",
     changePassword: "/flea-market/change-password",
+    profile: "/flea-market/profile",
     manageEvent: "/flea-market/manage-event",
     billing: {
       page: "/flea-market/billing",
@@ -103,6 +109,7 @@ export const routes = {
   hr: {
     dashboard: "/hr/dashboard",
     changePassword: "/hr/change-password",
+    profile: "/hr/profile",
     onboarding: "/hr/onboarding",
     employees: "/hr/employees",
       rewards: "/hr/rewards",

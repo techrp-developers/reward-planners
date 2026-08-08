@@ -214,6 +214,14 @@ export default function AdminNavbar() {
         {profileOpen && (
           <div className="mt-2 overflow-hidden bg-white border border-gray-100 shadow-xl rounded-2xl">
             <Link
+              to={routes.admin.profile}
+              className="flex items-center gap-3 px-5 py-4 text-sm font-bold text-gray-600 hover:bg-gray-50"
+            >
+              <FiUser />
+              Profile
+            </Link>
+
+            <Link
               to={routes.admin.changePassword}
               className="flex items-center gap-3 px-5 py-4 text-sm font-bold text-gray-600 hover:bg-gray-50"
             >

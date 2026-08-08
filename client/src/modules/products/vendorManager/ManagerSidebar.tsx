@@ -12,6 +12,7 @@ import {
   FiShoppingCart,
   FiGift,
   FiLock,
+  FiUser,
   // FiHeart,
   FiUserCheck,
 } from "react-icons/fi";
@@ -400,6 +401,13 @@ export default function ManagerNavbar() {
             }}
           />
           <div className="space-y-0.5">
+            <Link
+              to={routes.manager.profile}
+              className="flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-white/80 hover:text-[#852BAF] rounded-xl transition-all duration-150"
+            >
+              <FiUser className="text-base text-gray-400 shrink-0" />
+              Profile
+            </Link>
             <Link
               to="/manager/change-password"
               className="flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-white/80 hover:text-[#852BAF] rounded-xl transition-all duration-150"
