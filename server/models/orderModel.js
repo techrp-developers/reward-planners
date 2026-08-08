@@ -365,6 +365,31 @@ class OrderModel {
     };
   }
 
+  // Get vendor order stats (excludes cancelled orders from count/revenue)
+  async getVendorOrderStats(vendorId) {
+    const [[stats]] = await db.execute(
+      `
+    SELECT
+      COUNT(*) AS total_orders,
+      COALESCE(SUM(vo.vendor_total), 0) AS total_revenue
+
+    FROM vendor_orders vo
+
+    JOIN eorders o
+      ON vo.order_id = o.order_id
+
+    WHERE vo.vendor_id = ?
+      AND o.status != 'cancelled'
+    `,
+      [vendorId],
+    );
+
+    return {
+      total_orders: Number(stats.total_orders) || 0,
+      total_revenue: Number(stats.total_revenue) || 0,
+    };
+  }
+
   // view vendor details
   async viewVendorOrderDetails(vendorOrderId, vendorId) {
     const [[order]] = await db.execute(

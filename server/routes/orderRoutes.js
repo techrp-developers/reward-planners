@@ -36,6 +36,14 @@ router.get(
   orderController.viewVendorOrderDetails,
 );
 
+// vendor order stats (total orders excl. cancelled + total revenue)
+router.get(
+  "/order-stats",
+  authenticateToken,
+  authorizeRoles("vendor"),
+  orderController.getOrderStats,
+);
+
 // ===================================Admin order cancellation========================================
 // all cancellation requests
 router.get(

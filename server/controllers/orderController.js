@@ -134,6 +134,34 @@ class OrderController {
     }
   }
 
+  // Get vendor order stats (total orders excl. cancelled + total revenue)
+  async getOrderStats(req, res) {
+    try {
+      const vendorId = req.user?.vendor_id;
+
+      if (!vendorId) {
+        return res.status(404).json({
+          success: false,
+          message: "Vendor ID is required",
+        });
+      }
+
+      const stats = await orderModel.getVendorOrderStats(vendorId);
+
+      return res.json({
+        success: true,
+        stats,
+      });
+    } catch (error) {
+      console.error("Vendor order stats error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Unable to fetch order stats",
+      });
+    }
+  }
+
   // view vendor Order Details
   async viewVendorOrderDetails(req, res) {
     try {
