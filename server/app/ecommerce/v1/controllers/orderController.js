@@ -11,7 +11,21 @@ const {
   enqueueWhatsApp,
 } = require("../../../../services/whatsapp/waEnqueueService");
 const { runNonBlocking } = require("../../../../utils/nonBlocking");
-const { notifyUser } = require("../../../common/utils/notification");
+const {
+  sendDirectPushAndSave,
+} = require("../../../../services/push/separatePushService");
+
+function sendEcommercePush(payload, label) {
+  runNonBlocking(
+    () =>
+      sendDirectPushAndSave({
+        sound: "default",
+        channel_id: "order_updates",
+        ...payload,
+      }),
+    label,
+  );
+}
 
 function positiveInt(value, fallback, max = 100) {
   const parsed = Number.parseInt(value, 10);
@@ -515,7 +529,7 @@ class OrderController {
 
       await conn.commit();
 
-      notifyUser(
+      sendEcommercePush(
         {
           userId,
           module: "ecommerce",
@@ -524,8 +538,10 @@ class OrderController {
           message: "Your order cancellation request has been submitted.",
           icon: "x-circle",
           reference_type: "order",
-          reference_id: orderId,
+          reference_id: String(orderId),
           action_url: `/orders/order-details/${orderId}`,
+          screen: "OrderDetails",
+          alert_type: "order_cancellation_requested",
         },
         "order cancellation notification",
       );

@@ -3,7 +3,22 @@ const {
   finalizePaidServiceOrder,
   generateInvoiceOnce,
 } = require("./paymentFinalizer");
-const { notifyUser } = require("../../../common/utils/notification");
+const { runNonBlocking } = require("../../../../utils/nonBlocking");
+const {
+  sendDirectPushAndSave,
+} = require("../../../../services/push/separatePushService");
+
+function sendServicePush(payload, label) {
+  runNonBlocking(
+    () =>
+      sendDirectPushAndSave({
+        sound: "default",
+        channel_id: "service_updates",
+        ...payload,
+      }),
+    label,
+  );
+}
 
 async function processEvent(req) {
   const body = req.parsedBody;
@@ -59,7 +74,7 @@ async function processEvent(req) {
         [parentOrderId],
       );
 
-      notifyUser(
+      sendServicePush(
         {
           userId: orderUser?.user_id,
           module: "service",
@@ -68,8 +83,10 @@ async function processEvent(req) {
           message: "Your service order is confirmed. Please submit the required documents.",
           icon: "briefcase",
           reference_type: "service_order",
-          reference_id: parentOrderId,
+          reference_id: String(parentOrderId),
           action_url: `/service-order-documents/parent-documents/${parentOrderId}`,
+          screen: "OrderDetails",
+          alert_type: "service_order_paid",
         },
         "service webhook paid notification",
       );
@@ -117,7 +134,7 @@ async function processEvent(req) {
       [parentOrderId],
     );
 
-    notifyUser(
+    sendServicePush(
       {
         userId: orderUser?.user_id,
         module: "service",
@@ -126,8 +143,10 @@ async function processEvent(req) {
         message: "Your service order payment failed. Please try again.",
         icon: "credit-card",
         reference_type: "service_order",
-        reference_id: parentOrderId,
+        reference_id: String(parentOrderId),
         action_url: `/service-orders/${parentOrderId}`,
+        screen: "OrderDetails",
+        alert_type: "service_payment_failed",
         priority: "high",
       },
       "service payment failed notification",

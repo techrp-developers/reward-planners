@@ -1,6 +1,6 @@
 const FitnessModel = require("../models/fitnessModel");
 const db = require("../../../../config/database");
-const { notifyUser } = require("../../../common/utils/notification");
+const { notifyUser } = require("../../../../services/push/nonBlockingPush");
 
 const formatDate = (date) => {
   return new Date(date).toLocaleDateString("en-CA"); // YYYY-MM-DD

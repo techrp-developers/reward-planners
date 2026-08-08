@@ -1,38 +1,116 @@
 const cron = require("node-cron");
 const xpressService = require("../xpressbees_service");
 const db = require("../../../config/database");
-const { notifyUser } = require("../../../app/common/utils/notification");
+const NotificationModel = require("../../../app/common/models/notificationModel");
+const { runNonBlocking } = require("../../../utils/nonBlocking");
+const {
+  sendDirectPushNotification,
+} = require("../../push/separatePushService");
 const {
   processShipmentsAfterPayment,
 } = require("../../../app/ecommerce/v1/utils/webhook");
 const RefundService = require("../../../app/ecommerce/v1/controllers/paymentController");
 const { cronPing, checkCronHealth } = require("../../../services/cronMonitor");
 
+function optionalRequire(modulePath, fallbackValue) {
+  try {
+    return require(modulePath);
+  } catch (error) {
+    if (error.code !== "MODULE_NOT_FOUND") {
+      console.warn(`[shipmentCron] Optional module load failed: ${modulePath}`, error.message);
+    }
+    return fallbackValue;
+  }
+}
+
+const legacyRefundService = optionalRequire(
+  "../../Razorpay/ecommerceRefundService",
+  null,
+);
+
+const rewardWalletService = optionalRequire(
+  "../../rewards/ecommerceWalletService",
+  {},
+);
+
+const lifecyclePolicy = optionalRequire(
+  "../../../app/ecommerce/v1/utils/lifecyclePolicy",
+  {},
+);
+
+const addWalletAdjustment =
+  rewardWalletService.addWalletAdjustment ||
+  (async () => {});
+
+const creditDeliveredOrderRewards =
+  rewardWalletService.creditDeliveredOrderRewards ||
+  (async () => {});
+
+const refundServiceHandler =
+  legacyRefundService?.processRefund
+    ? legacyRefundService
+    : RefundService;
+
+function sendEcommercePush(payload, label) {
+  runNonBlocking(
+    () => sendDirectPushNotification({
+      sound: "default",
+      channel_id: "order_updates",
+      ...payload,
+    }),
+    label,
+  );
+}
+
+function fallbackVendorStatusForShipment(status) {
+  if (status === "delivered") return "delivered";
+  if (status === "rto") return "rto";
+  if (status === "ndr") return "delivery_failed";
+  if (["picked_up", "in_transit", "out_for_delivery"].includes(status)) {
+    return "shipped";
+  }
+  if (status === "cancelled") return "cancelled";
+  return "processing";
+}
+
+const vendorStatusForShipment =
+  lifecyclePolicy.vendorStatusForShipment || fallbackVendorStatusForShipment;
+
+function createInAppNotification(payload, errorLabel) {
+  return NotificationModel.create({
+    ...payload,
+    user_id: payload.user_id || payload.userId,
+  }).catch((err) => console.error(`${errorLabel}:`, err));
+}
+
 // =====================
 // STATUS MAPPING
 // =====================
 const XPRESS_STATUS_MAP = {
-  // Picked up
+  "pending pickup": "booked",
+  "out for pickup": "booked",
+  "pickup not done": "booked",
+  "pickup done": "booked",
+  "data received": "booked",
+
   "shipment picked up": "picked_up",
   "picked up": "picked_up",
+  picked: "picked_up",
 
-  // In transit
   "in transit": "in_transit",
   "out of delivery area": "in_transit",
   "shipment in transit": "in_transit",
+  "reached at destination": "in_transit",
   "reached at destination hub": "in_transit",
   "reached at hub": "in_transit",
   dispatched: "in_transit",
 
-  // Out for delivery
   "out for delivery": "out_for_delivery",
   "out for delivery - attempt": "out_for_delivery",
 
-  // Delivered
   delivered: "delivered",
   "shipment delivered": "delivered",
 
-  // NDR - exhaustive list of known XpressBees NDR strings
   "delivery attempted - recipient not available": "ndr",
   "delivery attempted - address not found": "ndr",
   "delivery attempted - customer refused": "ndr",
@@ -45,7 +123,6 @@ const XPRESS_STATUS_MAP = {
   "delivery failed": "ndr",
   "delivery exception": "ndr",
 
-  // RTO
   "rto initiated": "rto",
   "rto in transit": "rto",
   "rto delivered": "rto",
@@ -53,45 +130,50 @@ const XPRESS_STATUS_MAP = {
   "return to origin": "rto",
   "returned to origin": "rto",
   "return initiated": "rto",
+  "return delivered": "rto",
+
+  cancelled: "cancelled",
+  canceled: "cancelled",
+  "shipment cancelled": "cancelled",
+  "shipment canceled": "cancelled",
 };
 
-// ==========================
-// SAFE FALLBACK PATTERNS
-// (only for strings too variable for exact match)
-// ==========================
 const XPRESS_FALLBACK_PATTERNS = [
-  // Order matters — most specific first
   { test: (s) => s.startsWith("delivery attempted"), result: "ndr" },
+  { test: (s) => s.startsWith("rto"), result: "rto" },
+  { test: (s) => s.includes("return to origin"), result: "rto" },
+  { test: (s) => s.includes("return delivered"), result: "rto" },
+  { test: (s) => s.includes("returned"), result: "rto" },
   { test: (s) => s.includes("out for delivery"), result: "out_for_delivery" },
   { test: (s) => s.includes("in transit"), result: "in_transit" },
   { test: (s) => s.includes("picked"), result: "picked_up" },
   { test: (s) => s.includes("delivered"), result: "delivered" },
-  { test: (s) => s.startsWith("rto"), result: "rto" },
-  { test: (s) => s.includes("return to origin"), result: "rto" },
-  { test: (s) => s.includes("returned"), result: "rto" },
-  // NDR patterns — intentionally NO generic "failed" match here
   { test: (s) => s.includes("ndr"), result: "ndr" },
   { test: (s) => s.includes("not available"), result: "ndr" },
   { test: (s) => s.includes("address issue"), result: "ndr" },
 ];
+
+const STATUS_TIME_COLUMNS = {
+  picked_up: "picked_up_at",
+  in_transit: "in_transit_at",
+  out_for_delivery: "out_for_delivery_at",
+  delivered: "delivered_at",
+  rto: "rto_at",
+};
 
 function mapXpressStatus(status) {
   if (!status || typeof status !== "string") return null;
 
   const s = status.toLowerCase().trim();
 
-  // 1. Exact match — fastest, most reliable
   if (XPRESS_STATUS_MAP[s]) {
     return XPRESS_STATUS_MAP[s];
   }
 
-  // 2. Fallback patterns — for variable-suffix strings like
-  //    "delivery attempted - <courier-specific reason>"
   for (const { test, result } of XPRESS_FALLBACK_PATTERNS) {
     if (test(s)) return result;
   }
 
-  // 3. Unknown status — log it so you can add it to the map
   console.warn(`[mapXpressStatus] Unrecognised XpressBees status: "${status}"`);
   return null;
 }
@@ -112,38 +194,43 @@ async function syncOrderStatus(orderId) {
 
   const statuses = shipments.map((s) => s.shipping_status);
   const userId = shipments[0].user_id;
+  const transitStatuses = ["picked_up", "in_transit", "out_for_delivery"];
 
   let finalStatus = null;
 
-  // =====================
-  // STATUS PRIORITY LOGIC
-  // =====================
   if (statuses.every((s) => s === "delivered")) {
     finalStatus = "delivered";
   } else if (statuses.some((s) => s === "ndr")) {
     finalStatus = "delivery_failed";
-  } else if (statuses.some((s) => s === "pending")) {
-    finalStatus = "processing";
   } else if (statuses.every((s) => s === "rto")) {
     finalStatus = "rto";
   } else if (
+    statuses.some((s) => transitStatuses.includes(s) || s === "delivered") &&
     statuses.some((s) =>
-      ["in_transit", "picked_up", "out_for_delivery"].includes(s),
-    ) &&
-    statuses.some((s) => s === "booked")
+      ["pending", "booking_in_progress", "booking_failed", "booked"].includes(
+        s,
+      ),
+    )
   ) {
     finalStatus = "partially_shipped";
-  } else if (statuses.some((s) => s === "booked")) {
-    finalStatus = "processing";
-  } else if (statuses.every((s) => s === "booking_failed")) {
+  } else if (statuses.some((s) => transitStatuses.includes(s))) {
+    finalStatus = statuses.every((s) => transitStatuses.includes(s))
+      ? "shipped"
+      : "partially_shipped";
+  } else if (statuses.some((s) => ["delivered", "rto"].includes(s))) {
+    finalStatus = "partially_shipped";
+  } else if (
+    statuses.some((s) =>
+      ["pending", "booking_in_progress", "booking_failed", "booked"].includes(
+        s,
+      ),
+    )
+  ) {
     finalStatus = "processing";
   }
 
   if (!finalStatus) return;
 
-  // =====================
-  // UPDATE ONLY IF CHANGED
-  // =====================
   const [result] = await db.query(
     `
     UPDATE eorders
@@ -154,51 +241,81 @@ async function syncOrderStatus(orderId) {
     [finalStatus, orderId, finalStatus],
   );
 
-  // =====================
-  // NOTIFICATION ON STATUS CHANGE
-  // =====================
-  if (result.affectedRows > 0) {
-    let title = "";
-    let message = "";
-    let icon = "package";
+  if (finalStatus === "delivered" && result.affectedRows > 0) {
+    const notificationPayload = {
+      user_id: userId,
+      userId,
+      module: "ecommerce",
+      type: "delivery",
+      title: "Order delivered",
+      message: "Your package has been delivered successfully.",
+      icon: "package-check",
+      reference_type: "order",
+      reference_id: String(orderId),
+      action_url: `/orders/order-details/${orderId}`,
+      screen: "OrderDetails",
+      alert_type: "shipment_delivered",
+    };
 
-    if (finalStatus === "shipped") {
-      title = "Order shipped 🚚";
-      message = "Your order has been shipped and is on the way.";
-      icon = "truck";
-    } else if (finalStatus === "out_for_delivery") {
-      title = "Out for delivery 🛵";
-      message = "Your order is out for delivery today.";
-      icon = "truck";
-    } else if (finalStatus === "delivered") {
-      title = "Order delivered 🎉";
-      message = "Your package has been delivered successfully.";
-      icon = "package-check";
-    } else if (finalStatus === "rto") {
-      title = "Order returned ⚠️";
-      message = "Your package is being returned to the warehouse.";
-      icon = "x-circle";
-    }
-
-    if (title) {
-      try {
-        const { notifyUser } = require("../../../app/common/utils/notification");
-        notifyUser({
-          userId,
-          module: "ecommerce",
-          type: finalStatus,
-          title,
-          message,
-          icon,
-          reference_type: "order",
-          reference_id: orderId,
-          action_url: `/orders/order-details/${orderId}`,
-        }, `shipment status ${finalStatus} notification`);
-      } catch (err) {
-        console.error(`[shipmentCron] Failed to send notification for status ${finalStatus}:`, err.message);
-      }
-    }
+    createInAppNotification(
+      notificationPayload,
+      "Delivery notification failed",
+    );
+    sendEcommercePush(notificationPayload, "delivery push notification");
+    creditDeliveredOrderRewards(orderId).catch((err) =>
+      console.error("Delivered-order reward credit failed:", err),
+    );
   }
+}
+
+async function syncTrackingHistory(shipment, history) {
+  if (!Array.isArray(history)) return;
+
+  for (const event of [...history].reverse()) {
+    const status = mapXpressStatus(event?.message);
+    if (!status || !event?.event_time) continue;
+
+    const timeColumn = STATUS_TIME_COLUMNS[status];
+    if (timeColumn) {
+      await db.query(
+        `UPDATE order_shipments
+         SET ${timeColumn} = COALESCE(${timeColumn}, ?)
+         WHERE id = ?`,
+        [event.event_time, shipment.id],
+      );
+    }
+
+    await db.query(
+      `INSERT INTO shipment_events
+        (shipment_id, status, raw_status, description, created_at)
+       SELECT ?, ?, ?, ?, ?
+       WHERE NOT EXISTS (
+         SELECT 1 FROM shipment_events
+         WHERE shipment_id = ? AND status = ? AND raw_status = ?
+           AND created_at = ?
+       )`,
+      [
+        shipment.id,
+        status,
+        event.message,
+        event.message,
+        event.event_time,
+        shipment.id,
+        status,
+        event.message,
+        event.event_time,
+      ],
+    );
+  }
+}
+
+async function syncVendorOrderStatus(vendorOrderId, shipmentStatus) {
+  const vendorStatus = vendorStatusForShipment(shipmentStatus);
+
+  await db.query(
+    `UPDATE vendor_orders SET shipping_status = ? WHERE vendor_order_id = ?`,
+    [vendorStatus, vendorOrderId],
+  );
 }
 
 // =====================
@@ -212,48 +329,55 @@ async function updateShipmentTracking(shipment) {
       return;
     }
 
-    if (!response.data || !response.data.current_status) {
+    if (!response.data) {
       return;
     }
 
-    const newStatus = mapXpressStatus(response.data.current_status);
+    await db.query(
+      `UPDATE order_shipments SET last_tracking_payload = ? WHERE id = ?`,
+      [JSON.stringify(response.data), shipment.id],
+    );
 
+    const rawStatus =
+      response.data.current_status ||
+      response.data.status ||
+      response.data.history?.[0]?.message;
+
+    if (!rawStatus) {
+      console.warn(
+        `[tracking] XpressBees response has no status for AWB ${shipment.awb_number}`,
+      );
+      return;
+    }
+
+    const newStatus = mapXpressStatus(rawStatus);
     if (!newStatus) return;
 
-    if (newStatus === shipment.shipping_status) return;
+    await syncTrackingHistory(shipment, response.data.history);
 
-    // =====================
-    // FETCH USER
-    // =====================
+    if (
+      newStatus === shipment.shipping_status &&
+      !(newStatus === "rto" && !shipment.rto_processed)
+    ) {
+      await syncVendorOrderStatus(shipment.vendor_order_id, newStatus);
+      await syncOrderStatus(shipment.order_id);
+      return;
+    }
+
     const [[orderRow]] = await db.query(
-      `
-      SELECT user_id FROM eorders WHERE order_id = ?
-    `,
+      `SELECT user_id FROM eorders WHERE order_id = ?`,
       [shipment.order_id],
     );
 
     const userId = orderRow?.user_id;
+    const timeColumn = STATUS_TIME_COLUMNS[newStatus];
+    const statusEventTime = response.data.history?.find(
+      (event) => mapXpressStatus(event?.message) === newStatus,
+    )?.event_time;
 
-    // =====================
-    // TIMESTAMP MAPPING
-    // =====================
-    const statusTimeMap = {
-      picked_up: "picked_up_at",
-      in_transit: "in_transit_at",
-      out_for_delivery: "out_for_delivery_at",
-      delivered: "delivered_at",
-      rto: "rto_at",
-    };
-
-    const timeColumn = statusTimeMap[newStatus];
-
-    // =====================
-    // UPDATE SHIPMENT FIRST
-    // =====================
     const updateFields = ["shipping_status = ?", "last_tracking_payload = ?"];
-
     if (timeColumn) {
-      updateFields.splice(1, 0, `${timeColumn} = NOW()`);
+      updateFields.splice(1, 0, `${timeColumn} = COALESCE(${timeColumn}, ?)`);
     }
 
     await db.query(
@@ -262,28 +386,21 @@ async function updateShipmentTracking(shipment) {
       SET ${updateFields.join(", ")}
       WHERE id = ?
     `,
-      [newStatus, JSON.stringify(response.data), shipment.id],
+      timeColumn
+        ? [newStatus, statusEventTime || new Date(), JSON.stringify(response.data), shipment.id]
+        : [newStatus, JSON.stringify(response.data), shipment.id],
     );
 
-    // =====================
-    // INSERT EVENT AFTER UPDATE
-    // =====================
+    await syncVendorOrderStatus(shipment.vendor_order_id, newStatus);
+
     await db.query(
       `
       INSERT INTO shipment_events (shipment_id, status, raw_status, description)
       VALUES (?, ?, ?, ?)
     `,
-      [
-        shipment.id,
-        newStatus,
-        response.data.current_status,
-        response.data.current_status,
-      ],
+      [shipment.id, newStatus, rawStatus, rawStatus],
     );
 
-    // =====================
-    // SLA TRACKING
-    // =====================
     if (newStatus === "delivered") {
       const [[row]] = await db.query(
         `
@@ -299,9 +416,7 @@ async function updateShipmentTracking(shipment) {
 
       if (expectedDate) {
         const expected = new Date(expectedDate);
-
         const isBreached = deliveredAt > expected;
-
         const delayHours = Math.max(
           0,
           Math.floor((deliveredAt - expected) / (1000 * 60 * 60)),
@@ -319,9 +434,6 @@ async function updateShipmentTracking(shipment) {
       }
     }
 
-    // =====================
-    // NDR LOGIC
-    // =====================
     if (newStatus === "ndr") {
       const [existing] = await db.query(
         `SELECT id FROM shipment_ndr_logs
@@ -340,7 +452,7 @@ async function updateShipmentTracking(shipment) {
               ndr_count = ndr_count + 1
           WHERE id = ?
         `,
-          [response.data.current_status, shipment.id],
+          [rawStatus, shipment.id],
         );
 
         await db.query(
@@ -349,15 +461,12 @@ async function updateShipmentTracking(shipment) {
           (shipment_id, reason, courier_status)
           VALUES (?, ?, ?)
         `,
-          [
-            shipment.id,
-            response.data.current_status,
-            response.data.current_status,
-          ],
+          [shipment.id, rawStatus, rawStatus],
         );
 
         if (userId) {
-          notifyUser({
+          const notificationPayload = {
+            user_id: userId,
             userId,
             module: "ecommerce",
             type: "ndr",
@@ -366,39 +475,70 @@ async function updateShipmentTracking(shipment) {
               "We couldn't deliver your order. Please update your details.",
             icon: "alert-circle",
             reference_type: "order",
-            reference_id: shipment.order_id,
+            reference_id: String(shipment.order_id),
             action_url: `/orders/order-details/${shipment.order_id}`,
+            screen: "OrderDetails",
+            alert_type: "shipment_ndr",
             priority: "high",
-          }, "NDR notification");
+          };
+
+          createInAppNotification(
+            notificationPayload,
+            "NDR notification failed",
+          );
+          sendEcommercePush(notificationPayload, "NDR push notification");
         }
       }
     }
 
-    // =====================
-    // RTO Logic
-    // =====================
-    if (newStatus === "rto" && shipment.shipping_status !== "rto") {
+    if (newStatus === "rto" && !shipment.rto_processed) {
       const conn = await db.getConnection();
 
       try {
         await conn.beginTransaction();
 
-        const [existingRefund] = await conn.query(
-          `SELECT refund_id FROM order_refunds
-       WHERE shipment_id = ?
-       AND status IN ('initiated', 'completed')
-       FOR UPDATE`,
+        const [[lockedShipment]] = await conn.query(
+          `SELECT rto_processed, shipping_charges
+           FROM order_shipments WHERE id = ? FOR UPDATE`,
           [shipment.id],
         );
 
-        if (!existingRefund.length) {
-          // Restore all stock in one query — no loop needed
+        if (!lockedShipment?.rto_processed) {
           await conn.query(
             `UPDATE product_variants pv
          JOIN eorder_items oi ON pv.variant_id = oi.variant_id
          SET pv.stock = pv.stock + oi.quantity
          WHERE oi.vendor_order_id = ?`,
             [shipment.vendor_order_id],
+          );
+
+          const [[amountRow]] = await conn.query(
+            `SELECT COALESCE(SUM(final_price), 0) AS amount,
+                    COALESCE(SUM(reward_coins_used), 0) AS used_coins,
+                    COALESCE(SUM(reward_coins_earned), 0) AS earned_coins
+             FROM eorder_items WHERE vendor_order_id = ?`,
+            [shipment.vendor_order_id],
+          );
+
+          if (Number(amountRow.used_coins || 0) > 0) {
+            try {
+              await addWalletAdjustment(conn, {
+                userId,
+                coins: amountRow.used_coins,
+                orderId: shipment.order_id,
+                referenceId: shipment.id,
+                transactionType: "credit",
+                reasonCode: "SHIPMENT_REWARD_REFUND",
+                title: "Coins refunded for returned shipment",
+              });
+            } catch (walletErr) {
+              console.error("Shipment reward refund failed:", walletErr);
+            }
+          }
+
+          await conn.query(
+            `UPDATE order_shipments SET rto_processed = 1 WHERE id = ?`,
+            [shipment.id],
           );
 
           await conn.query(
@@ -409,27 +549,20 @@ async function updateShipmentTracking(shipment) {
 
           await conn.commit();
 
-          // Refund and notification outside transaction (external calls)
-          const [[amountRow]] = await db.query(
-            `SELECT SUM(final_price) AS amount FROM eorder_items
-         WHERE vendor_order_id = ?`,
-            [shipment.vendor_order_id],
-          );
-
-          const refundAmount = amountRow.amount || 0;
+          const refundAmount =
+            Number(amountRow.amount || 0) +
+            Number(lockedShipment.shipping_charges || 0);
 
           if (refundAmount > 0) {
-            await RefundService.processRefund({
+            await refundServiceHandler.processRefund({
               orderId: shipment.order_id,
               shipmentId: shipment.id,
               vendorOrderId: shipment.vendor_order_id,
               amount: refundAmount,
+              refundKey: `shipment_${shipment.id}_rto_refund`,
             });
           }
 
-          // ==========================
-          // NOTIFY USER (ONCE)
-          // ==========================
           const [existingNotif] = await db.query(
             `
           SELECT notification_id FROM notifications
@@ -442,7 +575,8 @@ async function updateShipmentTracking(shipment) {
           );
 
           if (!existingNotif.length && userId) {
-            notifyUser({
+            const notificationPayload = {
+              user_id: userId,
               userId,
               module: "ecommerce",
               type: "rto",
@@ -451,9 +585,17 @@ async function updateShipmentTracking(shipment) {
                 "Your order could not be delivered and is being returned.",
               icon: "rotate-ccw",
               reference_type: "order",
-              reference_id: shipment.order_id,
+              reference_id: String(shipment.order_id),
               action_url: `/orders/order-details/${shipment.order_id}`,
-            }, "RTO notification");
+              screen: "OrderDetails",
+              alert_type: "shipment_rto",
+            };
+
+            createInAppNotification(
+              notificationPayload,
+              "RTO notification failed",
+            );
+            sendEcommercePush(notificationPayload, "RTO push notification");
           }
         } else {
           await conn.rollback();
@@ -477,12 +619,16 @@ async function updateShipmentTracking(shipment) {
 // =====================
 cron.schedule("*/30 * * * *", async () => {
   try {
-    console.log("🚚 Tracking cron running...");
+    console.log("Tracking cron running...");
     const [shipments] = await db.query(
-      `SELECT id, order_id,vendor_order_id, awb_number, shipping_status
+      `SELECT id, order_id, vendor_order_id, awb_number, shipping_status,
+              rto_processed, booking_last_attempt_at
        FROM order_shipments
        WHERE awb_number IS NOT NULL
-         AND shipping_status NOT IN ('delivered','cancelled','rto')`,
+         AND (
+           shipping_status NOT IN ('delivered','cancelled','rto')
+           OR (shipping_status = 'rto' AND rto_processed = 0)
+         )`,
     );
 
     const BATCH_SIZE = 20;
@@ -503,7 +649,16 @@ cron.schedule("*/30 * * * *", async () => {
 // =====================
 cron.schedule("*/10 * * * *", async () => {
   try {
-    console.log("🔁 Booking retry cron running...");
+    console.log("Booking retry cron running...");
+
+    await db.query(`
+      UPDATE order_shipments
+      SET booking_in_progress = 0,
+          shipping_status = 'booking_failed',
+          last_booking_error = 'Recovered stale booking lock'
+      WHERE booking_in_progress = 1
+        AND booking_last_attempt_at < NOW() - INTERVAL 15 MINUTE
+    `);
 
     const [shipments] = await db.query(`
       SELECT DISTINCT order_id
@@ -527,3 +682,54 @@ cron.schedule("*/10 * * * *", async () => {
   }
 });
 
+cron.schedule("*/15 * * * *", async () => {
+  try {
+    const [shipments] = await db.query(
+      `SELECT id, awb_number
+       FROM order_shipments
+       WHERE cancel_sync_status IN ('pending', 'failed')
+         AND cancel_sync_attempts < 8
+       ORDER BY id ASC LIMIT 20`,
+    );
+
+    for (const shipment of shipments) {
+      try {
+        const result = await xpressService.cancelShipmentExpressBees(
+          shipment.awb_number,
+        );
+        if (!result?.status) {
+          throw new Error(
+            result?.error?.message || result?.error || "Cancellation rejected",
+          );
+        }
+        await db.query(
+          `UPDATE order_shipments
+           SET cancel_sync_status = 'completed',
+               cancel_sync_attempts = cancel_sync_attempts + 1,
+               cancel_sync_last_error = NULL
+           WHERE id = ?`,
+          [shipment.id],
+        );
+      } catch (error) {
+        await db.query(
+          `UPDATE order_shipments
+           SET cancel_sync_status = 'failed',
+               cancel_sync_attempts = cancel_sync_attempts + 1,
+               cancel_sync_last_error = ?
+           WHERE id = ?`,
+          [error.message, shipment.id],
+        );
+      }
+    }
+  } catch (error) {
+    console.error("Courier cancellation retry cron failed:", error);
+  }
+});
+
+module.exports = {
+  mapXpressStatus,
+  syncOrderStatus,
+  syncTrackingHistory,
+  syncVendorOrderStatus,
+  updateShipmentTracking,
+};

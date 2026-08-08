@@ -1,8 +1,22 @@
 const db = require("../../../../config/database");
-const { notifyUser } = require("../../../common/utils/notification");
+const { runNonBlocking } = require("../../../../utils/nonBlocking");
+const {
+  sendDirectPushAndSave,
+} = require("../../../../services/push/separatePushService");
+
+function sendInsurancePush(payload, label) {
+  runNonBlocking(
+    () =>
+      sendDirectPushAndSave({
+        sound: "default",
+        channel_id: "service_updates",
+        ...payload,
+      }),
+    label,
+  );
+}
 
 class InsuranceController {
-  // start enquiry
   async startEnquiry(req, res) {
     const { insurance_type } = req.body;
     const userId = req.user?.user_id;
@@ -21,7 +35,6 @@ class InsuranceController {
       });
     }
 
-    //  STEP 1: Check existing draft
     const [existing] = await db.execute(
       `SELECT id FROM insurance_enquiries 
      WHERE user_id = ? 
@@ -31,7 +44,6 @@ class InsuranceController {
       [userId, insurance_type],
     );
 
-    //  STEP 2: If exists → return same enquiry
     if (existing.length) {
       return res.json({
         success: true,
@@ -40,14 +52,13 @@ class InsuranceController {
       });
     }
 
-    //  STEP 3: Else create new
     const [result] = await db.execute(
       `INSERT INTO insurance_enquiries (user_id, insurance_type)
      VALUES (?, ?)`,
       [userId, insurance_type],
     );
 
-    notifyUser(
+    sendInsurancePush(
       {
         userId,
         module: "service",
@@ -56,8 +67,10 @@ class InsuranceController {
         message: "Your insurance enquiry has been created.",
         icon: "shield",
         reference_type: "insurance_enquiry",
-        reference_id: result.insertId,
+        reference_id: String(result.insertId),
         action_url: `/insurance/enquiry/${result.insertId}`,
+        screen: "InsuranceEnquiry",
+        alert_type: "insurance_enquiry_started",
         metadata: { insurance_type },
       },
       "insurance enquiry notification",
@@ -70,7 +83,6 @@ class InsuranceController {
     });
   }
 
-  // save steps
   async saveStep(req, res) {
     const { enquiry_id, step, section, data } = req.body;
 
@@ -82,7 +94,6 @@ class InsuranceController {
     }
 
     const userId = req.user?.user_id;
-    // const userId = 1;
 
     if (!userId) {
       return res.status(401).json({
@@ -91,7 +102,6 @@ class InsuranceController {
       });
     }
 
-    // 1. Get existing form_data
     const [rows] = await db.execute(
       `SELECT form_data FROM insurance_enquiries WHERE id = ? AND user_id = ?`,
       [enquiry_id, userId],
@@ -114,10 +124,8 @@ class InsuranceController {
       formData = {};
     }
 
-    // 2. Merge new section
     formData[section] = data;
 
-    // 3. invalidate plan if core data changes
     if (section === "members" || section === "health") {
       await db.execute(
         `UPDATE insurance_enquiries 
@@ -127,7 +135,6 @@ class InsuranceController {
       );
     }
 
-    // 4. Update DB
     await db.execute(
       `UPDATE insurance_enquiries
      SET form_data = ?, step_completed = ?
@@ -138,10 +145,8 @@ class InsuranceController {
     res.json({ success: true });
   }
 
-  // Get Enquiry
   async getEnquiry(req, res) {
     const userId = req.user?.user_id;
-    // const userId = 1;
 
     if (!userId) {
       return res.status(401).json({
@@ -165,7 +170,6 @@ class InsuranceController {
     res.json({ success: true, data: rows[0] });
   }
 
-  // Final Submission
   async completeEnquiry(req, res) {
     const { enquiry_id } = req.body;
 
@@ -177,7 +181,6 @@ class InsuranceController {
     }
 
     const userId = req.user?.user_id;
-    // const userId = 1;
 
     if (!userId) {
       return res.status(401).json({
@@ -215,9 +218,7 @@ class InsuranceController {
         });
       }
 
-      // Validation
       if (type !== "personal_accident") {
-        // health & super topup
         if (!formData.members || !Array.isArray(formData.members)) {
           return res.status(400).json({
             success: false,
@@ -225,7 +226,6 @@ class InsuranceController {
           });
         }
       } else {
-        // personal accident
         if (!formData.basic) {
           return res.status(400).json({
             success: false,
@@ -241,7 +241,6 @@ class InsuranceController {
         });
       }
 
-      // Type-based validation
       if (type === "health") {
         const health = formData.health;
 
@@ -303,7 +302,7 @@ class InsuranceController {
         [enquiry_id, userId],
       );
 
-      notifyUser(
+      sendInsurancePush(
         {
           userId,
           module: "service",
@@ -312,8 +311,10 @@ class InsuranceController {
           message: "Your insurance enquiry has been submitted successfully.",
           icon: "shield-check",
           reference_type: "insurance_enquiry",
-          reference_id: enquiry_id,
+          reference_id: String(enquiry_id),
           action_url: `/insurance/enquiry/${enquiry_id}`,
+          screen: "InsuranceEnquiry",
+          alert_type: "insurance_enquiry_completed",
         },
         "insurance completed notification",
       );
@@ -331,7 +332,6 @@ class InsuranceController {
     }
   }
 
-  // plan selection
   async selectPlan(req, res) {
     const { enquiry_id, plan } = req.body;
 
@@ -350,7 +350,6 @@ class InsuranceController {
     }
 
     const userId = req.user?.user_id;
-    // const userId = 1
 
     if (!userId) {
       return res.status(401).json({

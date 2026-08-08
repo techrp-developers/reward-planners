@@ -16,13 +16,23 @@ function buildPushPayload(data, fcmToken) {
       reference_id: String(data.reference_id || ""),
       action_url: String(data.action_url || ""),
       screen: String(data.screen || ""),
+      sound: String(data.sound || "default"),
+      alert_type: String(data.alert_type || ""),
     },
     android: {
       priority: "high",
       notification: {
         sound: "default",
         defaultSound: true,
+        channelId: String(data.channel_id || "default"),
         vibrateTimingsMillis: [0, 1000, 500, 1000, 500],
+      },
+    },
+    apns: {
+      payload: {
+        aps: {
+          sound: "default",
+        },
       },
     },
     token: fcmToken,
@@ -118,6 +128,9 @@ async function sendTodoReminderPush({
     reference_id: String(todoId || ""),
     action_url: "/todo",
     screen,
+    sound: "default",
+    alert_type: "todo_alarm",
+    channel_id: "todo_reminders",
     metadata: {
       reminderType,
     },

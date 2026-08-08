@@ -6,7 +6,7 @@ const ekoService = require("../services/eko_service");
 const rechargeService = require("../services/recharge_service");
 const { processTransaction } = require("../services/paymentProcessor");
 const db = require("../../../../config/database");
-const { notifyUser } = require("../../../common/utils/notification");
+const { notifyUser } = require("../../../../services/push/nonBlockingPush");
 
 class PaymentController {
   //   create Order

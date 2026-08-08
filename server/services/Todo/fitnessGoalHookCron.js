@@ -1,6 +1,6 @@
 const cron = require("node-cron");
 const db = require("../../config/database");
-const { notifyUser } = require("../../app/common/utils/notification");
+const { notifyUser } = require("../push/nonBlockingPush");
 
 // Mid-day goal hook: daily at 2:00 PM
 cron.schedule("0 14 * * *", async () => {

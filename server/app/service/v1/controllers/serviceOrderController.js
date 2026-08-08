@@ -13,7 +13,10 @@ const {
   finalizePaidServiceOrder,
   generateInvoiceOnce,
 } = require("../utils/paymentFinalizer");
-const { notifyUser } = require("../../../common/utils/notification");
+const { runNonBlocking } = require("../../../../utils/nonBlocking");
+const {
+  sendDirectPushAndSave,
+} = require("../../../../services/push/separatePushService");
 
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
 function getPublicUrl(path) {
@@ -36,6 +39,18 @@ const ALLOWED_STATUSES = [
   "completed",
   "cancelled",
 ];
+
+function sendServicePush(payload, label) {
+  runNonBlocking(
+    () =>
+      sendDirectPushAndSave({
+        sound: "default",
+        channel_id: "service_updates",
+        ...payload,
+      }),
+    label,
+  );
+}
 
 // Helper function
 //calculate summary utility function
@@ -352,7 +367,7 @@ class ServiceOrderController {
       });
 
       if (!alreadyPaid) {
-        notifyUser(
+        sendServicePush(
           {
             userId,
             module: "service",
@@ -362,8 +377,10 @@ class ServiceOrderController {
               "Your service order is confirmed. Please submit the required documents.",
             icon: "briefcase",
             reference_type: "service_order",
-            reference_id: parent_order_id,
+            reference_id: String(parent_order_id),
             action_url: `/service-order-documents/parent-documents/${parent_order_id}`,
+            screen: "OrderDetails",
+            alert_type: "service_order_paid",
           },
           "service order paid notification",
         );
@@ -956,7 +973,7 @@ class ServiceOrderController {
         [parentOrderId],
       );
 
-      notifyUser(
+      sendServicePush(
         {
           userId,
           module: "service",
@@ -965,8 +982,10 @@ class ServiceOrderController {
           message: "Your service documents were submitted successfully.",
           icon: "file-check",
           reference_type: "service_order",
-          reference_id: parentOrderId,
+          reference_id: String(parentOrderId),
           action_url: `/service-orders/${parentOrderId}`,
+          screen: "OrderDetails",
+          alert_type: "service_documents_submitted",
         },
         "service documents submitted notification",
       );
@@ -1031,7 +1050,7 @@ class ServiceOrderController {
 
       await ServiceOrderModel.updateStatus(id, status);
 
-      notifyUser(
+      sendServicePush(
         {
           userId: order.user_id,
           module: "service",
@@ -1040,8 +1059,10 @@ class ServiceOrderController {
           message: `Your service order status is now ${status.replace(/_/g, " ")}.`,
           icon: "briefcase",
           reference_type: "service_order",
-          reference_id: order.parent_order_id || id,
+          reference_id: String(order.parent_order_id || id),
           action_url: `/service-orders/${order.parent_order_id || id}`,
+          screen: "OrderDetails",
+          alert_type: "service_order_status",
           metadata: { status, service_order_id: id },
         },
         "service order status notification",
@@ -1224,7 +1245,7 @@ class ServiceOrderController {
         },
       });
 
-      notifyUser(
+      sendServicePush(
         {
           userId,
           module: "service",
@@ -1233,8 +1254,10 @@ class ServiceOrderController {
           message: "Your service support request has been submitted.",
           icon: "life-buoy",
           reference_type: "support_request",
-          reference_id: requestId,
+          reference_id: String(requestId),
           action_url: `/service-orders/${service_order_id}/support`,
+          screen: "OrderSupport",
+          alert_type: "service_support_requested",
           metadata: { service_order_id, issue_id },
         },
         "service support notification",
@@ -1559,7 +1582,7 @@ class ServiceOrderController {
 
       await connection.commit();
 
-      notifyUser(
+      sendServicePush(
         {
           userId,
           module: "service",
@@ -1569,8 +1592,10 @@ class ServiceOrderController {
             "Your service order cancellation request has been submitted.",
           icon: "x-circle",
           reference_type: "service_order",
-          reference_id: service_order_id,
+          reference_id: String(service_order_id),
           action_url: `/service-orders/${service_order_id}`,
+          screen: "OrderDetails",
+          alert_type: "service_cancellation_requested",
         },
         "service cancellation notification",
       );

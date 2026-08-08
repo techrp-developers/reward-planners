@@ -1,5 +1,9 @@
 const db = require("../../../../config/database");
 const CartModel = require("../models/serviceCartModel");
+const { runNonBlocking } = require("../../../../utils/nonBlocking");
+const {
+  sendDirectPushAndSave,
+} = require("../../../../services/push/separatePushService");
 
 class ServiceCartController {
   async addToCart(req, res) {
@@ -23,7 +27,6 @@ class ServiceCartController {
         });
       }
 
-      // get variant price
       const [[variant]] = await db.execute(
         `SELECT price FROM service_variants WHERE id = ? AND service_id = ?`,
         [variant_id, service_id],
@@ -44,9 +47,6 @@ class ServiceCartController {
         price: variant.price,
       });
 
-      // -------------------------------
-      // SERVICE BUNDLE UPSELL PUSH
-      // -------------------------------
       try {
         const [bundleInfo] = await db.execute(
           `
@@ -58,30 +58,36 @@ class ServiceCartController {
           WHERE sbi.service_id = ? AND sbi2.service_id != ?
           LIMIT 1
           `,
-          [service_id, service_id]
+          [service_id, service_id],
         );
 
         if (bundleInfo && bundleInfo.length > 0) {
           const upsell = bundleInfo[0];
-          // Check if user already has the related service in service_cart_items
           const [[alreadyInCart]] = await db.execute(
             `SELECT id FROM service_cart_items WHERE cart_id = ? AND service_id = ? LIMIT 1`,
-            [cart.id, upsell.related_service_id]
+            [cart.id, upsell.related_service_id],
           );
 
           if (!alreadyInCart) {
-            const { notifyUser } = require("../../../common/utils/notification");
-            notifyUser({
-              userId,
-              module: "service",
-              type: "service_bundle_upsell",
-              title: "Get the complete package! 📦",
-              message: `Save by adding ${upsell.related_service_name} to complete your ${upsell.bundle_name} pack!`,
-              icon: "gift",
-              reference_type: "service_bundle",
-              reference_id: String(upsell.bundle_id),
-              action_url: "/services",
-            }, "service bundle upsell notification");
+            runNonBlocking(
+              () =>
+                sendDirectPushAndSave({
+                  userId,
+                  module: "service",
+                  type: "service_bundle_upsell",
+                  title: "Get the complete package!",
+                  message: `Save by adding ${upsell.related_service_name} to complete your ${upsell.bundle_name} pack!`,
+                  icon: "gift",
+                  reference_type: "service_bundle",
+                  reference_id: String(upsell.bundle_id),
+                  action_url: "/services",
+                  screen: "Services",
+                  sound: "default",
+                  channel_id: "service_updates",
+                  alert_type: "service_bundle_upsell",
+                }),
+              "service bundle upsell notification",
+            );
           }
         }
       } catch (upsellErr) {
@@ -97,7 +103,6 @@ class ServiceCartController {
     }
   }
 
-  // add bundle items to cart
   async addBundleToCart(req, res) {
     try {
       const userId = req.user?.user_id;
@@ -120,7 +125,6 @@ class ServiceCartController {
         });
       }
 
-      // get bundle
       const [[bundle]] = await db.execute(
         `SELECT type FROM service_bundles WHERE id = ?`,
         [bundleId],
@@ -133,17 +137,14 @@ class ServiceCartController {
         });
       }
 
-      // get cart
       const cart = await CartModel.getOrCreateCart(userId);
 
-      // remove duplicate bundle if present
       await db.execute(
         `DELETE FROM service_cart_items 
        WHERE cart_id = ? AND bundle_id = ?`,
         [cart.id, bundleId],
       );
 
-      // get bundle items
       const [items] = await db.execute(
         `SELECT 
             bi.id,
@@ -186,19 +187,17 @@ class ServiceCartController {
       const insertedItems = [];
 
       for (let item of items) {
-        //  if custom bundle → apply selection
         if (bundle.type === "custom") {
           if (item.is_required === 0 && !selectedSet.has(item.id)) {
             continue;
           }
         }
 
-        let finalPrice =
+        const finalPrice =
           bundle.type === "fixed"
             ? Number(item.bundle_price)
             : Number(item.individual_price);
 
-        // add to cart
         await CartModel.addItem(cart.id, {
           service_id: item.service_id,
           variant_id: item.variant_id,
@@ -224,7 +223,6 @@ class ServiceCartController {
     }
   }
 
-  //   Get cart items for user
   async getCart(req, res) {
     try {
       const userId = req.user?.user_id;
@@ -238,7 +236,6 @@ class ServiceCartController {
       }
 
       const cart = await CartModel.getOrCreateCart(userId);
-
       const cartData = await CartModel.getCart(cart.id);
 
       const total =
@@ -270,7 +267,6 @@ class ServiceCartController {
       }
 
       const { id } = req.params;
-
       const cart = await CartModel.getOrCreateCart(userId);
 
       if (!cart) {
@@ -298,7 +294,6 @@ class ServiceCartController {
     }
   }
 
-  // remove bundle item
   async removeBundle(req, res) {
     try {
       const userId = req.user?.user_id;
@@ -320,7 +315,6 @@ class ServiceCartController {
       }
 
       const cart = await CartModel.getOrCreateCart(userId);
-
       await CartModel.removeBundle(cart.id, bundleId);
 
       res.json({
@@ -348,7 +342,6 @@ class ServiceCartController {
       }
 
       const cart = await CartModel.getOrCreateCart(userId);
-
       await CartModel.clearCart(cart.id);
 
       res.json({

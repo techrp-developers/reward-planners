@@ -1,6 +1,6 @@
 const cron = require("node-cron");
 const db = require("../../config/database");
-const { notifyUser } = require("../../app/common/utils/notification");
+const { notifyUser } = require("../push/nonBlockingPush");
 
 // Run every hour
 cron.schedule("0 * * * *", async () => {

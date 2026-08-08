@@ -1,6 +1,6 @@
 const db = require("../../../config/database");
 const { sendNewTicketMail } = require("../../../services/mailBuilder/ticketNotification");
-const { notifyUser } = require("../utils/notification");
+const { notifyUser } = require("../../../services/push/nonBlockingPush");
 
 class SupportController {
   async getCategories(req, res) {

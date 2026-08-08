@@ -4,7 +4,9 @@ const {
   sendNewEnquiryEmail,
 } = require("../../../../services/mailBuilder/enquiryNotification");
 const { runNonBlocking } = require("../../../../utils/nonBlocking");
-const { notifyUser } = require("../../../common/utils/notification");
+const {
+  sendDirectPushAndSave,
+} = require("../../../../services/push/separatePushService");
 
 class ServiceEnquiryController {
   // create user Enquiry
@@ -66,19 +68,24 @@ class ServiceEnquiryController {
         data: result,
       });
 
-      notifyUser(
-        {
-          userId,
-          module: "service",
-          type: "service_enquiry_submitted",
-          title: "Enquiry submitted",
-          message: "Your service enquiry has been submitted. Our team will contact you soon.",
-          icon: "message-circle",
-          reference_type: "service_enquiry",
-          reference_id: result?.id || result?.insertId,
-          action_url: "/services/enquiries",
-          metadata: { service_id, bundle_id, variant_id },
-        },
+      runNonBlocking(
+        () =>
+          sendDirectPushAndSave({
+            userId,
+            module: "service",
+            type: "service_enquiry_submitted",
+            title: "Enquiry submitted",
+            message: "Your service enquiry has been submitted. Our team will contact you soon.",
+            icon: "message-circle",
+            reference_type: "service_enquiry",
+            reference_id: String(result?.id || result?.insertId || ""),
+            action_url: "/services/enquiries",
+            screen: "Services",
+            sound: "default",
+            alert_type: "service_enquiry",
+            channel_id: "service_updates",
+            metadata: { service_id, bundle_id, variant_id },
+          }),
         "service enquiry notification",
       );
     } catch (err) {

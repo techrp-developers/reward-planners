@@ -1,7 +1,7 @@
 const db = require("../../../../config/database");
 const TransactionModel = require("../models/transactionModel");
 const { processTransaction } = require("../services/paymentProcessor");
-const { notifyUser } = require("../../../common/utils/notification");
+const { notifyUser } = require("../../../../services/push/nonBlockingPush");
 
 async function processEvent(req) {
   const conn = await db.getConnection();

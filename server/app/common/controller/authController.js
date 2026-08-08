@@ -17,7 +17,7 @@ const { sendOtpMail } = require("../../../services/mailBuilder/sendOtp");
 const {
   enqueueWhatsApp,
 } = require("../../../services/whatsapp/waEnqueueService");
-const { notifyUser } = require("../utils/notification");
+const { notifyUser } = require("../../../services/push/nonBlockingPush");
 const { uploadToR2 } = require("../../../utils/r2upload");
 const { deleteFromR2 } = require("../../../utils/r2delete");
 

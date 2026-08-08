@@ -5,12 +5,27 @@ const db = require("../../../../config/database");
 const {
   expirePendingOrder,
 } = require("../../../../services/Razorpay/orderExpiryService");
-const { notifyUser } = require("../../../common/utils/notification");
+const { runNonBlocking } = require("../../../../utils/nonBlocking");
+const {
+  sendDirectPushAndSave,
+} = require("../../../../services/push/separatePushService");
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZOR_API_KEY,
   key_secret: process.env.RAZOR_SECRET_KEY,
 });
+
+function sendEcommercePush(payload, label) {
+  runNonBlocking(
+    () =>
+      sendDirectPushAndSave({
+        sound: "default",
+        channel_id: "order_updates",
+        ...payload,
+      }),
+    label,
+  );
+}
 
 class PaymentController {
   // create payment
@@ -415,7 +430,7 @@ class PaymentController {
           `SELECT user_id FROM eorders WHERE order_id = ? LIMIT 1`,
           [orderId],
         );
-        notifyUser(
+        sendEcommercePush(
           {
             userId: orderUser?.user_id,
             module: "ecommerce",
@@ -424,8 +439,10 @@ class PaymentController {
             message: "We could not complete your refund automatically. Our team will review it.",
             icon: "alert-circle",
             reference_type: "refund",
-            reference_id: refundId,
+            reference_id: String(refundId),
             action_url: `/orders/order-details/${orderId}`,
+            screen: "OrderDetails",
+            alert_type: "refund_failed",
             priority: "high",
             metadata: { order_id: orderId, amount },
           },
@@ -474,7 +491,7 @@ class PaymentController {
         `SELECT user_id FROM eorders WHERE order_id = ? LIMIT 1`,
         [orderId],
       );
-      notifyUser(
+      sendEcommercePush(
         {
           userId: orderUser?.user_id,
           module: "ecommerce",
@@ -483,8 +500,10 @@ class PaymentController {
           message: `A refund of Rs. ${Number(amount).toFixed(2)} has been processed.`,
           icon: "refresh-cw",
           reference_type: "refund",
-          reference_id: refundId,
+          reference_id: String(refundId),
           action_url: `/orders/order-details/${orderId}`,
+          screen: "OrderDetails",
+          alert_type: "refund_completed",
           metadata: { order_id: orderId, amount, refund_id: refund.id },
         },
         "refund completed notification",

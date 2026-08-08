@@ -4,18 +4,38 @@ const {
   sendDirectPushNotification,
 } = require("../push/separatePushService");
 
-function toDateTimeString(date, time) {
+function buildLocalDateTime(date, time) {
   if (!date || !time) return null;
-  return `${date} ${String(time).slice(0, 8)}`;
+
+  const dateMatch = String(date).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const timeMatch = String(time).slice(0, 8).match(/^(\d{2}):(\d{2}):(\d{2})$/);
+
+  if (!dateMatch || !timeMatch) return null;
+
+  const year = Number(dateMatch[1]);
+  const monthIndex = Number(dateMatch[2]) - 1;
+  const day = Number(dateMatch[3]);
+  const hours = Number(timeMatch[1]);
+  const minutes = Number(timeMatch[2]);
+  const seconds = Number(timeMatch[3]);
+
+  const localDate = new Date(year, monthIndex, day, hours, minutes, seconds, 0);
+  return Number.isNaN(localDate.getTime()) ? null : localDate;
 }
 
-function toDateObject(dateTimeString) {
-  if (!dateTimeString) return null;
+function formatLocalDateTime(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return null;
+  }
 
-  const normalized = String(dateTimeString).replace(" ", "T");
-  const date = new Date(normalized);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const seconds = String(date.getSeconds()).padStart(2, "0");
 
-  return Number.isNaN(date.getTime()) ? null : date;
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
 
 function buildReminderPayload(todo, reminder) {
@@ -84,7 +104,7 @@ async function replaceReminderSchedule(todo, customReminders = []) {
   }
 
   const reminderRows = [];
-  const startReminderAt = toDateObject(toDateTimeString(todo.task_date, todo.start_time));
+  const startReminderAt = buildLocalDateTime(todo.task_date, todo.start_time);
 
   if (startReminderAt) {
     startReminderAt.setMinutes(startReminderAt.getMinutes() - 15);
@@ -94,7 +114,7 @@ async function replaceReminderSchedule(todo, customReminders = []) {
         todo.created_by,
         "START_15",
         "15 min before",
-        `${startReminderAt.toISOString().slice(0, 19).replace("T", " ")}`,
+        formatLocalDateTime(startReminderAt),
       ]);
     }
   }
@@ -102,7 +122,7 @@ async function replaceReminderSchedule(todo, customReminders = []) {
   for (const reminder of customReminders) {
     if (!reminder?.time) continue;
 
-    const scheduledAt = toDateObject(toDateTimeString(todo.task_date, reminder.time));
+    const scheduledAt = buildLocalDateTime(todo.task_date, reminder.time);
     if (!scheduledAt || scheduledAt.getTime() <= Date.now()) {
       continue;
     }
@@ -112,7 +132,7 @@ async function replaceReminderSchedule(todo, customReminders = []) {
       todo.created_by,
       "CUSTOM",
       reminder.label || reminder.time,
-      `${scheduledAt.toISOString().slice(0, 19).replace("T", " ")}`,
+      formatLocalDateTime(scheduledAt),
     ]);
   }
 

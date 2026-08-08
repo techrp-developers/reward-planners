@@ -8,8 +8,22 @@ const {
   orderConfirmationMail,
 } = require("../../../../services/mailBuilder/orderConfirmation");
 const { runNonBlocking } = require("../../../../utils/nonBlocking");
-const { notifyUser } = require("../../../common/utils/notification");
+const {
+  sendDirectPushAndSave,
+} = require("../../../../services/push/separatePushService");
 const RefundService = require("../controllers/paymentController");
+
+function sendEcommercePush(payload, label) {
+  runNonBlocking(
+    () =>
+      sendDirectPushAndSave({
+        sound: "default",
+        channel_id: "order_updates",
+        ...payload,
+      }),
+    label,
+  );
+}
 
 // booking payload
 async function buildXpressBookingPayload(orderId, vendorId) {
@@ -922,7 +936,7 @@ async function processEvent(req) {
 
       await conn.commit();
 
-      notifyUser(
+      sendEcommercePush(
         {
           userId,
           module: "ecommerce",
@@ -931,8 +945,10 @@ async function processEvent(req) {
           message: "Your order is confirmed and being processed.",
           icon: "shopping-bag",
           reference_type: "order",
-          reference_id: order_id,
+          reference_id: String(order_id),
           action_url: `/orders/order-details/${order_id}`,
+          screen: "OrderDetails",
+          alert_type: "order_paid",
           metadata: {
             reward_coins_used: redeemedCoins,
             reward_coins_earned: earnedCoins,
@@ -942,7 +958,7 @@ async function processEvent(req) {
       );
 
       if (earnedCoins > 0) {
-        notifyUser(
+        sendEcommercePush(
           {
             userId,
             module: "wallet",
@@ -951,8 +967,10 @@ async function processEvent(req) {
             message: `You earned ${earnedCoins} reward coins from your order.`,
             icon: "wallet",
             reference_type: "order",
-            reference_id: order_id,
+            reference_id: String(order_id),
             action_url: "/wallet",
+            screen: "Wallet",
+            alert_type: "order_reward_earned",
             metadata: { coins: earnedCoins, order_id },
           },
           "order reward notification",
@@ -1087,6 +1105,29 @@ async function processEvent(req) {
       );
 
       await conn.commit();
+
+      const [[failedOrderUser]] = await db.query(
+        `SELECT user_id FROM eorders WHERE order_id = ? LIMIT 1`,
+        [existingPayment.order_id],
+      );
+
+      sendEcommercePush(
+        {
+          userId: failedOrderUser?.user_id,
+          module: "ecommerce",
+          type: "payment_abandoned",
+          title: "Payment failed",
+          message: "Your payment could not be completed. Please try again to place your order.",
+          icon: "credit-card",
+          reference_type: "order",
+          reference_id: String(existingPayment.order_id),
+          action_url: `/orders/order-details/${existingPayment.order_id}`,
+          screen: "OrderDetails",
+          alert_type: "payment_failed",
+          priority: "high",
+        },
+        "ecommerce payment failed notification",
+      );
 
       console.log("[WEBHOOK] Ecommerce payment failed", {
         razorpay_order_id: payment.order_id,
