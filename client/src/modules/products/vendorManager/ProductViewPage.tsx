@@ -36,6 +36,7 @@ type ProductVariant = {
   manufacturing_date: string | null;
   expiry_date: string | null;
   created_at: string;
+  images?: string[];
 };
 
 interface ProductView {
@@ -684,12 +685,15 @@ export default function ReviewProductPage() {
                 >
                   <tr>
                     {[
+                      "Images",
                       "SKU",
                       "Attributes",
                       "MRP",
                       "Sale Price",
                       "Stock",
                       "Visibility",
+                      "Manufacturing Date",
+                      "Expiry Date",
                     ].map((h) => (
                       <th
                         key={h}
@@ -706,6 +710,30 @@ export default function ReviewProductPage() {
                       key={variant.variant_id}
                       className="hover:bg-purple-50/30 transition-colors"
                     >
+                      <td className="px-4 py-3">
+                        {variant.images && variant.images.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {variant.images.map((img, imgIndex) => (
+                              <div
+                                key={imgIndex}
+                                onClick={() =>
+                                  setLightboxImage(resolveImageUrl(img))
+                                }
+                                className="w-12 h-12 overflow-hidden border border-gray-200 rounded-lg cursor-pointer shrink-0"
+                              >
+                                <img
+                                  src={resolveImageUrl(img)}
+                                  alt={`${variant.sku} ${imgIndex + 1}`}
+                                  className="object-cover w-full h-full transition-transform hover:scale-110"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-300">—</span>
+                        )}
+                      </td>
+
                       <td className="px-4 py-3 font-bold text-gray-800 text-xs">
                         {variant.sku}
                       </td>
@@ -748,6 +776,22 @@ export default function ReviewProductPage() {
                         >
                           {variant.is_visible ? "Visible" : "Hidden"}
                         </span>
+                      </td>
+
+                      <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                        {variant.manufacturing_date
+                          ? new Date(
+                              variant.manufacturing_date,
+                            ).toLocaleDateString("en-IN")
+                          : "—"}
+                      </td>
+
+                      <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                        {variant.expiry_date
+                          ? new Date(variant.expiry_date).toLocaleDateString(
+                              "en-IN",
+                            )
+                          : "—"}
                       </td>
                     </tr>
                   ))}

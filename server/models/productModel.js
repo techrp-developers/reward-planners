@@ -556,12 +556,33 @@ class ProductModel {
         [productId],
       );
 
+      const variantIds = variants.map((v) => v.variant_id);
+      let variantImagesByVariant = {};
+
+      if (variantIds.length) {
+        const placeholders = variantIds.map(() => "?").join(",");
+        const [variantImages] = await db.execute(
+          `SELECT variant_id, image_url
+           FROM product_variant_images
+           WHERE variant_id IN (${placeholders})
+           ORDER BY sort_order ASC`,
+          variantIds,
+        );
+
+        variantImagesByVariant = variantImages.reduce((acc, row) => {
+          if (!acc[row.variant_id]) acc[row.variant_id] = [];
+          acc[row.variant_id].push(row.image_url);
+          return acc;
+        }, {});
+      }
+
       product.variants = variants.map((v) => ({
         ...v,
         variant_attributes:
           typeof v.variant_attributes === "string"
             ? JSON.parse(v.variant_attributes)
             : v.variant_attributes,
+        images: variantImagesByVariant[v.variant_id] || [],
       }));
 
       return product;
