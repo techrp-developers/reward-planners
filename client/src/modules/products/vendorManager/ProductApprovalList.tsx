@@ -206,6 +206,8 @@ export default function ProductManagerList() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [brandSearch, setBrandSearch] = useState("");
+  const [vendorSearch, setVendorSearch] = useState("");
   const [sortBy, setSortBy] = useState<SortColumn>("product_id");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
@@ -267,6 +269,8 @@ export default function ProductManagerList() {
         status:
           statusFilter !== "all" ? normalizeStatusForApi(statusFilter) : "",
         search: searchQuery,
+        brand: brandSearch,
+        vendorId: vendorSearch,
 
         sortBy: SORT_FIELD_MAP[sortBy],
         sortOrder,
@@ -300,6 +304,8 @@ export default function ProductManagerList() {
     pagination.itemsPerPage,
     statusFilter,
     searchQuery,
+    brandSearch,
+    vendorSearch,
     sortBy,
     sortOrder,
   ]);
@@ -315,6 +321,8 @@ export default function ProductManagerList() {
     pagination.itemsPerPage,
     searchQuery,
     statusFilter,
+    brandSearch,
+    vendorSearch,
     sortBy,
     sortOrder,
   ]);
@@ -577,6 +585,22 @@ export default function ProductManagerList() {
     [],
   );
 
+  const onBrandSearchChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setBrandSearch(e.target.value);
+      setPagination((prev) => ({ ...prev, currentPage: 1 }));
+    },
+    [],
+  );
+
+  const onVendorSearchChange = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      setVendorSearch(e.target.value);
+      setPagination((prev) => ({ ...prev, currentPage: 1 }));
+    },
+    [],
+  );
+
   return (
     <div className="min-h-screen">
       <div className="p-4 bg-white border border-gray-200 shadow-lg rounded-2xl md:p-6">
@@ -694,6 +718,35 @@ export default function ProductManagerList() {
           >
             Download Report
           </button>
+        </div>
+
+        {/* BRAND / VENDOR FILTERS */}
+        <div className="flex flex-col gap-4 mb-6 md:flex-row">
+          <div className="relative flex-1">
+            <input
+              type="text"
+              value={brandSearch}
+              onChange={onBrandSearchChange}
+              placeholder="Filter by brand..."
+              className="w-full p-3 pl-10 border border-gray-300 rounded-lg outline-none
+                         focus:ring-2 focus:ring-[#852BAF] focus:border-transparent"
+            />
+            <FaSearch className="absolute text-gray-400 pointer-events-none left-3 top-4" />
+          </div>
+
+          <select
+            value={vendorSearch}
+            onChange={onVendorSearchChange}
+            className="p-3 border border-gray-300 rounded-lg cursor-pointer outline-none
+                       focus:ring-2 focus:ring-[#852BAF] focus:border-transparent"
+          >
+            <option value="">Filter by vendor...</option>
+            {vendors.map((vendor) => (
+              <option key={vendor.vendor_id} value={vendor.vendor_id}>
+                {vendor.full_name}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* TABLE */}
