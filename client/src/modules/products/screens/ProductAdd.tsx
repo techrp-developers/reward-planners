@@ -632,14 +632,14 @@ export default function ProductListingDynamic() {
             Fill in the details below to list your product
           </p>
         </div>
-        <div
+        {/* <div
           className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-white"
           style={{
             background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
           }}
         >
           <FaPlus size={10} /> New Product
-        </div>
+        </div> */}
       </div>
 
       {/* ── ALERTS ── */}
