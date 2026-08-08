@@ -786,6 +786,10 @@ export default function ProductManagerList() {
                   Status
                 </th>
 
+                <th className="px-4 py-4 text-xs font-bold tracking-wider text-gray-500 uppercase">
+                  Rejection Reason
+                </th>
+
                 <th
                   onClick={() => handleSort("created_at")}
                   className="px-4 py-4 text-xs font-bold tracking-wider text-gray-500 uppercase cursor-pointer"
@@ -829,6 +833,19 @@ export default function ProductManagerList() {
 
                   <td className="px-4 py-4">
                     <StatusChip status={product.status} />
+                  </td>
+
+                  <td className="px-4 py-4">
+                    {product.rejection_reason ? (
+                      <span
+                        className="block text-xs text-red-600 font-medium max-w-[140px] truncate"
+                        title={product.rejection_reason}
+                      >
+                        {product.rejection_reason}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-300">—</span>
+                    )}
                   </td>
 
                   <td className="px-4 py-4 text-sm text-gray-500 whitespace-nowrap">
