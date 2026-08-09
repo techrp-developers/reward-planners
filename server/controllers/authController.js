@@ -1,6 +1,6 @@
 const bcrypt = require("bcryptjs");
 const db = require("../config/database");
-const { generateToken } = require("../utils/jwt");
+const { issueSession, rotateSession, revokeSession, revokeUserSessions, isCsrfValid, clearSessionCookies } = require("../utils/authSession");
 const { generateOTP, hashOTP } = require("../utils/otpGenerate");
 const { sendOtpEmail, sendPasswordResetEmail } = require("../config/mail");
 const { sendRegistrationSuccessMail } = require("../services/mailBuilder/authNotification");
@@ -166,13 +166,6 @@ const authController = {
         };
       }
     }
-    const token = generateToken({
-      user_id: user.user_id,
-      vendor_id: vendorData?.vendor_id || null,
-      role: user.role,
-      email: user.email,
-    });
-
     // Send mail
     try {
       await sendRegistrationSuccessMail(
@@ -197,7 +190,6 @@ const authController = {
           phone: user.phone,
         },
         vendor: vendorData,
-        token,
       },
     });
   },
@@ -362,6 +354,7 @@ const authController = {
       hashedPassword,
       userId,
     ]);
+    await revokeUserSessions(userId);
 
     await db.execute("DELETE FROM password_reset_tokens WHERE user_id = ?", [
       userId,
@@ -452,7 +445,6 @@ const authController = {
       }
 
       let vendorData = null;
-      let vendorId = null;
 
       if (user.role === "vendor") {
         const [vendorRows] = await db.execute(
@@ -472,17 +464,10 @@ const authController = {
 
         if (vendorRows.length > 0) {
           vendorData = vendorRows[0];
-          vendorId = vendorData.vendor_id;
         }
       }
 
-      //  MUST include vendor_id in token
-      const token = generateToken({
-        user_id: user.user_id,
-        vendor_id: vendorId,
-        email: user.email,
-        role: user.role,
-      });
+      await issueSession(user.user_id, req, res);
 
       return res.json({
         success: true,
@@ -490,7 +475,6 @@ const authController = {
         data: {
           user: safeUser,
           vendor: vendorData,
-          token,
         },
       });
     } catch (err) {
@@ -586,8 +570,25 @@ const authController = {
   /* ============================================================
        LOGOUT
      ============================================================ */
-  logout: (req, res) => {
-    res.clearCookie();
+  refresh: async (req, res) => {
+    try {
+      const userId = await rotateSession(req, res);
+      if (!userId) {
+        clearSessionCookies(res);
+        return res.status(401).json({ success: false, code: "SESSION_EXPIRED", message: "Session expired. Please sign in again." });
+      }
+      return res.json({ success: true });
+    } catch (error) {
+      console.error("Refresh session error:", error);
+      clearSessionCookies(res);
+      return res.status(401).json({ success: false, code: "SESSION_EXPIRED", message: "Session expired. Please sign in again." });
+    }
+  },
+
+  logout: async (req, res) => {
+    if (!isCsrfValid(req)) return res.status(403).json({ success: false, code: "CSRF_INVALID", message: "Invalid security token" });
+    try { await revokeSession(req, res); }
+    catch (error) { console.error("Logout session cleanup error:", error); clearSessionCookies(res); }
     return res.json({ success: true, message: "Logout successful" });
   },
 
@@ -641,6 +642,8 @@ const authController = {
         hashedPassword,
         normalizedEmail,
       ]);
+      const [[changedUser]] = await db.execute("SELECT user_id FROM eusers WHERE email = ? LIMIT 1", [normalizedEmail]);
+      if (changedUser) await revokeUserSessions(changedUser.user_id);
 
       return res.json({
         success: true,

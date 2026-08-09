@@ -874,23 +874,6 @@ export default function Onboarding() {
       return;
     }
 
-    const token = localStorage.getItem("token");
-    if (!token) {
-      await Swal.fire({
-        icon: "warning",
-        title: "Not logged in",
-        text: "Please login first and try again.",
-        confirmButtonText: "OK",
-        buttonsStyling: false,
-        customClass: {
-          popup: "rounded-full",
-          confirmButton:
-            "px-6 py-2 rounded-full font-bold text-white bg-[#852BAF] hover:bg-linear-to-r hover:from-[#852BAF] hover:to-[#FC3F78] transition-all duration-300 cursor-pointer active:scale-95",
-        },
-      });
-      return;
-    }
-
     try {
       const form = new FormData();
       Object.entries(formData).forEach(([k, v]) => {

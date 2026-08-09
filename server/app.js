@@ -104,6 +104,7 @@ app.use(
       "X-Location-Id",
       "X-Session-Token",
       "Idempotency-Key",
+      "X-CSRF-Token",
     ],
   }),
 );

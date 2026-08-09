@@ -419,9 +419,6 @@ export default function ProductListingDynamic() {
     setSuccess(null);
 
     try {
-      const token = localStorage.getItem("token");
-      if (!token) throw new Error("Authentication required. Please login.");
-
       if (!product.categoryId && !isCustomCategory)
         throw new Error("Please select a category");
       if (isCustomCategory && !custom_category.trim())

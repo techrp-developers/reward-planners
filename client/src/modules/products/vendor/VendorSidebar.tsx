@@ -54,11 +54,7 @@ export default function VendorNavbar({ isOpen = false, onClose }: VendorNavbarPr
   useEffect(() => {
     const fetchStatus = async () => {
       try {
-        const token = localStorage.getItem("token");
-        if (!token) return;
-        const res = await api.get("/vendor/my-details", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await api.get("/vendor/my-details");
         setVendorStatus(res.data.vendor.status);
       } catch {
         setVendorStatus(null);

@@ -95,6 +95,8 @@ router.post("/admin/login", authLimiter, (req, res) =>
 
 router.post("/login", authLimiter, (req, res) => authController.login(req, res));
 
+router.post("/refresh", authLimiter, authController.refresh);
+
 /* ============================================================
    PASSWORD RESET
    ============================================================ */
@@ -108,7 +110,7 @@ router.get("/me", authenticateToken, authController.getProfile);
 
 router.put("/profile", authenticateToken, authController.updateProfile);
 
-router.post("/logout", authenticateToken, authController.logout);
+router.post("/logout", authController.logout);
 
 /* ============================================================
    STATES
