@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const ProductController = require("../controllers/productController");
 const { productUpload } = require("../middleware/mediaUpload/productUpload");
+const { bulkProductUpload } = require("../middleware/mediaUpload/bulkProductUpload");
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 
 // CREATE PRODUCT (images + ALL category documents)
@@ -18,7 +19,7 @@ router.post(
   "/validate-bulk-upload",
   authenticateToken,
   authorizeRoles("vendor"),
-  productUpload.any(),
+  bulkProductUpload.single("file"),
   ProductController.bulkValidate,
 );
 
