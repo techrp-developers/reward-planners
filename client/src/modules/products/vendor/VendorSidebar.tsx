@@ -6,6 +6,7 @@ import {
   FiLogOut,
   FiLayout,
   FiPackage,
+  FiBox,
   FiPlusSquare,
   FiBriefcase,
   FiChevronRight,
@@ -15,6 +16,7 @@ import {
   FiClock,
   FiUser,
   FiX,
+  FiBarChart2,
 } from "react-icons/fi";
 import { api } from "../../../common/api/api";
 import { useAuth } from "../../../common/auth/useAuth";
@@ -82,6 +84,15 @@ export default function VendorNavbar({ isOpen = false, onClose }: VendorNavbarPr
       label: "Orders",
       to: "/vendor/orders/summary",
       Icon: FiShoppingCart,
+    },
+    isApproved && {
+      label: "Reports",
+      Icon: FiBarChart2,
+      children: [
+        { label: "Stock Report", to: "/vendor/reports/stock", Icon: FiBox },
+        { label: "Product Report", to: "/vendor/reports/products", Icon: FiPackage },
+        { label: "Order Report", to: "/vendor/reports/orders", Icon: FiShoppingCart },
+      ],
     },
   ].filter(Boolean) as NavItem[];
 

@@ -19,6 +19,11 @@ export const routes = {
       summary: "/vendor/orders/summary",
       details: "/vendor/orders/details/:orderId",
     },
+    reports: {
+      stock: "/vendor/reports/stock",
+      products: "/vendor/reports/products",
+      orders: "/vendor/reports/orders",
+    },
     productManagerList: "/vendor/product-managers",
     fleaMarketPurchases: "/vendor/flea-market/purchases",
   },
