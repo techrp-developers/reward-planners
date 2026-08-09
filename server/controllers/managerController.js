@@ -278,12 +278,24 @@ class ManagerController {
   // Download vendor report
   async getVendorReport(req, res) {
     try {
-      const { status, fromDate, toDate } = req.query;
+      const { status = "", fromDate, toDate, search = "" } = req.query;
+
+      const allowedStatuses = ["", "sent_for_approval", "approved", "rejected", "deleted"];
+      if (!allowedStatuses.includes(status)) {
+        return res.status(400).json({ success: false, message: "Invalid vendor status" });
+      }
+      if ((fromDate && !toDate) || (!fromDate && toDate)) {
+        return res.status(400).json({ success: false, message: "Select both From and To dates" });
+      }
+      if (fromDate && toDate && fromDate > toDate) {
+        return res.status(400).json({ success: false, message: "From date cannot be after To date" });
+      }
 
       const data = await ManagerModel.getVendorReport({
         status,
         fromDate,
         toDate,
+        search: String(search).trim(),
       });
 
       const workbook = new ExcelJS.Workbook();
@@ -308,7 +320,10 @@ class ManagerController {
         });
       });
 
-      worksheet.getRow(1).font = { bold: true };
+      worksheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+      worksheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF852BAF" } };
+      worksheet.views = [{ state: "frozen", ySplit: 1 }];
+      worksheet.autoFilter = { from: "A1", to: "I1" };
 
       res.setHeader(
         "Content-Type",
@@ -317,7 +332,7 @@ class ManagerController {
 
       res.setHeader(
         "Content-Disposition",
-        "attachment; filename=vendor_report.xlsx",
+        `attachment; filename=vendor_report_${new Date().toISOString().slice(0, 10)}.xlsx`,
       );
 
       await workbook.xlsx.write(res);
