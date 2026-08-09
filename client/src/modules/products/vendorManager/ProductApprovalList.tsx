@@ -20,7 +20,7 @@ import {
   FaTrash,
 } from "react-icons/fa";
 import { Link } from "react-router-dom";
-import { FiBox } from "react-icons/fi";
+import { FiBox, FiCalendar, FiDownload, FiX } from "react-icons/fi";
 import { routes } from "../../../routes";
 import { api } from "../../../common/api/api";
 import { confirmDialog } from "../../../common/utils/confirmDialog";
@@ -91,6 +91,9 @@ interface ApiResponse {
 }
 
 type ActionType = "approve" | "reject" | "request_resubmission";
+
+const errorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error ? error.message : fallback;
 
 /* ================================
        STATUS CHIP
@@ -195,6 +198,10 @@ export default function ProductManagerList() {
   const [vendorFilter, setVendorFilter] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [reportDownloading, setReportDownloading] = useState(false);
+  const [reportBrand, setReportBrand] = useState("");
+  const [reportStatus, setReportStatus] = useState("");
 
   const [stats, setStats] = useState<Stats>({
     total: 0,
@@ -316,16 +323,7 @@ export default function ProductManagerList() {
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [
-    pagination.currentPage,
-    pagination.itemsPerPage,
-    searchQuery,
-    statusFilter,
-    brandSearch,
-    vendorSearch,
-    sortBy,
-    sortOrder,
-  ]);
+  }, [fetchProducts]);
 
   const handleDelete = async (product: ProductItem) => {
     const confirmed = await confirmDialog({
@@ -370,10 +368,10 @@ export default function ProductManagerList() {
         timer: 1200,
         showConfirmButton: false,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       await Swal.fire({
         title: "Error",
-        text: error?.message || "Failed to delete product.",
+        text: errorMessage(error, "Failed to delete product."),
         icon: "error",
       });
     }
@@ -527,10 +525,10 @@ export default function ProductManagerList() {
         showConfirmButton: false,
         customClass: { popup: "rounded-2xl" },
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       await Swal.fire({
         title: "Failed",
-        text: error?.message || "Something went wrong.",
+        text: errorMessage(error, "Something went wrong."),
         icon: "error",
         confirmButtonText: "OK",
         buttonsStyling: false,
@@ -554,12 +552,23 @@ export default function ProductManagerList() {
   };
 
   const handleDownloadReport = async () => {
+    if ((fromDate && !toDate) || (!fromDate && toDate)) {
+      await Swal.fire("Date range incomplete", "Select both From and To dates.", "warning");
+      return;
+    }
+    if (fromDate && toDate && fromDate > toDate) {
+      await Swal.fire("Invalid period", "From date cannot be after To date.", "warning");
+      return;
+    }
     try {
+      setReportDownloading(true);
       const response = await api.get("/product/download-product-report", {
         params: {
-          vendorId: vendorFilter,
-          fromDate,
-          toDate,
+          vendorId: vendorFilter || undefined,
+          brand: reportBrand.trim() || undefined,
+          status: reportStatus ? normalizeStatusForApi(reportStatus) : undefined,
+          fromDate: fromDate || undefined,
+          toDate: toDate || undefined,
         },
         responseType: "blob",
       });
@@ -568,12 +577,18 @@ export default function ProductManagerList() {
       const link = document.createElement("a");
       link.href = url;
 
-      link.setAttribute("download", "product_report.xlsx");
+      link.setAttribute("download", `manager_product_report_${new Date().toISOString().slice(0, 10)}.xlsx`);
       document.body.appendChild(link);
       link.click();
       link.remove();
+      window.URL.revokeObjectURL(url);
+      setReportModalOpen(false);
+      await Swal.fire({ icon: "success", title: "Report downloaded", text: "Your filtered Excel report is ready.", timer: 1800, showConfirmButton: false });
     } catch (error) {
       console.error("Download failed", error);
+      await Swal.fire("Download failed", "Unable to generate the product report. Please try again.", "error");
+    } finally {
+      setReportDownloading(false);
     }
   };
 
@@ -603,8 +618,25 @@ export default function ProductManagerList() {
 
   return (
     <div className="min-h-screen">
+      {reportModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget && !reportDownloading) setReportModalOpen(false); }}>
+          <div role="dialog" aria-modal="true" aria-labelledby="manager-report-title" className="w-full max-w-2xl overflow-hidden rounded-3xl border border-white/70 bg-white shadow-[0_28px_90px_rgba(39,20,58,0.3)]">
+            <div className="relative overflow-hidden bg-gradient-to-br from-[#25103d] via-[#64248c] to-[#b72f72] px-6 py-6 text-white"><div className="absolute -right-10 -top-16 h-40 w-40 rounded-full bg-white/10 blur-2xl" /><div className="relative flex items-start justify-between gap-4"><div className="flex items-center gap-4"><div className="grid h-12 w-12 place-items-center rounded-2xl border border-white/15 bg-white/10"><FiDownload size={21} /></div><div><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-purple-200">Manager analytics</p><h2 id="manager-report-title" className="mt-1 text-xl font-extrabold">Download product report</h2><p className="mt-1 text-xs text-purple-100/75">Export products across vendors with precise filters.</p></div></div><button type="button" disabled={reportDownloading} onClick={() => setReportModalOpen(false)} className="grid h-9 w-9 place-items-center rounded-xl border border-white/15 bg-white/10 transition hover:bg-white/20" aria-label="Close"><FiX /></button></div></div>
+            <div className="space-y-5 p-6">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div><label htmlFor="manager-report-vendor" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Vendor</label><select id="manager-report-vendor" value={vendorFilter} onChange={(event) => setVendorFilter(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-purple-400 focus:bg-white focus:ring-4 focus:ring-purple-100"><option value="">All vendors</option>{vendors.map((vendor) => <option key={vendor.vendor_id} value={vendor.vendor_id}>{vendor.full_name}</option>)}</select></div>
+                <div><label htmlFor="manager-report-brand" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Brand</label><input id="manager-report-brand" value={reportBrand} onChange={(event) => setReportBrand(event.target.value)} placeholder="All brands" className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-purple-400 focus:bg-white focus:ring-4 focus:ring-purple-100" /></div>
+                <div className="sm:col-span-2"><label htmlFor="manager-report-status" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Product status</label><select id="manager-report-status" value={reportStatus} onChange={(event) => setReportStatus(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-purple-400 focus:bg-white focus:ring-4 focus:ring-purple-100"><option value="">All statuses</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="resubmission">Resubmission</option></select></div>
+              </div>
+              <div className="rounded-2xl border border-purple-100 bg-purple-50/50 p-4"><div className="mb-3 flex items-center gap-2"><FiCalendar className="text-[#852BAF]" /><div><p className="text-sm font-extrabold text-slate-800">Custom period</p><p className="text-xs text-slate-500">Leave both empty to include all dates.</p></div></div><div className="grid gap-3 sm:grid-cols-2"><div><label htmlFor="manager-report-from" className="mb-1.5 block text-xs font-semibold text-slate-500">From date</label><input id="manager-report-from" type="date" value={fromDate} max={toDate || undefined} onChange={(event) => setFromDate(event.target.value)} className="w-full rounded-xl border border-purple-100 bg-white px-3 py-2.5 text-sm outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100" /></div><div><label htmlFor="manager-report-to" className="mb-1.5 block text-xs font-semibold text-slate-500">To date</label><input id="manager-report-to" type="date" value={toDate} min={fromDate || undefined} onChange={(event) => setToDate(event.target.value)} className="w-full rounded-xl border border-purple-100 bg-white px-3 py-2.5 text-sm outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100" /></div></div></div>
+              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between"><button type="button" disabled={reportDownloading} onClick={() => { setVendorFilter(""); setReportBrand(""); setReportStatus(""); setFromDate(""); setToDate(""); }} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-500 transition hover:bg-slate-50">Clear filters</button><button type="button" disabled={reportDownloading} onClick={() => void handleDownloadReport()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-purple-500/20 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60">{reportDownloading ? <><FaSpinner className="animate-spin" /> Generating...</> : <><FiDownload /> Download Excel</>}</button></div>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="p-4 bg-white border border-gray-200 shadow-lg rounded-2xl md:p-6">
-        <div className="flex items-start gap-3 mt-1 mb-8">
+        <div className="mb-8 mt-1 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+          <div className="flex items-start gap-3">
           <div className="w-12 h-12 bg-gradient-to-r from-[#852BAF] to-[#FC3F78] rounded-full flex items-center justify-center shrink-0">
             <FiBox className="text-xl text-white" />
           </div>
@@ -615,6 +647,8 @@ export default function ProductManagerList() {
               Manage your products, pricing, and stock — all in one place.
             </p>
           </div>
+          </div>
+          <button type="button" onClick={() => { setVendorFilter(vendorSearch); setReportBrand(brandSearch); setReportStatus(statusFilter === "all" ? "" : statusFilter); setReportModalOpen(true); }} className="inline-flex items-center justify-center gap-2 rounded-xl border border-purple-200 bg-white px-4 py-2.5 text-sm font-bold text-[#852BAF] shadow-sm transition hover:-translate-y-0.5 hover:border-[#852BAF] hover:bg-purple-50 hover:shadow-md"><FiDownload /> Product report</button>
         </div>
         {/* STATS CARDS */}
         <div className="grid grid-cols-1 gap-4 mb-8 sm:grid-cols-2 lg:grid-cols-5">
@@ -651,8 +685,8 @@ export default function ProductManagerList() {
         </div>
 
         {/* FILTERS + SEARCH */}
-        <div className="flex flex-col gap-4 mb-6 md:flex-row">
-          <div className="relative flex-1">
+        <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="relative">
             <input
               type="text"
               value={searchQuery}
@@ -664,65 +698,7 @@ export default function ProductManagerList() {
             <FaSearch className="absolute text-gray-400 pointer-events-none left-3 top-4" />
           </div>
 
-          <select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setPagination((p) => ({ ...p, currentPage: 1 }));
-            }}
-            className="p-3 border border-gray-300 rounded-lg cursor-pointer outline-none
-                       focus:ring-2 focus:ring-[#852BAF] focus:border-transparent"
-          >
-            <option value="all">All</option>
-            <option value="pending">Pending</option>
-            <option value="approved">Approved</option>
-            <option value="rejected">Rejected</option>
-            <option value="resubmission">Resubmission</option>
-          </select>
-        </div>
-
-        {/* REPORT DOWNLOAD SECTION */}
-        <div className="flex flex-col items-center justify-between gap-3 mb-6 md:flex-row">
-          <div className="flex flex-wrap gap-2">
-            <select
-              value={vendorFilter}
-              onChange={(e) => setVendorFilter(e.target.value)}
-              className="p-2 border border-gray-200 rounded-lg cursor-pointer text-sm outline-none focus:ring-2 focus:ring-[#852BAF] focus:border-transparent"
-            >
-              <option value="">All Vendors</option>
-              {vendors.map((vendor) => (
-                <option key={vendor.vendor_id} value={vendor.vendor_id}>
-                  {vendor.full_name}
-                </option>
-              ))}
-            </select>
-
-            <input
-              type="date"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              className="p-2 border border-gray-200 rounded-lg cursor-pointer text-sm outline-none focus:ring-2 focus:ring-[#852BAF] focus:border-transparent"
-            />
-
-            <input
-              type="date"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              className="p-2 border border-gray-200 rounded-lg cursor-pointer text-sm outline-none focus:ring-2 focus:ring-[#852BAF] focus:border-transparent"
-            />
-          </div>
-
-          <button
-            onClick={handleDownloadReport}
-            className="px-5 py-2 rounded-xl font-semibold text-white bg-gradient-to-r cursor-pointer from-[#852BAF] to-[#FC3F78]"
-          >
-            Download Report
-          </button>
-        </div>
-
-        {/* BRAND / VENDOR FILTERS */}
-        <div className="flex flex-col gap-4 mb-6 md:flex-row">
-          <div className="relative flex-1">
+          <div className="relative">
             <input
               type="text"
               value={brandSearch}
@@ -737,15 +713,31 @@ export default function ProductManagerList() {
           <select
             value={vendorSearch}
             onChange={onVendorSearchChange}
-            className="p-3 border border-gray-300 rounded-lg cursor-pointer outline-none
+            className="w-full p-3 border border-gray-300 rounded-lg cursor-pointer outline-none
                        focus:ring-2 focus:ring-[#852BAF] focus:border-transparent"
           >
-            <option value="">Filter by vendor...</option>
+            <option value="">All vendors</option>
             {vendors.map((vendor) => (
               <option key={vendor.vendor_id} value={vendor.vendor_id}>
                 {vendor.full_name}
               </option>
             ))}
+          </select>
+
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPagination((p) => ({ ...p, currentPage: 1 }));
+            }}
+            className="w-full p-3 border border-gray-300 rounded-lg cursor-pointer outline-none
+                       focus:ring-2 focus:ring-[#852BAF] focus:border-transparent"
+          >
+            <option value="all">All</option>
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+            <option value="resubmission">Resubmission</option>
           </select>
         </div>
 
