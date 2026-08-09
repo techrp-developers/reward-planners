@@ -15,6 +15,7 @@ import {
   FiClock,
   FiBox,
   FiUser,
+  FiX,
 } from "react-icons/fi";
 import { api } from "../../../common/api/api";
 import { useAuth } from "../../../common/auth/useAuth";
@@ -36,7 +37,12 @@ interface NavDropdown {
 
 type NavItem = NavLink | NavDropdown;
 
-export default function VendorNavbar() {
+type VendorNavbarProps = {
+  isOpen?: boolean;
+  onClose?: () => void;
+};
+
+export default function VendorNavbar({ isOpen = false, onClose }: VendorNavbarProps) {
   const { user, logout } = useAuth();
   const { pathname } = useLocation();
 
@@ -93,12 +99,11 @@ export default function VendorNavbar() {
 
   return (
     <nav
-      className="fixed top-0 left-0 flex flex-col w-64 h-full font-sans"
+      className={`fixed left-0 top-0 z-50 flex h-full w-64 flex-col font-sans transition-transform duration-300 lg:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full"}`}
       style={{
         background: "linear-gradient(180deg, #ffffff 0%, #fdf8ff 60%, #fff5f8 100%)",
         borderRight: "1px solid rgba(133,43,175,0.1)",
         boxShadow: "4px 0 32px rgba(133,43,175,0.08)",
-        animation: "slideInLeft 0.35s cubic-bezier(.22,.68,0,1.2) both",
       }}
     >
       {/* ── BRAND LOGO ── */}
@@ -122,6 +127,9 @@ export default function VendorNavbar() {
               Vendor Portal
             </p>
           </div>
+          <button onClick={onClose} aria-label="Close navigation" className="ml-auto grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 lg:hidden">
+            <FiX size={18} />
+          </button>
         </div>
 
         <div
@@ -224,6 +232,7 @@ export default function VendorNavbar() {
                         <Link
                           key={child.to}
                           to={child.to}
+                          onClick={onClose}
                           className={`flex items-center gap-2 py-2.5 px-4 text-sm transition-all duration-200 rounded-r-xl border-l-2 -ml-0.5 ${
                             isActive(child.to)
                               ? "border-[#852BAF] text-[#852BAF] font-semibold bg-purple-50/60"
@@ -246,6 +255,7 @@ export default function VendorNavbar() {
               ) : (
                 <Link
                   to={item.to}
+                  onClick={onClose}
                   className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
                     item.isDisabled
                       ? "bg-emerald-50 text-emerald-700 cursor-default opacity-90 border border-emerald-100"
@@ -343,6 +353,7 @@ export default function VendorNavbar() {
           <div className="space-y-0.5">
             <Link
               to="/vendor/profile"
+              onClick={onClose}
               className="flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-white/80 hover:text-[#852BAF] rounded-xl transition-all duration-150"
             >
               <FiUser className="text-base text-gray-400 shrink-0" />
@@ -350,6 +361,7 @@ export default function VendorNavbar() {
             </Link>
             <Link
               to="/vendor/change-password"
+              onClick={onClose}
               className="flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-white/80 hover:text-[#852BAF] rounded-xl transition-all duration-150"
             >
               <FiLock className="text-base text-gray-400 shrink-0" />

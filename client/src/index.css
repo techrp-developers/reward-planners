@@ -204,3 +204,64 @@
 .premium-form textarea:hover {
   background-color: #f9fafb;
 }
+
+/* ============================================================
+   VENDOR PORTAL — SHARED PREMIUM SHELL
+   These rules give every vendor route a consistent finish, including
+   shared product and account screens rendered inside VendorLayout.
+============================================================ */
+:is(.vendor-portal, .role-portal) main h1,
+:is(.vendor-portal, .role-portal) main h2 {
+  letter-spacing: -0.025em;
+}
+
+:is(.vendor-portal, .role-portal) main table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+:is(.vendor-portal, .role-portal) main thead {
+  background: linear-gradient(180deg, #faf9fc 0%, #f6f3fa 100%);
+}
+
+:is(.vendor-portal, .role-portal) main th {
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 750;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+:is(.vendor-portal, .role-portal) main tbody tr {
+  transition: background-color 0.18s ease, transform 0.18s ease;
+}
+
+:is(.vendor-portal, .role-portal) main tbody tr:hover {
+  background-color: rgba(248, 245, 252, 0.85);
+}
+
+:is(.vendor-portal, .role-portal) main input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+:is(.vendor-portal, .role-portal) main select,
+:is(.vendor-portal, .role-portal) main textarea {
+  border-color: #e2e8f0;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+:is(.vendor-portal, .role-portal) main input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus,
+:is(.vendor-portal, .role-portal) main select:focus,
+:is(.vendor-portal, .role-portal) main textarea:focus {
+  border-color: rgba(133, 43, 175, 0.55);
+  box-shadow: 0 0 0 4px rgba(133, 43, 175, 0.1);
+}
+
+:is(.vendor-portal, .role-portal) main ::selection {
+  background: rgba(133, 43, 175, 0.18);
+  color: #351244;
+}
+
+@media (max-width: 767px) {
+  :is(.vendor-portal, .role-portal) main .overflow-x-auto {
+    border-radius: 1rem;
+  }
+}

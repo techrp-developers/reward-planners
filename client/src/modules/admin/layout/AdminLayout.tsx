@@ -1,6 +1,7 @@
 import { Navigate, Outlet } from "react-router-dom";
 import AdminNavbar from "./AdminSidebar";
 import { useAuth } from "../../../common/auth/useAuth";
+import PremiumPortalShell from "../../../common/layouts/PremiumPortalShell";
 
 // AdminLayout.tsx
 export default function AdminLayout() {
@@ -9,16 +10,5 @@ export default function AdminLayout() {
   if (loading) return null;
   if (!user || user.role !== "admin") return <Navigate to="/login" replace />;
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <AdminNavbar />
-
-      {/* Match content width to viewport minus fixed sidebar width (w-64 = 16rem). */}
-      <main className="ml-64 min-h-screen w-[calc(100%-16rem)] overflow-x-hidden">
-        <div className="p-2 md:p-3">
-          <Outlet />
-        </div>
-      </main>
-    </div>
-  );
+  return <PremiumPortalShell sidebar={<AdminNavbar />} roleLabel="Admin workspace" userLabel={user.name || user.email}><Outlet /></PremiumPortalShell>;
 }
