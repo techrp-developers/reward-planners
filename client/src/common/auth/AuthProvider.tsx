@@ -62,7 +62,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setInitializing(false);
     } else void restoreSession();
 
-    const expireSession = () => { setUser(null); navigate("/login", { replace: true }); };
+    const expireSession = () => {
+      setUser(null);
+      const path = window.location.pathname.replace(/^\/crm(?=\/|$)/, "") || "/";
+      const publicAuthPaths = new Set([
+        "/login",
+        "/register",
+        "/forgot-password",
+        "/reset-password",
+        "/verify-otp",
+      ]);
+      if (!publicAuthPaths.has(path)) navigate("/login", { replace: true });
+    };
     window.addEventListener("auth:session-expired", expireSession);
     return () => { active = false; window.removeEventListener("auth:session-expired", expireSession); };
   }, [navigate]);

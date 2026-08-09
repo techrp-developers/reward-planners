@@ -9,6 +9,13 @@ const crypto = require("crypto");
 const normalizeEmail = (email) =>
   typeof email === "string" ? email.trim().toLowerCase() : "";
 
+const getClientBaseUrl = () => {
+  const configuredUrl = (process.env.CLIENT_URL || "http://localhost:5173")
+    .split(",")[0]
+    .trim();
+  return configuredUrl.replace(/\/+$/, "");
+};
+
 const authController = {
   /* ============================================================
        REGISTER USER (Auto-create vendor if role = vendor)
@@ -291,13 +298,20 @@ const authController = {
       [user.user_id, tokenHash, expiresAt],
     );
 
-    const resetLink = `https://rewardplanners.com/crm/reset-password?token=${rawToken}`;
+    const resetLink = `${getClientBaseUrl()}/reset-password?token=${encodeURIComponent(rawToken)}`;
 
     // Send mail
     try {
       await sendPasswordResetEmail(user.email, resetLink);
     } catch (mailErr) {
       console.error("PASSWORD RESET MAIL FAILED:", mailErr);
+      await db.execute("DELETE FROM password_reset_tokens WHERE user_id = ?", [
+        user.user_id,
+      ]);
+      return res.status(502).json({
+        success: false,
+        message: "Unable to send the reset email right now. Please try again shortly.",
+      });
     }
 
     return res.json(genericResponse);

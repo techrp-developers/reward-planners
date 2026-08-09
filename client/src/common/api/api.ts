@@ -40,7 +40,12 @@ api.interceptors.response.use(
       await refreshRequest;
       return api(config);
     } catch (refreshError) {
-      window.dispatchEvent(new Event("auth:session-expired"));
+      // `/auth/me` is also used to probe for an existing session when the app
+      // starts. A signed-out user is expected there and must remain on public
+      // pages such as Forgot Password instead of being forced back to Login.
+      if (!url.includes("/auth/me")) {
+        window.dispatchEvent(new Event("auth:session-expired"));
+      }
       return Promise.reject(refreshError);
     }
   },
