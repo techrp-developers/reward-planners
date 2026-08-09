@@ -956,12 +956,29 @@ class ProductController {
   // Get Product Report
   async getProductReport(req, res) {
     try {
-      const { vendorId, fromDate, toDate } = req.query;
+      const { fromDate, toDate, brand = "", status = "" } = req.query;
+      const vendorId = req.user.role === "vendor" ? req.user.vendor_id : req.query.vendorId;
+
+      if (req.user.role === "vendor" && !vendorId) {
+        return res.status(400).json({ success: false, message: "Vendor account is not linked" });
+      }
+      if ((fromDate && !toDate) || (!fromDate && toDate)) {
+        return res.status(400).json({ success: false, message: "Select both From and To dates" });
+      }
+      if (fromDate && toDate && fromDate > toDate) {
+        return res.status(400).json({ success: false, message: "From date cannot be after To date" });
+      }
+      const allowedStatuses = ["", "pending", "sent_for_approval", "approved", "rejected", "resubmission"];
+      if (!allowedStatuses.includes(status)) {
+        return res.status(400).json({ success: false, message: "Invalid product status" });
+      }
 
       const data = await ProductModel.getReportData({
         vendorId,
         fromDate,
         toDate,
+        brand: String(brand).trim(),
+        status,
       });
 
       const workbook = new ExcelJS.Workbook();
@@ -972,9 +989,16 @@ class ProductController {
         { header: "Product Name", key: "product_name", width: 25 },
         { header: "Vendor", key: "vendor_name", width: 25 },
         { header: "Brand", key: "brand_name", width: 20 },
+        { header: "Category", key: "category_name", width: 22 },
+        { header: "Subcategory", key: "subcategory_name", width: 22 },
         { header: "Status", key: "status", width: 15 },
         { header: "Created At", key: "created_at", width: 20 },
       ];
+
+      worksheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+      worksheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF852BAF" } };
+      worksheet.views = [{ state: "frozen", ySplit: 1 }];
+      worksheet.autoFilter = { from: "A1", to: "H1" };
 
       data.forEach((item) => {
         worksheet.addRow({
@@ -990,7 +1014,7 @@ class ProductController {
 
       res.setHeader(
         "Content-Disposition",
-        "attachment; filename=product_report.xlsx",
+        `attachment; filename=vendor_product_report_${new Date().toISOString().slice(0, 10)}.xlsx`,
       );
 
       await workbook.xlsx.write(res);

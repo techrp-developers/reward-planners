@@ -20,7 +20,7 @@ import {
   FaUpload,
   // FaFileImport,
 } from "react-icons/fa";
-import { FiPackage } from "react-icons/fi";
+import { FiCalendar, FiDownload, FiPackage, FiX } from "react-icons/fi";
 import Swal from "sweetalert2";
 import { Link } from "react-router-dom";
 import { routes } from "../../../routes";
@@ -719,6 +719,9 @@ export default function ProductManagerList() {
   const [sortBy, setSortBy] = useState<string>("created_at");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [reportDownloading, setReportDownloading] = useState(false);
+  const [reportFilters, setReportFilters] = useState({ brand: "", status: "", fromDate: "", toDate: "" });
   // const [rows, setRows] = useState<any[]>([]);
   const [validationResult, setValidationResult] = useState<BulkValidationResult | null>(null);
   const [categoryId, setCategoryId] = useState("");
@@ -1073,6 +1076,45 @@ export default function ProductManagerList() {
     setPagination((p) => ({ ...p, currentPage: 1 }));
   };
 
+  const handleDownloadReport = async () => {
+    if ((reportFilters.fromDate && !reportFilters.toDate) || (!reportFilters.fromDate && reportFilters.toDate)) {
+      await Swal.fire("Date range incomplete", "Select both From and To dates.", "warning");
+      return;
+    }
+    if (reportFilters.fromDate && reportFilters.toDate && reportFilters.fromDate > reportFilters.toDate) {
+      await Swal.fire("Invalid period", "From date cannot be after To date.", "warning");
+      return;
+    }
+
+    try {
+      setReportDownloading(true);
+      const response = await api.get("/product/download-product-report", {
+        params: {
+          brand: reportFilters.brand.trim() || undefined,
+          status: reportFilters.status || undefined,
+          fromDate: reportFilters.fromDate || undefined,
+          toDate: reportFilters.toDate || undefined,
+        },
+        responseType: "blob",
+      });
+      const downloadUrl = URL.createObjectURL(response.data);
+      const anchor = document.createElement("a");
+      anchor.href = downloadUrl;
+      anchor.download = `vendor_product_report_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(downloadUrl);
+      setReportModalOpen(false);
+      await Swal.fire({ icon: "success", title: "Report downloaded", text: "Your filtered Excel report is ready.", timer: 1800, showConfirmButton: false });
+    } catch (requestError) {
+      console.error("Product report download failed", requestError);
+      await Swal.fire("Download failed", "Unable to generate the product report. Please try again.", "error");
+    } finally {
+      setReportDownloading(false);
+    }
+  };
+
   const handlePageChange = (page: number) => {
     if (page >= 1 && page <= pagination.totalPages) {
       setPagination((prev) => ({ ...prev, currentPage: page }));
@@ -1126,6 +1168,28 @@ export default function ProductManagerList() {
         validating={validating}
       />
 
+      {reportModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget && !reportDownloading) setReportModalOpen(false); }}>
+          <div role="dialog" aria-modal="true" aria-labelledby="product-report-title" className="w-full max-w-xl overflow-hidden rounded-3xl border border-white/70 bg-white shadow-[0_28px_90px_rgba(39,20,58,0.3)]">
+            <div className="relative overflow-hidden bg-gradient-to-br from-[#25103d] via-[#64248c] to-[#b72f72] px-6 py-6 text-white">
+              <div className="absolute -right-10 -top-16 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
+              <div className="relative flex items-start justify-between gap-4"><div className="flex items-center gap-4"><div className="grid h-12 w-12 place-items-center rounded-2xl border border-white/15 bg-white/10"><FiDownload size={21} /></div><div><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-purple-200">Product analytics</p><h2 id="product-report-title" className="mt-1 text-xl font-extrabold">Download product report</h2><p className="mt-1 text-xs text-purple-100/75">Export only the products that match your selection.</p></div></div><button type="button" disabled={reportDownloading} onClick={() => setReportModalOpen(false)} className="grid h-9 w-9 place-items-center rounded-xl border border-white/15 bg-white/10 transition hover:bg-white/20" aria-label="Close"><FiX /></button></div>
+            </div>
+
+            <div className="space-y-5 p-6">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div><label htmlFor="report-brand" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Brand</label><input id="report-brand" value={reportFilters.brand} onChange={(event) => setReportFilters((previous) => ({ ...previous, brand: event.target.value }))} placeholder="All brands" className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-purple-400 focus:bg-white focus:ring-4 focus:ring-purple-100" /></div>
+                <div><label htmlFor="report-status" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Product status</label><select id="report-status" value={reportFilters.status} onChange={(event) => setReportFilters((previous) => ({ ...previous, status: event.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-purple-400 focus:bg-white focus:ring-4 focus:ring-purple-100"><option value="">All statuses</option><option value="pending">Pending</option><option value="sent_for_approval">Sent for approval</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="resubmission">Resubmission</option></select></div>
+              </div>
+
+              <div className="rounded-2xl border border-purple-100 bg-purple-50/50 p-4"><div className="mb-3 flex items-center gap-2"><FiCalendar className="text-[#852BAF]" /><div><p className="text-sm font-extrabold text-slate-800">Custom period</p><p className="text-xs text-slate-500">Leave both empty to include all dates.</p></div></div><div className="grid gap-3 sm:grid-cols-2"><div><label htmlFor="report-from" className="mb-1.5 block text-xs font-semibold text-slate-500">From date</label><input id="report-from" type="date" value={reportFilters.fromDate} max={reportFilters.toDate || undefined} onChange={(event) => setReportFilters((previous) => ({ ...previous, fromDate: event.target.value }))} className="w-full rounded-xl border border-purple-100 bg-white px-3 py-2.5 text-sm outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100" /></div><div><label htmlFor="report-to" className="mb-1.5 block text-xs font-semibold text-slate-500">To date</label><input id="report-to" type="date" value={reportFilters.toDate} min={reportFilters.fromDate || undefined} onChange={(event) => setReportFilters((previous) => ({ ...previous, toDate: event.target.value }))} className="w-full rounded-xl border border-purple-100 bg-white px-3 py-2.5 text-sm outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100" /></div></div></div>
+
+              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between"><button type="button" disabled={reportDownloading} onClick={() => setReportFilters({ brand: "", status: "", fromDate: "", toDate: "" })} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-500 transition hover:bg-slate-50">Clear filters</button><button type="button" disabled={reportDownloading} onClick={() => void handleDownloadReport()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-purple-500/20 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60">{reportDownloading ? <><FaSpinner className="animate-spin" /> Generating...</> : <><FiDownload /> Download Excel</>}</button></div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div
         className="bg-white rounded-3xl overflow-hidden"
         style={{ border: "1px solid rgba(133,43,175,0.1)", boxShadow: "0 4px 32px rgba(133,43,175,0.07)" }}
@@ -1167,6 +1231,16 @@ export default function ProductManagerList() {
               </div>
               <div className="text-xs text-gray-400">Auto-refresh · 30s</div>
             </div>
+
+            <button
+              onClick={() => {
+                setReportFilters((previous) => ({ ...previous, brand: brandFilter, status: statusFilter === "all" ? "" : statusFilter }));
+                setReportModalOpen(true);
+              }}
+              className="flex items-center gap-2 rounded-xl border border-purple-200 bg-white px-4 py-2.5 text-sm font-bold text-[#852BAF] shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#852BAF] hover:bg-purple-50 hover:shadow-md"
+            >
+              <FiDownload /> Report
+            </button>
 
             <button
               onClick={() => setBulkModalOpen(true)}

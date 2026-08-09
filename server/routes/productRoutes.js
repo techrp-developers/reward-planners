@@ -84,7 +84,7 @@ router.get(
 router.get(
   "/download-product-report",
   authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
+  authorizeRoles("vendor", "vendor_manager", "admin"),
   ProductController.getProductReport,
 );
 

@@ -1128,7 +1128,7 @@ class ProductModel {
   }
 
   // Download product Report
-  async getReportData({ vendorId, fromDate, toDate }) {
+  async getReportData({ vendorId, fromDate, toDate, brand, status }) {
     try {
       const conditions = ["p.is_deleted = 0"];
       const params = [];
@@ -1143,6 +1143,16 @@ class ProductModel {
         params.push(fromDate, toDate);
       }
 
+      if (brand) {
+        conditions.push("p.brand_name LIKE ?");
+        params.push(`%${brand}%`);
+      }
+
+      if (status) {
+        conditions.push("p.status = ?");
+        params.push(status);
+      }
+
       const whereClause = `WHERE ${conditions.join(" AND ")}`;
 
       const query = `
@@ -1151,10 +1161,14 @@ class ProductModel {
         p.product_name,
         v.full_name AS vendor_name,
         p.brand_name,
+        COALESCE(c.category_name, p.custom_category) AS category_name,
+        COALESCE(sc.subcategory_name, p.custom_subcategory) AS subcategory_name,
         p.status,
         p.created_at
       FROM eproducts p
       LEFT JOIN vendors v ON p.vendor_id = v.vendor_id
+      LEFT JOIN categories c ON p.category_id = c.category_id
+      LEFT JOIN sub_categories sc ON p.subcategory_id = sc.subcategory_id
       ${whereClause}
       ORDER BY p.created_at DESC
     `;
