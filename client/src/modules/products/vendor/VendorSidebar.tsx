@@ -13,7 +13,6 @@ import {
   FiLock,
   FiShield,
   FiClock,
-  FiBox,
   FiUser,
   FiX,
 } from "react-icons/fi";
@@ -83,11 +82,6 @@ export default function VendorNavbar({ isOpen = false, onClose }: VendorNavbarPr
       label: "Orders",
       to: "/vendor/orders/summary",
       Icon: FiShoppingCart,
-    },
-    isApproved && {
-      label: "Flea Market Purchases",
-      to: "/vendor/flea-market/purchases",
-      Icon: FiBox,
     },
   ].filter(Boolean) as NavItem[];
 

@@ -81,7 +81,6 @@ const NotFoundPage = lazy(() => import("./common/auth/NotFound.tsx"));
 // Vendor Orders
 const OrderSummary = lazy(() => import("./modules/products/vendor/OrderSummary.tsx"));
 const OrderDetail = lazy(() => import("./modules/products/vendor/OrderDetail.tsx"));
-const VendorFleaMarketPurchasesPage = lazy(() => import("./modules/products/vendor/VendorFleaMarketPurchasesPage.tsx"));
 
 // Manager Order
 const OrderList = lazy(() => import("./modules/products/vendorManager/order/OrderList.tsx"));
@@ -278,7 +277,10 @@ export default function App() {
 
         <Route path={routes.vendor.orders.details} element={<OrderDetail />} />
 
-        <Route path={routes.vendor.fleaMarketPurchases} element={<VendorFleaMarketPurchasesPage />} />
+        <Route
+          path={routes.vendor.fleaMarketPurchases}
+          element={<Navigate to={`${routes.vendor.orders.summary}?tab=flea-market`} replace />}
+        />
       </Route>
 
       {/* ========== MANAGER ========== */}
