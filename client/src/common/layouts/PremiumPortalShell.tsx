@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
-import { FiMenu } from "react-icons/fi";
+import PortalTopNavbar from "./PortalTopNavbar";
 
 type PremiumPortalShellProps = {
   sidebar: ReactNode;
@@ -22,15 +22,7 @@ export default function PremiumPortalShell({ sidebar, roleLabel, userLabel, chil
       </div>
       {sidebarOpen && <button aria-label="Close navigation" onClick={() => setSidebarOpen(false)} className="fixed inset-0 z-40 bg-slate-950/35 backdrop-blur-sm lg:hidden" />}
 
-      <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200/70 bg-white/85 px-4 backdrop-blur-xl lg:hidden">
-        <button onClick={() => setSidebarOpen(true)} aria-label="Open navigation" className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm">
-          <FiMenu size={20} />
-        </button>
-        <div className="text-right">
-          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-purple-600">{roleLabel}</p>
-          {userLabel && <p className="max-w-52 truncate text-sm font-semibold text-slate-800">{userLabel}</p>}
-        </div>
-      </header>
+      <PortalTopNavbar roleLabel={roleLabel} userLabel={userLabel} onOpenSidebar={() => setSidebarOpen(true)} />
 
       <main className="relative min-h-screen min-w-0 overflow-x-hidden lg:ml-64">
         <div key={pathname} className="page-enter mx-auto w-full max-w-[1600px] p-4 sm:p-6 lg:p-8">

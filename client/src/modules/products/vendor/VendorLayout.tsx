@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
-import { FiMenu } from "react-icons/fi";
 import { useAuth } from "../../../common/auth/useAuth";
+import PortalTopNavbar from "../../../common/layouts/PortalTopNavbar";
 import VendorNavbar from "./VendorSidebar";
 
 export default function VendorLayout() {
@@ -34,15 +34,7 @@ export default function VendorLayout() {
         />
       )}
 
-      <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200/70 bg-white/85 px-4 backdrop-blur-xl lg:hidden">
-        <button onClick={() => setSidebarOpen(true)} aria-label="Open navigation" className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm">
-          <FiMenu size={20} />
-        </button>
-        <div className="text-right">
-          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-purple-600">Vendor workspace</p>
-          <p className="max-w-52 truncate text-sm font-semibold text-slate-800">{user?.name || user?.email}</p>
-        </div>
-      </header>
+      <PortalTopNavbar roleLabel="Vendor workspace" userLabel={user?.name || user?.email} onOpenSidebar={() => setSidebarOpen(true)} />
 
       <main className="relative min-h-screen lg:ml-64">
         <div key={pathname} className="page-enter mx-auto w-full max-w-[1600px] p-4 sm:p-6 lg:p-8">

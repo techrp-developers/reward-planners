@@ -80,6 +80,11 @@
   border-radius: 10px;
 }
 
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(28px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
 /* Shared premium navigation treatment across every role portal. */
 .premium-role-sidebar {
   isolation: isolate;

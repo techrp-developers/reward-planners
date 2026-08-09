@@ -934,7 +934,7 @@ export default function Onboarding() {
 
   /* ================= UI ================= */
   return (
-    <div className="max-w-6xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+    <div className="w-full py-2 sm:py-4">
       {/* Header Section */}
       <div className="mb-8 text-left">
         <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">

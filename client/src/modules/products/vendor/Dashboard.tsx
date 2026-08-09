@@ -297,12 +297,14 @@ export default function VendorDashboard() {
               <FaShoppingCart className="text-[#852BAF]" size={15} />
               <h3 className="text-base font-bold text-gray-800">Recent Orders</h3>
             </div>
-            <button
-              onClick={() => navigate("/vendor/orders/summary")}
-              className="text-sm font-bold text-[#852BAF] hover:underline cursor-pointer transition-colors"
-            >
-              View All
-            </button>
+            {isApproved && (
+              <button
+                onClick={() => navigate("/vendor/orders/summary")}
+                className="text-sm font-bold text-[#852BAF] hover:underline cursor-pointer transition-colors"
+              >
+                View All
+              </button>
+            )}
           </div>
 
           <div className="overflow-x-auto">

@@ -22,7 +22,6 @@ import { routes } from "../../../routes";
 import logo from "../../../common/assets/logo.svg";
 // import { serviceCategories } from "../../service/serviceManager/shared/serviceCategories";
 import { useNotification } from "../../../common/notifications/useNotification";
-import NotificationBell from "../../../common/notifications/components/NotificationBell";
 
 interface NavChild {
   label: string;
@@ -209,10 +208,6 @@ export default function ManagerNavbar() {
       </div> */}
 
       {/* ── NOTIFICATIONS ── */}
-      <div className="px-4 mb-2">
-        <NotificationBell align="left" />
-      </div>
-
       {/* ── NAVIGATION ── */}
       <div className="flex-1 px-3 space-y-0.5 overflow-y-auto vendor-sidebar-scroll pb-2">
         {navItems.map((item, i) => {
