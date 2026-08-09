@@ -8,6 +8,7 @@ const ExcelJS = require("exceljs");
 const { uploadToR2 } = require("../utils/r2upload");
 const sharp = require("sharp");
 const XLSX = require("xlsx");
+const xpressService = require("../services/ExpressBees/xpressbees_service");
 
 const BULK_BASE_FIELDS = new Set([
   "productName", "brandName", "manufacturer", "gstSlab", "hsnSacCode",
@@ -1022,6 +1023,73 @@ class ProductController {
     } catch (err) {
       console.error("Download report error:", err);
       res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  async getDeliveryFeeEstimate(req, res) {
+    try {
+      const productId = Number(req.params.productId);
+      const destination = String(process.env.PRODUCT_DELIVERY_ESTIMATE_PINCODE || "").trim();
+
+      if (!Number.isInteger(productId) || productId <= 0) {
+        return res.status(400).json({ success: false, message: "Invalid product ID" });
+      }
+      if (!/^\d{6}$/.test(destination)) {
+        return res.status(500).json({ success: false, message: "Delivery estimate pincode is not configured" });
+      }
+
+      const [[shipment]] = await db.execute(
+        `SELECT p.product_id, p.vendor_id, pv.variant_id, pv.sale_price,
+                pv.weight, pv.length, pv.breadth, pv.height, va.pincode AS origin
+         FROM eproducts p
+         INNER JOIN product_variants pv ON pv.product_id = p.product_id
+         LEFT JOIN vendor_addresses va ON va.vendor_id = p.vendor_id AND va.type = 'shipping'
+         WHERE p.product_id = ? AND p.is_deleted = 0
+         ORDER BY pv.is_visible DESC, pv.variant_id ASC
+         LIMIT 1`,
+        [productId],
+      );
+
+      if (!shipment) {
+        return res.status(404).json({ success: false, message: "Product or variant not found" });
+      }
+      if (!shipment.origin) {
+        return res.status(422).json({ success: false, message: "Vendor shipping pincode is unavailable" });
+      }
+
+      const serviceResponse = await xpressService.checkServiceability({
+        origin: String(shipment.origin),
+        destination,
+        payment_type: "prepaid",
+        order_amount: Number(shipment.sale_price || 0).toString(),
+        weight: Math.round(Number(shipment.weight || 0) * 1000).toString(),
+        length: Math.round(Number(shipment.length || 0)).toString(),
+        breadth: Math.round(Number(shipment.breadth || 0)).toString(),
+        height: Math.round(Number(shipment.height || 0)).toString(),
+      });
+
+      const courierOptions = Array.isArray(serviceResponse?.data) ? serviceResponse.data : [];
+      const courier = courierOptions
+        .filter((option) => Number(option.total_charges) > 0)
+        .sort((a, b) => Number(a.total_charges) - Number(b.total_charges))[0];
+
+      if (!serviceResponse?.status || !courier) {
+        return res.status(422).json({ success: false, message: "Delivery is not serviceable for the configured pincode" });
+      }
+
+      return res.json({
+        success: true,
+        estimate: {
+          deliveryFee: Number(courier.total_charges),
+          destinationPincode: destination,
+          originPincode: String(shipment.origin),
+          variantId: shipment.variant_id,
+          courierName: courier.name || null,
+        },
+      });
+    } catch (error) {
+      console.error("DELIVERY FEE ESTIMATE ERROR:", error);
+      return res.status(502).json({ success: false, message: "Unable to calculate delivery estimate" });
     }
   }
 

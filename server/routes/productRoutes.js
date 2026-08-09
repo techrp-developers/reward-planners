@@ -152,6 +152,13 @@ router.patch(
   ProductController.Searchable,
 );
 
+router.get(
+  "/:productId/delivery-fee-estimate",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  ProductController.getDeliveryFeeEstimate,
+);
+
 // Get product by ID
 router.get(
   "/:id",

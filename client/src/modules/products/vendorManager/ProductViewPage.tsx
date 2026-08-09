@@ -12,6 +12,7 @@ import {
   FaTimes,
   FaRedo,
   FaTrash,
+  FaTruck,
 } from "react-icons/fa";
 
 import { useNavigate, useParams } from "react-router-dom";
@@ -76,6 +77,14 @@ interface ProductView {
   }>;
 
   variants: ProductVariant[];
+}
+
+interface DeliveryFeeEstimate {
+  deliveryFee: number;
+  destinationPincode: string;
+  originPincode: string;
+  variantId: number;
+  courierName: string | null;
 }
 
 const FormInput = ({
@@ -181,6 +190,9 @@ export default function ReviewProductPage() {
     Record<string, string[]>
   >({});
   const [attributeSchema, setAttributeSchema] = useState<any[]>([]);
+  const [deliveryEstimate, setDeliveryEstimate] =
+    useState<DeliveryFeeEstimate | null>(null);
+  const [deliveryEstimateLoading, setDeliveryEstimateLoading] = useState(false);
 
   useEffect(() => {
     if (!productId) {
@@ -188,8 +200,26 @@ export default function ReviewProductPage() {
       setLoading(false);
       return;
     }
-    fetchProduct(productId);
+    void fetchProduct(productId);
+    void fetchDeliveryEstimate(productId);
   }, [productId]);
+
+  const fetchDeliveryEstimate = async (id: string) => {
+    setDeliveryEstimateLoading(true);
+    setDeliveryEstimate(null);
+
+    try {
+      const response = await api.get(
+        `/product/${encodeURIComponent(id)}/delivery-fee-estimate`,
+      );
+      setDeliveryEstimate(response.data?.estimate ?? null);
+    } catch (estimateError) {
+      // The product review should remain usable when a courier is unavailable.
+      console.error("Unable to calculate delivery fee estimate", estimateError);
+    } finally {
+      setDeliveryEstimateLoading(false);
+    }
+  };
 
   const resolveImageUrl = (path?: string) => {
     if (!path) return "";
@@ -532,12 +562,48 @@ export default function ReviewProductPage() {
               <h1 className="text-3xl font-bold text-gray-900">
                 Product Review
               </h1>
-              <p className="mt-1 text-sm text-gray-400">
-                Product ID:{" "}
-                <span className="font-bold text-[#852BAF]">
-                  #{product.productId}
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                <span className="text-gray-500">
+                  Product ID:{" "}
+                  <span className="font-bold text-[#852BAF]">
+                    #{product.productId}
+                  </span>
                 </span>
-              </p>
+                <span className="hidden h-4 w-px bg-gray-300 sm:block" />
+                <span
+                  className="inline-flex min-h-8 items-center gap-2 rounded-full border border-purple-100 bg-white/90 px-3 py-1 font-semibold text-gray-700 shadow-sm"
+                  title="Estimate for one unit of the first visible variant"
+                >
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-purple-50 text-[#852BAF]">
+                    {deliveryEstimateLoading ? (
+                      <FaSpinner className="animate-spin text-[10px]" />
+                    ) : (
+                      <FaTruck className="text-[10px]" />
+                    )}
+                  </span>
+                  {deliveryEstimateLoading ? (
+                    "Estimating delivery fee..."
+                  ) : deliveryEstimate ? (
+                    <>
+                      Estimated delivery fee:{" "}
+                      <span className="text-[#852BAF]">
+                        {new Intl.NumberFormat("en-IN", {
+                          style: "currency",
+                          currency: "INR",
+                          maximumFractionDigits: 2,
+                        }).format(deliveryEstimate.deliveryFee)}
+                      </span>
+                      <span className="font-normal text-gray-400">
+                        to {deliveryEstimate.destinationPincode}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="font-medium text-gray-400">
+                      Delivery estimate unavailable
+                    </span>
+                  )}
+                </span>
+              </div>
             </div>
           </div>
 
