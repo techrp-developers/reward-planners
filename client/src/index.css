@@ -80,6 +80,97 @@
   border-radius: 10px;
 }
 
+/* Shared premium navigation treatment across every role portal. */
+.premium-role-sidebar {
+  isolation: isolate;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 14% 3%, rgba(133, 43, 175, 0.11), transparent 27%),
+    radial-gradient(circle at 92% 92%, rgba(252, 63, 120, 0.09), transparent 28%),
+    linear-gradient(180deg, #fff 0%, #fdfaff 58%, #fff8fb 100%) !important;
+  border-right: 1px solid rgba(133, 43, 175, 0.12) !important;
+  box-shadow: 8px 0 42px rgba(67, 28, 87, 0.09) !important;
+}
+
+.premium-role-sidebar::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: -1;
+  height: 5px;
+  background: linear-gradient(90deg, #852baf, #b02a9f 48%, #fc3f78);
+}
+
+.premium-role-sidebar > div:first-child {
+  position: relative;
+  padding-top: 1.75rem !important;
+  padding-bottom: 1.35rem !important;
+}
+
+.premium-role-sidebar > div:first-child::after {
+  content: "";
+  position: absolute;
+  right: 1.25rem;
+  bottom: 0;
+  left: 1.25rem;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(133, 43, 175, 0.22), rgba(252, 63, 120, 0.14), transparent);
+}
+
+.premium-role-sidebar > div:first-child h1 {
+  letter-spacing: -0.025em;
+}
+
+.premium-role-sidebar a,
+.premium-role-sidebar button {
+  outline: none;
+}
+
+.premium-role-sidebar a:focus-visible,
+.premium-role-sidebar button:focus-visible {
+  box-shadow: 0 0 0 3px rgba(133, 43, 175, 0.18);
+}
+
+.premium-role-sidebar a[class*="rounded-xl"],
+.premium-role-sidebar button[class*="rounded-xl"] {
+  position: relative;
+  min-height: 2.75rem;
+  border: 1px solid transparent;
+  will-change: transform;
+}
+
+.premium-role-sidebar a[class*="rounded-xl"]:not(.text-white):hover,
+.premium-role-sidebar button[class*="rounded-xl"]:not(.text-white):hover {
+  transform: translateX(3px);
+  border-color: rgba(133, 43, 175, 0.1);
+  background: rgba(255, 255, 255, 0.82) !important;
+  box-shadow: 0 7px 20px rgba(67, 28, 87, 0.07);
+}
+
+.premium-role-sidebar .text-white[class*="from-[#852BAF]"] {
+  box-shadow: 0 8px 22px rgba(133, 43, 175, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+}
+
+.premium-role-sidebar [class*="overflow-y-auto"] {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(133, 43, 175, 0.24) transparent;
+}
+
+.premium-role-sidebar [class*="overflow-y-auto"]::-webkit-scrollbar { width: 4px; }
+.premium-role-sidebar [class*="overflow-y-auto"]::-webkit-scrollbar-track { background: transparent; }
+.premium-role-sidebar [class*="overflow-y-auto"]::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(133, 43, 175, 0.3), rgba(252, 63, 120, 0.24));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .premium-role-sidebar,
+  .premium-role-sidebar * {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 /* ── Page-level fade-slide entrance ──
    No `both` fill-mode: retaining the end keyframe's transform forever turns
    this wrapper into a containing block for `position: fixed` descendants

@@ -48,7 +48,7 @@ export default function VendorNavbar({ isOpen = false, onClose }: VendorNavbarPr
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [vendorStatus, setVendorStatus] = useState<"approved" | "pending" | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(true);
 
   useEffect(() => {
     const fetchStatus = async () => {
@@ -89,7 +89,7 @@ export default function VendorNavbar({ isOpen = false, onClose }: VendorNavbarPr
 
   return (
     <nav
-      className={`fixed left-0 top-0 z-50 flex h-full w-64 flex-col font-sans transition-transform duration-300 lg:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full"}`}
+      className={`premium-role-sidebar fixed left-0 top-0 z-50 flex h-full w-64 flex-col font-sans transition-transform duration-300 lg:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full"}`}
       style={{
         background: "linear-gradient(180deg, #ffffff 0%, #fdf8ff 60%, #fff5f8 100%)",
         borderRight: "1px solid rgba(133,43,175,0.1)",
@@ -331,7 +331,7 @@ export default function VendorNavbar({ isOpen = false, onClose }: VendorNavbarPr
         {/* PROFILE DROPDOWN */}
         <div
           className={`overflow-hidden transition-all duration-300 ${
-            isProfileOpen ? "max-h-28 mt-3 opacity-100" : "max-h-0 opacity-0"
+            isProfileOpen ? "max-h-44 mt-3 opacity-100" : "max-h-0 opacity-0"
           }`}
         >
           <div

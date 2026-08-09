@@ -44,7 +44,7 @@ export default function ManagerNavbar() {
   const { unreadCountByCategory } = useNotification();
 
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(true);
 
   const isActive = (to: string) => pathname === to;
 
@@ -155,7 +155,7 @@ export default function ManagerNavbar() {
 
   return (
     <nav
-      className="fixed top-0 left-0 flex flex-col w-64 h-full font-sans"
+      className="premium-role-sidebar fixed top-0 left-0 flex flex-col w-64 h-full font-sans"
       style={{
         background:
           "linear-gradient(180deg, #ffffff 0%, #fdf8ff 60%, #fff5f8 100%)",
@@ -390,7 +390,7 @@ export default function ManagerNavbar() {
 
         <div
           className={`overflow-hidden transition-all duration-300 ${
-            isProfileOpen ? "max-h-28 mt-3 opacity-100" : "max-h-0 opacity-0"
+            isProfileOpen ? "max-h-44 mt-3 opacity-100" : "max-h-0 opacity-0"
           }`}
         >
           <div

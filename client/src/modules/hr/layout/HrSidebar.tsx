@@ -45,7 +45,7 @@ export default function HrNavbar({ closeSidebar }: HrNavbarProps) {
   const { pathname } = useLocation();
 
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(true);
   const [loading, setLoading] = useState<boolean>(true);
   const [company, setCompany] = useState<{
     company_name: string;
@@ -95,7 +95,7 @@ const navItems: NavItem[] = [
   if (loading) return null;
 
   return (
-    <nav className="fixed top-0 left-0 flex flex-col w-64 h-full bg-white border-r border-gray-100 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+    <nav className="premium-role-sidebar fixed top-0 left-0 flex flex-col w-64 h-full bg-white border-r border-gray-100 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
       {/* Branding */}
       <div className="px-8 py-10">
         <div className="flex items-center gap-3">
@@ -215,7 +215,7 @@ const navItems: NavItem[] = [
 
         <div
           className={`overflow-hidden transition-all duration-300 ${
-            isProfileOpen ? "max-h-28 mt-3 opacity-100" : "max-h-0 opacity-0"
+            isProfileOpen ? "max-h-44 mt-3 opacity-100" : "max-h-0 opacity-0"
           }`}
         >
           <div

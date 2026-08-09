@@ -57,7 +57,7 @@ const navSections: NavSection[] = [
 export default function FleaMarketSidebar({ closeSidebar }: FleaMarketSidebarProps) {
   const { user, logout } = useAuth();
   const { pathname } = useLocation();
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(true);
 
   const isActive = (path: string) => pathname === path;
 
@@ -68,7 +68,7 @@ export default function FleaMarketSidebar({ closeSidebar }: FleaMarketSidebarPro
     // caused it to stay pinned to the viewport even when the page scrolled
     // horizontally (e.g. from a wide table), visually overlapping content
     // that had shifted left underneath it.
-    <nav className="flex flex-col w-64 h-full bg-white border-r border-gray-100 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+    <nav className="premium-role-sidebar flex flex-col w-64 h-full bg-white border-r border-gray-100 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
       {/* Branding */}
       <div className="px-8 py-10">
         <div className="flex items-center gap-3">

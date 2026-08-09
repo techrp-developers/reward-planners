@@ -35,7 +35,7 @@ export default function ServiceNavbar() {
   const { user, logout } = useAuth();
 
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(true);
 
   const isActive = (to: string) => pathname === to;
 
@@ -92,7 +92,7 @@ export default function ServiceNavbar() {
 
   return (
     <nav
-      className="fixed top-0 left-0 flex flex-col w-64 h-full font-sans"
+      className="premium-role-sidebar fixed top-0 left-0 flex flex-col w-64 h-full font-sans"
       style={{
         background: "linear-gradient(180deg, #ffffff 0%, #fdf8ff 60%, #fff5f8 100%)",
         borderRight: "1px solid rgba(133,43,175,0.1)",
@@ -310,7 +310,7 @@ export default function ServiceNavbar() {
 
         <div
           className={`overflow-hidden transition-all duration-300 ${
-            isProfileOpen ? "max-h-28 mt-3 opacity-100" : "max-h-0 opacity-0"
+            isProfileOpen ? "max-h-44 mt-3 opacity-100" : "max-h-0 opacity-0"
           }`}
         >
           <div
