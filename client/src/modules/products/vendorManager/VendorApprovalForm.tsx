@@ -18,8 +18,9 @@ import {
 import { FiChevronLeft, FiShield } from "react-icons/fi";
 import Swal from "sweetalert2";
 import { api } from "../../../common/api/api";
+import { SERVER_CONFIG } from "../../../common/config/serverConfig";
 
-const API_BASEIMAGE_URL = "https://rewardplanners.com/api/crm";
+const API_BASEIMAGE_URL = SERVER_CONFIG.apiBaseUrl;
 
 const resolveImageUrl = (path: string) =>
   path?.startsWith("http") ? path : `${API_BASEIMAGE_URL}/uploads/${path}`;

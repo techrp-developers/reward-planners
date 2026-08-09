@@ -41,7 +41,7 @@ const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
               <div className="relative mt-6 flex justify-center">
                 <button
-                  onClick={() => (window.location.href = "https://rewardplanners.com/crm/login")}
+                  onClick={() => (window.location.href = "/crm/login")}
                   className="px-6 py-3 rounded-2xl font-bold text-white
                            bg-gradient-to-r from-[#852BAF] to-[#FC3F78]
                            shadow-lg shadow-[#852BAF]/25

@@ -1,6 +1,7 @@
 import axios from "axios";
+import { SERVER_CONFIG } from "../config/serverConfig";
 
-const API_BASE_URL = "https://rewardplanners.com/api/crm";
+export const API_BASE_URL = SERVER_CONFIG.apiBaseUrl;
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
