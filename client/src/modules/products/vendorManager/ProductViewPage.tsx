@@ -32,6 +32,10 @@ type ProductVariant = {
   mrp: number | null;
   sale_price: number | null;
   stock: number;
+  weight: number | null;
+  length: number | null;
+  breadth: number | null;
+  height: number | null;
   is_visible: number;
   variant_attributes: Record<string, string>;
   manufacturing_date: string | null;
@@ -741,8 +745,8 @@ export default function ReviewProductPage() {
               title="Product Variants"
               description="SKU-wise pricing, attributes and stock details"
             />
-            <div className="overflow-x-auto rounded-xl border border-gray-100">
-              <table className="min-w-full text-sm text-left">
+            <div className="w-full overflow-x-auto overscroll-x-contain rounded-xl border border-gray-100">
+              <table className="min-w-max text-sm text-left">
                 <thead
                   style={{
                     background:
@@ -754,6 +758,9 @@ export default function ReviewProductPage() {
                       "Images",
                       "SKU",
                       "Attributes",
+                      "Weight",
+                      "Dimensions (L x B x H)",
+                      "Billable Weight",
                       "MRP",
                       "Sale Price",
                       "Stock",
@@ -778,7 +785,7 @@ export default function ReviewProductPage() {
                     >
                       <td className="px-4 py-3">
                         {variant.images && variant.images.length > 0 ? (
-                          <div className="flex flex-wrap gap-1.5">
+                          <div className="flex flex-nowrap gap-1.5 whitespace-nowrap">
                             {variant.images.map((img, imgIndex) => (
                               <div
                                 key={imgIndex}
@@ -818,6 +825,22 @@ export default function ReviewProductPage() {
                               ),
                             )}
                         </div>
+                      </td>
+
+                      <td className="px-4 py-3 whitespace-nowrap text-gray-700">
+                        {Number(variant.weight) > 0 ? `${Number(variant.weight).toFixed(3)} kg` : "-"}
+                      </td>
+
+                      <td className="px-4 py-3 whitespace-nowrap text-gray-700">
+                        {Number(variant.length) > 0 && Number(variant.breadth) > 0 && Number(variant.height) > 0
+                          ? `${Number(variant.length)} x ${Number(variant.breadth)} x ${Number(variant.height)} cm`
+                          : "-"}
+                      </td>
+
+                      <td className="px-4 py-3 whitespace-nowrap font-bold text-[#852BAF]">
+                        {Number(variant.weight) > 0 && Number(variant.length) > 0 && Number(variant.breadth) > 0 && Number(variant.height) > 0
+                          ? `${Math.max(Number(variant.weight), (Number(variant.length) * Number(variant.breadth) * Number(variant.height)) / 5000).toFixed(3)} kg`
+                          : "-"}
                       </td>
 
                       <td className="px-4 py-3 text-gray-700">
