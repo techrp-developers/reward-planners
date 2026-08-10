@@ -119,7 +119,6 @@ const ServiceOrderView: React.FC = () => {
   const STATUS_OPTIONS = [
     "in_progress",
     "completed",
-    "cancelled",
   ];
 
   const fetchOrder = useCallback(async () => {
@@ -552,13 +551,14 @@ const ServiceOrderView: React.FC = () => {
                         ))}
                       </select>
 
-                      {item.status !== "completed" &&
-                        item.status !== "cancelled" && (
+                      {item.status !== "cancelled" && (
                           <button
                             onClick={() => cancelService(item.id)}
-                            className="px-3 py-1 text-xs font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 cursor-pointer"
+                            disabled={item.status === "completed" || updatingStatus}
+                            title={item.status === "completed" ? "Completed services cannot be cancelled" : "Cancel this service"}
+                            className="px-3 py-1 text-xs font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 cursor-pointer disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400"
                           >
-                            Cancel Service
+                            {item.status === "completed" ? "Cancellation unavailable" : "Cancel Service"}
                           </button>
                         )}
                     </div>
