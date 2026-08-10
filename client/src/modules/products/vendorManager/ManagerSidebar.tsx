@@ -13,16 +13,14 @@ import {
   FiGift,
   FiLock,
   FiUser,
-  // FiHeart,
   FiUserCheck,
   FiBarChart2,
   FiZap,
 } from "react-icons/fi";
-import { FaFileAlt, FaBolt } from "react-icons/fa";
+import { FaFileAlt } from "react-icons/fa";
 import { useAuth } from "../../../common/auth/useAuth";
 import { routes } from "../../../routes";
 import logo from "../../../common/assets/logo.svg";
-// import { serviceCategories } from "../../service/serviceManager/shared/serviceCategories";
 import { useNotification } from "../../../common/notifications/useNotification";
 
 interface NavChild {
@@ -75,24 +73,6 @@ export default function ManagerNavbar() {
       Icon: FiPackage,
       type: "link",
     },
-    // {
-    //   label: "Service Partners",
-    //   Icon: FiHeart,
-    //   type: "dropdown",
-    //   children: [
-    //     { label: "All Partners", to: routes.manager.servicePartners.list },
-    //     ...serviceCategories.map((c) => ({
-    //       label: c.name,
-    //       to: `${routes.manager.servicePartners.list}?category=${encodeURIComponent(c.name)}`,
-    //     })),
-    //   ],
-    // },
-    // {
-    //   label: "Partner Managers",
-    //   to: routes.manager.partnerManagers.list,
-    //   Icon: FiUserCheck,
-    //   type: "link",
-    // },
     {
       label: "Category",
       Icon: FiTag,
@@ -117,19 +97,6 @@ export default function ManagerNavbar() {
       to: routes.manager.attributes,
       Icon: FiSliders,
       type: "link",
-    },
-    {
-      label: "Service",
-      Icon: FaBolt,
-      type: "dropdown",
-      children: [
-        { label: "Service Enquiries", to: routes.manager.services.enquiries },
-        { label: "Service Orders", to: routes.manager.services.service_orders },
-        {
-          label: "Service Cancellations",
-          to: routes.manager.services.cancellation_requests,
-        },
-      ],
     },
     {
       label: "Orders",

@@ -114,14 +114,14 @@ router.post(
 router.get(
   "/service-cancellation-requests",
   authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
+  authorizeRoles("vendor_manager", "service_manager", "admin"),
   orderController.getServiceCancellationRequests,
 );
 
 router.get(
   "/service-cancellation-request/:serviceOrderId",
   authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
+  authorizeRoles("vendor_manager", "service_manager", "admin"),
   orderController.getServiceCancellationDetails,
 );
 
@@ -129,7 +129,7 @@ router.get(
 router.post(
   "/approve-service-cancellation/:serviceOrderId",
   authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
+  authorizeRoles("vendor_manager", "service_manager", "admin"),
   orderController.approveServiceCancellation,
 );
 
@@ -143,7 +143,7 @@ router.get(
 router.post(
   "/cancel-service/:serviceOrderId",
   authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
+  authorizeRoles("vendor_manager", "service_manager", "admin"),
   orderController.cancelServiceAsManager,
 );
 
@@ -151,7 +151,7 @@ router.post(
 router.post(
   "/reject-service-cancellation/:serviceOrderId",
   authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
+  authorizeRoles("vendor_manager", "service_manager", "admin"),
   orderController.rejectServiceCancellation,
 );
 

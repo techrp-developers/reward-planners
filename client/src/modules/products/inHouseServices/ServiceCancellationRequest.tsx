@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FiRefreshCw, FiXCircle } from "react-icons/fi";
 import { api } from "../../../common/api/api";
+import { useServiceOperationsRoutes } from "../../service/serviceManager/shared/useModuleRoutes";
 
 interface ServiceCancellationRequestItem {
   service_order_id: number;
@@ -29,6 +30,7 @@ interface ServiceCancellationListResponse {
 const statuses = ["requested", "approved", "rejected", "all"] as const;
 
 export default function ServiceCancellationRequest() {
+  const operationRoutes = useServiceOperationsRoutes();
   const navigate = useNavigate();
   const [requests, setRequests] = useState<ServiceCancellationRequestItem[]>([]);
   const [status, setStatus] = useState<(typeof statuses)[number]>("requested");
@@ -179,7 +181,7 @@ export default function ServiceCancellationRequest() {
                     <td className="px-5 py-4">
                       <button
                         type="button"
-                        onClick={() => navigate(`/manager/service-cancellation-detail/${request.service_order_id}`)}
+                        onClick={() => navigate(operationRoutes.cancellationDetail.replace(":serviceOrderId", String(request.service_order_id)))}
                         className="cursor-pointer rounded-lg border border-purple-200 bg-purple-50 px-4 py-1.5 text-sm font-semibold text-[#852BAF] hover:bg-[#852BAF] hover:text-white"
                       >
                         Review

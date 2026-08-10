@@ -14,7 +14,7 @@ router.post("/", auth, ServiceEnquiryController.createEnquiry);
 router.get(
   "/",
   authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
+  authorizeRoles("vendor_manager", "service_manager", "admin"),
   ServiceEnquiryController.getAllEnquiries,
 );
 
@@ -22,7 +22,7 @@ router.get(
 router.get(
   "/:id",
   authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
+  authorizeRoles("vendor_manager", "service_manager", "admin"),
   ServiceEnquiryController.getEnquiryById,
 );
 
@@ -30,7 +30,7 @@ router.get(
 router.put(
   "/:id/status",
   authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
+  authorizeRoles("vendor_manager", "service_manager", "admin"),
   ServiceEnquiryController.updateEnquiryStatus,
 );
 

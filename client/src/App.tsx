@@ -128,6 +128,8 @@ const PartnerManagerList = lazy(() => import("./modules/service/serviceManager/p
 const PartnerManagerOnboard = lazy(() => import("./modules/service/serviceManager/partnerManagers/pages/PartnerManagerOnboard.tsx"));
 const ServiceDashboard = lazy(() => import("./modules/service/serviceManager/dashboard/pages/ServiceDashboard.tsx"));
 const ServiceListingsPage = lazy(() => import("./modules/service/serviceManager/serviceListings/pages/ServiceListingsPage.tsx"));
+const ServiceCatalogPage = lazy(() => import("./modules/service/serviceManager/serviceListings/pages/ServiceCatalogPage.tsx"));
+const FinancialServicesPage = lazy(() => import("./modules/service/serviceManager/financialServices/FinancialServicesPage.tsx"));
 const BookingsPage = lazy(() => import("./modules/service/serviceManager/bookings/pages/BookingsPage.tsx"));
 const ServiceReportsPage = lazy(() => import("./modules/service/serviceManager/reports/pages/ServiceReportsPage.tsx"));
 const ServiceSettingsPage = lazy(() => import("./modules/service/serviceManager/settings/pages/ServiceSettingsPage.tsx"));
@@ -367,32 +369,6 @@ export default function App() {
           element={<CancellationDetail />}
         />
 
-        {/* Services */}
-        <Route
-          path={routes.manager.services.enquiries}
-          element={<ServiceEnquiries />}
-        />
-        <Route
-          path={routes.manager.services.details}
-          element={<ServiceDetails />}
-        />
-        <Route
-          path={routes.manager.services.service_orders}
-          element={<ServiceOrderList />}
-        />
-        <Route
-          path={routes.manager.services.service_order_details}
-          element={<ServiceOrderView />}
-        />
-        <Route
-          path={routes.manager.services.cancellation_requests}
-          element={<ServiceCancellationRequest />}
-        />
-        <Route
-          path={routes.manager.services.cancellation_detail}
-          element={<ServiceCancellationDetail />}
-        />
-
         {/* Rewards */}
         <Route
           path={routes.manager.rewards.rewardRule}
@@ -413,37 +389,6 @@ export default function App() {
           element={<ProductRewardMapping />}
         />
 
-        {/* Service Partners */}
-        <Route
-          path={routes.manager.servicePartners.list}
-          element={<ServicePartnerList />}
-        />
-        <Route
-          path={routes.manager.servicePartners.onboard}
-          element={<ServicePartnerOnboard />}
-        />
-        <Route
-          path={routes.manager.servicePartners.edit}
-          element={<ServicePartnerOnboard />}
-        />
-        <Route
-          path={routes.manager.servicePartners.profile}
-          element={<ServicePartnerProfile />}
-        />
-
-        {/* Partner Managers */}
-        <Route
-          path={routes.manager.partnerManagers.list}
-          element={<PartnerManagerList />}
-        />
-        <Route
-          path={routes.manager.partnerManagers.onboard}
-          element={<PartnerManagerOnboard />}
-        />
-        <Route
-          path={routes.manager.partnerManagers.edit}
-          element={<PartnerManagerOnboard />}
-        />
       </Route>
 
       {/* ========== ADMIN ========== */}
@@ -476,6 +421,14 @@ export default function App() {
       {/* ========== SERVICES ========== */}
       <Route element={<ServiceLayout />}>
         <Route path={routes.service.dashboard} element={<ServiceDashboard />} />
+        <Route path={routes.service.catalog} element={<ServiceCatalogPage />} />
+        <Route path={routes.service.finance} element={<FinancialServicesPage />} />
+        <Route path={routes.service.enquiries} element={<ServiceEnquiries />} />
+        <Route path={routes.service.enquiryDetail} element={<ServiceDetails />} />
+        <Route path={routes.service.orders} element={<ServiceOrderList />} />
+        <Route path={routes.service.orderDetail} element={<ServiceOrderView />} />
+        <Route path={routes.service.cancellations} element={<ServiceCancellationRequest />} />
+        <Route path={routes.service.cancellationDetail} element={<ServiceCancellationDetail />} />
 
         {/* Service Partners */}
         <Route

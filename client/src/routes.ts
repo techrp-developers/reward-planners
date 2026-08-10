@@ -130,6 +130,14 @@ export const routes = {
   },
   service: {
     dashboard: "/service/dashboard",
+    catalog: "/service/catalog",
+    finance: "/service/financial-services/:section?",
+    enquiries: "/service/enquiries",
+    enquiryDetail: "/service/enquiries/:id",
+    orders: "/service/orders",
+    orderDetail: "/service/orders/:parentOrderId",
+    cancellations: "/service/cancellations",
+    cancellationDetail: "/service/cancellations/:serviceOrderId",
     servicePartners: {
       list: "/service/service-partners",
       onboard: "/service/service-partners/onboard",

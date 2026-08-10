@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FiArrowLeft, FiArrowRight, FiCheckCircle, FiClock, FiDollarSign, FiEye, FiFileText, FiPackage, FiRefreshCw, FiSearch } from "react-icons/fi";
 import { api } from "../../../common/api/api";
-import { routes } from "../../../routes";
+import { useServiceOperationsRoutes } from "../../service/serviceManager/shared/useModuleRoutes";
 
 interface ServiceItem { id: number; order_ref: string; service_name: string; price: number; status: string; }
 interface ServiceOrder { parent_order_id: string; customer_name: string; email: string; mobile: string; created_at: string; total_amount: number; status: string; total_services: number; items: ServiceItem[]; }
@@ -11,12 +11,13 @@ const statusClass: Record<string, string> = { pending_payment: "border-amber-200
 const currency = (amount: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(amount);
 
 export default function ServiceOrderList() {
+  const operationRoutes = useServiceOperationsRoutes();
   const navigate = useNavigate(); const [orders, setOrders] = useState<ServiceOrder[]>([]); const [page, setPage] = useState(1); const [totalPages, setTotalPages] = useState(1); const [loading, setLoading] = useState(true); const [error, setError] = useState(""); const [search, setSearch] = useState(""); const [status, setStatus] = useState("all");
   const fetchOrders = useCallback(async () => { try { setLoading(true); setError(""); const res = await api.get<ServiceOrderListResponse>("/v1/service-orders/admin-orders", { params: { page, limit: 10, search: search.trim() || undefined, status: status === "all" ? undefined : status } }); if (!res.data.success) throw new Error(); setOrders(res.data.orders || []); setTotalPages(res.data.totalPages || 1); } catch { setError("We couldn't load the service orders. Please try again."); } finally { setLoading(false); } }, [page, search, status]);
   useEffect(() => { const timer = window.setTimeout(() => { void fetchOrders(); }, 350); return () => window.clearTimeout(timer); }, [fetchOrders]);
   const filtered = orders;
   const summary = useMemo(() => ({ total: orders.length, value: orders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0), active: orders.filter((order) => !["completed", "cancelled"].includes(order.status)).length, completed: orders.filter((order) => order.status === "completed").length }), [orders]);
-  const openOrder = (id: string) => navigate(routes.manager.services.service_order_details.replace(":parentOrderId", id));
+  const openOrder = (id: string) => navigate(operationRoutes.orderDetail.replace(":parentOrderId", id));
   const cards = [{ label: "Orders on this page", value: summary.total.toLocaleString(), Icon: FiPackage, tone: "bg-purple-50 text-[#852BAF]" }, { label: "Order value", value: currency(summary.value), Icon: FiDollarSign, tone: "bg-pink-50 text-[#FC3F78]" }, { label: "Active orders", value: summary.active.toLocaleString(), Icon: FiClock, tone: "bg-amber-50 text-amber-600" }, { label: "Completed", value: summary.completed.toLocaleString(), Icon: FiCheckCircle, tone: "bg-emerald-50 text-emerald-600" }];
 
   return <main className="min-h-full bg-gradient-to-br from-[#fdf8ff] via-white to-[#fff5f8] p-4 sm:p-6 lg:p-8"><div className="mx-auto max-w-[1500px] space-y-6">

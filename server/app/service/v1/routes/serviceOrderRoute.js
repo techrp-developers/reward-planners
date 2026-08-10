@@ -65,7 +65,7 @@ router.post(
 router.get(
   "/admin-orders",
   authenticateToken,
-  authorizeRoles("admin", "vendor_manager"),
+  authorizeRoles("admin", "vendor_manager", "service_manager"),
   ServiceOrderController.adminOrderList,
 );
 
@@ -73,7 +73,7 @@ router.get(
 router.get(
   "/admin-order-details/:parentOrderId",
   authenticateToken,
-  authorizeRoles("admin", "vendor_manager"),
+  authorizeRoles("admin", "vendor_manager", "service_manager"),
   ServiceOrderController.adminOrderDetails,
 );
 
@@ -81,7 +81,7 @@ router.get(
 router.put(
   "/status/:id",
   authenticateToken,
-  authorizeRoles("admin", "vendor_manager"),
+  authorizeRoles("admin", "vendor_manager", "service_manager"),
   ServiceOrderController.updateOrderStatus,
 );
 

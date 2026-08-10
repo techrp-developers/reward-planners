@@ -3,11 +3,12 @@ import { Link, useLocation } from "react-router-dom";
 import {
   FiGrid,
   FiHeart,
-  FiUserCheck,
   FiList,
-  FiCalendar,
-  FiBarChart2,
-  FiSettings,
+  FiInbox,
+  FiShoppingBag,
+  FiXCircle,
+  FiTrendingUp,
+  FiShield,
   FiChevronDown,
   FiChevronRight,
   FiLogOut,
@@ -15,7 +16,6 @@ import {
 import { useAuth } from "../../../common/auth/useAuth";
 import { routes } from "../../../routes";
 import logo from "../../../common/assets/logo.svg";
-import { serviceCategories } from "./shared/serviceCategories";
 
 interface NavChild {
   label: string;
@@ -47,45 +47,39 @@ export default function ServiceNavbar() {
       type: "link",
     },
     {
-      label: "Service Partners",
-      Icon: FiHeart,
-      type: "dropdown",
-      children: [
-        { label: "All Partners", to: routes.service.servicePartners.list },
-        ...serviceCategories.map((c) => ({
-          label: c.name,
-          to: `${routes.service.servicePartners.list}?category=${encodeURIComponent(c.name)}`,
-        })),
-      ],
-    },
-    {
-      label: "Partner Managers",
-      to: routes.service.partnerManagers.list,
-      Icon: FiUserCheck,
-      type: "link",
-    },
-    {
-      label: "Service Listings",
-      to: routes.service.serviceListings,
+      label: "Services & Variants",
+      to: routes.service.catalog,
       Icon: FiList,
       type: "link",
     },
     {
-      label: "Bookings",
-      to: routes.service.bookings,
-      Icon: FiCalendar,
+      label: "Mutual Funds",
+      to: routes.service.finance.replace(":section?", "mutual-funds"),
+      Icon: FiTrendingUp,
       type: "link",
     },
     {
-      label: "Reports",
-      to: routes.service.reports,
-      Icon: FiBarChart2,
+      label: "Insurance",
+      to: routes.service.finance.replace(":section?", "insurance"),
+      Icon: FiShield,
       type: "link",
     },
     {
-      label: "Settings",
-      to: routes.service.settings,
-      Icon: FiSettings,
+      label: "Service Enquiries",
+      to: routes.service.enquiries,
+      Icon: FiInbox,
+      type: "link",
+    },
+    {
+      label: "Service Orders",
+      to: routes.service.orders,
+      Icon: FiShoppingBag,
+      type: "link",
+    },
+    {
+      label: "Order Cancellations",
+      to: routes.service.cancellations,
+      Icon: FiXCircle,
       type: "link",
     },
   ];
