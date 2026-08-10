@@ -81,7 +81,9 @@ class ManagerController {
           co.created_at,
           co.updated_at,
           COUNT(DISTINCT cu.id) AS total_employee_count,
-          COUNT(DISTINCT CASE WHEN c.status = 1 THEN c.user_id END) AS active_employee_count
+          COUNT(DISTINCT CASE WHEN c.status = 1 THEN c.user_id END) AS active_employee_count,
+          COUNT(DISTINCT CASE WHEN c.status = 1 AND c.device_platform = 'android' THEN c.user_id END) AS android_user_count,
+          COUNT(DISTINCT CASE WHEN c.status = 1 AND c.device_platform = 'ios' THEN c.user_id END) AS ios_user_count
         FROM companies co
         LEFT JOIN company_users cu ON cu.company_id = co.company_id
         LEFT JOIN customer c ON c.company_id = co.company_id
@@ -99,6 +101,8 @@ class ManagerController {
           ...company,
           total_employee_count: Number(company.total_employee_count || 0),
           active_employee_count: Number(company.active_employee_count || 0),
+          android_user_count: Number(company.android_user_count || 0),
+          ios_user_count: Number(company.ios_user_count || 0),
           company_logo: company.company_logo
             ? company.company_logo.startsWith("http")
               ? company.company_logo
@@ -125,6 +129,7 @@ class ManagerController {
           c.status,
           c.is_verified,
           c.last_login_at,
+          c.device_platform,
           co.company_name,
           cu.department,
           cu.role AS company_role
@@ -177,7 +182,8 @@ class ManagerController {
            c.user_id AS customer_id,
            c.status AS customer_status,
            c.is_verified AS customer_is_verified,
-           c.last_login_at
+           c.last_login_at,
+           c.device_platform
          FROM company_users cu
          LEFT JOIN customer c ON c.company_user_id = cu.id
          WHERE cu.company_id = ?
