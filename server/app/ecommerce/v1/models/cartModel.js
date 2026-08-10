@@ -52,6 +52,7 @@ class cartModel {
     LEFT JOIN product_images pi ON p.product_id = pi.product_id
 
     WHERE ci.user_id = ?
+      AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
     GROUP BY ci.cart_item_id
     ORDER BY ci.created_at DESC
   `;
@@ -119,6 +120,7 @@ class cartModel {
       JOIN eproducts p ON p.product_id = ci.product_id
 
       WHERE ci.user_id = ?
+        AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
     `,
       [user_id],
     );
@@ -234,8 +236,14 @@ class cartModel {
       await conn.beginTransaction();
 
       const [[variant]] = await conn.execute(
-        `SELECT stock FROM product_variants WHERE variant_id = ? FOR UPDATE`,
-        [variantId],
+        `SELECT pv.stock
+         FROM product_variants pv
+         JOIN eproducts p ON p.product_id = pv.product_id
+         WHERE pv.variant_id = ?
+           AND pv.product_id = ?
+           AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
+         FOR UPDATE`,
+        [variantId, productId],
       );
 
       if (!variant) throw new Error("INVALID_VARIANT");
