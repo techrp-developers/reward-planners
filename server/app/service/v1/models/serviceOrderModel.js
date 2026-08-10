@@ -10,6 +10,22 @@ function getPublicUrl(path) {
   return `${CDN_BASE_URL}/${path}`;
 }
 
+// A parent order may contain several service rows. Keep this aggregation in
+// one place so the manager list and detail screen always report the same state.
+function getParentServiceOrderStatus(statuses = []) {
+  const normalized = statuses.map((status) => String(status || "pending_payment").toLowerCase());
+  if (!normalized.length) return "pending_payment";
+  if (normalized.every((status) => status === "cancelled")) return "cancelled";
+  if (
+    normalized.some((status) => status === "completed") &&
+    normalized.every((status) => ["completed", "cancelled"].includes(status))
+  ) return "completed";
+  if (normalized.some((status) => status === "in_progress")) return "in_progress";
+  if (normalized.some((status) => status === "documents_uploaded")) return "documents_uploaded";
+  if (normalized.some((status) => status === "documents_pending")) return "documents_pending";
+  return "pending_payment";
+}
+
 function mapServiceCancelEvent(event) {
   const eventMap = {
     cancellation_requested: "Cancellation Requested",
@@ -1829,12 +1845,13 @@ class ServiceOrderModel {
         OR cu.name LIKE ?
         OR cu.email LIKE ?
         OR cu.phone LIKE ?
+        OR s.name LIKE ?
       )
     `;
 
       const q = `%${search}%`;
 
-      params.push(q, q, q, q, q);
+      params.push(q, q, q, q, q, q);
     }
 
     sql += ` ORDER BY so.created_at DESC`;
@@ -1878,21 +1895,7 @@ class ServiceOrderModel {
     });
 
     const orders = Object.values(grouped).map((order) => {
-      let finalStatus = "pending_payment";
-
-      if (
-        order.statuses.some(
-          (s) => s === "in_progress" || s === "documents_pending",
-        )
-      ) {
-        finalStatus = "in_progress";
-      } else if (order.statuses.every((s) => s === "completed")) {
-        finalStatus = "completed";
-      } else if (order.statuses.every((s) => s === "cancelled")) {
-        finalStatus = "cancelled";
-      } else if (order.statuses.some((s) => s === "completed")) {
-        finalStatus = "completed";
-      }
+      const finalStatus = getParentServiceOrderStatus(order.statuses);
 
       return {
         parent_order_id: order.parent_order_id,
@@ -1999,19 +2002,7 @@ class ServiceOrderModel {
 
     const statuses = rows.map((r) => r.status);
 
-    let finalStatus = "pending_payment";
-
-    if (
-      statuses.some((s) => s === "in_progress" || s === "documents_pending")
-    ) {
-      finalStatus = "in_progress";
-    } else if (statuses.every((s) => s === "completed")) {
-      finalStatus = "completed";
-    } else if (statuses.every((s) => s === "cancelled")) {
-      finalStatus = "cancelled";
-    } else if (statuses.some((s) => s === "completed")) {
-      finalStatus = "completed";
-    }
+    const finalStatus = getParentServiceOrderStatus(statuses);
 
     const response = {
       parent_order_id: parentId,

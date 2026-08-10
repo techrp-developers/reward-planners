@@ -69,6 +69,16 @@ interface ApiResponse {
   data: ServiceOrderDetails;
 }
 
+const getParentStatus = (items: ServiceItem[], bundles: Bundle[]) => {
+  const statuses = [...items, ...bundles.flatMap((bundle) => bundle.items)].map((item) => item.status);
+  if (statuses.length > 0 && statuses.every((status) => status === "cancelled")) return "cancelled";
+  if (statuses.some((status) => status === "completed") && statuses.every((status) => ["completed", "cancelled"].includes(status))) return "completed";
+  if (statuses.some((status) => status === "in_progress")) return "in_progress";
+  if (statuses.some((status) => status === "documents_uploaded")) return "documents_uploaded";
+  if (statuses.some((status) => status === "documents_pending")) return "documents_pending";
+  return "pending_payment";
+};
+
 const ServiceOrderView: React.FC = () => {
   const { parentOrderId } = useParams();
   const navigate = useNavigate();
@@ -131,6 +141,7 @@ const ServiceOrderView: React.FC = () => {
         return {
           ...prev,
           items: updatedItems,
+          status: getParentStatus(updatedItems, prev.bundles),
         };
       });
     } catch (err) {
@@ -165,6 +176,7 @@ const ServiceOrderView: React.FC = () => {
         return {
           ...prev,
           items: updatedItems,
+          status: getParentStatus(updatedItems, prev.bundles),
         };
       });
     } catch (err) {
