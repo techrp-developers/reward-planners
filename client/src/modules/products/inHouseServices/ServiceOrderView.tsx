@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../../../common/api/api";
 import { FiCheck, FiFileText, FiX } from "react-icons/fi";
+import Swal from "sweetalert2";
 
 interface Customer {
   name: string;
@@ -96,6 +97,10 @@ const updatedTimeline = (current: ServiceItem["timeline"], status: string) => {
   ];
 };
 
+const canCancelService = (item: ServiceItem) =>
+  ["documents_pending", "documents_uploaded", "in_progress"].includes(item.status) &&
+  item.timeline?.find((step) => step.status === "Order Confirmed")?.completed === true;
+
 const getParentStatus = (items: ServiceItem[], bundles: Bundle[]) => {
   const statuses = [...items, ...bundles.flatMap((bundle) => bundle.items)].map((item) => item.status);
   if (statuses.length > 0 && statuses.every((status) => status === "cancelled")) return "cancelled";
@@ -179,17 +184,24 @@ const ServiceOrderView: React.FC = () => {
   };
 
   const cancelService = async (serviceId: number) => {
-    const confirmCancel = window.confirm(
-      "Are you sure you want to cancel this service?",
-    );
-
-    if (!confirmCancel) return;
-
     try {
-      setUpdatingStatus(true);
+      const commentResult = await Swal.fire({
+        title: "Cancel this service?",
+        text: "The refund and reward reversal workflow will start after confirmation.",
+        input: "textarea",
+        inputLabel: "Admin note",
+        inputPlaceholder: "Explain why this service is being cancelled...",
+        showCancelButton: true,
+        confirmButtonText: "Cancel service",
+        confirmButtonColor: "#dc2626",
+        icon: "warning",
+        inputValidator: (value) => String(value || "").trim() ? undefined : "Please enter an admin note",
+      });
+      if (!commentResult.isConfirmed) return;
 
-      await api.put(`/v1/service-orders/status/${serviceId}`, {
-        status: "cancelled",
+      setUpdatingStatus(true);
+      await api.post(`/order/cancel-service/${serviceId}`, {
+        comment: String(commentResult.value || "").trim(),
       });
 
       setData((prev) => {
@@ -205,9 +217,10 @@ const ServiceOrderView: React.FC = () => {
           status: getParentStatus(updatedItems, prev.bundles),
         };
       });
+      await Swal.fire({ icon: "success", title: "Service cancelled", text: "The cancellation was recorded and the refund workflow has started.", confirmButtonColor: "#852BAF" });
     } catch (err) {
       console.error(err);
-      alert("Failed to cancel service");
+      await Swal.fire({ icon: "error", title: "Cancellation failed", text: "The service could not be cancelled. It may not be eligible at this stage.", confirmButtonColor: "#852BAF" });
     } finally {
       setUpdatingStatus(false);
     }
@@ -554,11 +567,11 @@ const ServiceOrderView: React.FC = () => {
                       {item.status !== "cancelled" && (
                           <button
                             onClick={() => cancelService(item.id)}
-                            disabled={item.status === "completed" || updatingStatus}
-                            title={item.status === "completed" ? "Completed services cannot be cancelled" : "Cancel this service"}
+                            disabled={!canCancelService(item) || updatingStatus}
+                            title={!canCancelService(item) ? "Cancellation is unavailable at this stage" : "Cancel this service"}
                             className="px-3 py-1 text-xs font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 cursor-pointer disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400"
                           >
-                            {item.status === "completed" ? "Cancellation unavailable" : "Cancel Service"}
+                            {canCancelService(item) ? "Cancel Service" : "Cancellation unavailable"}
                           </button>
                         )}
                     </div>

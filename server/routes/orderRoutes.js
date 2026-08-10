@@ -132,6 +132,13 @@ router.post(
   orderController.approveServiceCancellation,
 );
 
+router.post(
+  "/cancel-service/:serviceOrderId",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  orderController.cancelServiceAsManager,
+);
+
 // reject service cancellation
 router.post(
   "/reject-service-cancellation/:serviceOrderId",
