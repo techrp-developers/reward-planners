@@ -993,10 +993,17 @@ class ProductModel {
     role,
     vendorId,
     brand,
+    productType,
   }) {
     try {
       const conditions = ["p.is_deleted = 0"];
       const params = [];
+
+      if (productType === "flea_market") {
+        conditions.push("p.created_via = 'flea_market_quick_create'");
+      } else {
+        conditions.push("COALESCE(p.created_via, '') != 'flea_market_quick_create'");
+      }
 
       if (status) {
         conditions.push("p.status = ?");

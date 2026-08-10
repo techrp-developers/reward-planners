@@ -188,6 +188,7 @@ const SORT_FIELD_MAP: Record<SortColumn, string> = {
        MAIN COMPONENT
 ================================ */
 export default function ProductManagerList() {
+  const [productTab, setProductTab] = useState<"catalog" | "flea_market">("catalog");
   const [products, setProducts] = useState<
     (Omit<ProductItem, "status"> & { status: ProductStatus })[]
   >([]);
@@ -278,6 +279,7 @@ export default function ProductManagerList() {
         search: searchQuery,
         brand: brandSearch,
         vendorId: vendorSearch,
+        productType: productTab,
 
         sortBy: SORT_FIELD_MAP[sortBy],
         sortOrder,
@@ -313,6 +315,7 @@ export default function ProductManagerList() {
     searchQuery,
     brandSearch,
     vendorSearch,
+    productTab,
     sortBy,
     sortOrder,
   ]);
@@ -651,6 +654,29 @@ export default function ProductManagerList() {
           <button type="button" onClick={() => { setVendorFilter(vendorSearch); setReportBrand(brandSearch); setReportStatus(statusFilter === "all" ? "" : statusFilter); setReportModalOpen(true); }} className="inline-flex items-center justify-center gap-2 rounded-xl border border-purple-200 bg-white px-4 py-2.5 text-sm font-bold text-[#852BAF] shadow-sm transition hover:-translate-y-0.5 hover:border-[#852BAF] hover:bg-purple-50 hover:shadow-md"><FiDownload /> Product report</button>
         </div>
         {/* STATS CARDS */}
+        <div className="mb-6 inline-flex w-full rounded-2xl border border-purple-100 bg-purple-50/60 p-1.5 sm:w-auto">
+          <button
+            type="button"
+            onClick={() => {
+              setProductTab("catalog");
+              setPagination((prev) => ({ ...prev, currentPage: 1 }));
+            }}
+            className={`flex-1 rounded-xl px-5 py-2.5 text-sm font-bold transition sm:flex-none ${productTab === "catalog" ? "bg-white text-[#852BAF] shadow-sm ring-1 ring-purple-100" : "text-slate-500 hover:text-[#852BAF]"}`}
+          >
+            Ecommerce Products
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setProductTab("flea_market");
+              setPagination((prev) => ({ ...prev, currentPage: 1 }));
+            }}
+            className={`flex-1 rounded-xl px-5 py-2.5 text-sm font-bold transition sm:flex-none ${productTab === "flea_market" ? "bg-white text-[#FC3F78] shadow-sm ring-1 ring-pink-100" : "text-slate-500 hover:text-[#FC3F78]"}`}
+          >
+            Flea Market Products
+          </button>
+        </div>
+
         <div className="grid grid-cols-1 gap-4 mb-8 sm:grid-cols-2 lg:grid-cols-5">
           <StatCard
             title="Total Products"

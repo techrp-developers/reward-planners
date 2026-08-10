@@ -890,6 +890,7 @@ class ProductController {
         req.query.sortOrder?.toUpperCase() === "ASC" ? "ASC" : "DESC";
       const vendorId = req.query.vendorId || "";
       const brand = req.query.brand || "";
+      const productType = req.query.productType === "flea_market" ? "flea_market" : "catalog";
 
       const { products, totalItems, stats } =
         await ProductModel.getAllProductDetails({
@@ -902,6 +903,7 @@ class ProductController {
           role,
           vendorId,
           brand,
+          productType,
         });
 
       const normalizedProducts = products.map((p) => ({
