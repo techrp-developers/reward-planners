@@ -627,7 +627,11 @@ export default function Onboarding() {
           setRejectionReason(statusRes.data.vendor.rejection_reason || "");
 
           //  THIS IS THE IMPORTANT PART
-          if (status === "rejected" || status === "sent_for_approval") {
+          if (
+            status === "rejected" ||
+            status === "sent_for_approval" ||
+            status === "approved"
+          ) {
             const detailRes = await api.get("/vendor/onboarding-data");
 
             if (detailRes.data?.success) {
@@ -930,7 +934,8 @@ export default function Onboarding() {
     }
   };
 
-  const isReadOnly = vendorStatus === "sent_for_approval";
+  const isReadOnly =
+    vendorStatus === "sent_for_approval" || vendorStatus === "approved";
 
   /* ================= UI ================= */
   return (
@@ -938,11 +943,15 @@ export default function Onboarding() {
       {/* Header Section */}
       <div className="mb-8 text-left">
         <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
-          Complete Your{" "}
-          <span className="gradient-text-brand">Onboarding</span>
+          {vendorStatus === "approved" ? "Your " : "Complete Your "}
+          <span className="gradient-text-brand">
+            {vendorStatus === "approved" ? "Onboarding Details" : "Onboarding"}
+          </span>
         </h1>
         <p className="text-gray-500 mt-2 font-medium">
-          Verify your business details to start selling.
+          {vendorStatus === "approved"
+            ? "Review the verified business information submitted for your vendor account."
+            : "Verify your business details to start selling."}
         </p>
       </div>
 
@@ -994,12 +1003,12 @@ export default function Onboarding() {
         </div>
       )}
 
-      {!loadingStatus && vendorStatus !== "approved" && (
+      {!loadingStatus && vendorStatus !== null && (
         <form
           onSubmit={handleSubmit}
           className="space-y-8"
-          style={isReadOnly ? { pointerEvents: "none", opacity: 0.8 } : {}}
         >
+          <fieldset disabled={isReadOnly} className="contents">
           {/* A. Business Information */}
           <section className="space-y-4 bg-white/95 backdrop-blur-xl rounded-2xl p-6 sm:p-8 shadow-lg hover:shadow-2xl transition-shadow duration-300">
             <SectionHeader
@@ -1587,6 +1596,7 @@ export default function Onboarding() {
               </button>
             </div>
           )}
+          </fieldset>
         </form>
       )}
     </div>

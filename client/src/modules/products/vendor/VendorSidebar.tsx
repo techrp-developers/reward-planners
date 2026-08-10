@@ -71,7 +71,11 @@ export default function VendorNavbar({ isOpen = false, onClose }: VendorNavbarPr
 
   const navItems: NavItem[] = [
     { label: "Dashboard", to: "/vendor/dashboard", Icon: FiLayout },
-    !isApproved && { label: "Onboarding", to: "/vendor/onboarding", Icon: FiBriefcase },
+    {
+      label: isApproved ? "Onboarding Details" : "Onboarding",
+      to: "/vendor/onboarding",
+      Icon: FiBriefcase,
+    },
     isApproved && {
       label: "Products",
       Icon: FiTag,
