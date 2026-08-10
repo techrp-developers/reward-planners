@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../../common/api/api";
-import { ArrowLeft, ArrowRight, CheckCircle2, Loader2, ShieldCheck } from "lucide-react";
-import { MdAdminPanelSettings, MdAnalytics, MdArrowForward, MdBusiness, MdCheck as Check, MdCheckCircle, MdDarkMode, MdFactCheck, MdGroups, MdLightMode, MdLocationOn, MdOutlineVerifiedUser, MdPerson, MdRedeem, MdSecurity } from "react-icons/md";
+import { MdAdminPanelSettings, MdAnalytics, MdArrowBack, MdArrowForward, MdAutorenew, MdBusiness, MdCheck as Check, MdCheckCircle, MdClose, MdDarkMode, MdFactCheck, MdGroups, MdLightMode, MdLocationOn, MdOutlineVerifiedUser, MdPerson, MdRedeem, MdSecurity, MdVerifiedUser, MdVisibility, MdVisibilityOff } from "react-icons/md";
 
 type FormData = Record<string, string | boolean>;
 type StateOption = { state_id: number; state_name: string };
@@ -62,6 +61,7 @@ export default function ClientOnboarding() {
   const [data, setData] = useState<FormData>({ ...initialData, ...(saved?.data ?? {}) });
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
   const [verifying, setVerifying] = useState(false);
   const [states, setStates] = useState<StateOption[]>([]);
   const [statesLoading, setStatesLoading] = useState(true);
@@ -198,13 +198,16 @@ export default function ClientOnboarding() {
               {fieldErrors.state && <span className="mt-1.5 block text-xs font-semibold text-red-600">{fieldErrors.state}</span>}
             </>
           ) : (
+            <div className="relative">
             <input
-              type={field.type || "text"} value={String(data[field.name] ?? "")}
+              type={field.type === "password" && visiblePasswords[field.name] ? "text" : field.type || "text"} value={String(data[field.name] ?? "")}
               onChange={(event) => update(field.name, event.target.value)} placeholder={field.placeholder}
               onBlur={() => setFieldErrors((current) => ({ ...current, [field.name]: validateField(field.name, data[field.name] ?? "") }))}
               aria-invalid={Boolean(fieldErrors[field.name])}
-              className={`mt-3 w-full rounded-lg border px-4 py-4 text-base font-medium outline-none transition placeholder:font-normal focus:ring-4 ${darkMode ? "border-[#4c4852] bg-[#242328] text-white placeholder:text-[#8c8992] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus:border-fuchsia-500 focus:ring-fuchsia-500/10" : "border-transparent bg-[#f4f1f6] text-slate-800 placeholder:text-slate-400 focus:border-purple-300 focus:bg-white focus:ring-purple-100"} ${fieldErrors[field.name] ? "border-red-400 focus:border-red-400 focus:ring-red-500/10" : ""}`}
+              className={`mt-3 w-full rounded-lg border px-4 py-4 text-base font-medium outline-none transition placeholder:font-normal focus:ring-4 ${field.type === "password" ? "pr-12" : ""} ${darkMode ? "border-[#4c4852] bg-[#242328] text-white placeholder:text-[#8c8992] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus:border-fuchsia-500 focus:ring-fuchsia-500/10" : "border-transparent bg-[#f4f1f6] text-slate-800 placeholder:text-slate-400 focus:border-purple-300 focus:bg-white focus:ring-purple-100"} ${fieldErrors[field.name] ? "border-red-400 focus:border-red-400 focus:ring-red-500/10" : ""}`}
             />
+            {field.type === "password" && <button type="button" onClick={() => setVisiblePasswords((current) => ({ ...current, [field.name]: !current[field.name] }))} className={`absolute right-3 top-[27px] grid h-9 w-9 place-items-center rounded-md text-xl transition ${darkMode ? "text-slate-400 hover:bg-slate-700 hover:text-white" : "text-slate-500 hover:bg-white hover:text-purple-700"}`} aria-label={visiblePasswords[field.name] ? `Hide ${field.label}` : `Show ${field.label}`} title={visiblePasswords[field.name] ? "Hide password" : "Show password"}>{visiblePasswords[field.name] ? <MdVisibilityOff /> : <MdVisibility />}</button>}
+            </div>
           )}
           {field.name !== "state" && fieldErrors[field.name] && <span className="mt-1.5 block text-xs font-semibold text-red-600">{fieldErrors[field.name]}</span>}
         </label>
@@ -230,7 +233,7 @@ export default function ClientOnboarding() {
         </label>
         <label className="flex items-start gap-3 text-sm text-slate-600"><input type="checkbox" checked={Boolean(data.identityConsent)} onChange={(e) => update("identityConsent", e.target.checked)} className="mt-1 h-4 w-4 accent-purple-600" />I authorize Reward Planner to verify my identity through an approved provider.</label>
         <button type="button" onClick={verifyIdentity} disabled={verifying || Boolean(data.aadhaarVerified)} className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 font-bold text-white disabled:bg-emerald-600">
-          {verifying ? <><Loader2 className="h-5 w-5 animate-spin" /> Verifying…</> : data.aadhaarVerified ? <><MdCheckCircle className="h-5 w-5" /> Verification complete</> : <><ShieldCheck className="h-5 w-5" /> Verify Aadhaar</>}
+          {verifying ? <><MdAutorenew className="h-5 w-5 animate-spin" /> Verifying…</> : data.aadhaarVerified ? <><MdCheckCircle className="h-5 w-5" /> Verification complete</> : <><MdVerifiedUser className="h-5 w-5" /> Verify Aadhaar</>}
         </button>
       </div>
     );
@@ -245,7 +248,7 @@ export default function ClientOnboarding() {
     );
     return (
       <div className="py-5 text-center">
-        <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-emerald-100 text-emerald-600"><CheckCircle2 className="h-11 w-11" /></div>
+        <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-emerald-100 text-emerald-600"><MdCheckCircle className="h-11 w-11" /></div>
         <h2 className="mt-6 text-3xl font-extrabold text-slate-900">Welcome to Reward Planner!</h2>
         <p className="mt-2 text-slate-500">Your onboarding information is ready to create the organization.</p>
         <div className="mx-auto mt-7 grid max-w-lg gap-3 rounded-2xl bg-slate-50 p-5 text-left text-sm sm:grid-cols-2">
@@ -272,7 +275,7 @@ export default function ClientOnboarding() {
     ];
     return <div className={`min-h-screen px-5 py-6 sm:px-8 lg:px-12 ${darkMode ? "bg-[#090d18] text-white" : "bg-[#f7f5f8] text-slate-900"}`} style={{ fontFamily: '"Segoe UI Variable", "Avenir Next", Inter, ui-sans-serif, system-ui, sans-serif' }}>
       <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-7xl flex-col">
-        <header className="flex items-center justify-between"><Link to="/login" className={`inline-flex items-center gap-2 text-sm font-medium ${darkMode ? "text-slate-400 hover:text-white" : "text-slate-500 hover:text-purple-700"}`}><ArrowLeft className="h-4 w-4" /> Back to login</Link><button type="button" onClick={() => setDarkMode((value) => !value)} className={`grid h-10 w-10 place-items-center rounded-full text-lg ${darkMode ? "bg-slate-800 text-amber-300" : "bg-white text-purple-700 shadow-sm"}`} aria-label={darkMode ? "Use light mode" : "Use dark mode"}>{darkMode ? <MdLightMode /> : <MdDarkMode />}</button></header>
+        <header className="flex items-center justify-between"><Link to="/login" className={`inline-flex items-center gap-2 text-sm font-medium ${darkMode ? "text-slate-400 hover:text-white" : "text-slate-500 hover:text-purple-700"}`}><MdArrowBack className="h-5 w-5" /> Back to login</Link><button type="button" onClick={() => setDarkMode((value) => !value)} className={`grid h-10 w-10 place-items-center rounded-full text-lg ${darkMode ? "bg-slate-800 text-amber-300" : "bg-white text-purple-700 shadow-sm"}`} aria-label={darkMode ? "Use light mode" : "Use dark mode"}>{darkMode ? <MdLightMode /> : <MdDarkMode />}</button></header>
         <main className="grid flex-1 items-center gap-12 py-12 lg:grid-cols-[1.08fr_.92fr] lg:py-16">
           <section><span className={`inline-flex rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] ${darkMode ? "bg-purple-500/10 text-purple-300" : "bg-purple-100 text-purple-700"}`}>Welcome to Reward Planners</span><h1 className="mt-7 max-w-3xl text-4xl font-semibold leading-[1.1] tracking-tight sm:text-5xl lg:text-6xl">Recognition that feels <span className="bg-gradient-to-r from-[#8b5cf6] to-[#ec4899] bg-clip-text text-transparent">personal.</span><br />Rewards that create impact.</h1><p className={`mt-7 max-w-2xl text-lg leading-8 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>Reward Planners is a unified employee engagement and rewards platform that helps organizations recognize people, manage benefits and build a stronger workplace culture.</p><div className="mt-9 flex flex-wrap items-center gap-4"><button type="button" onClick={() => { setShowIntroduction(false); window.scrollTo({ top: 0 }); }} className="inline-flex items-center gap-3 rounded-lg bg-gradient-to-r from-[#7457d7] to-[#a855d5] px-7 py-3.5 text-base font-semibold text-white shadow-lg shadow-purple-900/20 transition hover:-translate-y-0.5">Get Onboarded <MdArrowForward className="text-xl" /></button><span className={`text-sm ${darkMode ? "text-slate-500" : "text-slate-500"}`}>Takes approximately 5–8 minutes</span></div></section>
           <section className={`border px-6 py-7 sm:px-8 sm:py-9 ${darkMode ? "border-slate-700 bg-[#0e1422]" : "border-slate-200 bg-white shadow-xl shadow-slate-200/60"}`}><div className="mb-7"><p className={`text-sm font-medium ${darkMode ? "text-purple-300" : "text-purple-700"}`}>One platform. Shared purpose.</p><h2 className="mt-2 text-2xl font-semibold">What your organization gains</h2></div><div className="divide-y divide-slate-700/30">{benefits.map(({ Icon, title, text }) => <article key={title} className="flex gap-4 py-5 first:pt-0 last:pb-0"><span className={`grid h-11 w-11 shrink-0 place-items-center rounded-full text-xl ${darkMode ? "bg-purple-500/10 text-purple-300" : "bg-purple-50 text-purple-700"}`}><Icon /></span><div><h3 className="text-base font-semibold">{title}</h3><p className={`mt-1 text-sm leading-6 ${darkMode ? "text-slate-400" : "text-slate-500"}`}>{text}</p></div></article>)}</div></section>
@@ -283,21 +286,21 @@ export default function ClientOnboarding() {
   }
   return (
     <div className={`min-h-screen px-4 py-8 sm:py-12 ${darkMode ? "bg-[#090d18] text-white" : "bg-[#f5f5f7] text-slate-900"}`} style={{ fontFamily: '"Segoe UI Variable", "Avenir Next", Inter, ui-sans-serif, system-ui, sans-serif' }}>
-      <div className={`mx-auto max-w-5xl overflow-hidden border shadow-2xl ${darkMode ? "border-slate-700 bg-[#0e1422] shadow-black/40" : "border-slate-200 bg-white shadow-slate-300/50"}`}>
+      <div className={`mx-auto w-full max-w-7xl overflow-hidden border shadow-2xl ${darkMode ? "border-slate-700 bg-[#0e1422] shadow-black/40" : "border-slate-200 bg-white shadow-slate-300/50"}`}>
         <header className={`flex items-center justify-between border-b px-6 py-4 ${darkMode ? "border-slate-700" : "border-slate-200"}`}>
           <div><h1 className="text-lg font-semibold">Client Onboarding</h1><p className={`mt-0.5 text-sm ${darkMode ? "text-slate-400" : "text-slate-500"}`}>Set up your organization account</p></div>
-          <div className="flex items-center gap-2"><button type="button" onClick={() => setDarkMode((value) => !value)} className={`grid h-9 w-9 place-items-center rounded-full text-lg ${darkMode ? "bg-slate-800 text-amber-300" : "bg-slate-100 text-purple-700"}`} aria-label={darkMode ? "Use light mode" : "Use dark mode"}>{darkMode ? <MdLightMode /> : <MdDarkMode />}</button><Link to="/login" className={`grid h-9 w-9 place-items-center rounded-full text-xl ${darkMode ? "text-slate-400 hover:bg-slate-800" : "text-slate-500 hover:bg-slate-100"}`} aria-label="Close onboarding">×</Link></div>
+          <div className="flex items-center gap-2"><button type="button" onClick={() => setDarkMode((value) => !value)} className={`grid h-9 w-9 place-items-center rounded-full text-lg ${darkMode ? "bg-slate-800 text-amber-300" : "bg-slate-100 text-purple-700"}`} aria-label={darkMode ? "Use light mode" : "Use dark mode"}>{darkMode ? <MdLightMode /> : <MdDarkMode />}</button><Link to="/login" className={`grid h-9 w-9 place-items-center rounded-full text-xl ${darkMode ? "text-slate-400 hover:bg-slate-800" : "text-slate-500 hover:bg-slate-100"}`} aria-label="Close onboarding"><MdClose /></Link></div>
         </header>
 
         <nav className={`overflow-x-auto border-b px-6 py-6 ${darkMode ? "border-slate-700" : "border-slate-200"}`}>
-          <div className="flex min-w-[760px]">{steps.map((item, index) => { const available = index <= highestStep; const completed = index < highestStep; const current = index === step; return <div key={item.title} className="relative flex flex-1 justify-center">{index < steps.length - 1 && <span className={`absolute left-[58%] top-5 w-[84%] border-t border-dashed ${completed ? "border-purple-500" : darkMode ? "border-slate-600" : "border-slate-300"}`} />}<button type="button" disabled={!available} onClick={() => { setStep(index); setError(""); }} className="relative z-10 flex w-24 flex-col items-center disabled:cursor-not-allowed"><span className={`grid h-10 w-10 place-items-center rounded-full text-sm font-semibold ${current ? "bg-gradient-to-br from-[#7457d7] to-[#9a63df] text-white" : completed ? "bg-emerald-500 text-white" : darkMode ? "bg-slate-700 text-slate-300" : "bg-slate-200 text-slate-600"}`}>{completed ? <Check className="text-xl" /> : index + 1}</span><span className={`mt-2 text-center text-xs leading-4 ${current ? darkMode ? "text-white" : "text-slate-900" : darkMode ? "text-slate-400" : "text-slate-500"}`}>{item.title}</span></button></div>; })}</div>
+          <div className="flex min-w-[900px]">{steps.map((item, index) => { const available = index <= highestStep; const completed = index < highestStep; const current = index === step; return <div key={item.title} className="relative flex flex-1 justify-center">{index < steps.length - 1 && <span className={`absolute left-[58%] top-5 w-[84%] border-t border-dashed ${completed ? "border-purple-500" : darkMode ? "border-slate-600" : "border-slate-300"}`} />}<button type="button" disabled={!available} onClick={() => { setStep(index); setError(""); }} className="relative z-10 flex w-28 flex-col items-center disabled:cursor-not-allowed"><span className={`grid h-11 w-11 place-items-center rounded-full text-sm font-semibold ${current ? "bg-gradient-to-br from-[#7457d7] to-[#9a63df] text-white" : completed ? "bg-[#6f4dcc] text-white" : darkMode ? "bg-slate-700 text-slate-300" : "bg-slate-200 text-slate-600"}`}>{completed ? <Check className="text-xl" /> : index + 1}</span><span className={`mt-2 text-center text-sm leading-4 ${current ? darkMode ? "text-white" : "text-slate-900" : darkMode ? "text-slate-400" : "text-slate-500"}`}>{item.title}</span></button></div>; })}</div>
         </nav>
 
-        <main className="px-6 py-8 sm:px-10 sm:py-10">
+        <main className="px-6 py-9 sm:px-12 sm:py-11 lg:px-16 lg:py-12">
           <div className="mb-7"><p className={`text-sm font-medium ${darkMode ? "text-slate-400" : "text-slate-500"}`}>Step {step + 1} of {steps.length}</p><h2 className="mt-1 text-2xl font-semibold">{steps[step].title}</h2><p className={`mt-2 text-base ${darkMode ? "text-slate-400" : "text-slate-500"}`}>{descriptions[step]}</p></div>
           {content()}
           {error && <div className={`mt-5 border px-4 py-3 text-sm ${darkMode ? "border-red-500/40 bg-red-950/30 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>{error}</div>}
-          {step < 6 && <footer className={`mt-9 flex items-center justify-between border-t pt-6 ${darkMode ? "border-slate-700" : "border-slate-200"}`}><button type="button" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0} className={`px-5 py-2.5 text-sm font-medium disabled:invisible ${darkMode ? "text-slate-300" : "text-slate-600"}`}><ArrowLeft className="mr-2 inline h-4 w-4" />Previous</button><button type="button" onClick={next} className="rounded-md bg-gradient-to-r from-[#7457d7] to-[#9a63df] px-7 py-2.5 text-sm font-semibold text-white">Continue<ArrowRight className="ml-2 inline h-4 w-4" /></button></footer>}
+          {step < 6 && <footer className={`mt-9 flex items-center justify-between border-t pt-6 ${darkMode ? "border-slate-700" : "border-slate-200"}`}><button type="button" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0} className={`inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium disabled:invisible ${darkMode ? "text-slate-300" : "text-slate-600"}`}><MdArrowBack className="text-lg" />Previous</button><button type="button" onClick={next} className="inline-flex items-center gap-2 rounded-md bg-gradient-to-r from-[#7457d7] to-[#9a63df] px-7 py-2.5 text-sm font-semibold text-white">Continue<MdArrowForward className="text-lg" /></button></footer>}
         </main>
       </div>
     </div>
