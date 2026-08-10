@@ -79,6 +79,7 @@ const OrderView: React.FC = () => {
   const [data, setData] = useState<OrderDetailsResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [downloadingInvoice, setDownloadingInvoice] = useState(false);
 
   const fetchOrderDetails = useCallback(async () => {
     try {
@@ -114,6 +115,33 @@ const OrderView: React.FC = () => {
       currency: "INR",
     }).format(amount);
 
+  const downloadInvoice = async () => {
+    if (!orderId || downloadingInvoice) return;
+
+    try {
+      setDownloadingInvoice(true);
+      const response = await api.get(`/order/invoice/${orderId}`, {
+        responseType: "blob",
+      });
+      const disposition = response.headers["content-disposition"] as string | undefined;
+      const fileName = disposition?.match(/filename="?([^";]+)"?/i)?.[1]
+        ?? `invoice-${data?.order.order_ref || orderId}.pdf`;
+      const url = window.URL.createObjectURL(response.data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Failed to download invoice", err);
+      window.alert("Invoice is not available for this order yet.");
+    } finally {
+      setDownloadingInvoice(false);
+    }
+  };
+
   if (loading) return <div style={{ padding: 20 }}>Loading order...</div>;
   if (error) return <div style={{ padding: 20, color: "red" }}>{error}</div>;
   if (!data) return null;
@@ -135,7 +163,7 @@ const OrderView: React.FC = () => {
   <div className="min-h-screen p-6 md:p-10" style={{ background: "linear-gradient(160deg, #fdf8ff 0%, #fff5f8 50%, #f8f9ff 100%)" }}>
 
     {/* HEADER */}
-    <div className="flex items-center justify-between mb-8">
+    <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
       <button
         className="inline-flex items-center gap-2 text-sm font-semibold
         bg-gradient-to-r from-[#852BAF] to-[#FC3F78] text-white
@@ -148,6 +176,18 @@ const OrderView: React.FC = () => {
       <h2 className="text-2xl md:text-3xl font-bold text-gray-900">
         Order #{data.order.order_ref}
       </h2>
+
+      <button
+        type="button"
+        onClick={downloadInvoice}
+        disabled={downloadingInvoice}
+        className="inline-flex items-center gap-2 rounded-xl border border-purple-200 bg-white px-5 py-2.5 text-sm font-bold text-[#852BAF] shadow-sm transition hover:-translate-y-0.5 hover:border-[#852BAF] hover:shadow-md disabled:cursor-wait disabled:opacity-60"
+      >
+        <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" />
+        </svg>
+        {downloadingInvoice ? "Preparing invoice..." : "Download Invoice"}
+      </button>
     </div>
 
     {/* ORDER INFO */}

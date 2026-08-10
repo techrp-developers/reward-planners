@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 const orderController = require("../controllers/orderController");
+const ecommerceOrderController = require("../app/ecommerce/v1/controllers/orderController");
 
 // Get all orders
 router.get(
@@ -130,6 +131,13 @@ router.post(
   authenticateToken,
   authorizeRoles("vendor_manager", "admin"),
   orderController.approveServiceCancellation,
+);
+
+router.get(
+  "/invoice/:orderId",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  ecommerceOrderController.getInvoiceForManager,
 );
 
 router.post(
