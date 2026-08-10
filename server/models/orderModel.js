@@ -198,6 +198,11 @@ class OrderModel {
       o.order_id,
       o.order_ref,
       o.total_amount,
+      (
+        SELECT COALESCE(SUM(vo.vendor_total), 0)
+        FROM vendor_orders vo
+        WHERE vo.order_id = o.order_id
+      ) AS vendor_total,
       o.status,
       o.cancellation_status,
       (
@@ -332,6 +337,7 @@ class OrderModel {
         order_ref: order.order_ref,
         status: order.status,
         total_amount: order.total_amount,
+        vendor_total: Number(order.vendor_total || 0),
         created_at: order.created_at,
       },
 

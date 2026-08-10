@@ -8,6 +8,7 @@ interface Order {
   order_ref: string;
   status: string;
   total_amount: number;
+  vendor_total: number;
   created_at: string;
 }
 
@@ -146,7 +147,7 @@ const OrderView: React.FC = () => {
     {/* ORDER INFO */}
     <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm mb-5">
       <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">Order Summary</h3>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
         <div>
           <span className="text-xs text-gray-400 font-medium uppercase tracking-wide">Status</span>
           <div className="mt-2">
@@ -163,6 +164,12 @@ const OrderView: React.FC = () => {
           <span className="text-xs text-gray-400 font-medium uppercase tracking-wide">Total</span>
           <p className="mt-2 text-xl font-bold text-[#852BAF]">
             {formatCurrency(data.order.total_amount)}
+          </p>
+        </div>
+        <div>
+          <span className="text-xs text-gray-400 font-medium uppercase tracking-wide">Vendor Total</span>
+          <p className="mt-2 text-xl font-bold text-[#FC3F78]">
+            {formatCurrency(data.order.vendor_total)}
           </p>
         </div>
       </div>
