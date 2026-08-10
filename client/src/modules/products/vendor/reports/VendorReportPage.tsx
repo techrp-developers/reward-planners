@@ -58,7 +58,18 @@ export default function VendorReportPage({ type }: { type: VendorReportType }) {
     finally { setLoading(false); }
   }, [fromDate, search, status, toDate, type]);
 
-  useEffect(() => { void fetchReport(); }, [type]);
+  useEffect(() => {
+    let active = true;
+    setLoading(true); setError("");
+    api.get<ReportResponse>(`/vendor-reports/${type}`).then((response) => {
+      if (!active) return;
+      setRows(response.data.rows || []); setSummary(response.data.summary || {});
+    }).catch(() => {
+      if (!active) return;
+      setRows([]); setSummary({}); setError("We couldn't load this report. Check the filters and try again.");
+    }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [type]);
   const metricCards = useMemo(() => config.metrics.map(([key, label]) => ({ key, label, value: summary[key] || 0 })), [config.metrics, summary]);
 
   const downloadCsv = () => {

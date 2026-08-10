@@ -1173,6 +1173,19 @@ class ServiceOrderController {
       const { id } = req.params;
       const { status } = req.body;
 
+      // Vendor managers control fulfilment only. Payment and document states are
+      // system/customer-managed and must not be writable through this action.
+      const vendorManagerStatuses = ["in_progress", "completed", "cancelled"];
+      if (
+        req.user?.role === "vendor_manager" &&
+        !vendorManagerStatuses.includes(status)
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "Vendor managers can only mark a service in progress, completed, or cancelled",
+        });
+      }
+
       // validate status
       if (!ALLOWED_STATUSES.includes(status)) {
         return res.status(400).json({

@@ -79,9 +79,6 @@ const ServiceOrderView: React.FC = () => {
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
   const STATUS_OPTIONS = [
-    "pending_payment",
-    "documents_pending",
-    "documents_uploaded",
     "in_progress",
     "completed",
     "cancelled",
@@ -486,7 +483,7 @@ const ServiceOrderView: React.FC = () => {
                   <td className="px-4 py-3">
                     <div className="flex flex-col gap-2">
                       <select
-                        value={item.status}
+                        value=""
                         disabled={
                           item.status === "completed" ||
                           item.status === "cancelled" ||
@@ -497,6 +494,9 @@ const ServiceOrderView: React.FC = () => {
                         }
                         className="px-3 py-2 text-sm border border-gray-300 rounded-lg"
                       >
+                        <option value="" disabled>
+                          Choose action
+                        </option>
                         {STATUS_OPTIONS.map((status) => (
                           <option key={status} value={status}>
                             {status.replaceAll("_", " ")}
