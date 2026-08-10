@@ -2,8 +2,19 @@ const puppeteer = require("puppeteer");
 const fs = require("fs");
 const path = require("path");
 
-const logoSvg = fs.readFileSync(path.join(__dirname, "../../uploads/assets/logo2.svg"), "utf8");
-const logoDataUri = `data:image/svg+xml;base64,${Buffer.from(logoSvg).toString("base64")}`;
+const logoPath = path.join(__dirname, "../../uploads/assets/logo2.svg");
+
+function getLogoDataUri() {
+  try {
+    const logoSvg = fs.readFileSync(logoPath, "utf8");
+    return `data:image/svg+xml;base64,${Buffer.from(logoSvg).toString("base64")}`;
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      console.warn("[invoicePdfService] Unable to load logo asset:", error.message);
+    }
+    return null;
+  }
+}
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({
@@ -16,6 +27,7 @@ function money(value) {
 }
 
 async function generateInvoicePdf(invoice, items) {
+  const logoDataUri = getLogoDataUri();
   const rows = items.map((item) => `<tr><td>${escapeHtml(item.product_name)}</td><td>${escapeHtml(item.sku)}</td>
     <td class="number">${item.quantity}</td><td class="number">&#8377;${money(item.unit_price)}</td>
     <td class="number">&#8377;${money(item.line_total)}</td></tr>`).join("");
@@ -26,7 +38,7 @@ async function generateInvoicePdf(invoice, items) {
     th,td{padding:10px;border-bottom:1px solid #e5e7eb;text-align:left}th{background:#f9fafb;font-size:10px;text-transform:uppercase}
     .number{text-align:right}.totals{width:320px;margin:20px 0 0 auto}.total-row{display:flex;justify-content:space-between;padding:6px 0}
     .grand{border-top:1px solid #ddd;margin-top:5px;padding-top:10px;font-size:16px;font-weight:bold}</style></head><body>
-    <img class="brand-logo" src="${logoDataUri}" alt="Reward Planners">
+    ${logoDataUri ? `<img class="brand-logo" src="${logoDataUri}" alt="Reward Planners">` : ""}
     <div class="header"><div><h1>${escapeHtml(invoice.fm_company_name || "Flea Market")}</h1><div class="muted">Sold by ${escapeHtml(invoice.fm_vendor_name || "Reward Planners")}</div></div>
     <div><strong>Invoice ${escapeHtml(invoice.invoice_number)}</strong><br><span class="muted">${escapeHtml(invoice.invoice_date)}</span></div></div>
     <div><strong>Billed to:</strong> ${escapeHtml(invoice.customer_name || "Customer")}<br><span class="muted">${escapeHtml(invoice.customer_email || "")}</span></div>
