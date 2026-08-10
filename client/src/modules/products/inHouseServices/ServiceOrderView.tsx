@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../../../common/api/api";
+import { FiFileText } from "react-icons/fi";
 
 interface Customer {
   name: string;
@@ -84,7 +85,7 @@ const ServiceOrderView: React.FC = () => {
     "cancelled",
   ];
 
-  const fetchOrder = async () => {
+  const fetchOrder = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -104,13 +105,13 @@ const ServiceOrderView: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [parentOrderId]);
 
   useEffect(() => {
     if (parentOrderId) {
       fetchOrder();
     }
-  }, [parentOrderId]);
+  }, [fetchOrder, parentOrderId]);
 
   const updateServiceStatus = async (serviceId: number, status: string) => {
     try {
@@ -201,11 +202,11 @@ const ServiceOrderView: React.FC = () => {
   };
 
   if (loading) {
-    return <div className="p-6">Loading service order...</div>;
+    return <div className="grid min-h-[65vh] place-items-center bg-gradient-to-br from-[#fdf8ff] via-white to-[#fff5f8]"><span className="flex flex-col items-center gap-3 text-sm font-bold text-[#852BAF]"><span className="h-9 w-9 animate-spin rounded-full border-4 border-purple-100 border-t-[#852BAF]" />Loading service order...</span></div>;
   }
 
   if (error) {
-    return <div className="p-6 text-red-500">{error}</div>;
+    return <div className="grid min-h-[65vh] place-items-center bg-gradient-to-br from-[#fdf8ff] via-white to-[#fff5f8] p-6 text-center"><div><div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-red-50 text-red-500"><FiFileText size={24} /></div><h2 className="mt-4 text-xl font-extrabold text-slate-900">Order unavailable</h2><p className="mt-1 text-sm text-slate-500">{error}</p><button onClick={() => navigate(-1)} className="mt-5 rounded-xl bg-[#852BAF] px-5 py-2.5 text-sm font-bold text-white">Return to orders</button></div></div>;
   }
 
   if (!data) {
@@ -214,28 +215,28 @@ const ServiceOrderView: React.FC = () => {
 
   return (
     <div
-      className="min-h-screen p-6 md:p-10"
+      className="min-h-screen bg-gradient-to-br from-[#fdf8ff] via-white to-[#fff5f8] p-4 sm:p-6 lg:p-8"
       style={{
         background:
           "linear-gradient(160deg, #fdf8ff 0%, #fff5f8 50%, #f8f9ff 100%)",
       }}
     >
       {/* HEADER */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="relative mb-6 flex items-center justify-between overflow-hidden rounded-3xl bg-gradient-to-br from-[#25103d] via-[#68258d] to-[#c33076] p-6 text-white shadow-[0_24px_65px_rgba(91,33,124,0.24)] sm:p-8">
         <button
           onClick={() => navigate(-1)}
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-semibold bg-gradient-to-r from-[#852BAF] to-[#FC3F78] shadow-lg hover:scale-[1.03] active:scale-95 transition cursor-pointer"
+          className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-white/20"
         >
           ← Back
         </button>
 
-        <h2 className="text-2xl md:text-3xl font-bold text-gray-900">
+        <h2 className="text-2xl font-extrabold text-white md:text-3xl">
           Service Order
         </h2>
       </div>
 
       {/* ORDER SUMMARY */}
-      <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm mb-5">
+      <div className="mb-5 rounded-3xl border border-purple-100 bg-white p-6 shadow-[0_18px_55px_rgba(67,31,91,0.08)]">
         <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">
           Order Summary
         </h3>
@@ -278,7 +279,7 @@ const ServiceOrderView: React.FC = () => {
       </div>
 
       {/* CUSTOMER */}
-      <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm mb-5">
+      <div className="mb-5 rounded-3xl border border-purple-100 bg-white p-6 shadow-[0_18px_55px_rgba(67,31,91,0.08)]">
         <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">
           Customer Details
         </h3>
@@ -312,7 +313,7 @@ const ServiceOrderView: React.FC = () => {
 
       {/* ADDRESS */}
       {data.address && (
-        <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm mb-5">
+        <div className="mb-5 rounded-3xl border border-purple-100 bg-white p-6 shadow-[0_18px_55px_rgba(67,31,91,0.08)]">
           <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">
             Service Address
           </h3>
@@ -342,7 +343,7 @@ const ServiceOrderView: React.FC = () => {
       )}
 
       {/* CUSTOMER DOCUMENTS */}
-      <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm mb-5">
+      <div className="mb-5 rounded-3xl border border-purple-100 bg-white p-6 shadow-[0_18px_55px_rgba(67,31,91,0.08)]">
         <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">
           Customer Documents
         </h3>
@@ -419,7 +420,7 @@ const ServiceOrderView: React.FC = () => {
       </div>
 
       {/* SERVICE ITEMS */}
-      <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm mb-5">
+      <div className="mb-5 rounded-3xl border border-purple-100 bg-white p-6 shadow-[0_18px_55px_rgba(67,31,91,0.08)]">
         <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-5">
           Service Items
         </h3>
@@ -524,7 +525,7 @@ const ServiceOrderView: React.FC = () => {
 
       {/* BUNDLES */}
       {data.bundles.length > 0 && (
-        <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm mb-5">
+        <div className="mb-5 rounded-3xl border border-purple-100 bg-white p-6 shadow-[0_18px_55px_rgba(67,31,91,0.08)]">
           <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">
             Bundles
           </h3>
@@ -554,7 +555,7 @@ const ServiceOrderView: React.FC = () => {
       )}
 
       {/* TOTAL */}
-      <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
+      <div className="rounded-3xl border border-purple-100 bg-gradient-to-r from-white to-purple-50 p-6 shadow-[0_18px_55px_rgba(67,31,91,0.08)]">
         <div className="flex justify-between items-center">
           <span className="text-lg font-semibold text-gray-700">
             Grand Total
