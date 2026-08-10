@@ -12,6 +12,8 @@ import {
   FiChevronDown,
   FiChevronRight,
   FiLogOut,
+  FiUser,
+  FiLock,
 } from "react-icons/fi";
 import { useAuth } from "../../../common/auth/useAuth";
 import { routes } from "../../../routes";
@@ -314,6 +316,26 @@ export default function ServiceNavbar() {
             }}
           />
           <div className="space-y-0.5">
+            <Link
+              to={routes.service.profile}
+              className={`flex items-center gap-2.5 w-full px-3 py-2 text-sm font-medium rounded-xl transition-all duration-150 ${
+                pathname === routes.service.profile
+                  ? "bg-purple-100 text-[#852BAF]"
+                  : "text-gray-600 hover:bg-purple-50 hover:text-[#852BAF]"
+              }`}
+            >
+              <FiUser className="text-base shrink-0" /> Profile
+            </Link>
+            <Link
+              to={routes.service.changePassword}
+              className={`flex items-center gap-2.5 w-full px-3 py-2 text-sm font-medium rounded-xl transition-all duration-150 ${
+                pathname === routes.service.changePassword
+                  ? "bg-purple-100 text-[#852BAF]"
+                  : "text-gray-600 hover:bg-purple-50 hover:text-[#852BAF]"
+              }`}
+            >
+              <FiLock className="text-base shrink-0" /> Change Password
+            </Link>
             <button
               onClick={logout}
               className="flex items-center gap-2.5 w-full px-3 py-2 text-sm font-medium text-red-500 hover:bg-red-50 hover:text-red-600 rounded-xl transition-all duration-150 cursor-pointer"

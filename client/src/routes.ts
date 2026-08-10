@@ -130,6 +130,8 @@ export const routes = {
   },
   service: {
     dashboard: "/service/dashboard",
+    profile: "/service/profile",
+    changePassword: "/service/change-password",
     catalog: "/service/catalog",
     finance: "/service/financial-services/:section?",
     enquiries: "/service/enquiries",

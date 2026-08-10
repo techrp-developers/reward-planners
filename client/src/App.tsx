@@ -421,6 +421,8 @@ export default function App() {
       {/* ========== SERVICES ========== */}
       <Route element={<ServiceLayout />}>
         <Route path={routes.service.dashboard} element={<ServiceDashboard />} />
+        <Route path={routes.service.profile} element={<EditProfilePage />} />
+        <Route path={routes.service.changePassword} element={<ChangePasswordPage />} />
         <Route path={routes.service.catalog} element={<ServiceCatalogPage />} />
         <Route path={routes.service.finance} element={<FinancialServicesPage />} />
         <Route path={routes.service.enquiries} element={<ServiceEnquiries />} />
