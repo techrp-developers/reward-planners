@@ -198,6 +198,11 @@ class OrderModel {
       o.order_id,
       o.order_ref,
       o.total_amount,
+      o.product_total,
+      o.reward_discount,
+      o.reward_coins_used,
+      o.reward_coins_earned,
+      o.shipping_total,
       (
         SELECT COALESCE(SUM(vo.vendor_total), 0)
         FROM vendor_orders vo
@@ -304,6 +309,20 @@ class OrderModel {
       [orderId],
     );
 
+    const [vendorBreakdown] = await db.execute(
+      `SELECT vo.vendor_order_id, vo.vendor_id,
+              COALESCE(v.company_name, v.full_name, CONCAT('Vendor #', vo.vendor_id)) AS vendor_name,
+              vo.vendor_total, vo.shipping_status,
+              COALESCE(SUM(os.shipping_charges), 0) AS delivery_charge
+       FROM vendor_orders vo
+       LEFT JOIN vendors v ON v.vendor_id = vo.vendor_id
+       LEFT JOIN order_shipments os ON os.vendor_order_id = vo.vendor_order_id
+       WHERE vo.order_id = ?
+       GROUP BY vo.vendor_order_id
+       ORDER BY vo.vendor_order_id`,
+      [orderId],
+    );
+
     const processedItems = items.map((i) => {
       let attributes = {};
 
@@ -338,6 +357,11 @@ class OrderModel {
         status: order.status,
         total_amount: order.total_amount,
         vendor_total: Number(order.vendor_total || 0),
+        product_total: Number(order.product_total || 0),
+        reward_discount: Number(order.reward_discount || 0),
+        reward_coins_used: Number(order.reward_coins_used || 0),
+        reward_coins_earned: Number(order.reward_coins_earned || 0),
+        shipping_total: Number(order.shipping_total || 0),
         created_at: order.created_at,
       },
 
@@ -379,6 +403,11 @@ class OrderModel {
         : order.status === "cancelled"
           ? [formatShipmentProgress({ shipping_status: "cancelled", shipment_created_at: order.created_at, cancelled_at: order.cancelled_at })]
           : [],
+      vendor_breakdown: vendorBreakdown.map((vendor) => ({
+        ...vendor,
+        vendor_total: Number(vendor.vendor_total || 0),
+        delivery_charge: Number(vendor.delivery_charge || 0),
+      })),
     };
   }
 
