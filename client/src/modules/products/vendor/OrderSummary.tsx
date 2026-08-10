@@ -79,7 +79,7 @@ const OrderSummary: React.FC = () => {
       currency: "INR",
     }).format(amount);
 
-  const visibleRevenue = orders.reduce((sum, order) => sum + Number(order.vendor_total || 0), 0);
+  const visibleVendorTotal = orders.reduce((sum, order) => sum + Number(order.vendor_total || 0), 0);
   const deliveredOrders = orders.filter((order) => order.shipping_status.toLowerCase() === "delivered").length;
   const activeOrders = orders.filter((order) => !["delivered", "cancelled"].includes(order.shipping_status.toLowerCase())).length;
 
@@ -148,7 +148,7 @@ const OrderSummary: React.FC = () => {
       <div className="space-y-5">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {[
-            { label: "Page revenue", value: formatCurrency(visibleRevenue), Icon: FiTrendingUp, tint: "text-purple-700 bg-purple-50" },
+            { label: "Page vendor total", value: formatCurrency(visibleVendorTotal), Icon: FiTrendingUp, tint: "text-purple-700 bg-purple-50" },
             { label: "Active orders", value: activeOrders.toLocaleString(), Icon: FiClock, tint: "text-amber-700 bg-amber-50" },
             { label: "Delivered", value: deliveredOrders.toLocaleString(), Icon: FiCheckCircle, tint: "text-emerald-700 bg-emerald-50" },
           ].map(({ label, value, Icon, tint }) => (
@@ -186,7 +186,7 @@ const OrderSummary: React.FC = () => {
               <table className="w-full text-sm text-left">
                 <thead>
                   <tr className="border-b border-purple-100 bg-gradient-to-r from-purple-50/90 to-pink-50/60">
-                    {["Order Ref", "Total", "Status", "Date", "Items", "Action"].map((h) => (
+                    {["Order Ref", "Vendor Total", "Status", "Date", "Items", "Action"].map((h) => (
                       <th key={h} className="px-5 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">
                         {h}
                       </th>
