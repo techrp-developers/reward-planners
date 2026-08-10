@@ -201,7 +201,7 @@ class OrderModel {
       o.status,
       o.cancellation_status,
       (
-        SELECT MAX(oct.created_at)
+        SELECT MAX(oct.event_time)
         FROM order_cancellation_timeline oct
         WHERE oct.order_id = o.order_id
           AND oct.event = 'cancellation_confirmed'
