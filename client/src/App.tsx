@@ -129,7 +129,6 @@ const PartnerManagerOnboard = lazy(() => import("./modules/service/serviceManage
 const ServiceDashboard = lazy(() => import("./modules/service/serviceManager/dashboard/pages/ServiceDashboard.tsx"));
 const ServiceListingsPage = lazy(() => import("./modules/service/serviceManager/serviceListings/pages/ServiceListingsPage.tsx"));
 const ServiceCatalogPage = lazy(() => import("./modules/service/serviceManager/serviceListings/pages/ServiceCatalogPage.tsx"));
-const FinancialServicesPage = lazy(() => import("./modules/service/serviceManager/financialServices/FinancialServicesPage.tsx"));
 const BookingsPage = lazy(() => import("./modules/service/serviceManager/bookings/pages/BookingsPage.tsx"));
 const ServiceReportsPage = lazy(() => import("./modules/service/serviceManager/reports/pages/ServiceReportsPage.tsx"));
 const ServiceSettingsPage = lazy(() => import("./modules/service/serviceManager/settings/pages/ServiceSettingsPage.tsx"));
@@ -424,7 +423,6 @@ export default function App() {
         <Route path={routes.service.profile} element={<EditProfilePage />} />
         <Route path={routes.service.changePassword} element={<ChangePasswordPage />} />
         <Route path={routes.service.catalog} element={<ServiceCatalogPage />} />
-        <Route path={routes.service.finance} element={<FinancialServicesPage />} />
         <Route path={routes.service.enquiries} element={<ServiceEnquiries />} />
         <Route path={routes.service.enquiryDetail} element={<ServiceDetails />} />
         <Route path={routes.service.orders} element={<ServiceOrderList />} />

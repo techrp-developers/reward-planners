@@ -7,8 +7,6 @@ import {
   FiInbox,
   FiShoppingBag,
   FiXCircle,
-  FiTrendingUp,
-  FiShield,
   FiChevronDown,
   FiChevronRight,
   FiLogOut,
@@ -49,22 +47,14 @@ export default function ServiceNavbar() {
       type: "link",
     },
     {
-      label: "Services & Variants",
-      to: routes.service.catalog,
+      label: "Service Catalogue",
       Icon: FiList,
-      type: "link",
-    },
-    {
-      label: "Mutual Funds",
-      to: routes.service.finance.replace(":section?", "mutual-funds"),
-      Icon: FiTrendingUp,
-      type: "link",
-    },
-    {
-      label: "Insurance",
-      to: routes.service.finance.replace(":section?", "insurance"),
-      Icon: FiShield,
-      type: "link",
+      type: "dropdown",
+      children: [
+        { label: "Categories", to: routes.service.catalog.replace(":section?", "categories") },
+        { label: "Services", to: routes.service.catalog.replace(":section?", "services") },
+        { label: "Variants", to: routes.service.catalog.replace(":section?", "variants") },
+      ],
     },
     {
       label: "Service Enquiries",

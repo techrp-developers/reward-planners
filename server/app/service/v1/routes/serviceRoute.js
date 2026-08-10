@@ -37,7 +37,7 @@ router.get("/details/:id", ServiceController.getServiceDetails);
 router.post(
   "/create-service",
   authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
+  authorizeRoles("vendor_manager", "service_manager", "admin"),
   upload.single("service_image"),
   ServiceController.createService,
 );
@@ -46,7 +46,7 @@ router.post(
 router.put(
   "/update/:id",
   authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
+  authorizeRoles("vendor_manager", "service_manager", "admin"),
   upload.single("service_image"),
   ServiceController.updateService,
 );
@@ -55,7 +55,7 @@ router.put(
 router.delete(
   "/remove/:id",
   authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
+  authorizeRoles("vendor_manager", "service_manager", "admin"),
   ServiceController.deleteService,
 );
 
