@@ -6,6 +6,7 @@ export const routes = {
     onboarding: "/vendor/onboarding",
     changePassword: "/vendor/change-password",
     profile: "/vendor/profile",
+    tutorialsFaq: "/vendor/tutorials-faq",
    products: {
     add: "/vendor/products/add",
     list: "/vendor/products/list",

@@ -17,6 +17,7 @@ import {
   FiUser,
   FiX,
   FiBarChart2,
+  FiBookOpen,
 } from "react-icons/fi";
 import { api } from "../../../common/api/api";
 import { useAuth } from "../../../common/auth/useAuth";
@@ -97,6 +98,11 @@ export default function VendorNavbar({ isOpen = false, onClose }: VendorNavbarPr
         { label: "Product Report", to: "/vendor/reports/products", Icon: FiPackage },
         { label: "Order Report", to: "/vendor/reports/orders", Icon: FiShoppingCart },
       ],
+    },
+    {
+      label: "Tutorials & FAQ",
+      to: "/vendor/tutorials-faq",
+      Icon: FiBookOpen,
     },
   ].filter(Boolean) as NavItem[];
 
