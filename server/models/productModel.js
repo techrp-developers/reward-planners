@@ -211,6 +211,7 @@ class ProductModel {
   SELECT attribute_key
   FROM category_attributes
   WHERE is_variant = 1
+    AND is_active = 1
     AND (
       subcategory_id = ?
       OR (category_id = ? AND subcategory_id IS NULL)
@@ -344,7 +345,7 @@ class ProductModel {
     const variantAttributes = {};
     variantKeys.forEach((k) => {
       if (Array.isArray(allAttributes[k])) {
-        const normalized = normalize(allAttributes[k]);
+        const normalized = [...new Set(normalize(allAttributes[k]))];
         if (normalized.length) {
           variantAttributes[k] = normalized;
         }
@@ -354,6 +355,9 @@ class ProductModel {
     // CASE 1: Real variant combinations
     if (Object.keys(variantAttributes).length) {
       const combinations = generateCombinations(variantAttributes);
+      if (combinations.length > 100) {
+        throw new Error(`Too many variant combinations (${combinations.length}). Reduce the selected options to 100 combinations or fewer.`);
+      }
 
       for (const combo of combinations) {
         const comboJson = JSON.stringify(combo);

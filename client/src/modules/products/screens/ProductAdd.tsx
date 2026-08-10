@@ -139,6 +139,7 @@ interface CategoryAttribute {
   attribute_key: string;
   attribute_label: string;
   is_required: number;
+  is_variant: number;
   input_type: string;
   options?: string[];
 }
@@ -396,6 +397,16 @@ export default function ProductListingDynamic() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
+    const selectedVariantAttributes = categoryAttributes.filter((attribute) => attribute.is_variant === 1);
+    const combinations = selectedVariantAttributes.reduce((count, attribute) => {
+      const optionCount = new Set((productAttributes[attribute.attribute_key] || []).filter(Boolean)).size;
+      return optionCount ? count * optionCount : count;
+    }, 1);
+    if (combinations > 100) {
+      setError(`This selection creates ${combinations} variants. Reduce it to 100 combinations or fewer.`);
+      return;
+    }
+
     const missingAttrs = categoryAttributes.filter((attr) => {
       if (attr.is_required !== 1) return false;
       const val = productAttributes[attr.attribute_key];
@@ -600,6 +611,12 @@ export default function ProductListingDynamic() {
     subSubCategories.find(
       (ss) => ss.sub_subcategory_id === product.subSubCategoryId,
     )?.name || "Not selected";
+
+  const variantAttributes = categoryAttributes.filter((attribute) => attribute.is_variant === 1);
+  const variantCombinationCount = variantAttributes.reduce((count, attribute) => {
+    const selectedCount = new Set((productAttributes[attribute.attribute_key] || []).filter(Boolean)).size;
+    return selectedCount ? count * selectedCount : count;
+  }, 1);
 
   if (loading && categories.length === 0) {
     return (
@@ -949,6 +966,7 @@ export default function ProductListingDynamic() {
                       {attr.is_required === 1 && (
                         <span className="text-red-500 ml-0.5">*</span>
                       )}
+                      {attr.is_variant === 1 && <span className="ml-2 rounded-full bg-purple-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-[#852BAF]">Variant option</span>}
                     </label>
 
                     {inputType === "multiselect" && (
@@ -1075,6 +1093,7 @@ export default function ProductListingDynamic() {
                 : "Select a category and sub-category to see product attributes."}
             </p>
           )}
+          {variantAttributes.length > 0 && <div className={`mt-6 rounded-2xl border p-4 ${variantCombinationCount > 100 ? "border-red-200 bg-red-50" : "border-purple-100 bg-purple-50/60"}`}><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-extrabold text-slate-800">Variant matrix preview</p><p className="mt-1 text-xs text-slate-500">Each unique option combination becomes a separately managed SKU.</p></div><span className={`rounded-xl px-4 py-2 text-sm font-black ${variantCombinationCount > 100 ? "bg-red-100 text-red-700" : "bg-white text-[#852BAF] shadow-sm"}`}>{variantCombinationCount} combination{variantCombinationCount === 1 ? "" : "s"}</span></div>{variantCombinationCount > 100 && <p className="mt-3 text-xs font-bold text-red-600">Reduce the selected options to 100 combinations or fewer.</p>}</div>}
         </section>
 
         {/* ── PRODUCT DESCRIPTION ── */}

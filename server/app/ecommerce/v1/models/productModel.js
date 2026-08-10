@@ -641,7 +641,8 @@ class ProductModel {
       SELECT attribute_key
       FROM category_attributes
       WHERE is_variant = 1
-      AND (
+        AND is_active = 1
+        AND (
         subcategory_id = ?
         OR (category_id = ? AND subcategory_id IS NULL)
       )

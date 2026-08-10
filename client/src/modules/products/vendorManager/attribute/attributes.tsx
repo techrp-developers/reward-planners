@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import Swal from "sweetalert2";
-import { FiTrash2, FiEye, FiPlus, FiX, FiSave, FiLayers, FiSearch, FiSliders, FiCheckCircle, FiBox } from "react-icons/fi";
+import { FiEye, FiPlus, FiX, FiSave, FiLayers, FiSearch, FiSliders, FiCheckCircle, FiBox, FiArchive, FiRotateCcw, FiTrash2 } from "react-icons/fi";
 import { api } from "../../../../common/api/api";
 import { confirmDialog } from "../../../../common/utils/confirmDialog";
 import { getPageNumbers } from "../../../../common/utils/pagination";
@@ -33,6 +33,8 @@ interface Attribute {
   is_required: number;
   sort_order: number;
   created_at: string;
+  is_active: number;
+  is_used?: number;
 }
 
 export default function CategoryAttributeManagement() {
@@ -46,6 +48,7 @@ export default function CategoryAttributeManagement() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selected, setSelected] = useState<Attribute | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"active" | "archived" | "all">("active");
 
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 10;
@@ -102,6 +105,7 @@ export default function CategoryAttributeManagement() {
       params: {
         category_id: categoryId || undefined,
         subcategory_id: subcategoryId || undefined,
+        status: statusFilter,
       },
     });
     setAttributes(res.data.data || []);
@@ -116,7 +120,7 @@ export default function CategoryAttributeManagement() {
     fetchAttributes();
     // The filter values intentionally drive this request.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoryId, subcategoryId]);
+  }, [categoryId, subcategoryId, statusFilter]);
 
   // useEffect(() => {
   //   fetchAttributes();
@@ -127,8 +131,8 @@ export default function CategoryAttributeManagement() {
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!categoryId && !subcategoryId) {
-      return Swal.fire("Select category or subcategory", "", "warning");
+    if (!subcategoryId) {
+      return Swal.fire("Select a subcategory", "Attributes are assigned to a specific product subcategory.", "warning");
     }
 
     try {
@@ -154,20 +158,31 @@ export default function CategoryAttributeManagement() {
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (attribute: Attribute) => {
+    const used = Boolean(attribute.is_used);
     const confirmed = await confirmDialog({
-      title: "Delete attribute?",
-      text: "This cannot be undone",
+      title: used ? "Archive attribute?" : "Delete unused attribute?",
+      text: used ? "It will be hidden from new products but retained on existing products." : "This unused attribute and its configured options will be permanently deleted.",
     });
 
     if (!confirmed) return;
 
     try {
-      await api.delete(`/manager/category-attributes/${id}`);
+      await api.delete(`/manager/category-attributes/${attribute.id}`);
       fetchAttributes();
-      Swal.fire("Deleted", "", "success");
+      Swal.fire(used ? "Archived" : "Deleted", used ? "Existing product data remains unchanged." : "The unused attribute was permanently removed.", "success");
     } catch (err: unknown) {
       Swal.fire("Blocked", axios.isAxiosError(err) ? err.response?.data?.message : "Unable to delete attribute", "error");
+    }
+  };
+
+  const handleRestore = async (id: number) => {
+    try {
+      await api.patch(`/manager/category-attributes/${id}/restore`);
+      await fetchAttributes();
+      Swal.fire("Restored", "The attribute is available for products again.", "success");
+    } catch (err: unknown) {
+      Swal.fire("Unable to restore", axios.isAxiosError(err) ? err.response?.data?.message : "Please try again", "error");
     }
   };
 
@@ -266,8 +281,8 @@ export default function CategoryAttributeManagement() {
           <div className="my-6 h-px bg-gradient-to-r from-purple-100 via-slate-100 to-transparent" />
           <p className="mb-4 text-[10px] font-black tracking-[0.18em] text-gray-400 uppercase">Attribute details</p>
 
-          <form onSubmit={handleAdd} className="grid items-end grid-cols-2 gap-4 md:grid-cols-6">
-            <div className="col-span-2">
+          <form onSubmit={handleAdd} className="grid items-end grid-cols-2 gap-4 md:grid-cols-12">
+            <div className="col-span-2 md:col-span-3">
               <label className={labelCls}>Key</label>
               <input
                 placeholder="e.g. color"
@@ -277,7 +292,7 @@ export default function CategoryAttributeManagement() {
               />
             </div>
 
-            <div className="col-span-2">
+            <div className="col-span-2 md:col-span-3">
               <label className={labelCls}>Label</label>
               <input
                 placeholder="e.g. Color"
@@ -287,7 +302,7 @@ export default function CategoryAttributeManagement() {
               />
             </div>
 
-            <div className="col-span-1">
+            <div className="col-span-2 md:col-span-3">
               <label className={labelCls}>Input Type</label>
               <select
                 value={form.input_type}
@@ -302,10 +317,22 @@ export default function CategoryAttributeManagement() {
               </select>
             </div>
 
-            <div className="flex justify-end col-span-1">
+            <div className="col-span-2 md:col-span-3">
+              <label className={labelCls}>Order</label>
+              <input type="number" min="0" value={form.sort_order} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} className={inputCls} />
+            </div>
+
+            <label className="col-span-2 flex h-11 cursor-pointer items-center justify-start gap-3 rounded-xl border border-purple-100 bg-purple-50 px-4 text-xs font-bold text-[#852BAF] md:col-span-3">
+              <input type="checkbox" checked={form.is_variant === 1} onChange={(e) => setForm({ ...form, is_variant: e.target.checked ? 1 : 0, input_type: e.target.checked ? "multiselect" : form.input_type })} className="accent-[#852BAF]" /> Variant
+            </label>
+            <label className="col-span-2 flex h-11 cursor-pointer items-center justify-start gap-3 rounded-xl border border-emerald-100 bg-emerald-50 px-4 text-xs font-bold text-emerald-700 md:col-span-3">
+              <input type="checkbox" checked={form.is_required === 1} onChange={(e) => setForm({ ...form, is_required: e.target.checked ? 1 : 0 })} className="accent-emerald-600" /> Required
+            </label>
+
+            <div className="col-span-2 flex justify-stretch md:col-span-3 md:col-start-10">
               <button
                 type="submit"
-                className="h-10 px-5 whitespace-nowrap flex items-center gap-2 bg-gradient-to-r from-[#852BAF] to-[#FC3F78] text-white text-sm font-semibold rounded-xl shadow-md hover:opacity-90 active:scale-95 transition-all cursor-pointer"
+                className="flex h-11 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-5 text-sm font-semibold text-white shadow-md transition-all hover:opacity-90 active:scale-95 cursor-pointer"
               >
                 <FiPlus /> Add Attribute
               </button>
@@ -318,6 +345,8 @@ export default function CategoryAttributeManagement() {
           {/* Table header row with search */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
             <div><h2 className="font-black text-slate-900">Attributes library</h2><p className="mt-1 text-xs text-slate-400">{filteredAttributes.length} matching attributes</p></div>
+            <div className="flex items-center gap-2">
+            <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value as typeof statusFilter); setCurrentPage(1); }} className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-600 outline-none focus:border-purple-400"><option value="active">Active</option><option value="archived">Archived</option><option value="all">All statuses</option></select>
             <label className="relative">
             <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -327,14 +356,14 @@ export default function CategoryAttributeManagement() {
               onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
               className="h-10 w-72 rounded-xl border border-gray-200 bg-gray-50/60 py-2 pl-10 pr-4 text-sm outline-none transition focus:border-[#852BAF]/40 focus:ring-4 focus:ring-purple-100"
             />
-            </label>
+            </label></div>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
               <thead style={{ background: "linear-gradient(135deg, #fdf8ff 0%, #fff5f8 100%)" }}>
                 <tr>
-                  {["Category", "Subcategory", "Key", "Label", "Type", "Variant", "Required", "Actions"].map((h) => (
+                  {["Category", "Subcategory", "Key", "Label", "Type", "Variant", "Required", "Status", "Actions"].map((h) => (
                     <th key={h} className="px-4 py-4 text-[10px] font-black tracking-widest text-gray-400 uppercase whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -367,6 +396,7 @@ export default function CategoryAttributeManagement() {
                           {a.is_required ? "Yes" : "No"}
                         </span>
                       </td>
+                      <td className="px-4 py-3"><span className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${a.is_active ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-100 text-slate-500"}`}>{a.is_active ? "Active" : "Archived"}</span>{Boolean(a.is_used) && <p className="mt-1 text-[10px] font-semibold text-amber-600">Used by products</p>}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <button
@@ -376,13 +406,7 @@ export default function CategoryAttributeManagement() {
                           >
                             <FiEye size={14} />
                           </button>
-                          <button
-                            onClick={() => handleDelete(a.id)}
-                            className="w-8 h-8 flex items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white shadow-sm transition-all cursor-pointer"
-                            title="Delete"
-                          >
-                            <FiTrash2 size={14} />
-                          </button>
+                          {a.is_active ? (a.is_used ? <button onClick={() => handleDelete(a)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-600 shadow-sm transition-all hover:bg-amber-600 hover:text-white" title="Archive used attribute"><FiArchive size={14} /></button> : <button onClick={() => handleDelete(a)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 shadow-sm transition-all hover:bg-red-600 hover:text-white" title="Delete unused attribute"><FiTrash2 size={14} /></button>) : <button onClick={() => void handleRestore(a.id)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-600 shadow-sm transition-all hover:bg-emerald-600 hover:text-white" title="Restore"><FiRotateCcw size={14} /></button>}
                         </div>
                       </td>
                     </tr>
