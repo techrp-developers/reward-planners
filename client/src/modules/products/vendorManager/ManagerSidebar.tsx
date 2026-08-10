@@ -15,6 +15,7 @@ import {
   FiUser,
   // FiHeart,
   FiUserCheck,
+  FiBarChart2,
 } from "react-icons/fi";
 import { FaFileAlt, FaBolt } from "react-icons/fa";
 import { useAuth } from "../../../common/auth/useAuth";
@@ -139,6 +140,16 @@ export default function ManagerNavbar() {
           label: "Cancellation Request",
           to: routes.manager.orders.cancellationRequest,
         },
+      ],
+    },
+    {
+      label: "Reports",
+      Icon: FiBarChart2,
+      type: "dropdown",
+      children: [
+        { label: "Usage Report", to: routes.manager.reports.usage },
+        { label: "Stock Report", to: routes.manager.reports.stock },
+        { label: "Order Report", to: routes.manager.reports.orders },
       ],
     },
     {

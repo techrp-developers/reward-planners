@@ -86,6 +86,7 @@ const VendorReportPage = lazy(() => import("./modules/products/vendor/reports/Ve
 // Manager Order
 const OrderList = lazy(() => import("./modules/products/vendorManager/order/OrderList.tsx"));
 const OrderView = lazy(() => import("./modules/products/vendorManager/order/OrderView.tsx"));
+const ManagerReportPage = lazy(() => import("./modules/products/vendorManager/reports/ManagerReportPage.tsx"));
 
 // Service
 const ServiceEnquiries = lazy(() => import("./modules/products/inHouseServices/ServiceEnquiries.tsx"));
@@ -361,6 +362,9 @@ export default function App() {
         <Route path={routes.manager.orders.orderList} element={<OrderList />} />
 
         <Route path={routes.manager.orders.details} element={<OrderView />} />
+        <Route path={routes.manager.reports.usage} element={<ManagerReportPage type="usage" />} />
+        <Route path={routes.manager.reports.stock} element={<ManagerReportPage type="stock" />} />
+        <Route path={routes.manager.reports.orders} element={<ManagerReportPage type="orders" />} />
 
         <Route
           path={routes.manager.orders.cancellationRequest}
