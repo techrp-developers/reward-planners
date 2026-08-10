@@ -26,6 +26,27 @@ function getParentServiceOrderStatus(statuses = []) {
   return "pending_payment";
 }
 
+function getServiceItemTimeline(status, paymentStatus) {
+  if (status === "cancelled") {
+    return [
+      { status: "Order Confirmed", completed: paymentStatus === "paid" },
+      { status: "Order Cancelled", completed: true },
+    ];
+  }
+  return [
+    { status: "Order Confirmed", completed: paymentStatus === "paid" },
+    {
+      status: "Documents Submitted",
+      completed: ["documents_uploaded", "in_progress", "completed"].includes(status),
+    },
+    {
+      status: "In Progress",
+      completed: ["in_progress", "completed"].includes(status),
+    },
+    { status: "Completed", completed: status === "completed" },
+  ];
+}
+
 function mapServiceCancelEvent(event) {
   const eventMap = {
     cancellation_requested: "Cancellation Requested",
@@ -1949,6 +1970,7 @@ class ServiceOrderModel {
       so.order_ref,
       so.price,
       so.status,
+      so.payment_status,
       so.bundle_id,
       so.created_at,
 
@@ -2056,6 +2078,7 @@ class ServiceOrderModel {
         price: Number(row.price),
 
         status: row.status,
+        timeline: getServiceItemTimeline(row.status, row.payment_status),
       };
 
       if (row.bundle_id) {

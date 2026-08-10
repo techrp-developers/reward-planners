@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../../../common/api/api";
-import { FiFileText } from "react-icons/fi";
+import { FiCheck, FiFileText, FiX } from "react-icons/fi";
 
 interface Customer {
   name: string;
@@ -31,6 +31,7 @@ interface ServiceItem {
   image_url: string | null;
   price: number;
   status: string;
+  timeline: Array<{ status: string; completed: boolean }>;
 }
 
 interface Bundle {
@@ -68,6 +69,32 @@ interface ApiResponse {
   success: boolean;
   data: ServiceOrderDetails;
 }
+
+const ServiceItemTimeline = ({ timeline = [] }: { timeline?: ServiceItem["timeline"] }) => (
+  <div className="min-w-[280px] py-1">
+    <div className="grid" style={{ gridTemplateColumns: `repeat(${Math.max(timeline.length, 1)}, minmax(0, 1fr))` }}>
+      {timeline.map((step, index) => {
+        const cancelled = step.status.toLowerCase().includes("cancelled");
+        return <div key={step.status} className="relative flex flex-col items-center text-center">
+          <span className={`absolute left-0 right-0 top-3 h-0.5 ${index === 0 ? "left-1/2" : ""} ${index === timeline.length - 1 ? "right-1/2" : ""} ${cancelled ? "bg-red-300" : step.completed ? "bg-gradient-to-r from-[#852BAF] to-[#FC3F78]" : "bg-slate-200"}`} />
+          <span className={`relative z-10 grid h-6 w-6 place-items-center rounded-full border-2 border-white text-[10px] shadow-sm ${cancelled ? "bg-red-500 text-white" : step.completed ? "bg-gradient-to-br from-[#852BAF] to-[#FC3F78] text-white" : "bg-slate-200 text-slate-400"}`}>{cancelled ? <FiX /> : step.completed ? <FiCheck /> : index + 1}</span>
+          <span className={`mt-2 max-w-20 whitespace-normal text-[9px] font-bold leading-3 ${cancelled ? "text-red-600" : step.completed ? "text-slate-700" : "text-slate-400"}`}>{step.status}</span>
+        </div>;
+      })}
+    </div>
+  </div>
+);
+
+const updatedTimeline = (current: ServiceItem["timeline"], status: string) => {
+  const confirmed = current?.find((step) => step.status === "Order Confirmed")?.completed ?? true;
+  if (status === "cancelled") return [{ status: "Order Confirmed", completed: confirmed }, { status: "Order Cancelled", completed: true }];
+  return [
+    { status: "Order Confirmed", completed: confirmed },
+    { status: "Documents Submitted", completed: ["documents_uploaded", "in_progress", "completed"].includes(status) },
+    { status: "In Progress", completed: ["in_progress", "completed"].includes(status) },
+    { status: "Completed", completed: status === "completed" },
+  ];
+};
 
 const getParentStatus = (items: ServiceItem[], bundles: Bundle[]) => {
   const statuses = [...items, ...bundles.flatMap((bundle) => bundle.items)].map((item) => item.status);
@@ -135,7 +162,7 @@ const ServiceOrderView: React.FC = () => {
         if (!prev) return prev;
 
         const updatedItems = prev.items.map((item) =>
-          item.id === serviceId ? { ...item, status } : item,
+          item.id === serviceId ? { ...item, status, timeline: updatedTimeline(item.timeline, status) } : item,
         );
 
         return {
@@ -170,7 +197,7 @@ const ServiceOrderView: React.FC = () => {
         if (!prev) return prev;
 
         const updatedItems = prev.items.map((item) =>
-          item.id === serviceId ? { ...item, status: "cancelled" } : item,
+          item.id === serviceId ? { ...item, status: "cancelled", timeline: updatedTimeline(item.timeline, "cancelled") } : item,
         );
 
         return {
@@ -450,6 +477,7 @@ const ServiceOrderView: React.FC = () => {
                   "Service",
                   "Variant",
                   "Price",
+                  "Timeline",
                   "Status / Actions",
                 ].map((h) => (
                   <th
@@ -494,7 +522,14 @@ const ServiceOrderView: React.FC = () => {
                   </td>
 
                   <td className="px-4 py-3">
+                    <ServiceItemTimeline timeline={item.timeline} />
+                  </td>
+
+                  <td className="px-4 py-3">
                     <div className="flex flex-col gap-2">
+                      <span className={getStatusBadge(item.status)}>
+                        {item.status.replaceAll("_", " ")}
+                      </span>
                       <select
                         value=""
                         disabled={
@@ -550,10 +585,10 @@ const ServiceOrderView: React.FC = () => {
 
               <div className="space-y-2">
                 {bundle.items.map((item) => (
-                  <div key={item.id} className="flex justify-between text-sm">
-                    <span>{item.service_name}</span>
-
-                    <span>{formatCurrency(item.price)}</span>
+                  <div key={item.id} className="grid items-center gap-4 rounded-xl bg-slate-50 p-3 text-sm md:grid-cols-[1fr_300px_auto]">
+                    <div><span className="font-semibold text-slate-700">{item.service_name}</span><div className="mt-2"><span className={getStatusBadge(item.status)}>{item.status.replaceAll("_", " ")}</span></div></div>
+                    <ServiceItemTimeline timeline={item.timeline} />
+                    <span className="font-bold text-[#852BAF]">{formatCurrency(item.price)}</span>
                   </div>
                 ))}
               </div>
