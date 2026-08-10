@@ -213,9 +213,11 @@ export default function ClientOnboarding() {
         </label>
       ))}
       {step === 1 && (
-        <label className={`sm:col-span-2 flex items-center gap-4 rounded-2xl border p-5 text-base font-bold shadow-sm ${darkMode ? "border-purple-500/20 bg-purple-950/30 text-slate-200" : "border-purple-100 bg-gradient-to-r from-purple-50 to-pink-50/60 text-slate-700"}`}>
-          <input type="checkbox" checked={Boolean(data.officeSame)} onChange={(e) => update("officeSame", e.target.checked)} className="h-4 w-4 accent-purple-600" />
-          Office address is the same as the registered address
+        <label className={`group sm:col-span-2 flex cursor-pointer items-center gap-4 rounded-2xl border p-4 transition-all duration-200 ${data.officeSame ? darkMode ? "border-purple-500/60 bg-purple-500/10 shadow-[0_10px_28px_rgba(139,92,246,0.08)]" : "border-purple-300 bg-purple-50/70 shadow-[0_10px_28px_rgba(116,87,215,0.08)]" : darkMode ? "border-slate-700 bg-slate-900/45 hover:border-slate-600" : "border-slate-200 bg-white hover:border-purple-200 hover:shadow-[0_10px_25px_rgba(60,72,88,0.07)]"}`}>
+          <input type="checkbox" checked={Boolean(data.officeSame)} onChange={(e) => update("officeSame", e.target.checked)} className="sr-only" />
+          <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl text-xl transition ${data.officeSame ? "bg-gradient-to-br from-[#7457d7] to-[#9a63df] text-white" : darkMode ? "bg-slate-800 text-slate-400" : "bg-slate-100 text-slate-500 group-hover:bg-purple-50 group-hover:text-purple-600"}`}><MdLocationOn /></span>
+          <span className="min-w-0 flex-1"><span className={`block text-base font-semibold ${darkMode ? "text-slate-100" : "text-slate-800"}`}>Use registered address as office address</span><span className={`mt-1 block text-sm font-normal ${darkMode ? "text-slate-400" : "text-slate-500"}`}>The office address fields will use the same details entered above.</span></span>
+          <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-lg border text-sm transition ${data.officeSame ? "border-purple-600 bg-purple-600 text-white" : darkMode ? "border-slate-600 bg-slate-800 text-transparent" : "border-slate-300 bg-white text-transparent"}`}><Check /></span>
         </label>
       )}
     </div>
