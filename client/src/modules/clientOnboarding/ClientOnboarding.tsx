@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../../common/api/api";
 import { ArrowLeft, ArrowRight, CheckCircle2, Loader2, ShieldCheck } from "lucide-react";
-import { MdAdminPanelSettings, MdApartment as Building2, MdBusiness, MdCheck as Check, MdCheckCircle, MdFactCheck, MdLocationOn, MdOutlineVerifiedUser, MdPerson } from "react-icons/md";
+import { MdAdminPanelSettings, MdAnalytics, MdArrowForward, MdBusiness, MdCheck as Check, MdCheckCircle, MdDarkMode, MdFactCheck, MdGroups, MdLightMode, MdLocationOn, MdOutlineVerifiedUser, MdPerson, MdRedeem, MdSecurity } from "react-icons/md";
 
 type FormData = Record<string, string | boolean>;
 type StateOption = { state_id: number; state_name: string };
@@ -66,6 +66,10 @@ export default function ClientOnboarding() {
   const [states, setStates] = useState<StateOption[]>([]);
   const [statesLoading, setStatesLoading] = useState(true);
   const [statesError, setStatesError] = useState("");
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("rp-onboarding-theme") !== "light");
+  const [showIntroduction, setShowIntroduction] = useState(true);
+
+  useEffect(() => { localStorage.setItem("rp-onboarding-theme", darkMode ? "dark" : "light"); }, [darkMode]);
 
   useEffect(() => {
     let active = true;
@@ -172,10 +176,10 @@ export default function ClientOnboarding() {
   };
 
   const renderFields = () => (
-    <div className="grid gap-5 sm:grid-cols-2">
+    <div className="grid gap-4 sm:grid-cols-2">
       {(fields[step] || []).map((field) => (
-        <label key={field.name} className="block text-sm font-semibold text-slate-700">
-          {field.label}{field.required && <span className="text-pink-500"> *</span>}
+        <label key={field.name} className="group block border-0 bg-transparent p-1 transition-all duration-200">
+          <span className={`flex items-center justify-between text-sm font-bold ${darkMode ? "text-white" : "text-slate-600"}`}><span>{field.label}{field.required && <span className="text-pink-500"> *</span>}</span>{!darkMode && <span className="h-1.5 w-1.5 rounded-full bg-purple-300 transition group-focus-within:bg-[#C64EFE]" />}</span>
           {field.name === "state" ? (
             <>
               <select
@@ -183,7 +187,7 @@ export default function ClientOnboarding() {
                 onChange={(event) => update("state", event.target.value)}
                 onBlur={() => setFieldErrors((current) => ({ ...current, state: validateField("state", data.state) }))}
                 disabled={statesLoading || Boolean(statesError)}
-                className={`mt-2 w-full rounded-xl border bg-white px-4 py-3 font-normal outline-none transition focus:ring-4 disabled:cursor-not-allowed disabled:bg-slate-50 ${fieldErrors.state ? "border-red-300 focus:border-red-400 focus:ring-red-100" : "border-slate-200 focus:border-purple-400 focus:ring-purple-100"}`}
+                className={`mt-3 w-full rounded-lg border px-4 py-4 text-base font-medium outline-none transition focus:ring-4 disabled:cursor-not-allowed ${darkMode ? "border-[#4c4852] bg-[#242328] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus:border-fuchsia-500 focus:ring-fuchsia-500/10" : "border-transparent bg-[#f4f1f6] text-slate-800 focus:border-purple-300 focus:bg-white focus:ring-purple-100 disabled:bg-slate-100"} ${fieldErrors.state ? "border-red-400 focus:border-red-400 focus:ring-red-500/10" : ""}`}
               >
                 <option value="">{statesLoading ? "Loading states…" : "Select state"}</option>
                 {states.map((state) => (
@@ -199,14 +203,14 @@ export default function ClientOnboarding() {
               onChange={(event) => update(field.name, event.target.value)} placeholder={field.placeholder}
               onBlur={() => setFieldErrors((current) => ({ ...current, [field.name]: validateField(field.name, data[field.name] ?? "") }))}
               aria-invalid={Boolean(fieldErrors[field.name])}
-              className={`mt-2 w-full rounded-xl border bg-white px-4 py-3 font-normal outline-none transition focus:ring-4 ${fieldErrors[field.name] ? "border-red-300 focus:border-red-400 focus:ring-red-100" : "border-slate-200 focus:border-purple-400 focus:ring-purple-100"}`}
+              className={`mt-3 w-full rounded-lg border px-4 py-4 text-base font-medium outline-none transition placeholder:font-normal focus:ring-4 ${darkMode ? "border-[#4c4852] bg-[#242328] text-white placeholder:text-[#8c8992] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus:border-fuchsia-500 focus:ring-fuchsia-500/10" : "border-transparent bg-[#f4f1f6] text-slate-800 placeholder:text-slate-400 focus:border-purple-300 focus:bg-white focus:ring-purple-100"} ${fieldErrors[field.name] ? "border-red-400 focus:border-red-400 focus:ring-red-500/10" : ""}`}
             />
           )}
           {field.name !== "state" && fieldErrors[field.name] && <span className="mt-1.5 block text-xs font-semibold text-red-600">{fieldErrors[field.name]}</span>}
         </label>
       ))}
       {step === 1 && (
-        <label className="sm:col-span-2 flex items-center gap-3 rounded-xl bg-slate-50 p-4 text-sm font-medium text-slate-700">
+        <label className={`sm:col-span-2 flex items-center gap-4 rounded-2xl border p-5 text-base font-bold shadow-sm ${darkMode ? "border-purple-500/20 bg-purple-950/30 text-slate-200" : "border-purple-100 bg-gradient-to-r from-purple-50 to-pink-50/60 text-slate-700"}`}>
           <input type="checkbox" checked={Boolean(data.officeSame)} onChange={(e) => update("officeSame", e.target.checked)} className="h-4 w-4 accent-purple-600" />
           Office address is the same as the registered address
         </label>
@@ -218,10 +222,10 @@ export default function ClientOnboarding() {
     if ([0, 1, 2, 5].includes(step)) return renderFields();
     if (step === 3) return (
       <div className="mx-auto max-w-xl space-y-5">
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        <div className={`rounded-2xl border p-5 text-base leading-7 ${darkMode ? "border-amber-500/30 bg-amber-950/20 text-amber-200" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
           For safety, this temporary screen only collects the last four digits. Full Aadhaar must be handled by an approved KYC provider and must never be stored here.
         </div>
-        <label className="block text-sm font-semibold text-slate-700">Last 4 digits of Aadhaar
+        <label className={`block text-base font-bold ${darkMode ? "text-slate-200" : "text-slate-700"}`}>Last 4 digits of Aadhaar
           <input maxLength={4} inputMode="numeric" value={String(data.aadhaarLast4)} onChange={(e) => update("aadhaarLast4", e.target.value.replace(/\D/g, ""))} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 tracking-[.45em] outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100" placeholder="0000" />
         </label>
         <label className="flex items-start gap-3 text-sm text-slate-600"><input type="checkbox" checked={Boolean(data.identityConsent)} onChange={(e) => update("identityConsent", e.target.checked)} className="mt-1 h-4 w-4 accent-purple-600" />I authorize Reward Planner to verify my identity through an approved provider.</label>
@@ -233,7 +237,7 @@ export default function ClientOnboarding() {
     if (step === 4) return (
       <div className="space-y-3">
         {[['terms','Terms of Service'],['privacy','Privacy Policy'],['dataConsent','Data Processing Consent'],['communicationConsent','Electronic Communication Consent']].map(([name, label]) => (
-          <label key={name} className="flex items-center gap-3 rounded-xl border border-slate-200 p-4 text-sm font-medium text-slate-700 hover:bg-slate-50">
+          <label key={name} className={`flex items-center gap-4 rounded-2xl border p-5 text-base font-bold transition ${darkMode ? "border-slate-700 bg-slate-900/70 text-slate-200 hover:border-purple-500/50" : "border-slate-200 text-slate-700 hover:bg-slate-50"}`}>
             <input type="checkbox" checked={Boolean(data[name])} onChange={(e) => update(name, e.target.checked)} className="h-4 w-4 accent-purple-600" /> I accept the {label}<span className="ml-auto text-pink-500">Required</span>
           </label>
         ))}
@@ -259,43 +263,42 @@ export default function ClientOnboarding() {
   };
 
   const descriptions = ["Tell us about your organization.", "Add the registered business address.", "Add the authorized company representative.", "Verify the representative's identity.", "Review and accept the required agreements.", "Create the primary HR administrator.", "Your organization is ready for the next step."];
-
+  if (showIntroduction) {
+    const benefits = [
+      { Icon: MdRedeem, title: "Meaningful rewards", text: "Create rewarding experiences that make recognition useful, timely and memorable." },
+      { Icon: MdGroups, title: "Connected workforce", text: "Bring employees, HR teams and organization administrators into one shared ecosystem." },
+      { Icon: MdAnalytics, title: "Clear visibility", text: "Understand participation, engagement and reward activity through one organized portal." },
+      { Icon: MdSecurity, title: "Secure by design", text: "Protected account access, verified organization details and role-based workspaces." },
+    ];
+    return <div className={`min-h-screen px-5 py-6 sm:px-8 lg:px-12 ${darkMode ? "bg-[#090d18] text-white" : "bg-[#f7f5f8] text-slate-900"}`} style={{ fontFamily: '"Segoe UI Variable", "Avenir Next", Inter, ui-sans-serif, system-ui, sans-serif' }}>
+      <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-7xl flex-col">
+        <header className="flex items-center justify-between"><Link to="/login" className={`inline-flex items-center gap-2 text-sm font-medium ${darkMode ? "text-slate-400 hover:text-white" : "text-slate-500 hover:text-purple-700"}`}><ArrowLeft className="h-4 w-4" /> Back to login</Link><button type="button" onClick={() => setDarkMode((value) => !value)} className={`grid h-10 w-10 place-items-center rounded-full text-lg ${darkMode ? "bg-slate-800 text-amber-300" : "bg-white text-purple-700 shadow-sm"}`} aria-label={darkMode ? "Use light mode" : "Use dark mode"}>{darkMode ? <MdLightMode /> : <MdDarkMode />}</button></header>
+        <main className="grid flex-1 items-center gap-12 py-12 lg:grid-cols-[1.08fr_.92fr] lg:py-16">
+          <section><span className={`inline-flex rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] ${darkMode ? "bg-purple-500/10 text-purple-300" : "bg-purple-100 text-purple-700"}`}>Welcome to Reward Planners</span><h1 className="mt-7 max-w-3xl text-4xl font-semibold leading-[1.1] tracking-tight sm:text-5xl lg:text-6xl">Recognition that feels <span className="bg-gradient-to-r from-[#8b5cf6] to-[#ec4899] bg-clip-text text-transparent">personal.</span><br />Rewards that create impact.</h1><p className={`mt-7 max-w-2xl text-lg leading-8 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>Reward Planners is a unified employee engagement and rewards platform that helps organizations recognize people, manage benefits and build a stronger workplace culture.</p><div className="mt-9 flex flex-wrap items-center gap-4"><button type="button" onClick={() => { setShowIntroduction(false); window.scrollTo({ top: 0 }); }} className="inline-flex items-center gap-3 rounded-lg bg-gradient-to-r from-[#7457d7] to-[#a855d5] px-7 py-3.5 text-base font-semibold text-white shadow-lg shadow-purple-900/20 transition hover:-translate-y-0.5">Get Onboarded <MdArrowForward className="text-xl" /></button><span className={`text-sm ${darkMode ? "text-slate-500" : "text-slate-500"}`}>Takes approximately 5–8 minutes</span></div></section>
+          <section className={`border px-6 py-7 sm:px-8 sm:py-9 ${darkMode ? "border-slate-700 bg-[#0e1422]" : "border-slate-200 bg-white shadow-xl shadow-slate-200/60"}`}><div className="mb-7"><p className={`text-sm font-medium ${darkMode ? "text-purple-300" : "text-purple-700"}`}>One platform. Shared purpose.</p><h2 className="mt-2 text-2xl font-semibold">What your organization gains</h2></div><div className="divide-y divide-slate-700/30">{benefits.map(({ Icon, title, text }) => <article key={title} className="flex gap-4 py-5 first:pt-0 last:pb-0"><span className={`grid h-11 w-11 shrink-0 place-items-center rounded-full text-xl ${darkMode ? "bg-purple-500/10 text-purple-300" : "bg-purple-50 text-purple-700"}`}><Icon /></span><div><h3 className="text-base font-semibold">{title}</h3><p className={`mt-1 text-sm leading-6 ${darkMode ? "text-slate-400" : "text-slate-500"}`}>{text}</p></div></article>)}</div></section>
+        </main>
+        <footer className={`border-t py-5 text-sm ${darkMode ? "border-slate-800 text-slate-600" : "border-slate-200 text-slate-400"}`}>Reward Planners · Organization onboarding</footer>
+      </div>
+    </div>;
+  }
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(198,78,254,0.18),_transparent_30%),linear-gradient(135deg,#fdf8ff_0%,#ffffff_48%,#fff5f8_100%)] p-3 sm:p-5 lg:p-7">
-      <div className="mx-auto w-full max-w-[1600px]">
-        <header className="mb-5 flex items-center justify-between px-1">
-          <Link to="/login" className="inline-flex items-center gap-2 rounded-xl border border-purple-100 bg-white/80 px-4 py-2.5 text-sm font-bold text-slate-600 shadow-sm backdrop-blur transition hover:border-purple-300 hover:text-[#852BAF]"><ArrowLeft className="h-4 w-4" /> Back to login</Link>
-          <div className="text-right"><p className="text-sm font-black text-slate-800">Reward Planner</p><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#852BAF]">Organization portal</p></div>
+    <div className={`min-h-screen px-4 py-8 sm:py-12 ${darkMode ? "bg-[#090d18] text-white" : "bg-[#f5f5f7] text-slate-900"}`} style={{ fontFamily: '"Segoe UI Variable", "Avenir Next", Inter, ui-sans-serif, system-ui, sans-serif' }}>
+      <div className={`mx-auto max-w-5xl overflow-hidden border shadow-2xl ${darkMode ? "border-slate-700 bg-[#0e1422] shadow-black/40" : "border-slate-200 bg-white shadow-slate-300/50"}`}>
+        <header className={`flex items-center justify-between border-b px-6 py-4 ${darkMode ? "border-slate-700" : "border-slate-200"}`}>
+          <div><h1 className="text-lg font-semibold">Client Onboarding</h1><p className={`mt-0.5 text-sm ${darkMode ? "text-slate-400" : "text-slate-500"}`}>Set up your organization account</p></div>
+          <div className="flex items-center gap-2"><button type="button" onClick={() => setDarkMode((value) => !value)} className={`grid h-9 w-9 place-items-center rounded-full text-lg ${darkMode ? "bg-slate-800 text-amber-300" : "bg-slate-100 text-purple-700"}`} aria-label={darkMode ? "Use light mode" : "Use dark mode"}>{darkMode ? <MdLightMode /> : <MdDarkMode />}</button><Link to="/login" className={`grid h-9 w-9 place-items-center rounded-full text-xl ${darkMode ? "text-slate-400 hover:bg-slate-800" : "text-slate-500 hover:bg-slate-100"}`} aria-label="Close onboarding">×</Link></div>
         </header>
 
-        <section className="relative overflow-hidden rounded-[32px] bg-gradient-to-br from-[#25103d] via-[#68258d] to-[#c33076] px-6 py-7 text-white shadow-[0_28px_80px_rgba(91,33,124,0.25)] sm:px-9 lg:px-12">
-          <div className="absolute -right-20 -top-28 h-80 w-80 rounded-full bg-white/10 blur-3xl" /><div className="absolute -bottom-28 left-1/3 h-56 w-56 rounded-full bg-pink-400/15 blur-3xl" />
-          <div className="relative flex flex-col justify-between gap-6 md:flex-row md:items-center"><div className="flex items-center gap-4"><span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-white/20 bg-white/10 shadow-inner"><Building2 className="h-6 w-6" /></span><div><p className="text-[10px] font-black uppercase tracking-[0.24em] text-purple-200">Client onboarding</p><h1 className="mt-1 text-2xl font-black sm:text-3xl">Create your organization workspace</h1><p className="mt-2 max-w-2xl text-sm text-purple-100/80">Complete the secure setup once. Your progress is saved automatically on this device.</p></div></div><div className="min-w-48 rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur-sm"><div className="flex items-end justify-between"><span className="text-xs font-bold text-purple-100">Overall progress</span><strong className="text-lg">{Math.round((step / 6) * 100)}%</strong></div><div className="mt-3 h-2 overflow-hidden rounded-full bg-white/15"><div className="h-full rounded-full bg-gradient-to-r from-purple-300 to-pink-300 transition-all duration-500" style={{ width: `${(step / 6) * 100}%` }} /></div></div></div>
-        </section>
+        <nav className={`overflow-x-auto border-b px-6 py-6 ${darkMode ? "border-slate-700" : "border-slate-200"}`}>
+          <div className="flex min-w-[760px]">{steps.map((item, index) => { const available = index <= highestStep; const completed = index < highestStep; const current = index === step; return <div key={item.title} className="relative flex flex-1 justify-center">{index < steps.length - 1 && <span className={`absolute left-[58%] top-5 w-[84%] border-t border-dashed ${completed ? "border-purple-500" : darkMode ? "border-slate-600" : "border-slate-300"}`} />}<button type="button" disabled={!available} onClick={() => { setStep(index); setError(""); }} className="relative z-10 flex w-24 flex-col items-center disabled:cursor-not-allowed"><span className={`grid h-10 w-10 place-items-center rounded-full text-sm font-semibold ${current ? "bg-gradient-to-br from-[#7457d7] to-[#9a63df] text-white" : completed ? "bg-emerald-500 text-white" : darkMode ? "bg-slate-700 text-slate-300" : "bg-slate-200 text-slate-600"}`}>{completed ? <Check className="text-xl" /> : index + 1}</span><span className={`mt-2 text-center text-xs leading-4 ${current ? darkMode ? "text-white" : "text-slate-900" : darkMode ? "text-slate-400" : "text-slate-500"}`}>{item.title}</span></button></div>; })}</div>
+        </nav>
 
-        <section className="mt-5 overflow-hidden rounded-[32px] border border-purple-100 bg-white shadow-[0_22px_65px_rgba(67,31,91,0.10)]">
-          <div className="border-b border-purple-100 bg-gradient-to-r from-purple-50/80 via-white to-pink-50/60 px-4 py-5 sm:px-7 lg:px-10">
-            <div className="overflow-x-auto pb-2">
-              <div className="flex min-w-[900px] items-start">{steps.map((item, index) => {
-                const Icon = item.icon; const isAvailable = index <= highestStep; const isCompleted = index < highestStep; const isCurrent = index === step;
-                return <div key={item.title} className="relative flex flex-1 flex-col items-center px-2 text-center">{index < steps.length - 1 && <span className={`absolute left-[56%] top-5 h-0.5 w-[88%] ${index < highestStep ? "bg-emerald-400" : "bg-slate-200"}`} />}
-                  <button type="button" disabled={!isAvailable} onClick={() => { setStep(index); setError(""); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="relative z-10 flex flex-col items-center disabled:cursor-not-allowed" aria-label={`${item.title}${isCompleted ? " (completed, click to edit)" : ""}`}>
-                    <span className={`grid h-11 w-11 place-items-center rounded-2xl border shadow-sm transition ${isCompleted ? "border-emerald-400 bg-emerald-500 text-white" : isCurrent ? "border-[#852BAF] bg-gradient-to-br from-[#852BAF] to-[#FC3F78] text-white shadow-purple-200" : "border-slate-200 bg-white text-slate-400"}`}>{isCompleted ? <Check className="h-5 w-5" /> : <Icon className="h-5 w-5" />}</span>
-                    <span className={`mt-2 text-xs font-extrabold ${isCurrent ? "text-[#852BAF]" : isCompleted ? "text-emerald-700" : "text-slate-400"}`}>{item.title}</span><span className="mt-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-300">Step {index + 1}</span>
-                  </button>
-                </div>;
-              })}</div>
-            </div>
-          </div>
-
-          <main className="px-5 py-7 sm:px-8 sm:py-9 lg:px-12 lg:py-11">
-            <div className="mx-auto max-w-6xl"><div className="mb-8 flex flex-col justify-between gap-4 border-b border-slate-100 pb-6 sm:flex-row sm:items-end"><div><span className="inline-flex rounded-full bg-purple-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-[#852BAF]">Step {step + 1} of {steps.length}</span><h2 className="mt-3 text-3xl font-black tracking-tight text-slate-900">{steps[step].title}</h2><p className="mt-2 text-sm text-slate-500">{descriptions[step]}</p></div><span className="hidden rounded-2xl bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500 sm:block">Fields marked <span className="font-black text-pink-500">*</span> are required</span></div>
-              {content()}
-              {error && <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</div>}
-              {step < 6 && <div className="mt-10 flex items-center justify-between border-t border-slate-100 pt-6"><button type="button" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 font-bold text-slate-600 shadow-sm transition hover:border-purple-300 hover:text-[#852BAF] disabled:pointer-events-none disabled:opacity-0"><ArrowLeft className="h-4 w-4" /> Previous</button><button type="button" onClick={next} className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-7 py-3 font-black text-white shadow-lg shadow-purple-200 transition hover:-translate-y-0.5">Continue <ArrowRight className="h-4 w-4" /></button></div>}
-            </div>
-          </main>
-        </section>
+        <main className="px-6 py-8 sm:px-10 sm:py-10">
+          <div className="mb-7"><p className={`text-sm font-medium ${darkMode ? "text-slate-400" : "text-slate-500"}`}>Step {step + 1} of {steps.length}</p><h2 className="mt-1 text-2xl font-semibold">{steps[step].title}</h2><p className={`mt-2 text-base ${darkMode ? "text-slate-400" : "text-slate-500"}`}>{descriptions[step]}</p></div>
+          {content()}
+          {error && <div className={`mt-5 border px-4 py-3 text-sm ${darkMode ? "border-red-500/40 bg-red-950/30 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>{error}</div>}
+          {step < 6 && <footer className={`mt-9 flex items-center justify-between border-t pt-6 ${darkMode ? "border-slate-700" : "border-slate-200"}`}><button type="button" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0} className={`px-5 py-2.5 text-sm font-medium disabled:invisible ${darkMode ? "text-slate-300" : "text-slate-600"}`}><ArrowLeft className="mr-2 inline h-4 w-4" />Previous</button><button type="button" onClick={next} className="rounded-md bg-gradient-to-r from-[#7457d7] to-[#9a63df] px-7 py-2.5 text-sm font-semibold text-white">Continue<ArrowRight className="ml-2 inline h-4 w-4" /></button></footer>}
+        </main>
       </div>
     </div>
   );
