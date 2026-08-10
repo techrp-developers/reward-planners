@@ -187,7 +187,7 @@ export default function ClientOnboarding() {
                 onChange={(event) => update("state", event.target.value)}
                 onBlur={() => setFieldErrors((current) => ({ ...current, state: validateField("state", data.state) }))}
                 disabled={statesLoading || Boolean(statesError)}
-                className={`mt-3 w-full rounded-lg border px-4 py-4 text-base font-medium outline-none transition focus:ring-4 disabled:cursor-not-allowed ${darkMode ? "border-[#4c4852] bg-[#242328] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus:border-fuchsia-500 focus:ring-fuchsia-500/10" : "border-transparent bg-[#f4f1f6] text-slate-800 focus:border-purple-300 focus:bg-white focus:ring-purple-100 disabled:bg-slate-100"} ${fieldErrors.state ? "border-red-400 focus:border-red-400 focus:ring-red-500/10" : ""}`}
+                className={`mt-3 w-full rounded-xl border px-4 py-4 text-base font-medium outline-none transition focus:ring-4 disabled:cursor-not-allowed ${darkMode ? "border-[#4c4852] bg-[#242328] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus:border-fuchsia-500 focus:ring-fuchsia-500/10" : "border-transparent bg-[#f1f4f7] text-slate-800 focus:border-purple-300 focus:bg-white focus:ring-purple-100 disabled:bg-slate-100"} ${fieldErrors.state ? "border-red-400 focus:border-red-400 focus:ring-red-500/10" : ""}`}
               >
                 <option value="">{statesLoading ? "Loading states…" : "Select state"}</option>
                 {states.map((state) => (
@@ -204,7 +204,7 @@ export default function ClientOnboarding() {
               onChange={(event) => update(field.name, event.target.value)} placeholder={field.placeholder}
               onBlur={() => setFieldErrors((current) => ({ ...current, [field.name]: validateField(field.name, data[field.name] ?? "") }))}
               aria-invalid={Boolean(fieldErrors[field.name])}
-              className={`mt-3 w-full rounded-lg border px-4 py-4 text-base font-medium outline-none transition placeholder:font-normal focus:ring-4 ${field.type === "password" ? "pr-12" : ""} ${darkMode ? "border-[#4c4852] bg-[#242328] text-white placeholder:text-[#8c8992] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus:border-fuchsia-500 focus:ring-fuchsia-500/10" : "border-transparent bg-[#f4f1f6] text-slate-800 placeholder:text-slate-400 focus:border-purple-300 focus:bg-white focus:ring-purple-100"} ${fieldErrors[field.name] ? "border-red-400 focus:border-red-400 focus:ring-red-500/10" : ""}`}
+              className={`mt-3 w-full rounded-xl border px-4 py-4 text-base font-medium outline-none transition placeholder:font-normal focus:ring-4 ${field.type === "password" ? "pr-12" : ""} ${darkMode ? "border-[#4c4852] bg-[#242328] text-white placeholder:text-[#8c8992] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus:border-fuchsia-500 focus:ring-fuchsia-500/10" : "border-transparent bg-[#f1f4f7] text-slate-800 placeholder:text-slate-400 focus:border-purple-300 focus:bg-white focus:ring-purple-100"} ${fieldErrors[field.name] ? "border-red-400 focus:border-red-400 focus:ring-red-500/10" : ""}`}
             />
             {field.type === "password" && <button type="button" onClick={() => setVisiblePasswords((current) => ({ ...current, [field.name]: !current[field.name] }))} className={`absolute right-3 top-[27px] grid h-9 w-9 place-items-center rounded-md text-xl transition ${darkMode ? "text-slate-400 hover:bg-slate-700 hover:text-white" : "text-slate-500 hover:bg-white hover:text-purple-700"}`} aria-label={visiblePasswords[field.name] ? `Hide ${field.label}` : `Show ${field.label}`} title={visiblePasswords[field.name] ? "Hide password" : "Show password"}>{visiblePasswords[field.name] ? <MdVisibilityOff /> : <MdVisibility />}</button>}
             </div>
@@ -223,7 +223,26 @@ export default function ClientOnboarding() {
 
   const content = () => {
     if ([0, 1, 2, 5].includes(step)) return renderFields();
-    if (step === 3) return (
+    if (step === 3) return (<>
+      <div className={`mx-auto grid max-w-4xl overflow-hidden rounded-3xl border lg:grid-cols-[.78fr_1.22fr] ${darkMode ? "border-slate-700 bg-slate-900/45" : "border-slate-200 bg-white shadow-[0_18px_45px_rgba(60,72,88,0.08)]"}`}>
+        <aside className={`p-6 sm:p-8 ${darkMode ? "bg-purple-500/10" : "bg-gradient-to-br from-purple-50 via-white to-indigo-50"}`}>
+          <span className={`grid h-12 w-12 place-items-center rounded-2xl text-2xl ${darkMode ? "bg-purple-500/15 text-purple-300" : "bg-white text-purple-700 shadow-sm"}`}><MdSecurity /></span>
+          <h3 className="mt-6 text-xl font-semibold tracking-tight">Your identity stays protected</h3>
+          <p className={`mt-3 text-sm leading-6 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>Only the final four Aadhaar digits are collected on this temporary screen.</p>
+          <div className={`mt-6 border-t pt-5 text-sm leading-6 ${darkMode ? "border-slate-700 text-slate-400" : "border-purple-100 text-slate-500"}`}><strong className={`block font-semibold ${darkMode ? "text-slate-200" : "text-slate-700"}`}>Privacy notice</strong>Full Aadhaar details must only be handled by an approved KYC provider and are never stored here.</div>
+        </aside>
+        <section className="p-6 sm:p-8">
+          <div className="flex items-start justify-between gap-4"><div><p className={`text-sm font-semibold ${darkMode ? "text-purple-300" : "text-purple-700"}`}>Secure verification</p><h3 className="mt-1 text-2xl font-semibold tracking-tight">Confirm your identity</h3></div>{Boolean(data.aadhaarVerified) && <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${darkMode ? "bg-emerald-500/15 text-emerald-300" : "bg-emerald-50 text-emerald-700"}`}><MdCheckCircle className="text-base" /> Verified</span>}</div>
+          <label className={`mt-7 block text-sm font-semibold ${darkMode ? "text-slate-200" : "text-slate-700"}`}>Last 4 digits of Aadhaar
+            <input maxLength={4} inputMode="numeric" disabled={Boolean(data.aadhaarVerified)} value={String(data.aadhaarLast4)} onChange={(e) => update("aadhaarLast4", e.target.value.replace(/\D/g, ""))} className={`mt-2.5 w-full rounded-xl border px-5 py-4 text-xl font-semibold tracking-[.65em] outline-none transition focus:border-purple-400 focus:ring-4 disabled:cursor-not-allowed ${darkMode ? "border-slate-700 bg-slate-800 text-white focus:ring-purple-500/10 disabled:text-slate-400" : "border-slate-200 bg-slate-50 text-slate-800 focus:bg-white focus:ring-purple-100 disabled:bg-slate-100 disabled:text-slate-500"}`} placeholder="0000" />
+          </label>
+          <label className={`mt-5 flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition ${data.identityConsent ? darkMode ? "border-purple-500/50 bg-purple-500/10" : "border-purple-200 bg-purple-50/60" : darkMode ? "border-slate-700" : "border-slate-200"}`}><input type="checkbox" checked={Boolean(data.identityConsent)} onChange={(e) => update("identityConsent", e.target.checked)} className="sr-only" /><span className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md border text-xs ${data.identityConsent ? "border-purple-600 bg-purple-600 text-white" : darkMode ? "border-slate-600 text-transparent" : "border-slate-300 text-transparent"}`}><Check /></span><span className={`text-sm leading-6 ${darkMode ? "text-slate-300" : "text-slate-600"}`}>I authorize Reward Planners to verify my identity through an approved provider.</span></label>
+          <button type="button" onClick={verifyIdentity} disabled={verifying || Boolean(data.aadhaarVerified)} className={`mt-5 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3.5 font-semibold text-white shadow-sm transition ${data.aadhaarVerified ? "bg-emerald-600" : "bg-gradient-to-r from-[#7457d7] to-[#9a63df] hover:-translate-y-0.5 hover:shadow-[0_10px_25px_rgba(116,87,215,0.2)]"}`}>
+            {verifying ? <><MdAutorenew className="h-5 w-5 animate-spin" /> Verifying...</> : data.aadhaarVerified ? <><MdCheckCircle className="h-5 w-5" /> Identity verified successfully</> : <><MdVerifiedUser className="h-5 w-5" /> Verify identity</>}
+          </button>
+        </section>
+      </div>
+      {/* verification-old
       <div className="mx-auto max-w-xl space-y-5">
         <div className={`rounded-2xl border p-5 text-base leading-7 ${darkMode ? "border-amber-500/30 bg-amber-950/20 text-amber-200" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
           For safety, this temporary screen only collects the last four digits. Full Aadhaar must be handled by an approved KYC provider and must never be stored here.
@@ -235,15 +254,30 @@ export default function ClientOnboarding() {
         <button type="button" onClick={verifyIdentity} disabled={verifying || Boolean(data.aadhaarVerified)} className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 font-bold text-white disabled:bg-emerald-600">
           {verifying ? <><MdAutorenew className="h-5 w-5 animate-spin" /> Verifying…</> : data.aadhaarVerified ? <><MdCheckCircle className="h-5 w-5" /> Verification complete</> : <><MdVerifiedUser className="h-5 w-5" /> Verify Aadhaar</>}
         </button>
-      </div>
+      </div> */}
+      </>
     );
     if (step === 4) return (
-      <div className="space-y-3">
-        {[['terms','Terms of Service'],['privacy','Privacy Policy'],['dataConsent','Data Processing Consent'],['communicationConsent','Electronic Communication Consent']].map(([name, label]) => (
-          <label key={name} className={`flex items-center gap-4 rounded-2xl border p-5 text-base font-bold transition ${darkMode ? "border-slate-700 bg-slate-900/70 text-slate-200 hover:border-purple-500/50" : "border-slate-200 text-slate-700 hover:bg-slate-50"}`}>
-            <input type="checkbox" checked={Boolean(data[name])} onChange={(e) => update(name, e.target.checked)} className="h-4 w-4 accent-purple-600" /> I accept the {label}<span className="ml-auto text-pink-500">Required</span>
-          </label>
-        ))}
+      <div>
+        <div className="grid gap-4 md:grid-cols-2">
+          {[
+            { name: "terms", label: "Terms of Service", description: "I have reviewed and agree to the platform terms.", Icon: MdFactCheck },
+            { name: "privacy", label: "Privacy Policy", description: "I understand how organization data is handled.", Icon: MdSecurity },
+            { name: "dataConsent", label: "Data Processing Consent", description: "I authorize processing for account administration.", Icon: MdAnalytics },
+            { name: "communicationConsent", label: "Communication Consent", description: "I agree to receive essential account communications.", Icon: MdGroups },
+          ].map(({ name, label, description, Icon }) => {
+            const checked = Boolean(data[name]);
+            return (
+              <label key={name} className={`group relative flex cursor-pointer items-start gap-4 rounded-2xl border p-5 transition-all duration-200 ${checked ? darkMode ? "border-purple-500/70 bg-purple-500/10 shadow-[0_10px_30px_rgba(139,92,246,0.08)]" : "border-purple-300 bg-purple-50/70 shadow-[0_10px_30px_rgba(116,87,215,0.09)]" : darkMode ? "border-slate-700 bg-slate-900/45 hover:border-slate-600 hover:bg-slate-800/60" : "border-slate-200 bg-white hover:-translate-y-0.5 hover:border-purple-200 hover:shadow-[0_12px_30px_rgba(60,72,88,0.08)]"}`}>
+                <input type="checkbox" checked={checked} onChange={(e) => update(name, e.target.checked)} className="sr-only" />
+                <span className={`mt-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-xl text-xl transition ${checked ? "bg-gradient-to-br from-[#7457d7] to-[#9a63df] text-white" : darkMode ? "bg-slate-800 text-slate-400" : "bg-slate-100 text-slate-500 group-hover:bg-purple-50 group-hover:text-purple-600"}`}><Icon /></span>
+                <span className="min-w-0 flex-1"><span className={`block text-base font-semibold ${darkMode ? "text-slate-100" : "text-slate-800"}`}>{label}</span><span className={`mt-1.5 block text-sm leading-6 ${darkMode ? "text-slate-400" : "text-slate-500"}`}>{description}</span></span>
+                <span className={`mt-1 grid h-6 w-6 shrink-0 place-items-center rounded-lg border text-sm transition ${checked ? "border-purple-600 bg-purple-600 text-white" : darkMode ? "border-slate-600 bg-slate-800 text-transparent" : "border-slate-300 bg-white text-transparent"}`}><Check /></span>
+              </label>
+            );
+          })}
+        </div>
+        <div className={`mt-5 flex items-center gap-3 rounded-xl px-4 py-3 text-sm ${darkMode ? "bg-slate-800/60 text-slate-400" : "bg-slate-100/80 text-slate-500"}`}><MdSecurity className={`shrink-0 text-lg ${darkMode ? "text-purple-300" : "text-purple-600"}`} />All four agreements are required to continue. Your selections are securely recorded with the onboarding submission.</div>
       </div>
     );
     return (
@@ -287,22 +321,22 @@ export default function ClientOnboarding() {
     </div>;
   }
   return (
-    <div className={`min-h-screen px-4 py-8 sm:py-12 ${darkMode ? "bg-[#090d18] text-white" : "bg-[#f5f5f7] text-slate-900"}`} style={{ fontFamily: '"Segoe UI Variable", "Avenir Next", Inter, ui-sans-serif, system-ui, sans-serif' }}>
-      <div className={`mx-auto w-full max-w-7xl overflow-hidden border shadow-2xl ${darkMode ? "border-slate-700 bg-[#0e1422] shadow-black/40" : "border-slate-200 bg-white shadow-slate-300/50"}`}>
-        <header className={`flex items-center justify-between border-b px-6 py-4 ${darkMode ? "border-slate-700" : "border-slate-200"}`}>
-          <div><h1 className="text-lg font-semibold">Client Onboarding</h1><p className={`mt-0.5 text-sm ${darkMode ? "text-slate-400" : "text-slate-500"}`}>Set up your organization account</p></div>
+    <div className={`min-h-screen px-4 py-8 sm:px-7 sm:py-12 ${darkMode ? "bg-[#111827] text-white" : "bg-[#dfe7ed] text-slate-900"}`} style={{ fontFamily: 'Inter, "SF Pro Display", "Segoe UI Variable", "Avenir Next", ui-sans-serif, system-ui, sans-serif' }}>
+      <div className={`mx-auto w-full max-w-7xl overflow-hidden rounded-[28px] border shadow-[0_28px_80px_rgba(43,55,72,0.16)] ${darkMode ? "border-slate-700 bg-[#0e1422]" : "border-white/80 bg-white"}`}>
+        <header className={`flex items-center justify-between border-b px-6 py-5 sm:px-8 ${darkMode ? "border-slate-700 bg-[#111827]" : "border-slate-100 bg-white"}`}>
+          <div><h1 className="text-xl font-semibold tracking-tight">Client Onboarding</h1><p className={`mt-1 text-sm ${darkMode ? "text-slate-400" : "text-slate-500"}`}>Set up your organization account</p></div>
           <div className="flex items-center gap-2"><button type="button" onClick={() => setDarkMode((value) => !value)} className={`grid h-9 w-9 place-items-center rounded-full text-lg ${darkMode ? "bg-slate-800 text-amber-300" : "bg-slate-100 text-purple-700"}`} aria-label={darkMode ? "Use light mode" : "Use dark mode"}>{darkMode ? <MdLightMode /> : <MdDarkMode />}</button><Link to="/login" className={`grid h-9 w-9 place-items-center rounded-full text-xl ${darkMode ? "text-slate-400 hover:bg-slate-800" : "text-slate-500 hover:bg-slate-100"}`} aria-label="Close onboarding"><MdClose /></Link></div>
         </header>
 
-        <nav className={`overflow-x-auto border-b px-6 py-6 ${darkMode ? "border-slate-700" : "border-slate-200"}`}>
+        <nav className={`overflow-x-auto border-b px-6 py-6 sm:px-9 ${darkMode ? "border-slate-700 bg-[#0d1524]" : "border-slate-100 bg-[#fbfcfd]"}`}>
           <div className="flex min-w-[900px]">{steps.map((item, index) => { const available = index <= highestStep; const completed = index < highestStep; const current = index === step; return <div key={item.title} className="relative flex flex-1 justify-center">{index < steps.length - 1 && <span className={`absolute left-[58%] top-5 w-[84%] border-t border-dashed ${completed ? "border-purple-500" : darkMode ? "border-slate-600" : "border-slate-300"}`} />}<button type="button" disabled={!available} onClick={() => { setStep(index); setError(""); }} className="relative z-10 flex w-28 flex-col items-center disabled:cursor-not-allowed"><span className={`grid h-11 w-11 place-items-center rounded-full text-sm font-semibold ${current ? "bg-gradient-to-br from-[#7457d7] to-[#9a63df] text-white" : completed ? "bg-[#6f4dcc] text-white" : darkMode ? "bg-slate-700 text-slate-300" : "bg-slate-200 text-slate-600"}`}>{completed ? <Check className="text-xl" /> : index + 1}</span><span className={`mt-2 text-center text-sm leading-4 ${current ? darkMode ? "text-white" : "text-slate-900" : darkMode ? "text-slate-400" : "text-slate-500"}`}>{item.title}</span></button></div>; })}</div>
         </nav>
 
-        <main className="px-6 py-9 sm:px-12 sm:py-11 lg:px-16 lg:py-12">
-          <div className="mb-7"><p className={`text-sm font-medium ${darkMode ? "text-slate-400" : "text-slate-500"}`}>Step {step + 1} of {steps.length}</p><h2 className="mt-1 text-2xl font-semibold">{steps[step].title}</h2><p className={`mt-2 text-base ${darkMode ? "text-slate-400" : "text-slate-500"}`}>{descriptions[step]}</p></div>
+        <main className={`px-6 py-9 sm:px-12 sm:py-11 lg:px-16 lg:py-12 ${darkMode ? "bg-[#0e1422]" : "bg-[#f9fbfc]"}`}>
+          <div className={`mb-8 rounded-2xl border px-5 py-4 ${darkMode ? "border-slate-700 bg-slate-800/35" : "border-slate-100 bg-white shadow-[0_8px_24px_rgba(60,72,88,0.05)]"}`}><div className="flex flex-wrap items-center justify-between gap-3"><div><p className={`text-sm font-medium ${darkMode ? "text-purple-300" : "text-purple-700"}`}>Step {step + 1} of {steps.length}</p><h2 className="mt-1 text-2xl font-semibold tracking-tight">{steps[step].title}</h2><p className={`mt-2 text-base ${darkMode ? "text-slate-400" : "text-slate-500"}`}>{descriptions[step]}</p></div><div className="min-w-44"><div className="flex justify-between text-xs"><span className={darkMode ? "text-slate-400" : "text-slate-500"}>Progress</span><strong>{Math.round((step / 6) * 100)}%</strong></div><div className={`mt-2 h-1.5 overflow-hidden rounded-full ${darkMode ? "bg-slate-700" : "bg-slate-100"}`}><span className="block h-full rounded-full bg-gradient-to-r from-[#7457d7] to-[#9a63df] transition-all" style={{ width: `${(step / 6) * 100}%` }} /></div></div></div></div>
           {content()}
-          {error && <div className={`mt-5 border px-4 py-3 text-sm ${darkMode ? "border-red-500/40 bg-red-950/30 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>{error}</div>}
-          {step < 6 && <footer className={`mt-9 flex items-center justify-between border-t pt-6 ${darkMode ? "border-slate-700" : "border-slate-200"}`}><button type="button" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0} className={`inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium disabled:invisible ${darkMode ? "text-slate-300" : "text-slate-600"}`}><MdArrowBack className="text-lg" />Previous</button><button type="button" onClick={next} className="inline-flex items-center gap-2 rounded-md bg-gradient-to-r from-[#7457d7] to-[#9a63df] px-7 py-2.5 text-sm font-semibold text-white">Continue<MdArrowForward className="text-lg" /></button></footer>}
+          {error && <div className={`mt-5 rounded-xl border px-4 py-3 text-sm ${darkMode ? "border-red-500/40 bg-red-950/30 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>{error}</div>}
+          {step < 6 && <footer className={`mt-9 flex items-center justify-between border-t pt-6 ${darkMode ? "border-slate-700" : "border-slate-200"}`}><button type="button" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0} className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition disabled:invisible ${darkMode ? "text-slate-300 hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100"}`}><MdArrowBack className="text-lg" />Previous</button><button type="button" onClick={next} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#7457d7] to-[#9a63df] px-7 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(116,87,215,0.22)] transition hover:-translate-y-0.5">Continue<MdArrowForward className="text-lg" /></button></footer>}
         </main>
       </div>
     </div>
