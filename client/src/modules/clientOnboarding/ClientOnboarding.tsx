@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../../common/api/api";
-import { MdAdminPanelSettings, MdAnalytics, MdArrowBack, MdArrowForward, MdAutorenew, MdBusiness, MdCheck as Check, MdCheckCircle, MdClose, MdDarkMode, MdFactCheck, MdGroups, MdLightMode, MdLocationOn, MdOutlineVerifiedUser, MdPerson, MdRedeem, MdSecurity, MdVerifiedUser, MdVisibility, MdVisibilityOff } from "react-icons/md";
+import { MdAdminPanelSettings, MdAnalytics, MdArrowBack, MdArrowForward, MdAutorenew, MdBusiness, MdCelebration, MdCheck as Check, MdCheckCircle, MdClose, MdDarkMode, MdFactCheck, MdGroups, MdLightMode, MdLocationOn, MdOutlineVerifiedUser, MdPerson, MdRedeem, MdSecurity, MdVerifiedUser, MdVisibility, MdVisibilityOff } from "react-icons/md";
 
 type FormData = Record<string, string | boolean>;
 type StateOption = { state_id: number; state_name: string };
@@ -247,19 +247,21 @@ export default function ClientOnboarding() {
       </div>
     );
     return (
-      <div className="py-5 text-center">
-        <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-emerald-100 text-emerald-600"><MdCheckCircle className="h-11 w-11" /></div>
-        <h2 className="mt-6 text-3xl font-extrabold text-slate-900">Welcome to Reward Planner!</h2>
-        <p className="mt-2 text-slate-500">Your onboarding information is ready to create the organization.</p>
-        <div className="mx-auto mt-7 grid max-w-lg gap-3 rounded-2xl bg-slate-50 p-5 text-left text-sm sm:grid-cols-2">
-          <div><span className="text-slate-500">Company</span><strong className="block text-slate-900">{String(data.companyName)}</strong></div>
-          <div><span className="text-slate-500">Admin</span><strong className="block text-slate-900">{String(data.adminEmail)}</strong></div>
-          <div><span className="text-slate-500">Status</span><strong className="block text-emerald-600">Ready</strong></div>
-          <div><span className="text-slate-500">Next step</span><strong className="block text-slate-900">Organization setup</strong></div>
-        </div>
-        <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
-          <button onClick={() => navigate("/login", { state: { message: "Client onboarding completed successfully." } })} className="rounded-full bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-8 py-3 font-bold text-white shadow-lg">Return to login</button>
-          <button type="button" onClick={startOver} className="rounded-full border border-slate-200 px-6 py-3 font-semibold text-slate-600 hover:bg-slate-50">Start over</button>
+      <div className="relative min-h-[500px] overflow-hidden py-10 text-center">
+        <style>{`@keyframes rp-burst{0%{opacity:0;transform:scale(.05) rotate(0)}18%{opacity:1}65%{opacity:.9}100%{opacity:0;transform:scale(1.2) rotate(25deg)}}.rp-firework{position:absolute;width:5px;height:5px;border-radius:999px;animation:rp-burst 1.9s ease-out infinite;box-shadow:0 -58px #a855f7,41px -41px #ec4899,58px 0 #f59e0b,41px 41px #8b5cf6,0 58px #22c55e,-41px 41px #f43f5e,-58px 0 #06b6d4,-41px -41px #eab308}.rp-firework:nth-of-type(2){animation-delay:.55s}.rp-firework:nth-of-type(3){animation-delay:1.1s}@media(prefers-reduced-motion:reduce){.rp-firework{display:none}}`}</style>
+        <span className="rp-firework left-[13%] top-[28%]" /><span className="rp-firework right-[13%] top-[24%]" /><span className="rp-firework left-1/2 top-[12%]" />
+        <div className="relative z-10 mx-auto max-w-3xl">
+          <div className={`mx-auto grid h-24 w-24 place-items-center rounded-full border text-5xl ${darkMode ? "border-purple-500/30 bg-purple-500/10 text-purple-300" : "border-purple-100 bg-purple-50 text-purple-700"}`}><MdCelebration /></div>
+          <p className={`mt-7 text-sm font-semibold uppercase tracking-[0.18em] ${darkMode ? "text-purple-300" : "text-purple-700"}`}>Onboarding complete</p>
+          <h2 className={`mt-3 text-4xl font-semibold tracking-tight sm:text-5xl ${darkMode ? "text-white" : "text-slate-900"}`}>Welcome aboard, {String(data.companyName || "your team")}!</h2>
+          <p className={`mx-auto mt-4 max-w-xl text-lg leading-8 ${darkMode ? "text-slate-400" : "text-slate-500"}`}>Your organization profile is ready. You can now continue to Reward Planners and begin setting up your workplace experience.</p>
+          <div className={`mx-auto mt-9 grid max-w-2xl border-y text-left sm:grid-cols-2 ${darkMode ? "divide-slate-700 border-slate-700 sm:divide-x" : "divide-slate-200 border-slate-200 sm:divide-x"}`}>
+            <div className="px-5 py-5"><span className={`text-sm ${darkMode ? "text-slate-500" : "text-slate-400"}`}>Organization</span><strong className="mt-1 block text-base">{String(data.companyName)}</strong></div>
+            <div className="px-5 py-5"><span className={`text-sm ${darkMode ? "text-slate-500" : "text-slate-400"}`}>Primary administrator</span><strong className="mt-1 block text-base">{String(data.adminEmail)}</strong></div>
+            <div className="px-5 py-5"><span className={`text-sm ${darkMode ? "text-slate-500" : "text-slate-400"}`}>Setup status</span><strong className="mt-1 flex items-center gap-2 text-base text-purple-500"><MdCheckCircle /> Ready to continue</strong></div>
+            <div className="px-5 py-5"><span className={`text-sm ${darkMode ? "text-slate-500" : "text-slate-400"}`}>Next step</span><strong className="mt-1 block text-base">Organization workspace</strong></div>
+          </div>
+          <div className="mt-9 flex flex-wrap items-center justify-center gap-4"><button onClick={() => navigate("/login", { state: { message: "Client onboarding completed successfully." } })} className="inline-flex items-center gap-2 rounded-md bg-gradient-to-r from-[#7457d7] to-[#a855d5] px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-purple-900/20">Continue to login <MdArrowForward /></button><button type="button" onClick={startOver} className={`rounded-md border px-6 py-3.5 text-base font-medium ${darkMode ? "border-slate-700 text-slate-300 hover:bg-slate-800" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>Start over</button></div>
         </div>
       </div>
     );
