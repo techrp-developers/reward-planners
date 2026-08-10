@@ -768,7 +768,7 @@ export default function ProductManagerList() {
         </div>
 
         {/* TABLE */}
-        <div className="relative overflow-hidden border border-gray-100 rounded-2xl">
+        <div className="relative overflow-x-auto border border-gray-100 rounded-2xl">
           {loading && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 backdrop-blur-[1px]">
               <FaSpinner className="animate-spin text-3xl text-[#852BAF]" />
@@ -794,6 +794,10 @@ export default function ProductManagerList() {
                   <div className="flex items-center">
                     Product {getSortIcon("product_name")}
                   </div>
+                </th>
+
+                <th className="px-4 py-4 text-xs font-bold tracking-wider text-gray-500 uppercase">
+                  Vendor
                 </th>
 
                 <th className="px-4 py-4 text-xs font-bold tracking-wider text-gray-500 uppercase">
@@ -845,6 +849,22 @@ export default function ProductManagerList() {
                     >
                       {product.product_name}
                     </Link>
+                  </td>
+
+                  <td className="px-4 py-4">
+                    <div className="flex min-w-[150px] items-center gap-2.5">
+                      <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-purple-100 to-pink-100 text-xs font-extrabold uppercase text-[#852BAF] ring-1 ring-purple-200/70">
+                        {(product.vendor_name || "V").trim().charAt(0)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold text-gray-700" title={product.vendor_name || undefined}>
+                          {product.vendor_name || `Vendor #${product.vendor_id}`}
+                        </p>
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                          ID {product.vendor_id}
+                        </p>
+                      </div>
+                    </div>
                   </td>
 
                   <td className="px-4 py-4 text-sm text-gray-500">{product.brand_name}</td>
