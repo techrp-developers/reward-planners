@@ -107,6 +107,8 @@ const ProductRewardMapping = lazy(() => import("./modules/products/vendorManager
 
 /* Attribute */
 const AttributeManagement = lazy(() => import("./modules/products/vendorManager/attribute/attributes.tsx"));
+const FlashSaleList = lazy(() => import("./modules/products/vendorManager/flashSale/FlashSaleList.tsx"));
+const FlashSaleEditor = lazy(() => import("./modules/products/vendorManager/flashSale/FlashSaleEditor.tsx"));
 
 /* Sales */
 // import FlashSaleCreate from "./vendor/components/feature/manager/flashSale/FlashSaleCreate";
@@ -343,20 +345,9 @@ export default function App() {
           element={<AttributeManagement />}
         />
 
-        {/* Flash Sale */}
-        {/* <Route path={routes.manager.flashlist} element={<FlashSaleList />} />
-
-        <Route
-          path={routes.manager.flashCreate}
-          element={<FlashSaleCreate />}
-        />
-
-        <Route path="/manager/flash-sale/:id" element={<FlashSaleCreate />} />
-
-        <Route
-          path="/manager/flash-variants/:flashId"
-          element={<FlashSaleVariant />}
-        /> */}
+        <Route path={routes.manager.flashSales.list} element={<FlashSaleList />} />
+        <Route path={routes.manager.flashSales.create} element={<FlashSaleEditor />} />
+        <Route path={routes.manager.flashSales.edit} element={<FlashSaleEditor />} />
 
         {/* Orders */}
         <Route path={routes.manager.orders.orderList} element={<OrderList />} />

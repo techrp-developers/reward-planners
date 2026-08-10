@@ -43,8 +43,11 @@ export const routes = {
     addDocument:"/manager/document/DocumentAdd",
     linkDocument:"/manager/document/DocumentCategory",
     attributes: "/manager/attributes",
-    // flashlist: "/manager/flashlist",
-    // flashCreate: "/manager/flash-sale",
+    flashSales: {
+      list: "/manager/flash-sales",
+      create: "/manager/flash-sales/create",
+      edit: "/manager/flash-sales/:id",
+    },
     orders:{
       orderList: "/manager/orders",
       details: "/manager/order-view/:orderId",

@@ -16,6 +16,7 @@ import {
   // FiHeart,
   FiUserCheck,
   FiBarChart2,
+  FiZap,
 } from "react-icons/fi";
 import { FaFileAlt, FaBolt } from "react-icons/fa";
 import { useAuth } from "../../../common/auth/useAuth";
@@ -141,6 +142,12 @@ export default function ManagerNavbar() {
           to: routes.manager.orders.cancellationRequest,
         },
       ],
+    },
+    {
+      label: "Flash Sales",
+      to: routes.manager.flashSales.list,
+      Icon: FiZap,
+      type: "link",
     },
     {
       label: "Reports",
