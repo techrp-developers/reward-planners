@@ -1,0 +1,24 @@
+import { FiCheck, FiClock, FiMapPin, FiPackage, FiTruck, FiX } from "react-icons/fi";
+
+export interface ShipmentProgress {
+  vendor_order_id?: number;
+  courier_name?: string | null;
+  awb_number?: string | null;
+  shipping_status: string;
+  expected_delivery_date?: string | null;
+  current_step: number;
+  steps: Array<{ key: string; label: string; completed: boolean; current: boolean }>;
+  timeline: Array<{ label: string; time: string }>;
+}
+
+const icons = [FiPackage, FiTruck, FiMapPin, FiCheck];
+const formatDateTime = (value: string) => new Date(value).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+export default function OrderStatusTimeline({ shipments }: { shipments: ShipmentProgress[] }) {
+  if (!shipments.length) return <section className="rounded-3xl border border-purple-100 bg-white p-6 shadow-[0_12px_38px_rgba(67,31,91,0.07)]"><div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-2xl bg-purple-50 text-[#852BAF]"><FiClock /></span><div><h2 className="font-extrabold text-slate-900">Order timeline</h2><p className="text-sm text-slate-500">Shipment tracking will appear once fulfilment begins.</p></div></div></section>;
+
+  return <section className="rounded-3xl border border-purple-100 bg-white p-6 shadow-[0_12px_38px_rgba(67,31,91,0.07)] sm:p-7"><div className="mb-7 flex flex-wrap items-center justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#852BAF]">Live fulfilment</p><h2 className="mt-1 text-xl font-extrabold text-slate-900">Order status timeline</h2></div>{shipments.length > 1 && <span className="rounded-full bg-purple-50 px-3 py-1.5 text-xs font-bold text-[#852BAF]">{shipments.length} shipments</span>}</div><div className="space-y-8">{shipments.map((shipment, shipmentIndex) => <article key={`${shipment.vendor_order_id || "shipment"}-${shipmentIndex}`} className={shipments.length > 1 ? "rounded-2xl border border-slate-100 p-5" : ""}>{shipments.length > 1 && <div className="mb-6 flex flex-wrap items-center justify-between gap-2"><p className="font-extrabold text-slate-800">Shipment {shipmentIndex + 1}</p><span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold capitalize text-indigo-700">{String(shipment.shipping_status || "processing").replaceAll("_", " ")}</span></div>}
+    <div className="grid" style={{ gridTemplateColumns: `repeat(${shipment.steps.length}, minmax(0, 1fr))` }}>{shipment.steps.map((step, index) => { const Icon = step.key === "cancelled" ? FiX : (icons[index] || FiPackage); const active = step.completed || step.current; const cancelled = step.key === "cancelled"; return <div key={step.key} className="relative flex flex-col items-center text-center"><div className={`absolute left-0 right-0 top-5 h-1 ${index === 0 ? "left-1/2" : ""} ${index === shipment.steps.length - 1 ? "right-1/2" : ""} ${cancelled ? "bg-gradient-to-r from-[#852BAF] to-red-500" : index <= shipment.current_step ? "bg-gradient-to-r from-[#852BAF] to-[#FC3F78]" : "bg-slate-100"}`} /><span className={`relative z-10 grid h-11 w-11 place-items-center rounded-full border-4 border-white shadow-md transition ${cancelled ? "bg-gradient-to-br from-red-500 to-rose-600 text-white" : active ? "bg-gradient-to-br from-[#852BAF] to-[#FC3F78] text-white" : "bg-slate-100 text-slate-400"}`}>{step.completed ? <FiCheck /> : <Icon />}</span><p className={`mt-3 text-[11px] font-extrabold sm:text-xs ${cancelled ? "text-red-600" : active ? "text-slate-800" : "text-slate-400"}`}>{step.label}</p></div>; })}</div>
+    <div className="mt-7 grid gap-4 border-t border-slate-100 pt-5 lg:grid-cols-[1fr_auto]"><div>{shipment.timeline.length ? <div className="space-y-3">{shipment.timeline.slice().reverse().map((event, index) => <div key={`${event.label}-${event.time}`} className="flex items-start gap-3"><span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${index === 0 ? "bg-[#FC3F78] ring-4 ring-pink-50" : "bg-purple-200"}`} /><div><p className="text-sm font-bold text-slate-700">{event.label}</p><p className="text-xs text-slate-400">{formatDateTime(event.time)}</p></div></div>)}</div> : <p className="text-sm text-slate-400">Waiting for the first courier scan.</p>}</div><div className="space-y-1 text-left lg:text-right">{shipment.courier_name && <p className="text-xs font-bold text-slate-500">{shipment.courier_name}</p>}{shipment.awb_number && <p className="font-mono text-xs font-extrabold text-[#852BAF]">AWB {shipment.awb_number}</p>}{shipment.expected_delivery_date && <p className="text-xs text-slate-400">Expected by {new Date(shipment.expected_delivery_date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</p>}</div></div>
+  </article>)}</div></section>;
+}

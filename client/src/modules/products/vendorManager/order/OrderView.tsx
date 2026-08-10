@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api } from "../../../../common/api/api";
+import OrderStatusTimeline, { type ShipmentProgress } from "../../components/OrderStatusTimeline";
 
 interface Order {
   order_id: number;
@@ -61,6 +62,7 @@ interface OrderDetailsResponse {
   address: Address;
   items: OrderItem[];
   summary: OrderSummary;
+  shipments: ShipmentProgress[];
 }
 
 const OrderView: React.FC = () => {
@@ -71,7 +73,7 @@ const OrderView: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchOrderDetails = async () => {
+  const fetchOrderDetails = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -91,13 +93,13 @@ const OrderView: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [orderId]);
 
   useEffect(() => {
     if (orderId) {
       fetchOrderDetails();
     }
-  }, [orderId]);
+  }, [fetchOrderDetails, orderId]);
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat("en-IN", {
@@ -165,6 +167,8 @@ const OrderView: React.FC = () => {
         </div>
       </div>
     </div>
+
+    <OrderStatusTimeline shipments={data.shipments || []} />
 
     {/* CUSTOMER */}
     <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm mb-5">

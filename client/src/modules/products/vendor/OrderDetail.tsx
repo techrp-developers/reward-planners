@@ -5,6 +5,7 @@ import {
   FiMail, FiMapPin, FiPackage, FiPhone, FiShoppingBag, FiTruck, FiUser,
 } from "react-icons/fi";
 import { api } from "../../../common/api/api";
+import OrderStatusTimeline, { type ShipmentProgress } from "../components/OrderStatusTimeline";
 
 const statusStyles: Record<string, { badge: string; icon: React.ElementType }> = {
   pending: { badge: "border-amber-200 bg-amber-50 text-amber-700", icon: FiClock },
@@ -19,7 +20,7 @@ interface Customer { user_id: number; name: string; email: string; phone: string
 interface Address { type: string; name: string; phone: string; line1: string; line2: string; city: string; state: string; country: string; zipcode: string; landmark?: string; }
 interface OrderItem { order_item_id: number; product_id: number; variant_id: number; product_name: string; brand_name: string; image: string | null; attributes: Record<string, string>; quantity: number; price: number; item_total: number; }
 interface Summary { item_total: number; vendor_total: number; }
-interface VendorOrderDetailsResponse { success: boolean; order: Order; customer: Customer; address: Address; items: OrderItem[]; summary: Summary; }
+interface VendorOrderDetailsResponse { success: boolean; order: Order; customer: Customer; address: Address; items: OrderItem[]; summary: Summary; shipments: ShipmentProgress[]; }
 
 const money = (amount: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(amount);
 const dateTime = (value: string) => new Date(value).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -64,7 +65,7 @@ const OrderDetail: React.FC = () => {
     </div>
   );
 
-  const { order, customer, address, items, summary } = data;
+  const { order, customer, address, items, summary, shipments } = data;
   const status = statusStyles[order.shipping_status.toLowerCase()] ?? { badge: "border-gray-200 bg-gray-50 text-gray-700", icon: FiPackage };
   const StatusIcon = status.icon;
   const addressLine = [address.line1, address.line2, address.city, address.state, address.country, address.zipcode].filter(Boolean).join(", ");
@@ -92,6 +93,8 @@ const OrderDetail: React.FC = () => {
           </div>
         </div>
       </section>
+
+      <OrderStatusTimeline shipments={shipments || []} />
 
       <div className="grid gap-5 lg:grid-cols-[1.55fr_1fr]">
         <section className="overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-[0_10px_35px_rgba(52,22,68,0.07)]">
