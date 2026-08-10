@@ -1,372 +1,43 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { FiArrowRight, FiCheckCircle, FiClock, FiInbox, FiPhoneCall, FiRefreshCw, FiSearch, FiUsers } from "react-icons/fi";
 import { api } from "../../../common/api/api";
-import { FiInbox } from "react-icons/fi";
-import { FaSearch, FaEye } from "react-icons/fa";
+import { routes } from "../../../routes";
 
-interface ServiceEnquiry {
-  id: number;
-  enquiry_ref: string;
+type EnquiryStatus = "new" | "contacted" | "converted" | "closed";
+interface ServiceEnquiry { id: number; enquiry_ref: string; bundle_id: number | null; name: string; city: string; mobile: string; email: string; status: EnquiryStatus; enquiry_data: Record<string, unknown>; created_at: string; service_name: string | null; variant_name: string | null; variant_title: string | null; bundle_name: string | null; bundle_description: string | null; bundle_banner_image: string | null; }
 
-  bundle_id: number | null;
+const statusClasses: Record<EnquiryStatus, string> = { new: "border-amber-200 bg-amber-50 text-amber-700", contacted: "border-blue-200 bg-blue-50 text-blue-700", converted: "border-emerald-200 bg-emerald-50 text-emerald-700", closed: "border-slate-200 bg-slate-100 text-slate-600" };
+const formatDate = (date: string) => new Date(date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 
-  name: string;
-  city: string;
-  mobile: string;
-  email: string;
-
-  status: "new" | "contacted" | "converted" | "closed";
-
-  enquiry_data: Record<string, any>;
-
-  created_at: string;
-
-  service_name: string | null;
-
-  variant_name: string | null;
-
-  variant_title: string | null;
-
-  bundle_name: string | null;
-  bundle_description: string | null;
-  bundle_banner_image: string | null;
-}
-
-const ServiceEnquiries = () => {
+export default function ServiceEnquiries() {
   const navigate = useNavigate();
-
-  const [loading, setLoading] = useState(false);
-
-  const [error, setError] = useState<string | null>(null);
-
   const [enquiries, setEnquiries] = useState<ServiceEnquiry[]>([]);
-
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
-
   const [statusFilter, setStatusFilter] = useState("all");
-
   const [updatingId, setUpdatingId] = useState<number | null>(null);
 
-  const fetchEnquiries = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+  const fetchEnquiries = async () => { try { setLoading(true); setError(""); const res = await api.get("/v1/service-enquiry"); if (!res.data.success) throw new Error(); setEnquiries(res.data.data || []); } catch { setError("We couldn't load the service enquiries. Please try again."); } finally { setLoading(false); } };
+  useEffect(() => { void fetchEnquiries(); }, []);
 
-      const res = await api.get("/v1/service-enquiry");
+  const filtered = useMemo(() => enquiries.filter((item) => { const query = search.trim().toLowerCase(); return (!query || [item.name, item.mobile, item.email, item.enquiry_ref, item.service_name, item.bundle_name].some((value) => String(value || "").toLowerCase().includes(query))) && (statusFilter === "all" || item.status === statusFilter); }), [enquiries, search, statusFilter]);
+  const counts = useMemo(() => ({ total: enquiries.length, new: enquiries.filter((x) => x.status === "new").length, contacted: enquiries.filter((x) => x.status === "contacted").length, converted: enquiries.filter((x) => x.status === "converted").length }), [enquiries]);
 
-      if (!res.data.success) {
-        throw new Error("Failed to load enquiries");
-      }
+  const updateStatus = async (id: number, status: EnquiryStatus) => { try { setUpdatingId(id); const res = await api.put(`/v1/service-enquiry/${id}/status`, { status }); if (!res.data.success) throw new Error(); setEnquiries((current) => current.map((item) => item.id === id ? { ...item, status } : item)); } catch { window.alert("Unable to update the enquiry status."); } finally { setUpdatingId(null); } };
 
-      setEnquiries(res.data.data || []);
-    } catch (err) {
-      console.error(err);
-      setError("Failed to load enquiries");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const cards = [
+    { label: "Total enquiries", value: counts.total, Icon: FiUsers, tone: "bg-purple-50 text-[#852BAF]" },
+    { label: "New leads", value: counts.new, Icon: FiInbox, tone: "bg-amber-50 text-amber-600" },
+    { label: "Contacted", value: counts.contacted, Icon: FiPhoneCall, tone: "bg-blue-50 text-blue-600" },
+    { label: "Converted", value: counts.converted, Icon: FiCheckCircle, tone: "bg-emerald-50 text-emerald-600" },
+  ];
 
-  useEffect(() => {
-    fetchEnquiries();
-  }, []);
-
-  const filteredEnquiries = enquiries.filter((item) => {
-    const matchesSearch =
-      item.name.toLowerCase().includes(search.toLowerCase()) ||
-      item.mobile.includes(search) ||
-      item.enquiry_ref.toLowerCase().includes(search.toLowerCase());
-
-    const matchesStatus =
-      statusFilter === "all" ? true : item.status === statusFilter;
-
-    return matchesSearch && matchesStatus;
-  });
-
-  const getStatusClass = (status: string) => {
-    switch (status) {
-      case "new":
-        return "bg-yellow-100 text-yellow-700 border-yellow-200";
-
-      case "contacted":
-        return "bg-blue-100 text-blue-700 border-blue-200";
-
-      case "converted":
-        return "bg-green-100 text-green-700 border-green-200";
-
-      case "closed":
-        return "bg-red-100 text-red-700 border-red-200";
-
-      default:
-        return "bg-gray-100 text-gray-700 border-gray-200";
-    }
-  };
-
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  };
-
-  const updateEnquiryStatus = async (id: number, status: string) => {
-    try {
-      setUpdatingId(id);
-
-      const res = await api.put(`/v1/service-enquiry/${id}/status`, { status });
-
-      if (!res.data.success) {
-        throw new Error(res.data.message || "Failed to update status");
-      }
-
-      setEnquiries((prev) =>
-        prev.map((item) =>
-          item.id === id
-            ? {
-                ...item,
-                status: status as ServiceEnquiry["status"],
-              }
-            : item,
-        ),
-      );
-    } catch (error) {
-      console.error(error);
-      alert("Failed to update status");
-    } finally {
-      setUpdatingId(null);
-    }
-  };
-
-  return (
-    <div className="w-full min-h-screen">
-      <div className="p-6 bg-white border border-gray-200 shadow-lg rounded-2xl">
-        {/* HEADER */}
-
-        <div className="flex items-start gap-4 mb-8">
-          <div className="w-12 h-12 bg-gradient-to-r from-[#852BAF] to-[#FC3F78] rounded-full flex items-center justify-center shrink-0 shadow-md">
-            <FiInbox className="text-xl text-white" />
-          </div>
-
-          <div>
-            <h2 className="text-3xl font-bold text-gray-900">
-              Service Enquiries
-            </h2>
-
-            <p className="mt-1 text-sm text-gray-500">
-              Manage customer service enquiries and track conversions.
-            </p>
-          </div>
-        </div>
-
-        {/* FILTERS */}
-
-        <div className="flex flex-col gap-4 mb-6 md:flex-row">
-          <div className="relative flex-1">
-            <input
-              type="text"
-              placeholder="Search by ref no, name, mobile..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full py-3 pl-10 pr-4 border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-[#852BAF]"
-            />
-
-            <FaSearch className="absolute text-gray-400 left-3 top-4" />
-          </div>
-
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-3 border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-[#852BAF]"
-          >
-            <option value="all">All Status</option>
-
-            <option value="new">New</option>
-
-            <option value="contacted">Contacted</option>
-
-            <option value="converted">Converted</option>
-
-            <option value="closed">Closed</option>
-          </select>
-        </div>
-
-        {/* LOADER */}
-
-        {loading && (
-          <div className="flex justify-center py-12">
-            <div className="w-10 h-10 border-4 border-gray-200 border-t-[#852BAF] rounded-full animate-spin" />
-          </div>
-        )}
-
-        {/* ERROR */}
-
-        {error && (
-          <div className="px-4 py-3 mb-4 text-center text-red-600 border border-red-200 bg-red-50 rounded-xl">
-            {error}
-          </div>
-        )}
-
-        {/* TABLE */}
-
-        {!loading && !error && (
-          <div className="overflow-x-auto border border-gray-100 rounded-2xl">
-            <table className="w-full text-sm text-left">
-              <thead
-                style={{
-                  background: "linear-gradient(135deg,#fdf8ff 0%,#fff5f8 100%)",
-                }}
-              >
-                <tr>
-                  <th className="px-4 py-4 text-xs font-bold uppercase">
-                    Ref No
-                  </th>
-
-                  <th className="px-4 py-4 text-xs font-bold uppercase">
-                    Customer
-                  </th>
-
-                  <th className="px-4 py-4 text-xs font-bold uppercase">
-                    Mobile
-                  </th>
-
-                  <th className="px-4 py-4 text-xs font-bold uppercase">
-                    Service
-                  </th>
-
-                  <th className="px-4 py-4 text-xs font-bold uppercase">
-                    Requirement
-                  </th>
-
-                  <th className="px-4 py-4 text-xs font-bold uppercase">
-                    City
-                  </th>
-
-                  <th className="px-4 py-4 text-xs font-bold uppercase">
-                    Status
-                  </th>
-
-                  <th className="px-4 py-4 text-xs font-bold uppercase">
-                    Date
-                  </th>
-
-                  <th className="px-4 py-4 text-xs font-bold uppercase">
-                    Action
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-gray-50">
-                {filteredEnquiries.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="py-16 text-center text-gray-400">
-                      No enquiries found
-                    </td>
-                  </tr>
-                ) : (
-                  filteredEnquiries.map((enquiry) => (
-                    <tr
-                      key={enquiry.id}
-                      className="transition-colors bg-white hover:bg-purple-50/30"
-                    >
-                      <td className="px-4 py-4">
-                        <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-purple-50 text-[#852BAF]">
-                          {enquiry.enquiry_ref}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-4">
-                        <div className="font-semibold text-gray-800">
-                          {enquiry.name}
-                        </div>
-
-                        <div className="text-xs text-gray-500">
-                          {enquiry.email}
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-4 text-gray-600">
-                        {enquiry.mobile}
-                      </td>
-
-                      <td className="px-4 py-4">
-                        <div className="flex flex-col">
-                          <span className="font-medium text-gray-800">
-                            {enquiry.bundle_name || enquiry.service_name}
-                          </span>
-
-                          {enquiry.variant_name && (
-                            <span className="text-xs text-gray-500">
-                              {enquiry.variant_name}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-4 text-gray-600">
-                        {enquiry.enquiry_data?.requirement || "-"}
-                      </td>
-
-                      <td className="px-4 py-4 text-gray-600">
-                        {enquiry.city}
-                      </td>
-
-                      <td className="px-4 py-4">
-                        <div className="flex items-center gap-2">
-                          <select
-                            disabled={updatingId === enquiry.id}
-                            value={enquiry.status}
-                            onChange={(e) =>
-                              updateEnquiryStatus(enquiry.id, e.target.value)
-                            }
-                            className={`
-        px-3 py-1.5
-        text-xs font-semibold
-        border rounded-lg
-        cursor-pointer
-        outline-none
-        ${getStatusClass(enquiry.status)}
-      `}
-                          >
-                            <option value="new">New</option>
-                            <option value="contacted">Contacted</option>
-                            <option value="converted">Converted</option>
-                            <option value="closed">Closed</option>
-                          </select>
-
-                          {updatingId === enquiry.id && (
-                            <span className="text-xs text-gray-500">
-                              Saving...
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-4 text-gray-600 whitespace-nowrap">
-                        {formatDate(enquiry.created_at)}
-                      </td>
-
-                      <td className="px-4 py-4">
-                        <button
-                          onClick={() =>
-                            navigate(`/manager/enquiry/${enquiry.id}`)
-                          }
-                          className="px-3 py-1.5 text-xs font-semibold bg-purple-50 text-[#852BAF] border border-purple-200 rounded-lg hover:bg-[#852BAF] hover:text-white transition-all cursor-pointer"
-                        >
-                          <FaEye className="inline mr-1" />
-                          View
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-export default ServiceEnquiries;
+  return <main className="min-h-full bg-gradient-to-br from-[#fdf8ff] via-white to-[#fff5f8] p-4 sm:p-6 lg:p-8"><div className="mx-auto max-w-[1500px] space-y-6">
+    <header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#25103d] via-[#68258d] to-[#c33076] p-6 text-white shadow-[0_24px_65px_rgba(91,33,124,0.24)] sm:p-8"><div className="absolute -right-16 -top-24 h-64 w-64 rounded-full bg-white/10 blur-2xl" /><div className="relative flex items-center justify-between gap-5"><div className="flex items-center gap-4"><div className="grid h-14 w-14 place-items-center rounded-2xl border border-white/20 bg-white/10 shadow-inner"><FiInbox size={25} /></div><div><p className="text-[10px] font-bold uppercase tracking-[0.24em] text-purple-200">Lead workspace</p><h1 className="mt-1 text-2xl font-extrabold sm:text-3xl">Service Enquiries</h1><p className="mt-1 text-sm text-purple-100/80">Manage customer interest and move every enquiry towards conversion.</p></div></div><button onClick={() => void fetchEnquiries()} className="hidden items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-bold transition hover:bg-white/20 sm:inline-flex"><FiRefreshCw className={loading ? "animate-spin" : ""} /> Refresh</button></div></header>
+    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{cards.map(({ label, value, Icon, tone }) => <article key={label} className="rounded-2xl border border-purple-100 bg-white p-5 shadow-[0_12px_35px_rgba(67,31,91,0.07)]"><div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{label}</p><span className={`grid h-10 w-10 place-items-center rounded-xl ${tone}`}><Icon /></span></div><p className="mt-3 text-3xl font-black text-slate-900">{value.toLocaleString()}</p></article>)}</section>
+    <section className="rounded-3xl border border-purple-100 bg-white p-4 shadow-[0_18px_55px_rgba(67,31,91,0.08)]"><div className="grid gap-3 md:grid-cols-[1fr_220px]"><label className="relative"><FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search reference, customer, service, email or mobile" className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-4 text-sm outline-none transition focus:border-purple-400 focus:bg-white focus:ring-4 focus:ring-purple-100" /></label><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600 outline-none focus:border-purple-400"><option value="all">All statuses</option><option value="new">New</option><option value="contacted">Contacted</option><option value="converted">Converted</option><option value="closed">Closed</option></select></div></section>
+    <section className="overflow-hidden rounded-3xl border border-purple-100 bg-white shadow-[0_18px_55px_rgba(67,31,91,0.08)]"><div className="flex items-center justify-between border-b border-slate-100 px-6 py-5"><div><h2 className="font-extrabold text-slate-900">Enquiry pipeline</h2><p className="mt-0.5 text-xs text-slate-400">{filtered.length} of {enquiries.length} enquiries shown</p></div><FiClock className="text-[#852BAF]" /></div><div className="overflow-x-auto">{loading ? <div className="grid min-h-72 place-items-center text-sm font-bold text-[#852BAF]"><span className="flex flex-col items-center gap-3"><FiRefreshCw className="animate-spin text-2xl" />Loading enquiries...</span></div> : error ? <div className="grid min-h-72 place-items-center px-6 text-center"><div><p className="font-bold text-red-600">Unable to load enquiries</p><p className="mt-1 text-sm text-slate-500">{error}</p><button onClick={() => void fetchEnquiries()} className="mt-4 rounded-xl bg-[#852BAF] px-4 py-2 text-sm font-bold text-white">Try again</button></div></div> : !filtered.length ? <div className="grid min-h-72 place-items-center text-sm text-slate-400">No enquiries match the selected filters.</div> : <table className="min-w-full whitespace-nowrap text-left"><thead className="bg-purple-50/60 text-[10px] font-extrabold uppercase tracking-wider text-slate-500"><tr>{["Reference", "Customer", "Service", "Requirement", "Location", "Status", "Received", ""].map((heading) => <th key={heading} className="px-5 py-4">{heading}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{filtered.map((enquiry) => <tr key={enquiry.id} className="transition hover:bg-purple-50/30"><td className="px-5 py-4"><span className="rounded-full bg-purple-50 px-3 py-1.5 text-xs font-extrabold text-[#852BAF]">{enquiry.enquiry_ref}</span></td><td className="px-5 py-4"><p className="font-bold text-slate-900">{enquiry.name}</p><p className="mt-0.5 text-xs text-slate-400">{enquiry.email} · {enquiry.mobile}</p></td><td className="px-5 py-4"><p className="font-semibold text-slate-700">{enquiry.bundle_name || enquiry.service_name || "—"}</p><p className="text-xs text-slate-400">{enquiry.variant_name || "Custom requirement"}</p></td><td className="max-w-64 truncate px-5 py-4 text-sm text-slate-500" title={String(enquiry.enquiry_data?.requirement || "")}>{String(enquiry.enquiry_data?.requirement || "—")}</td><td className="px-5 py-4 text-sm text-slate-500">{enquiry.city || "—"}</td><td className="px-5 py-4"><select disabled={updatingId === enquiry.id} value={enquiry.status} onChange={(event) => void updateStatus(enquiry.id, event.target.value as EnquiryStatus)} className={`rounded-xl border px-3 py-2 text-xs font-bold capitalize outline-none ${statusClasses[enquiry.status]}`}>{["new", "contacted", "converted", "closed"].map((status) => <option key={status} value={status}>{status}</option>)}</select></td><td className="px-5 py-4 text-sm text-slate-500">{formatDate(enquiry.created_at)}</td><td className="px-5 py-4"><button onClick={() => navigate(routes.manager.services.details.replace(":id", String(enquiry.id)))} className="inline-flex items-center gap-2 rounded-xl border border-purple-100 bg-purple-50 px-3.5 py-2 text-xs font-extrabold text-[#852BAF] transition hover:border-[#852BAF] hover:bg-[#852BAF] hover:text-white">View <FiArrowRight /></button></td></tr>)}</tbody></table>}</div></section>
+  </div></main>;
+}
