@@ -28,12 +28,11 @@ const initialData: FormData = {
 
 const fields: Record<number, Array<{ name: string; label: string; type?: string; required?: boolean; placeholder?: string }>> = {
   0: [
-    { name: "companyName", label: "Company name", required: true }, { name: "legalName", label: "Legal entity name" },
+    { name: "companyName", label: "Company name", required: true },
     { name: "companyType", label: "Company type", required: true, placeholder: "Pvt Ltd / LLP / Startup" },
-    { name: "industry", label: "Industry", required: true }, { name: "employeeCount", label: "Number of employees", type: "number", required: true },
+    { name: "industry", label: "Industry", required: true }, { name: "employeeCount", label: "Employee count", required: true },
     { name: "website", label: "Website", type: "url" }, { name: "officialEmail", label: "Official email", type: "email", required: true },
-    { name: "officialPhone", label: "Mobile number", type: "tel", required: true }, { name: "pan", label: "Company PAN", required: true },
-    { name: "gst", label: "GST number (optional)" },
+    { name: "officialPhone", label: "Mobile number", type: "tel", required: true }, { name: "gst", label: "GST number (optional)" },
   ],
   1: [
     { name: "address1", label: "Address line 1", required: true }, { name: "address2", label: "Address line 2" },
@@ -105,7 +104,6 @@ export default function ClientOnboarding() {
       if (["pan", "repPan", "gst"].includes(name)) normalized = value.toUpperCase().replace(/\s/g, "").slice(0, name === "gst" ? 15 : 10);
       if (["officialPhone", "repPhone"].includes(name)) normalized = value.replace(/\D/g, "").slice(0, 10);
       if (name === "pincode") normalized = value.replace(/\D/g, "").slice(0, 6);
-      if (name === "employeeCount") normalized = value.replace(/\D/g, "");
     }
     setData((current) => ({
       ...current,
@@ -128,7 +126,7 @@ export default function ClientOnboarding() {
     if (["pan", "repPan"].includes(name) && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(text.toUpperCase())) return "Use PAN format ABCDE1234F.";
     if (name === "gst" && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(text.toUpperCase())) return "Enter a valid 15-character GSTIN.";
     if (name === "pincode" && !/^[1-9][0-9]{5}$/.test(text)) return "Enter a valid 6-digit PIN code.";
-    if (name === "employeeCount" && (!Number.isInteger(Number(text)) || Number(text) < 1)) return "Employee count must be at least 1.";
+    if (name === "employeeCount" && !["1-100", "101-500", "501-1,000", "1,001-5,000", "5,001+"].includes(text)) return "Select an employee count range.";
     if (name === "website") { try { const url = new URL(text); if (!["http:", "https:"].includes(url.protocol)) throw new Error(); } catch { return "Enter a complete URL starting with http:// or https://."; } }
     if (name === "password" && !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(text)) return "Use 8+ characters with uppercase, lowercase, number and symbol.";
     if (name === "confirmPassword" && text !== String(data.password)) return "Passwords do not match.";
@@ -197,14 +195,32 @@ export default function ClientOnboarding() {
               {statesError && <span className="mt-1 block text-xs font-normal text-red-600">{statesError}</span>}
               {fieldErrors.state && <span className="mt-1.5 block text-xs font-semibold text-red-600">{fieldErrors.state}</span>}
             </>
+          ) : field.name === "employeeCount" ? (
+            <>
+              <select
+                value={String(data.employeeCount ?? "")}
+                onChange={(event) => update("employeeCount", event.target.value)}
+                onBlur={() => setFieldErrors((current) => ({ ...current, employeeCount: validateField("employeeCount", data.employeeCount) }))}
+                className={`mt-3 w-full rounded-xl border px-4 py-4 text-base font-medium outline-none transition focus:ring-4 ${darkMode ? "border-[#4c4852] bg-[#242328] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus:border-fuchsia-500 focus:ring-fuchsia-500/10" : "border-transparent bg-[#f1f4f7] text-slate-800 focus:border-purple-300 focus:bg-white focus:ring-purple-100"} ${fieldErrors.employeeCount ? "border-red-400 focus:border-red-400 focus:ring-red-500/10" : ""}`}
+              >
+                <option value="">Select employee range</option>
+                <option value="1-100">1–100 employees</option>
+                <option value="101-500">101–500 employees</option>
+                <option value="501-1,000">501–1,000 employees</option>
+                <option value="1,001-5,000">1,001–5,000 employees</option>
+                <option value="5,001+">5,001+ employees</option>
+              </select>
+            </>
           ) : (
             <div className="relative">
+            {field.type === "tel" && <span className={`pointer-events-none absolute left-4 top-[27px] z-10 flex h-9 items-center border-r pr-3 text-sm font-semibold ${darkMode ? "border-slate-600 text-slate-300" : "border-slate-300 text-slate-600"}`}>+91</span>}
             <input
               type={field.type === "password" && visiblePasswords[field.name] ? "text" : field.type || "text"} value={String(data[field.name] ?? "")}
-              onChange={(event) => update(field.name, event.target.value)} placeholder={field.placeholder}
+              onChange={(event) => update(field.name, event.target.value)} placeholder={field.type === "tel" ? "10-digit mobile number" : field.placeholder}
+              autoComplete={field.type === "tel" ? "tel-national" : undefined}
               onBlur={() => setFieldErrors((current) => ({ ...current, [field.name]: validateField(field.name, data[field.name] ?? "") }))}
               aria-invalid={Boolean(fieldErrors[field.name])}
-              className={`mt-3 w-full rounded-xl border px-4 py-4 text-base font-medium outline-none transition placeholder:font-normal focus:ring-4 ${field.type === "password" ? "pr-12" : ""} ${darkMode ? "border-[#4c4852] bg-[#242328] text-white placeholder:text-[#8c8992] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus:border-fuchsia-500 focus:ring-fuchsia-500/10" : "border-transparent bg-[#f1f4f7] text-slate-800 placeholder:text-slate-400 focus:border-purple-300 focus:bg-white focus:ring-purple-100"} ${fieldErrors[field.name] ? "border-red-400 focus:border-red-400 focus:ring-red-500/10" : ""}`}
+              className={`mt-3 w-full rounded-xl border px-4 py-4 text-base font-medium outline-none transition placeholder:font-normal focus:ring-4 ${field.type === "password" ? "pr-12" : ""} ${field.type === "tel" ? "pl-[4.5rem]" : ""} ${darkMode ? "border-[#4c4852] bg-[#242328] text-white placeholder:text-[#8c8992] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus:border-fuchsia-500 focus:ring-fuchsia-500/10" : "border-transparent bg-[#f1f4f7] text-slate-800 placeholder:text-slate-400 focus:border-purple-300 focus:bg-white focus:ring-purple-100"} ${fieldErrors[field.name] ? "border-red-400 focus:border-red-400 focus:ring-red-500/10" : ""}`}
             />
             {field.type === "password" && <button type="button" onClick={() => setVisiblePasswords((current) => ({ ...current, [field.name]: !current[field.name] }))} className={`absolute right-3 top-[27px] grid h-9 w-9 place-items-center rounded-md text-xl transition ${darkMode ? "text-slate-400 hover:bg-slate-700 hover:text-white" : "text-slate-500 hover:bg-white hover:text-purple-700"}`} aria-label={visiblePasswords[field.name] ? `Hide ${field.label}` : `Show ${field.label}`} title={visiblePasswords[field.name] ? "Hide password" : "Show password"}>{visiblePasswords[field.name] ? <MdVisibilityOff /> : <MdVisibility />}</button>}
             </div>
