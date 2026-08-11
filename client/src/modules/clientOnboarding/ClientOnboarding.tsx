@@ -46,7 +46,6 @@ const fields: Record<number, Array<{ name: string; label: string; type?: string;
   2: [
     { name: "repName", label: "Full name", required: true }, { name: "designation", label: "Designation", required: true },
     { name: "repEmail", label: "Official email", type: "email", required: true }, { name: "repPhone", label: "Mobile number", type: "tel", required: true },
-    { name: "repPan", label: "PAN", required: true },
   ],
   5: [
     { name: "adminName", label: "Admin name", required: true }, { name: "adminEmail", label: "Admin email", type: "email", required: true },
