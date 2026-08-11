@@ -34,6 +34,10 @@ const { notifyUser } = require("../../../common/utils/notification");
 const { creditCompletedServiceReward } = require("../utils/serviceRewards");
 const { releaseServiceCoins } = require("../../../../services/rewards/serviceWalletService");
 const { runNonBlocking } = require("../../../../utils/nonBlocking");
+const {
+  notifyWhatsAppAdmins,
+  notifyNewServiceOrder,
+} = require("../../../../services/whatsapp/adminNotificationService");
 
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
 function getPublicUrl(path) {
@@ -371,6 +375,10 @@ class ServiceOrderController {
         runNonBlocking(
           () => generateAndEmailInvoice(parent_order_id),
           "service payment invoice email",
+        );
+        runNonBlocking(
+          () => notifyNewServiceOrder(parent_order_id),
+          "admin service order WhatsApp",
         );
       }
 
@@ -1342,13 +1350,16 @@ class ServiceOrderController {
       const [[order]] = await db.execute(
         `
       SELECT
-        id,
-        status
+        so.id,
+        so.status,
+        c.name AS customer_name,
+        c.company_id
 
-      FROM service_orders
+      FROM service_orders so
+      JOIN customer c ON c.user_id = so.user_id
 
-      WHERE id = ?
-      AND user_id = ?
+      WHERE so.id = ?
+      AND so.user_id = ?
       `,
         [service_order_id, userId],
       );
@@ -1366,7 +1377,7 @@ class ServiceOrderController {
 
       const [[issue]] = await db.execute(
         `
-      SELECT issue_id
+      SELECT issue_id, issue_text
 
       FROM service_order_issue_type
 
@@ -1474,6 +1485,18 @@ class ServiceOrderController {
           metadata: { service_order_id, issue_id },
         },
         "service support notification",
+      );
+
+      runNonBlocking(
+        () =>
+          notifyWhatsAppAdmins("admin_help_request_created", {
+            company_id: order.company_id ?? null,
+            customer_name: order.customer_name || "Customer",
+            request_id: requestId,
+            order_id: service_order_id,
+            issue_type: issue.issue_text,
+          }),
+        "admin help request WhatsApp",
       );
     } catch (err) {
       // cleanup temp files

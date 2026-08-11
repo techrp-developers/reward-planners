@@ -5,6 +5,7 @@ const {
 } = require("../../../../services/mailBuilder/enquiryNotification");
 const { runNonBlocking } = require("../../../../utils/nonBlocking");
 const { notifyUser } = require("../../../common/utils/notification");
+const { notifyWhatsAppAdmins } = require("../../../../services/whatsapp/adminNotificationService");
 
 class ServiceEnquiryController {
   // create user Enquiry
@@ -80,6 +81,31 @@ class ServiceEnquiryController {
           metadata: { service_id, bundle_id, variant_id },
         },
         "service enquiry notification",
+      );
+
+      runNonBlocking(
+        async () => {
+          const [[adminContext]] = await db.query(
+            `SELECT COALESCE(s.name, sb.name, 'Service') AS service_name,
+                    c.company_id
+               FROM service_enquiries se
+               LEFT JOIN services s ON s.id = se.service_id
+               LEFT JOIN service_bundles sb ON sb.id = se.bundle_id
+               JOIN customer c ON c.user_id = se.user_id
+              WHERE se.id = ?`,
+            [result.id],
+          );
+
+          return notifyWhatsAppAdmins("admin_service_enquiry_created", {
+            company_id: adminContext?.company_id ?? null,
+            customer_name: name,
+            customer_phone: mobile,
+            enquiry_ref: result.enquiry_ref,
+            order_id: result.enquiry_ref,
+            service_name: adminContext?.service_name || "Service",
+          });
+        },
+        "admin service enquiry WhatsApp",
       );
     } catch (err) {
       res.status(500).json({ success: false, message: err.message });
