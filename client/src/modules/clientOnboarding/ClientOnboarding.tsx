@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../../common/api/api";
-import { MdAdminPanelSettings, MdAnalytics, MdArrowBack, MdArrowForward, MdAutorenew, MdBusiness, MdCelebration, MdCheck as Check, MdCheckCircle, MdClose, MdDarkMode, MdEmail, MdFactCheck, MdGroups, MdLightMode, MdLocationOn, MdPerson, MdRedeem, MdSecurity, MdVerifiedUser, MdVisibility, MdVisibilityOff, MdWhatsapp } from "react-icons/md";
+import { MdAdminPanelSettings, MdAnalytics, MdArrowBack, MdArrowForward, MdAutorenew, MdBusiness, MdCelebration, MdCheck as Check, MdCheckCircle, MdClose, MdDarkMode, MdDraw, MdEmail, MdFactCheck, MdGroups, MdLightMode, MdLocationOn, MdPerson, MdRedeem, MdSecurity, MdVerifiedUser, MdVisibility, MdVisibilityOff, MdWhatsapp } from "react-icons/md";
 
 type FormData = Record<string, string | boolean>;
 type StateOption = { state_id: number; state_name: string };
@@ -76,8 +76,36 @@ export default function ClientOnboarding() {
   const [otpVerification, setOtpVerification] = useState<Record<OtpChannel, OtpState>>({ email: emptyOtpState(), whatsapp: emptyOtpState() });
   const [sendingAdminWelcome, setSendingAdminWelcome] = useState(false);
   const [adminWelcomeSent, setAdminWelcomeSent] = useState(false);
+  const [agreementSigned, setAgreementSigned] = useState(false);
+  const [agreementLoading, setAgreementLoading] = useState(false);
+  const [agreementMessage, setAgreementMessage] = useState("");
 
   useEffect(() => { localStorage.setItem("rp-onboarding-theme", darkMode ? "dark" : "light"); }, [darkMode]);
+
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    const signingState = query.get("zoho_state");
+    if (!signingState) return;
+    setShowIntroduction(false);
+    setStep(3);
+    setHighestStep((current) => Math.max(current, 3));
+    setAgreementLoading(true);
+    const returnStatus = query.get("zoho_sign");
+    if (returnStatus === "declined" || returnStatus === "later") {
+      setAgreementMessage(returnStatus === "declined" ? "The agreement was declined. Start again when you are ready to sign." : "Signing was postponed. Start again to complete the agreement.");
+      setAgreementLoading(false);
+      window.history.replaceState({}, "", "/client-onboarding");
+      return;
+    }
+    void api.post("/client-onboarding/otp/sign/status", { state: signingState }).then((response) => {
+      const signed = Boolean(response.data?.data?.signed);
+      setAgreementSigned(signed);
+      setAgreementMessage(signed ? "Agreement signed and confirmed by Zoho Sign." : "Zoho has not marked the agreement as signed yet. Please open it again and complete all required fields.");
+    }).catch((requestError) => setAgreementMessage((requestError as { response?: { data?: { message?: string } } }).response?.data?.message || "Unable to confirm the signed agreement.")).finally(() => {
+      setAgreementLoading(false);
+      window.history.replaceState({}, "", "/client-onboarding");
+    });
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -154,6 +182,7 @@ export default function ClientOnboarding() {
     setFieldErrors((current) => ({ ...current, ...errors }));
     if (required.some((field) => !String(data[field.name] ?? "").trim()) || Object.keys(errors).length) return "Review the highlighted fields before continuing.";
     if (step === 2 && (!otpVerification.email.verified || !otpVerification.whatsapp.verified)) return "Verify both the representative's email and WhatsApp number before continuing.";
+    if (step === 3 && !agreementSigned) return "Sign the client agreement through Zoho Sign before continuing.";
     if (step === 3 && ![data.terms, data.privacy, data.dataConsent, data.communicationConsent].every(Boolean)) return "Accept all mandatory legal agreements.";
     return "";
   };
@@ -232,6 +261,25 @@ export default function ClientOnboarding() {
     }
   };
 
+  const startAgreementSigning = async () => {
+    setAgreementLoading(true);
+    setAgreementMessage("");
+    try {
+      const response = await api.post("/client-onboarding/otp/sign/start", {
+        recipientName: data.repName,
+        recipientEmail: data.repEmail,
+        companyName: data.companyName,
+        returnUrl: `${window.location.origin}/client-onboarding`,
+      });
+      const signUrl = response.data?.data?.signUrl;
+      if (!signUrl) throw new Error("Zoho Sign did not return a signing URL.");
+      window.location.assign(signUrl);
+    } catch (requestError) {
+      setAgreementMessage(otpErrorMessage(requestError));
+      setAgreementLoading(false);
+    }
+  };
+
   const startOver = () => {
     localStorage.removeItem("rp-client-onboarding");
     setData(initialData);
@@ -242,6 +290,9 @@ export default function ClientOnboarding() {
     setOtpVerification({ email: emptyOtpState(), whatsapp: emptyOtpState() });
     setAdminWelcomeSent(false);
     setSendingAdminWelcome(false);
+    setAgreementSigned(false);
+    setAgreementLoading(false);
+    setAgreementMessage("");
   };
 
   const renderFields = () => (
@@ -367,6 +418,13 @@ export default function ClientOnboarding() {
     );
     if (step === 3) return (
       <div>
+        <section className={`mb-6 overflow-hidden rounded-2xl border ${agreementSigned ? darkMode ? "border-emerald-500/40 bg-emerald-500/10" : "border-emerald-200 bg-emerald-50/60" : darkMode ? "border-purple-500/30 bg-purple-500/10" : "border-purple-200 bg-gradient-to-r from-purple-50 via-white to-indigo-50"}`}>
+          <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+            <div className="flex items-start gap-4"><span className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-2xl ${agreementSigned ? "bg-emerald-600 text-white" : darkMode ? "bg-purple-500/20 text-purple-300" : "bg-white text-purple-700 shadow-sm"}`}>{agreementSigned ? <MdCheckCircle /> : <MdDraw />}</span><div><div className="flex flex-wrap items-center gap-2"><h3 className="text-lg font-semibold">Client service agreement</h3>{agreementSigned && <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${darkMode ? "bg-emerald-500/15 text-emerald-300" : "bg-emerald-100 text-emerald-700"}`}>Signed</span>}</div><p className={`mt-1.5 max-w-2xl text-sm leading-6 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>{agreementSigned ? "Zoho Sign has confirmed your completed signature." : "Review and digitally sign the client agreement securely through Zoho Sign. You will return to this page automatically after signing."}</p></div></div>
+            <button type="button" onClick={() => void startAgreementSigning()} disabled={agreementLoading || agreementSigned} className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold transition ${agreementSigned ? "cursor-default bg-emerald-600 text-white" : "bg-gradient-to-r from-[#7457d7] to-[#9a63df] text-white shadow-[0_10px_24px_rgba(116,87,215,0.2)] hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-70"}`}>{agreementLoading ? <><MdAutorenew className="animate-spin text-lg" /> Checking...</> : agreementSigned ? <><MdCheckCircle className="text-lg" /> Agreement signed</> : <><MdDraw className="text-lg" /> Review and sign</>}</button>
+          </div>
+          {agreementMessage && <p className={`border-t px-5 py-3 text-sm font-medium sm:px-6 ${agreementSigned ? darkMode ? "border-emerald-500/20 text-emerald-300" : "border-emerald-200 text-emerald-700" : darkMode ? "border-purple-500/20 text-purple-300" : "border-purple-100 text-purple-700"}`}>{agreementMessage}</p>}
+        </section>
         <div className="grid gap-4 md:grid-cols-2">
           {[
             { name: "terms", label: "Terms of Service", description: "I have reviewed and agree to the platform terms.", Icon: MdFactCheck },
@@ -411,6 +469,7 @@ export default function ClientOnboarding() {
 
   const descriptions = ["Tell us about your organization.", "Add the registered business address.", "Add and verify the authorized company representative.", "Review and accept the required agreements.", "Create the primary HR administrator.", "Your organization is ready for the next step."];
   const representativeVerificationComplete = otpVerification.email.verified && otpVerification.whatsapp.verified;
+  const legalStepComplete = agreementSigned && [data.terms, data.privacy, data.dataConsent, data.communicationConsent].every(Boolean);
   if (showIntroduction) {
     const benefits = [
       { Icon: MdRedeem, title: "Meaningful rewards", text: "Create rewarding experiences that make recognition useful, timely and memorable." },
@@ -438,14 +497,14 @@ export default function ClientOnboarding() {
         </header>
 
         <nav className={`overflow-x-auto border-b px-6 py-6 sm:px-9 ${darkMode ? "border-slate-700 bg-[#0d1524]" : "border-slate-100 bg-[#fbfcfd]"}`}>
-          <div className="flex min-w-[900px]">{steps.map((item, index) => { const available = index <= highestStep && (index <= 2 || representativeVerificationComplete); const completed = index < highestStep && (index < 2 || representativeVerificationComplete); const current = index === step; return <div key={item.title} className="relative flex flex-1 justify-center">{index < steps.length - 1 && <span className={`absolute left-[58%] top-5 w-[84%] border-t border-dashed ${completed ? "border-purple-500" : darkMode ? "border-slate-600" : "border-slate-300"}`} />}<button type="button" disabled={!available} onClick={() => { setStep(index); setError(""); }} className="relative z-10 flex w-28 flex-col items-center disabled:cursor-not-allowed disabled:opacity-60"><span className={`grid h-11 w-11 place-items-center rounded-full text-sm font-semibold ${current ? "bg-gradient-to-br from-[#7457d7] to-[#9a63df] text-white" : completed ? "bg-[#6f4dcc] text-white" : darkMode ? "bg-slate-700 text-slate-300" : "bg-slate-200 text-slate-600"}`}>{completed ? <Check className="text-xl" /> : index + 1}</span><span className={`mt-2 text-center text-sm leading-4 ${current ? darkMode ? "text-white" : "text-slate-900" : darkMode ? "text-slate-400" : "text-slate-500"}`}>{item.title}</span></button></div>; })}</div>
+          <div className="flex min-w-[900px]">{steps.map((item, index) => { const available = index <= highestStep && (index <= 2 || representativeVerificationComplete) && (index <= 3 || legalStepComplete); const completed = index < highestStep && (index < 2 || representativeVerificationComplete) && (index < 3 || legalStepComplete); const current = index === step; return <div key={item.title} className="relative flex flex-1 justify-center">{index < steps.length - 1 && <span className={`absolute left-[58%] top-5 w-[84%] border-t border-dashed ${completed ? "border-purple-500" : darkMode ? "border-slate-600" : "border-slate-300"}`} />}<button type="button" disabled={!available} onClick={() => { setStep(index); setError(""); }} className="relative z-10 flex w-28 flex-col items-center disabled:cursor-not-allowed disabled:opacity-60"><span className={`grid h-11 w-11 place-items-center rounded-full text-sm font-semibold ${current ? "bg-gradient-to-br from-[#7457d7] to-[#9a63df] text-white" : completed ? "bg-[#6f4dcc] text-white" : darkMode ? "bg-slate-700 text-slate-300" : "bg-slate-200 text-slate-600"}`}>{completed ? <Check className="text-xl" /> : index + 1}</span><span className={`mt-2 text-center text-sm leading-4 ${current ? darkMode ? "text-white" : "text-slate-900" : darkMode ? "text-slate-400" : "text-slate-500"}`}>{item.title}</span></button></div>; })}</div>
         </nav>
 
         <main className={`px-6 py-9 sm:px-12 sm:py-11 lg:px-16 lg:py-12 ${darkMode ? "bg-[#0e1422]" : "bg-[#f9fbfc]"}`}>
           <div className={`mb-8 rounded-2xl border px-5 py-4 ${darkMode ? "border-slate-700 bg-slate-800/35" : "border-slate-100 bg-white shadow-[0_8px_24px_rgba(60,72,88,0.05)]"}`}><div className="flex flex-wrap items-center justify-between gap-3"><div><p className={`text-sm font-medium ${darkMode ? "text-purple-300" : "text-purple-700"}`}>Step {step + 1} of {steps.length}</p><h2 className="mt-1 text-2xl font-semibold tracking-tight">{steps[step].title}</h2><p className={`mt-2 text-base ${darkMode ? "text-slate-400" : "text-slate-500"}`}>{descriptions[step]}</p></div><div className="min-w-44"><div className="flex justify-between text-xs"><span className={darkMode ? "text-slate-400" : "text-slate-500"}>Progress</span><strong>{Math.round((step / (steps.length - 1)) * 100)}%</strong></div><div className={`mt-2 h-1.5 overflow-hidden rounded-full ${darkMode ? "bg-slate-700" : "bg-slate-100"}`}><span className="block h-full rounded-full bg-gradient-to-r from-[#7457d7] to-[#9a63df] transition-all" style={{ width: `${(step / (steps.length - 1)) * 100}%` }} /></div></div></div></div>
           {content()}
           {error && <div className={`mt-5 rounded-xl border px-4 py-3 text-sm ${darkMode ? "border-red-500/40 bg-red-950/30 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>{error}</div>}
-          {step < steps.length - 1 && <footer className={`mt-9 flex items-center justify-between border-t pt-6 ${darkMode ? "border-slate-700" : "border-slate-200"}`}><button type="button" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0 || sendingAdminWelcome} className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition disabled:invisible ${darkMode ? "text-slate-300 hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100"}`}><MdArrowBack className="text-lg" />Previous</button><button type="button" onClick={() => void next()} disabled={(step === 2 && !representativeVerificationComplete) || sendingAdminWelcome} title={step === 2 && !representativeVerificationComplete ? "Verify both email and WhatsApp to continue" : undefined} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#7457d7] to-[#9a63df] px-7 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(116,87,215,0.22)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none disabled:hover:translate-y-0">{sendingAdminWelcome ? <><MdAutorenew className="animate-spin text-lg" /> Sending welcome email...</> : step === 2 && !representativeVerificationComplete ? "Complete both verifications" : step === 4 ? "Complete onboarding" : "Continue"}{!sendingAdminWelcome && <MdArrowForward className="text-lg" />}</button></footer>}
+          {step < steps.length - 1 && <footer className={`mt-9 flex items-center justify-between border-t pt-6 ${darkMode ? "border-slate-700" : "border-slate-200"}`}><button type="button" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0 || sendingAdminWelcome} className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition disabled:invisible ${darkMode ? "text-slate-300 hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100"}`}><MdArrowBack className="text-lg" />Previous</button><button type="button" onClick={() => void next()} disabled={(step === 2 && !representativeVerificationComplete) || (step === 3 && !legalStepComplete) || sendingAdminWelcome} title={step === 2 && !representativeVerificationComplete ? "Verify both email and WhatsApp to continue" : step === 3 && !legalStepComplete ? "Sign the agreement and accept all required terms to continue" : undefined} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#7457d7] to-[#9a63df] px-7 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(116,87,215,0.22)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none disabled:hover:translate-y-0">{sendingAdminWelcome ? <><MdAutorenew className="animate-spin text-lg" /> Sending welcome email...</> : step === 2 && !representativeVerificationComplete ? "Complete both verifications" : step === 3 && !legalStepComplete ? "Complete legal requirements" : step === 4 ? "Complete onboarding" : "Continue"}{!sendingAdminWelcome && <MdArrowForward className="text-lg" />}</button></footer>}
         </main>
       </div>
     </div>

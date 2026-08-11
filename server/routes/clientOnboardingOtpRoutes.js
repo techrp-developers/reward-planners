@@ -4,6 +4,7 @@ const { authLimiter } = require("../app/common/middlewares/rateLimiter");
 const { sendOtpEmail, sendAdminOnboardedEmail } = require("../config/mail");
 const { enqueueWhatsApp } = require("../services/whatsapp/waEnqueueService");
 const { normalizeIndianMobile } = require("../services/whatsapp/phone");
+const { createSigningSession, verifySigningSession } = require("../services/zohoSignService");
 
 const router = express.Router();
 const sessions = new Map();
@@ -82,6 +83,30 @@ router.post("/notify-admin", authLimiter, async (req, res) => {
   } catch (error) {
     console.error("[CLIENT_ONBOARDING] Admin welcome email failed:", error);
     return res.status(503).json({ success: false, message: "Unable to send the administrator welcome email right now." });
+  }
+});
+
+router.post("/sign/start", authLimiter, async (req, res) => {
+  const recipientName = String(req.body?.recipientName || "").trim();
+  const recipientEmail = normalizeEmail(req.body?.recipientEmail);
+  const companyName = String(req.body?.companyName || "").trim();
+  const returnUrl = String(req.body?.returnUrl || "");
+  if (!recipientName || !companyName || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(recipientEmail)) return res.status(400).json({ success: false, message: "Valid representative and organization details are required." });
+  try {
+    const data = await createSigningSession({ recipientName, recipientEmail, companyName, returnUrl });
+    return res.json({ success: true, data });
+  } catch (error) {
+    console.error("[CLIENT_ONBOARDING] Zoho signing start failed:", error);
+    return res.status(error.status || (error.code === "ZOHO_NOT_CONFIGURED" ? 503 : 502)).json({ success: false, message: error.code === "ZOHO_NOT_CONFIGURED" ? "Zoho Sign has not been configured on the server yet." : error.message || "Unable to start Zoho Sign." });
+  }
+});
+
+router.post("/sign/status", authLimiter, async (req, res) => {
+  try {
+    const data = await verifySigningSession(req.body?.state);
+    return res.json({ success: true, data });
+  } catch (error) {
+    return res.status(error.status || 502).json({ success: false, message: error.message || "Unable to confirm the Zoho Sign status." });
   }
 });
 
