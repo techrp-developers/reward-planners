@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../../common/api/api";
-import { MdAdminPanelSettings, MdAnalytics, MdArrowBack, MdArrowForward, MdAutorenew, MdBusiness, MdCelebration, MdCheck as Check, MdCheckCircle, MdClose, MdDarkMode, MdEmail, MdFactCheck, MdGroups, MdLightMode, MdLocationOn, MdOutlineVerifiedUser, MdPerson, MdRedeem, MdSecurity, MdVerifiedUser, MdVisibility, MdVisibilityOff, MdWhatsapp } from "react-icons/md";
+import { MdAdminPanelSettings, MdAnalytics, MdArrowBack, MdArrowForward, MdAutorenew, MdBusiness, MdCelebration, MdCheck as Check, MdCheckCircle, MdClose, MdDarkMode, MdEmail, MdFactCheck, MdGroups, MdLightMode, MdLocationOn, MdPerson, MdRedeem, MdSecurity, MdVerifiedUser, MdVisibility, MdVisibilityOff, MdWhatsapp } from "react-icons/md";
 
 type FormData = Record<string, string | boolean>;
 type StateOption = { state_id: number; state_name: string };
@@ -14,7 +14,6 @@ const steps = [
   { title: "Company", icon: MdBusiness },
   { title: "Address", icon: MdLocationOn },
   { title: "Representative", icon: MdPerson },
-  { title: "Verification", icon: MdOutlineVerifiedUser },
   { title: "Legal", icon: MdFactCheck },
   { title: "Admin", icon: MdAdminPanelSettings },
   { title: "Welcome", icon: MdCheckCircle },
@@ -47,7 +46,7 @@ const fields: Record<number, Array<{ name: string; label: string; type?: string;
     { name: "repName", label: "Full name", required: true }, { name: "designation", label: "Designation", required: true },
     { name: "repEmail", label: "Official email", type: "email", required: true }, { name: "repPhone", label: "Mobile number", type: "tel", required: true },
   ],
-  5: [
+  4: [
     { name: "adminName", label: "Admin name", required: true }, { name: "adminEmail", label: "Admin email", type: "email", required: true },
     { name: "password", label: "Create password", type: "password", required: true }, { name: "confirmPassword", label: "Confirm password", type: "password", required: true },
   ],
@@ -58,8 +57,12 @@ export default function ClientOnboarding() {
   const saved = useMemo(() => {
     try { return JSON.parse(localStorage.getItem("rp-client-onboarding") || "null"); } catch { return null; }
   }, []);
-  const [step, setStep] = useState<number>(saved?.step ?? 0);
-  const [highestStep, setHighestStep] = useState<number>(saved?.highestStep ?? saved?.step ?? 0);
+  const migrateStep = (value: unknown) => {
+    const numericStep = Math.max(0, Math.min(Number(value) || 0, saved?.version === 2 ? 5 : 6));
+    return saved?.version === 2 ? numericStep : numericStep >= 4 ? numericStep - 1 : Math.min(numericStep, 2);
+  };
+  const [step, setStep] = useState<number>(migrateStep(saved?.step));
+  const [highestStep, setHighestStep] = useState<number>(migrateStep(saved?.highestStep ?? saved?.step));
   const [data, setData] = useState<FormData>({ ...initialData, ...(saved?.data ?? {}) });
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -96,9 +99,10 @@ export default function ClientOnboarding() {
     localStorage.setItem("rp-client-onboarding", JSON.stringify({
       step,
       highestStep,
+      version: 2,
       data,
       savedAt: new Date().toISOString(),
-      completed: step === 6,
+      completed: step === steps.length - 1,
     }));
   }, [step, highestStep, data]);
 
@@ -148,15 +152,14 @@ export default function ClientOnboarding() {
     setFieldErrors((current) => ({ ...current, ...errors }));
     if (required.some((field) => !String(data[field.name] ?? "").trim()) || Object.keys(errors).length) return "Review the highlighted fields before continuing.";
     if (step === 2 && (!otpVerification.email.verified || !otpVerification.whatsapp.verified)) return "Verify both the representative's email and WhatsApp number before continuing.";
-    if (step === 3 && !data.aadhaarVerified) return "Complete Aadhaar verification before continuing.";
-    if (step === 4 && ![data.terms, data.privacy, data.dataConsent, data.communicationConsent].every(Boolean)) return "Accept all mandatory legal agreements.";
+    if (step === 3 && ![data.terms, data.privacy, data.dataConsent, data.communicationConsent].every(Boolean)) return "Accept all mandatory legal agreements.";
     return "";
   };
 
   const next = () => {
     const message = validate();
     if (message) return setError(message);
-    const nextStep = Math.min(step + 1, 6);
+    const nextStep = Math.min(step + 1, steps.length - 1);
     setHighestStep((current) => Math.max(current, nextStep));
     setStep(nextStep);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -306,8 +309,8 @@ export default function ClientOnboarding() {
   );
 
   const content = () => {
-    if ([0, 1, 2, 5].includes(step)) return renderFields();
-    if (step === 3) return (<>
+    if ([0, 1, 2, 4].includes(step)) return renderFields();
+    if (step === -1) return (<>
       <div className={`mx-auto grid max-w-4xl overflow-hidden rounded-3xl border lg:grid-cols-[.78fr_1.22fr] ${darkMode ? "border-slate-700 bg-slate-900/45" : "border-slate-200 bg-white shadow-[0_18px_45px_rgba(60,72,88,0.08)]"}`}>
         <aside className={`p-6 sm:p-8 ${darkMode ? "bg-purple-500/10" : "bg-gradient-to-br from-purple-50 via-white to-indigo-50"}`}>
           <span className={`grid h-12 w-12 place-items-center rounded-2xl text-2xl ${darkMode ? "bg-purple-500/15 text-purple-300" : "bg-white text-purple-700 shadow-sm"}`}><MdSecurity /></span>
@@ -341,7 +344,7 @@ export default function ClientOnboarding() {
       </div> */}
       </>
     );
-    if (step === 4) return (
+    if (step === 3) return (
       <div>
         <div className="grid gap-4 md:grid-cols-2">
           {[
@@ -385,7 +388,7 @@ export default function ClientOnboarding() {
     );
   };
 
-  const descriptions = ["Tell us about your organization.", "Add the registered business address.", "Add the authorized company representative.", "Verify the representative's identity.", "Review and accept the required agreements.", "Create the primary HR administrator.", "Your organization is ready for the next step."];
+  const descriptions = ["Tell us about your organization.", "Add the registered business address.", "Add and verify the authorized company representative.", "Review and accept the required agreements.", "Create the primary HR administrator.", "Your organization is ready for the next step."];
   const representativeVerificationComplete = otpVerification.email.verified && otpVerification.whatsapp.verified;
   if (showIntroduction) {
     const benefits = [
@@ -418,10 +421,10 @@ export default function ClientOnboarding() {
         </nav>
 
         <main className={`px-6 py-9 sm:px-12 sm:py-11 lg:px-16 lg:py-12 ${darkMode ? "bg-[#0e1422]" : "bg-[#f9fbfc]"}`}>
-          <div className={`mb-8 rounded-2xl border px-5 py-4 ${darkMode ? "border-slate-700 bg-slate-800/35" : "border-slate-100 bg-white shadow-[0_8px_24px_rgba(60,72,88,0.05)]"}`}><div className="flex flex-wrap items-center justify-between gap-3"><div><p className={`text-sm font-medium ${darkMode ? "text-purple-300" : "text-purple-700"}`}>Step {step + 1} of {steps.length}</p><h2 className="mt-1 text-2xl font-semibold tracking-tight">{steps[step].title}</h2><p className={`mt-2 text-base ${darkMode ? "text-slate-400" : "text-slate-500"}`}>{descriptions[step]}</p></div><div className="min-w-44"><div className="flex justify-between text-xs"><span className={darkMode ? "text-slate-400" : "text-slate-500"}>Progress</span><strong>{Math.round((step / 6) * 100)}%</strong></div><div className={`mt-2 h-1.5 overflow-hidden rounded-full ${darkMode ? "bg-slate-700" : "bg-slate-100"}`}><span className="block h-full rounded-full bg-gradient-to-r from-[#7457d7] to-[#9a63df] transition-all" style={{ width: `${(step / 6) * 100}%` }} /></div></div></div></div>
+          <div className={`mb-8 rounded-2xl border px-5 py-4 ${darkMode ? "border-slate-700 bg-slate-800/35" : "border-slate-100 bg-white shadow-[0_8px_24px_rgba(60,72,88,0.05)]"}`}><div className="flex flex-wrap items-center justify-between gap-3"><div><p className={`text-sm font-medium ${darkMode ? "text-purple-300" : "text-purple-700"}`}>Step {step + 1} of {steps.length}</p><h2 className="mt-1 text-2xl font-semibold tracking-tight">{steps[step].title}</h2><p className={`mt-2 text-base ${darkMode ? "text-slate-400" : "text-slate-500"}`}>{descriptions[step]}</p></div><div className="min-w-44"><div className="flex justify-between text-xs"><span className={darkMode ? "text-slate-400" : "text-slate-500"}>Progress</span><strong>{Math.round((step / (steps.length - 1)) * 100)}%</strong></div><div className={`mt-2 h-1.5 overflow-hidden rounded-full ${darkMode ? "bg-slate-700" : "bg-slate-100"}`}><span className="block h-full rounded-full bg-gradient-to-r from-[#7457d7] to-[#9a63df] transition-all" style={{ width: `${(step / (steps.length - 1)) * 100}%` }} /></div></div></div></div>
           {content()}
           {error && <div className={`mt-5 rounded-xl border px-4 py-3 text-sm ${darkMode ? "border-red-500/40 bg-red-950/30 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>{error}</div>}
-          {step < 6 && <footer className={`mt-9 flex items-center justify-between border-t pt-6 ${darkMode ? "border-slate-700" : "border-slate-200"}`}><button type="button" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0} className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition disabled:invisible ${darkMode ? "text-slate-300 hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100"}`}><MdArrowBack className="text-lg" />Previous</button><button type="button" onClick={next} disabled={step === 2 && !representativeVerificationComplete} title={step === 2 && !representativeVerificationComplete ? "Verify both email and WhatsApp to continue" : undefined} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#7457d7] to-[#9a63df] px-7 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(116,87,215,0.22)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none disabled:hover:translate-y-0">{step === 2 && !representativeVerificationComplete ? "Complete both verifications" : "Continue"}<MdArrowForward className="text-lg" /></button></footer>}
+          {step < steps.length - 1 && <footer className={`mt-9 flex items-center justify-between border-t pt-6 ${darkMode ? "border-slate-700" : "border-slate-200"}`}><button type="button" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0} className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition disabled:invisible ${darkMode ? "text-slate-300 hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100"}`}><MdArrowBack className="text-lg" />Previous</button><button type="button" onClick={next} disabled={step === 2 && !representativeVerificationComplete} title={step === 2 && !representativeVerificationComplete ? "Verify both email and WhatsApp to continue" : undefined} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#7457d7] to-[#9a63df] px-7 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(116,87,215,0.22)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none disabled:hover:translate-y-0">{step === 2 && !representativeVerificationComplete ? "Complete both verifications" : "Continue"}<MdArrowForward className="text-lg" /></button></footer>}
         </main>
       </div>
     </div>
