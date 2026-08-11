@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../../common/api/api";
-import { MdAdminPanelSettings, MdAnalytics, MdArrowBack, MdArrowForward, MdAutorenew, MdBusiness, MdCelebration, MdCheck as Check, MdCheckCircle, MdClose, MdDarkMode, MdFactCheck, MdGroups, MdLightMode, MdLocationOn, MdOutlineVerifiedUser, MdPerson, MdRedeem, MdSecurity, MdVerifiedUser, MdVisibility, MdVisibilityOff } from "react-icons/md";
+import { MdAdminPanelSettings, MdAnalytics, MdArrowBack, MdArrowForward, MdAutorenew, MdBusiness, MdCelebration, MdCheck as Check, MdCheckCircle, MdClose, MdDarkMode, MdEmail, MdFactCheck, MdGroups, MdLightMode, MdLocationOn, MdOutlineVerifiedUser, MdPerson, MdRedeem, MdSecurity, MdVerifiedUser, MdVisibility, MdVisibilityOff, MdWhatsapp } from "react-icons/md";
 
 type FormData = Record<string, string | boolean>;
 type StateOption = { state_id: number; state_name: string };
+type OtpChannel = "email" | "whatsapp";
+type OtpState = { sessionId: string; otp: string; sent: boolean; verified: boolean; loading: boolean; message: string; error: string };
+
+const emptyOtpState = (): OtpState => ({ sessionId: "", otp: "", sent: false, verified: false, loading: false, message: "", error: "" });
 
 const steps = [
   { title: "Company", icon: MdBusiness },
@@ -67,6 +71,7 @@ export default function ClientOnboarding() {
   const [statesError, setStatesError] = useState("");
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem("rp-onboarding-theme") !== "light");
   const [showIntroduction, setShowIntroduction] = useState(true);
+  const [otpVerification, setOtpVerification] = useState<Record<OtpChannel, OtpState>>({ email: emptyOtpState(), whatsapp: emptyOtpState() });
 
   useEffect(() => { localStorage.setItem("rp-onboarding-theme", darkMode ? "dark" : "light"); }, [darkMode]);
 
@@ -112,6 +117,10 @@ export default function ClientOnboarding() {
         ? { aadhaarVerified: false }
         : {}),
     }));
+    if ((name === "repEmail" || name === "repPhone") && value !== data[name]) {
+      const channel: OtpChannel = name === "repEmail" ? "email" : "whatsapp";
+      setOtpVerification((current) => ({ ...current, [channel]: emptyOtpState() }));
+    }
     setError("");
     setFieldErrors((current) => ({ ...current, [name]: "" }));
   };
@@ -139,6 +148,7 @@ export default function ClientOnboarding() {
     const errors = Object.fromEntries(currentFields.map((field) => [field.name, validateField(field.name, data[field.name] ?? "")]).filter(([, value]) => value));
     setFieldErrors((current) => ({ ...current, ...errors }));
     if (required.some((field) => !String(data[field.name] ?? "").trim()) || Object.keys(errors).length) return "Review the highlighted fields before continuing.";
+    if (step === 2 && (!otpVerification.email.verified || !otpVerification.whatsapp.verified)) return "Verify both the representative's email and WhatsApp number before continuing.";
     if (step === 3 && !data.aadhaarVerified) return "Complete Aadhaar verification before continuing.";
     if (step === 4 && ![data.terms, data.privacy, data.dataConsent, data.communicationConsent].every(Boolean)) return "Accept all mandatory legal agreements.";
     return "";
@@ -164,6 +174,43 @@ export default function ClientOnboarding() {
     }, 900);
   };
 
+  const otpErrorMessage = (requestError: unknown) => {
+    const responseError = requestError as { response?: { data?: { message?: string } } };
+    return responseError.response?.data?.message || "Something went wrong. Please try again.";
+  };
+
+  const sendRepresentativeOtp = async (channel: OtpChannel) => {
+    const destination = String(channel === "email" ? data.repEmail : data.repPhone).trim();
+    const fieldName = channel === "email" ? "repEmail" : "repPhone";
+    const validationMessage = validateField(fieldName, destination);
+    if (validationMessage) {
+      setFieldErrors((current) => ({ ...current, [fieldName]: validationMessage }));
+      return;
+    }
+    setOtpVerification((current) => ({ ...current, [channel]: { ...current[channel], loading: true, error: "", message: "" } }));
+    try {
+      const response = await api.post("/client-onboarding/otp/send", { channel, destination });
+      setOtpVerification((current) => ({ ...current, [channel]: { ...emptyOtpState(), sent: true, sessionId: response.data?.data?.sessionId || "", message: response.data?.message || "OTP sent." } }));
+    } catch (requestError) {
+      setOtpVerification((current) => ({ ...current, [channel]: { ...current[channel], loading: false, error: otpErrorMessage(requestError) } }));
+    }
+  };
+
+  const verifyRepresentativeOtp = async (channel: OtpChannel) => {
+    const channelState = otpVerification[channel];
+    if (!/^\d{6}$/.test(channelState.otp)) {
+      setOtpVerification((current) => ({ ...current, [channel]: { ...current[channel], error: "Enter the 6-digit OTP." } }));
+      return;
+    }
+    setOtpVerification((current) => ({ ...current, [channel]: { ...current[channel], loading: true, error: "", message: "" } }));
+    try {
+      const response = await api.post("/client-onboarding/otp/verify", { sessionId: channelState.sessionId, otp: channelState.otp });
+      setOtpVerification((current) => ({ ...current, [channel]: { ...current[channel], loading: false, verified: true, message: response.data?.message || "Verified successfully." } }));
+    } catch (requestError) {
+      setOtpVerification((current) => ({ ...current, [channel]: { ...current[channel], loading: false, error: otpErrorMessage(requestError) } }));
+    }
+  };
+
   const startOver = () => {
     localStorage.removeItem("rp-client-onboarding");
     setData(initialData);
@@ -171,6 +218,7 @@ export default function ClientOnboarding() {
     setHighestStep(0);
     setError("");
     setFieldErrors({});
+    setOtpVerification({ email: emptyOtpState(), whatsapp: emptyOtpState() });
   };
 
   const renderFields = () => (
@@ -228,6 +276,25 @@ export default function ClientOnboarding() {
           {field.name !== "state" && fieldErrors[field.name] && <span className="mt-1.5 block text-xs font-semibold text-red-600">{fieldErrors[field.name]}</span>}
         </label>
       ))}
+      {step === 2 && (
+        <section className="mt-3 grid gap-4 sm:col-span-2 lg:grid-cols-2">
+          {([
+            { channel: "email", title: "Verify email address", destination: String(data.repEmail || ""), Icon: MdEmail, hint: "We will send a 6-digit code to the representative's email." },
+            { channel: "whatsapp", title: "Verify WhatsApp number", destination: `+91 ${String(data.repPhone || "")}`, Icon: MdWhatsapp, hint: "We will send a separate 6-digit code through WhatsApp." },
+          ] as const).map(({ channel, title, destination, Icon, hint }) => {
+            const channelState = otpVerification[channel];
+            return (
+              <article key={channel} className={`rounded-2xl border p-5 transition ${channelState.verified ? darkMode ? "border-emerald-500/40 bg-emerald-500/10" : "border-emerald-200 bg-emerald-50/60" : darkMode ? "border-slate-700 bg-slate-900/45" : "border-slate-200 bg-white shadow-[0_10px_28px_rgba(60,72,88,0.06)]"}`}>
+                <div className="flex items-start gap-4"><span className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl text-xl ${channelState.verified ? "bg-emerald-600 text-white" : darkMode ? "bg-purple-500/15 text-purple-300" : "bg-purple-50 text-purple-700"}`}><Icon /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{title}</h3>{channelState.verified && <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${darkMode ? "bg-emerald-500/15 text-emerald-300" : "bg-emerald-100 text-emerald-700"}`}><MdCheckCircle /> Verified</span>}</div><p className={`mt-1 truncate text-sm font-medium ${darkMode ? "text-slate-300" : "text-slate-600"}`}>{destination}</p></div></div>
+                <p className={`mt-4 text-sm leading-6 ${darkMode ? "text-slate-400" : "text-slate-500"}`}>{hint}</p>
+                {!channelState.sent && !channelState.verified && <button type="button" onClick={() => void sendRepresentativeOtp(channel)} disabled={channelState.loading} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#7457d7] to-[#9a63df] px-4 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-70">{channelState.loading ? <MdAutorenew className="animate-spin text-lg" /> : <Icon className="text-lg" />}{channelState.loading ? "Sending..." : `Send ${channel === "email" ? "email" : "WhatsApp"} OTP`}</button>}
+                {channelState.sent && !channelState.verified && <div className="mt-5"><div className="flex gap-2"><input inputMode="numeric" maxLength={6} value={channelState.otp} onChange={(event) => setOtpVerification((current) => ({ ...current, [channel]: { ...current[channel], otp: event.target.value.replace(/\D/g, "").slice(0, 6), error: "" } }))} placeholder="Enter 6-digit OTP" className={`min-w-0 flex-1 rounded-xl border px-4 py-3 text-center font-semibold tracking-[.25em] outline-none focus:border-purple-400 focus:ring-4 ${darkMode ? "border-slate-700 bg-slate-800 text-white focus:ring-purple-500/10" : "border-slate-200 bg-slate-50 focus:bg-white focus:ring-purple-100"}`} /><button type="button" onClick={() => void verifyRepresentativeOtp(channel)} disabled={channelState.loading} className="rounded-xl bg-slate-900 px-5 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-70">{channelState.loading ? <MdAutorenew className="animate-spin text-lg" /> : "Verify"}</button></div><button type="button" onClick={() => void sendRepresentativeOtp(channel)} disabled={channelState.loading} className={`mt-3 text-sm font-semibold ${darkMode ? "text-purple-300" : "text-purple-700"}`}>Resend OTP</button></div>}
+                {(channelState.message || channelState.error) && <p className={`mt-3 text-sm font-medium ${channelState.error ? "text-red-500" : channelState.verified ? "text-emerald-600" : darkMode ? "text-purple-300" : "text-purple-700"}`}>{channelState.error || channelState.message}</p>}
+              </article>
+            );
+          })}
+        </section>
+      )}
       {step === 1 && (
         <label className={`group sm:col-span-2 flex cursor-pointer items-center gap-4 rounded-2xl border p-4 transition-all duration-200 ${data.officeSame ? darkMode ? "border-purple-500/60 bg-purple-500/10 shadow-[0_10px_28px_rgba(139,92,246,0.08)]" : "border-purple-300 bg-purple-50/70 shadow-[0_10px_28px_rgba(116,87,215,0.08)]" : darkMode ? "border-slate-700 bg-slate-900/45 hover:border-slate-600" : "border-slate-200 bg-white hover:border-purple-200 hover:shadow-[0_10px_25px_rgba(60,72,88,0.07)]"}`}>
           <input type="checkbox" checked={Boolean(data.officeSame)} onChange={(e) => update("officeSame", e.target.checked)} className="sr-only" />
@@ -320,6 +387,7 @@ export default function ClientOnboarding() {
   };
 
   const descriptions = ["Tell us about your organization.", "Add the registered business address.", "Add the authorized company representative.", "Verify the representative's identity.", "Review and accept the required agreements.", "Create the primary HR administrator.", "Your organization is ready for the next step."];
+  const representativeVerificationComplete = otpVerification.email.verified && otpVerification.whatsapp.verified;
   if (showIntroduction) {
     const benefits = [
       { Icon: MdRedeem, title: "Meaningful rewards", text: "Create rewarding experiences that make recognition useful, timely and memorable." },
@@ -347,14 +415,14 @@ export default function ClientOnboarding() {
         </header>
 
         <nav className={`overflow-x-auto border-b px-6 py-6 sm:px-9 ${darkMode ? "border-slate-700 bg-[#0d1524]" : "border-slate-100 bg-[#fbfcfd]"}`}>
-          <div className="flex min-w-[900px]">{steps.map((item, index) => { const available = index <= highestStep; const completed = index < highestStep; const current = index === step; return <div key={item.title} className="relative flex flex-1 justify-center">{index < steps.length - 1 && <span className={`absolute left-[58%] top-5 w-[84%] border-t border-dashed ${completed ? "border-purple-500" : darkMode ? "border-slate-600" : "border-slate-300"}`} />}<button type="button" disabled={!available} onClick={() => { setStep(index); setError(""); }} className="relative z-10 flex w-28 flex-col items-center disabled:cursor-not-allowed"><span className={`grid h-11 w-11 place-items-center rounded-full text-sm font-semibold ${current ? "bg-gradient-to-br from-[#7457d7] to-[#9a63df] text-white" : completed ? "bg-[#6f4dcc] text-white" : darkMode ? "bg-slate-700 text-slate-300" : "bg-slate-200 text-slate-600"}`}>{completed ? <Check className="text-xl" /> : index + 1}</span><span className={`mt-2 text-center text-sm leading-4 ${current ? darkMode ? "text-white" : "text-slate-900" : darkMode ? "text-slate-400" : "text-slate-500"}`}>{item.title}</span></button></div>; })}</div>
+          <div className="flex min-w-[900px]">{steps.map((item, index) => { const available = index <= highestStep && (index <= 2 || representativeVerificationComplete); const completed = index < highestStep && (index < 2 || representativeVerificationComplete); const current = index === step; return <div key={item.title} className="relative flex flex-1 justify-center">{index < steps.length - 1 && <span className={`absolute left-[58%] top-5 w-[84%] border-t border-dashed ${completed ? "border-purple-500" : darkMode ? "border-slate-600" : "border-slate-300"}`} />}<button type="button" disabled={!available} onClick={() => { setStep(index); setError(""); }} className="relative z-10 flex w-28 flex-col items-center disabled:cursor-not-allowed disabled:opacity-60"><span className={`grid h-11 w-11 place-items-center rounded-full text-sm font-semibold ${current ? "bg-gradient-to-br from-[#7457d7] to-[#9a63df] text-white" : completed ? "bg-[#6f4dcc] text-white" : darkMode ? "bg-slate-700 text-slate-300" : "bg-slate-200 text-slate-600"}`}>{completed ? <Check className="text-xl" /> : index + 1}</span><span className={`mt-2 text-center text-sm leading-4 ${current ? darkMode ? "text-white" : "text-slate-900" : darkMode ? "text-slate-400" : "text-slate-500"}`}>{item.title}</span></button></div>; })}</div>
         </nav>
 
         <main className={`px-6 py-9 sm:px-12 sm:py-11 lg:px-16 lg:py-12 ${darkMode ? "bg-[#0e1422]" : "bg-[#f9fbfc]"}`}>
           <div className={`mb-8 rounded-2xl border px-5 py-4 ${darkMode ? "border-slate-700 bg-slate-800/35" : "border-slate-100 bg-white shadow-[0_8px_24px_rgba(60,72,88,0.05)]"}`}><div className="flex flex-wrap items-center justify-between gap-3"><div><p className={`text-sm font-medium ${darkMode ? "text-purple-300" : "text-purple-700"}`}>Step {step + 1} of {steps.length}</p><h2 className="mt-1 text-2xl font-semibold tracking-tight">{steps[step].title}</h2><p className={`mt-2 text-base ${darkMode ? "text-slate-400" : "text-slate-500"}`}>{descriptions[step]}</p></div><div className="min-w-44"><div className="flex justify-between text-xs"><span className={darkMode ? "text-slate-400" : "text-slate-500"}>Progress</span><strong>{Math.round((step / 6) * 100)}%</strong></div><div className={`mt-2 h-1.5 overflow-hidden rounded-full ${darkMode ? "bg-slate-700" : "bg-slate-100"}`}><span className="block h-full rounded-full bg-gradient-to-r from-[#7457d7] to-[#9a63df] transition-all" style={{ width: `${(step / 6) * 100}%` }} /></div></div></div></div>
           {content()}
           {error && <div className={`mt-5 rounded-xl border px-4 py-3 text-sm ${darkMode ? "border-red-500/40 bg-red-950/30 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>{error}</div>}
-          {step < 6 && <footer className={`mt-9 flex items-center justify-between border-t pt-6 ${darkMode ? "border-slate-700" : "border-slate-200"}`}><button type="button" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0} className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition disabled:invisible ${darkMode ? "text-slate-300 hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100"}`}><MdArrowBack className="text-lg" />Previous</button><button type="button" onClick={next} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#7457d7] to-[#9a63df] px-7 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(116,87,215,0.22)] transition hover:-translate-y-0.5">Continue<MdArrowForward className="text-lg" /></button></footer>}
+          {step < 6 && <footer className={`mt-9 flex items-center justify-between border-t pt-6 ${darkMode ? "border-slate-700" : "border-slate-200"}`}><button type="button" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0} className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition disabled:invisible ${darkMode ? "text-slate-300 hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100"}`}><MdArrowBack className="text-lg" />Previous</button><button type="button" onClick={next} disabled={step === 2 && !representativeVerificationComplete} title={step === 2 && !representativeVerificationComplete ? "Verify both email and WhatsApp to continue" : undefined} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#7457d7] to-[#9a63df] px-7 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(116,87,215,0.22)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none disabled:hover:translate-y-0">{step === 2 && !representativeVerificationComplete ? "Complete both verifications" : "Continue"}<MdArrowForward className="text-lg" /></button></footer>}
         </main>
       </div>
     </div>
