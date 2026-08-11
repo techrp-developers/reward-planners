@@ -1,7 +1,7 @@
 const crypto = require("crypto");
 const express = require("express");
 const { authLimiter } = require("../app/common/middlewares/rateLimiter");
-const { sendOtpEmail } = require("../config/mail");
+const { sendOtpEmail, sendAdminOnboardedEmail } = require("../config/mail");
 const { enqueueWhatsApp } = require("../services/whatsapp/waEnqueueService");
 const { normalizeIndianMobile } = require("../services/whatsapp/phone");
 
@@ -67,6 +67,22 @@ router.post("/verify", authLimiter, (req, res) => {
   }
   sessions.delete(sessionId);
   return res.json({ success: true, message: `${session.channel === "email" ? "Email" : "WhatsApp"} verified successfully.` });
+});
+
+router.post("/notify-admin", authLimiter, async (req, res) => {
+  const email = normalizeEmail(req.body?.email);
+  const adminName = String(req.body?.adminName || "").trim();
+  const companyName = String(req.body?.companyName || "").trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) || !adminName || !companyName) {
+    return res.status(400).json({ success: false, message: "Valid admin and organization details are required." });
+  }
+  try {
+    await sendAdminOnboardedEmail({ email, adminName, companyName });
+    return res.json({ success: true, message: "The administrator welcome email has been sent." });
+  } catch (error) {
+    console.error("[CLIENT_ONBOARDING] Admin welcome email failed:", error);
+    return res.status(503).json({ success: false, message: "Unable to send the administrator welcome email right now." });
+  }
 });
 
 setInterval(() => {

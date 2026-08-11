@@ -74,6 +74,8 @@ export default function ClientOnboarding() {
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem("rp-onboarding-theme") !== "light");
   const [showIntroduction, setShowIntroduction] = useState(true);
   const [otpVerification, setOtpVerification] = useState<Record<OtpChannel, OtpState>>({ email: emptyOtpState(), whatsapp: emptyOtpState() });
+  const [sendingAdminWelcome, setSendingAdminWelcome] = useState(false);
+  const [adminWelcomeSent, setAdminWelcomeSent] = useState(false);
 
   useEffect(() => { localStorage.setItem("rp-onboarding-theme", darkMode ? "dark" : "light"); }, [darkMode]);
 
@@ -156,9 +158,26 @@ export default function ClientOnboarding() {
     return "";
   };
 
-  const next = () => {
+  const next = async () => {
     const message = validate();
     if (message) return setError(message);
+    if (step === 4 && !adminWelcomeSent) {
+      setSendingAdminWelcome(true);
+      setError("");
+      try {
+        await api.post("/client-onboarding/otp/notify-admin", {
+          email: data.adminEmail,
+          adminName: data.adminName,
+          companyName: data.companyName,
+        });
+        setAdminWelcomeSent(true);
+      } catch (requestError) {
+        setError(otpErrorMessage(requestError));
+        setSendingAdminWelcome(false);
+        return;
+      }
+      setSendingAdminWelcome(false);
+    }
     const nextStep = Math.min(step + 1, steps.length - 1);
     setHighestStep((current) => Math.max(current, nextStep));
     setStep(nextStep);
@@ -221,6 +240,8 @@ export default function ClientOnboarding() {
     setError("");
     setFieldErrors({});
     setOtpVerification({ email: emptyOtpState(), whatsapp: emptyOtpState() });
+    setAdminWelcomeSent(false);
+    setSendingAdminWelcome(false);
   };
 
   const renderFields = () => (
@@ -424,7 +445,7 @@ export default function ClientOnboarding() {
           <div className={`mb-8 rounded-2xl border px-5 py-4 ${darkMode ? "border-slate-700 bg-slate-800/35" : "border-slate-100 bg-white shadow-[0_8px_24px_rgba(60,72,88,0.05)]"}`}><div className="flex flex-wrap items-center justify-between gap-3"><div><p className={`text-sm font-medium ${darkMode ? "text-purple-300" : "text-purple-700"}`}>Step {step + 1} of {steps.length}</p><h2 className="mt-1 text-2xl font-semibold tracking-tight">{steps[step].title}</h2><p className={`mt-2 text-base ${darkMode ? "text-slate-400" : "text-slate-500"}`}>{descriptions[step]}</p></div><div className="min-w-44"><div className="flex justify-between text-xs"><span className={darkMode ? "text-slate-400" : "text-slate-500"}>Progress</span><strong>{Math.round((step / (steps.length - 1)) * 100)}%</strong></div><div className={`mt-2 h-1.5 overflow-hidden rounded-full ${darkMode ? "bg-slate-700" : "bg-slate-100"}`}><span className="block h-full rounded-full bg-gradient-to-r from-[#7457d7] to-[#9a63df] transition-all" style={{ width: `${(step / (steps.length - 1)) * 100}%` }} /></div></div></div></div>
           {content()}
           {error && <div className={`mt-5 rounded-xl border px-4 py-3 text-sm ${darkMode ? "border-red-500/40 bg-red-950/30 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>{error}</div>}
-          {step < steps.length - 1 && <footer className={`mt-9 flex items-center justify-between border-t pt-6 ${darkMode ? "border-slate-700" : "border-slate-200"}`}><button type="button" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0} className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition disabled:invisible ${darkMode ? "text-slate-300 hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100"}`}><MdArrowBack className="text-lg" />Previous</button><button type="button" onClick={next} disabled={step === 2 && !representativeVerificationComplete} title={step === 2 && !representativeVerificationComplete ? "Verify both email and WhatsApp to continue" : undefined} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#7457d7] to-[#9a63df] px-7 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(116,87,215,0.22)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none disabled:hover:translate-y-0">{step === 2 && !representativeVerificationComplete ? "Complete both verifications" : "Continue"}<MdArrowForward className="text-lg" /></button></footer>}
+          {step < steps.length - 1 && <footer className={`mt-9 flex items-center justify-between border-t pt-6 ${darkMode ? "border-slate-700" : "border-slate-200"}`}><button type="button" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0 || sendingAdminWelcome} className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition disabled:invisible ${darkMode ? "text-slate-300 hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100"}`}><MdArrowBack className="text-lg" />Previous</button><button type="button" onClick={() => void next()} disabled={(step === 2 && !representativeVerificationComplete) || sendingAdminWelcome} title={step === 2 && !representativeVerificationComplete ? "Verify both email and WhatsApp to continue" : undefined} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#7457d7] to-[#9a63df] px-7 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(116,87,215,0.22)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none disabled:hover:translate-y-0">{sendingAdminWelcome ? <><MdAutorenew className="animate-spin text-lg" /> Sending welcome email...</> : step === 2 && !representativeVerificationComplete ? "Complete both verifications" : step === 4 ? "Complete onboarding" : "Continue"}{!sendingAdminWelcome && <MdArrowForward className="text-lg" />}</button></footer>}
         </main>
       </div>
     </div>
