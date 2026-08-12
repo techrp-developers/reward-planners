@@ -79,6 +79,19 @@ app.post(
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
+// Temporary diagnostic logger — confirms requests are actually reaching the server
+// and shows the request body, which morgan (above) doesn't log. Gated to non-production;
+// remove once whatever's being debugged is found.
+if (process.env.NODE_ENV !== "production") {
+  app.use((req, res, next) => {
+    console.log(`\n[REQUEST] ${new Date().toISOString()} ${req.method} ${req.originalUrl}`);
+    if (req.body && Object.keys(req.body).length) {
+      console.log(`[REQUEST BODY]`, req.body);
+    }
+    next();
+  });
+}
+
 // Maintenance middleware
 app.use(require("./middleware/maintenance"));
 

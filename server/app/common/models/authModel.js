@@ -36,13 +36,17 @@ class authModel {
 
   async findByEmail(email) {
     const [rows] = await db.execute(
-      `SELECT 
+      `SELECT
         user_id,
         name,
         email,
+        phone,
         password,
         status,
         is_verified,
+        terms_accepted,
+        fitness_onboarding_done,
+        refresh_token,
         device_id,
         device_name
      FROM customer
@@ -55,11 +59,55 @@ class authModel {
 
   async findByCompanyUserId(company_user_id) {
     const [rows] = await db.execute(
-      `SELECT user_id, name, email, company_user_id
+      `SELECT user_id, name, email, phone, status, company_user_id,
+        terms_accepted, fitness_onboarding_done
      FROM customer
      WHERE company_user_id = ?`,
       [company_user_id],
     );
+    return rows[0];
+  }
+
+  /* ======================================================
+     PHONE + OTP LOGIN
+  ====================================================== */
+
+  async findByPhone(phone) {
+    const [rows] = await db.execute(
+      `SELECT
+        user_id,
+        company_id,
+        company_user_id,
+        name,
+        email,
+        phone,
+        status,
+        is_verified,
+        terms_accepted,
+        fitness_onboarding_done,
+        refresh_token
+     FROM customer
+     WHERE phone = ?`,
+      [phone],
+    );
+
+    return rows[0];
+  }
+
+  async findEmployeeByPhone(phone) {
+    const [rows] = await db.execute(
+      `SELECT
+        id,
+        company_id,
+        name,
+        email,
+        contact AS phone
+     FROM company_users
+     WHERE contact = ? AND status = 1
+     LIMIT 1`,
+      [phone],
+    );
+
     return rows[0];
   }
 
@@ -225,6 +273,86 @@ class authModel {
     );
   }
 
+  async savePhoneOTP(phone, otp, expiry) {
+    await db.execute(
+      `INSERT INTO phone_otps (phone, otp, expiry, attempt_count, is_verified)
+     VALUES (?, ?, ?, 0, 0)`,
+      [phone, otp, expiry],
+    );
+  }
+
+  async getLatestPhoneOTP(phone) {
+    const [rows] = await db.execute(
+      `SELECT id, otp, expiry, attempt_count, is_verified
+     FROM phone_otps
+     WHERE phone = ? AND is_verified = 0
+     ORDER BY created_at DESC
+     LIMIT 1`,
+      [phone],
+    );
+
+    return rows[0];
+  }
+
+  async incrementPhoneOtpAttempt(id) {
+    await db.execute(
+      `UPDATE phone_otps
+     SET attempt_count = attempt_count + 1
+     WHERE id = ?`,
+      [id],
+    );
+  }
+
+  async markPhoneOtpVerified(id) {
+    await db.execute(
+      `UPDATE phone_otps
+     SET is_verified = 1
+     WHERE id = ?`,
+      [id],
+    );
+  }
+
+  // Kept separate from email_otps (used by flea-market's own OTP flow) to avoid
+  // two unrelated flows colliding on attempt_count/is_verified for the same email.
+  async saveEmailLoginOTP(email, otp, expiry) {
+    await db.execute(
+      `INSERT INTO email_login_otps (email, otp, expiry, attempt_count, is_verified)
+     VALUES (?, ?, ?, 0, 0)`,
+      [email, otp, expiry],
+    );
+  }
+
+  async getLatestEmailLoginOTP(email) {
+    const [rows] = await db.execute(
+      `SELECT id, otp, expiry, attempt_count, is_verified
+     FROM email_login_otps
+     WHERE email = ? AND is_verified = 0
+     ORDER BY created_at DESC
+     LIMIT 1`,
+      [email],
+    );
+
+    return rows[0];
+  }
+
+  async incrementEmailLoginOtpAttempt(id) {
+    await db.execute(
+      `UPDATE email_login_otps
+     SET attempt_count = attempt_count + 1
+     WHERE id = ?`,
+      [id],
+    );
+  }
+
+  async markEmailLoginOtpVerified(id) {
+    await db.execute(
+      `UPDATE email_login_otps
+     SET is_verified = 1
+     WHERE id = ?`,
+      [id],
+    );
+  }
+
   async createCustomer(data, conn) {
     const { company_id, company_user_id, name, email, phone, password } = data;
     const normalizedPhone = phone ? phone : "";
@@ -248,6 +376,26 @@ class authModel {
         email.toLowerCase(),
         normalizedPhone,
         password,
+      ],
+    );
+
+    return result.insertId;
+  }
+
+  // First-time phone signup: no password, terms_accepted/fitness_onboarding_done
+  // start at 0 so the app shows onboarding exactly once.
+  async createCustomerFromEmployee(employee, conn) {
+    const [result] = await conn.execute(
+      `INSERT INTO customer
+     (company_id, company_user_id, name, email, phone, is_verified, status,
+      terms_accepted, fitness_onboarding_done)
+     VALUES (?, ?, ?, ?, ?, 1, 1, 0, 0)`,
+      [
+        employee.company_id,
+        employee.id,
+        employee.name,
+        employee.email.toLowerCase(),
+        employee.phone,
       ],
     );
 
@@ -294,6 +442,36 @@ class authModel {
        WHERE user_id = ?`,
       [ipAddress, userId],
     );
+  }
+
+  async updateRefreshToken(userId, token) {
+    await db.execute(
+      `UPDATE customer
+     SET refresh_token = ?
+     WHERE user_id = ?`,
+      [token, userId],
+    );
+  }
+
+  async clearRefreshToken(userId) {
+    await db.execute(
+      `UPDATE customer
+     SET refresh_token = NULL
+     WHERE user_id = ?`,
+      [userId],
+    );
+  }
+
+  async findByRefreshToken(token) {
+    const [rows] = await db.execute(
+      `SELECT user_id, name, email, phone, status,
+        terms_accepted, fitness_onboarding_done
+     FROM customer
+     WHERE refresh_token = ?`,
+      [token],
+    );
+
+    return rows[0];
   }
 
   async clearFcmToken(userId) {

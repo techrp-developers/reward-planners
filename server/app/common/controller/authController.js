@@ -5,7 +5,6 @@ const path = require("path");
 const AddressModel = require("../models/addressModel");
 const WalletModel = require("../../common/models/walletModel");
 const FitnessService = require("../../step-counter/v1/service/fitnessService");
-const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const {
   accountCreationSuccessMail,
@@ -20,6 +19,7 @@ const {
 const { notifyUser } = require("../utils/notification");
 const { uploadToR2 } = require("../../../utils/r2upload");
 const { deleteFromR2 } = require("../../../utils/r2delete");
+const { sendOtpSms } = require("../../../utils/smsGateway");
 
 const ACCESS_EXPIRES = "15m";
 const REFRESH_EXPIRES_DAYS = 7;
@@ -30,6 +30,18 @@ function generateOTP() {
 
 function normalizeEmail(email) {
   return typeof email === "string" ? email.trim().toLowerCase() : "";
+}
+
+function normalizePhone(phone) {
+  return typeof phone === "string" ? phone.trim() : "";
+}
+
+// `@` is a reliable enough signal — phone numbers never contain it. Full email
+// validation happens after type detection, inside the email-specific branch.
+function detectIdentifierType(identifier) {
+  const trimmed = typeof identifier === "string" ? identifier.trim() : "";
+  if (!trimmed) return null;
+  return trimmed.includes("@") ? "email" : "phone";
 }
 
 // helper function
@@ -94,446 +106,408 @@ const thoughts = [
 
 class AuthController {
   /* ======================================================
-     ACTIVATE ACCOUNT
+     UNIFIED IDENTIFIER LOGIN (email or phone, OTP only —
+     password auth has been removed entirely)
   ====================================================== */
-  async activateAccount(req, res) {
+  async checkIdentifier(req, res) {
+    const { identifier } = req.body;
+    const type = detectIdentifierType(identifier);
+    console.log("[checkIdentifier] identifier:", identifier, "type:", type);
     try {
-      const { email } = req.body;
-
-      const normalizedEmail = normalizeEmail(email);
-      if (!normalizedEmail) {
+      if (!type) {
         return res.status(400).json({
           success: false,
-          message: "Email is required",
+          message: "Mobile number or email is required",
         });
       }
 
-      const employee = await AuthModel.findEmployeeByEmail(normalizedEmail);
+      const employee =
+        type === "phone"
+          ? await AuthModel.findEmployeeByPhone(normalizePhone(identifier))
+          : await AuthModel.findEmployeeByEmail(normalizeEmail(identifier));
+      console.log("[checkIdentifier] employee found:", !!employee);
 
       if (!employee) {
         return res.status(404).json({
           success: false,
-          message: "Employee not found",
+          message:
+            "This mobile number or email is not registered. Please contact your HR department.",
         });
       }
 
-      const existingAccount = await AuthModel.findByCompanyUserId(employee.id);
-
-      if (existingAccount) {
-        return res.status(400).json({
-          success: false,
-          message: "Account already activated",
-        });
-      }
-
-      await AuthModel.deleteOTPByEmail(normalizedEmail);
-
-      const otp = generateOTP();
-
-      await AuthModel.storeActivationOTP(normalizedEmail, otp);
-
-      await sendOtpMail({
-        email: normalizedEmail,
-        name: employee.name,
-        otp,
-      });
-
-      return res.json({
-        success: true,
-        message: "OTP sent to email",
-      });
-    } catch (error) {
-      console.error("Activate account error:", error);
-      return res.status(500).json({ success: false });
+      return res.json({ success: true, registered: true, type });
+    } catch (err) {
+      console.error("[checkIdentifier] ERROR:", err);
+      return res.status(500).json({ success: false, message: "Server error" });
     }
   }
 
-  /* ======================================================
-     RESEND ACTIVATION OTP
-  ====================================================== */
-  async resendActivationOTP(req, res) {
+  async sendOtp(req, res) {
+    const { identifier } = req.body;
+    const type = detectIdentifierType(identifier);
+    console.log("[sendOtp] identifier:", identifier, "type:", type);
     try {
-      const { email } = req.body;
-
-      const normalizedEmail = normalizeEmail(email);
-      if (!normalizedEmail) {
+      if (!type) {
         return res.status(400).json({
           success: false,
-          message: "Email is required",
+          message: "Mobile number or email is required",
         });
       }
 
-      const employee = await AuthModel.findEmployeeByEmail(normalizedEmail);
+      if (type === "phone") {
+        const phone = normalizePhone(identifier);
+        const employee = await AuthModel.findEmployeeByPhone(phone);
+        console.log("[sendOtp] employee found:", !!employee);
+        if (!employee) {
+          return res.status(404).json({
+            success: false,
+            message:
+              "This mobile number is not registered. Please contact your HR department.",
+          });
+        }
 
-      if (!employee) {
-        return res.status(404).json({
-          success: false,
-          message: "Employee not found",
-        });
+        const otp = generateOTP();
+        // do NOT log the OTP value itself in shared/shipped logs
+        console.log("[sendOtp] generated OTP for", phone);
+        // Matches the fixed BhashSMS message template, which states "valid for 15 minutes".
+        const expiry = new Date(Date.now() + 15 * 60 * 1000);
+        await AuthModel.savePhoneOTP(phone, otp, expiry);
+        console.log("[sendOtp] OTP saved to DB, expiry:", expiry);
+
+        console.log("[sendOtp] calling sendOtpSms...");
+        const smsResult = await sendOtpSms(phone, otp);
+        console.log("[sendOtp] sendOtpSms returned:", smsResult);
+      } else {
+        const email = normalizeEmail(identifier);
+        const employee = await AuthModel.findEmployeeByEmail(email);
+        console.log("[sendOtp] employee found:", !!employee);
+        if (!employee) {
+          return res.status(404).json({
+            success: false,
+            message:
+              "This email is not registered. Please contact your HR department.",
+          });
+        }
+
+        const otp = generateOTP();
+        console.log("[sendOtp] generated OTP for", email);
+        const expiry = new Date(Date.now() + 10 * 60 * 1000);
+        await AuthModel.saveEmailLoginOTP(email, otp, expiry);
+        await sendOtpMail({ email, name: employee.name, otp });
+        console.log("[sendOtp] OTP email sent to", email);
       }
 
-      const existing = await AuthModel.findByCompanyUserId(employee.id);
-
-      if (existing) {
-        return res.status(400).json({
-          success: false,
-          message: "Account already activated",
-        });
-      }
-
-      await AuthModel.deleteOTPByEmail(normalizedEmail);
-
-      const otp = generateOTP();
-
-      await AuthModel.storeActivationOTP(normalizedEmail, otp);
-
-      await sendOtpMail({
-        email: normalizedEmail,
-        name: employee.name,
-        otp,
-      });
-
-      return res.json({
-        success: true,
-        message: "OTP resent successfully",
-      });
-    } catch (error) {
-      return res.status(500).json({
-        success: false,
-      });
+      return res.json({ success: true, message: "OTP sent" });
+    } catch (err) {
+      console.error("[sendOtp] ERROR:", err);
+      return res
+        .status(500)
+        .json({ success: false, message: "Failed to send OTP" });
     }
   }
 
-  /* ======================================================
-   VERIFY OTP
-====================================================== */
-  async verifyActivationOTP(req, res) {
+  async verifyOtp(req, res) {
+    const conn = await db.getConnection();
+    const { identifier, otp } = req.body;
+    const type = detectIdentifierType(identifier);
+    console.log("[verifyOtp] identifier:", identifier, "type:", type);
     try {
-      const { email, otp } = req.body;
-
-      if (!email || !otp) {
+      if (!type || !otp) {
         return res.status(400).json({
           success: false,
-          message: "Email and OTP are required",
+          message: "Identifier and OTP are required",
         });
       }
 
-      const normalizedEmail = normalizeEmail(email);
+      const normalizedIdentifier =
+        type === "phone"
+          ? normalizePhone(identifier)
+          : normalizeEmail(identifier);
 
-      const attempt = await AuthModel.getOtpAttempts(normalizedEmail);
+      const otpRow =
+        type === "phone"
+          ? await AuthModel.getLatestPhoneOTP(normalizedIdentifier)
+          : await AuthModel.getLatestEmailLoginOTP(normalizedIdentifier);
+      console.log(
+        "[verifyOtp] OTP row found:",
+        !!otpRow,
+        otpRow ? `attempt_count=${otpRow.attempt_count}` : "",
+      );
 
-      if (attempt && attempt.attempt_count >= 5) {
+      if (!otpRow) {
+        return res.status(401).json({
+          success: false,
+          message: "No OTP found, please request again",
+        });
+      }
+
+      if (otpRow.attempt_count >= 5) {
         return res.status(429).json({
           success: false,
-          message: "Too many OTP attempts. Try again later.",
+          message: "Too many attempts, request a new OTP",
         });
       }
 
-      const otpRecord = await AuthModel.verifyOTP(normalizedEmail, otp);
-
-      if (!otpRecord) {
-        await AuthModel.incrementOtpAttempts(normalizedEmail);
-
-        return res.status(400).json({
-          success: false,
-          message: "Invalid or expired OTP",
-        });
+      const expired = new Date(otpRow.expiry) < new Date();
+      console.log("[verifyOtp] expired:", expired);
+      if (expired) {
+        return res.status(401).json({ success: false, message: "OTP expired" });
       }
 
-      await AuthModel.markOTPVerified(normalizedEmail);
-
-      return res.json({
-        success: true,
-        message: "OTP verified successfully",
-      });
-    } catch (err) {
-      console.error("Verify activation OTP error:", err);
-
-      return res.status(500).json({
-        success: false,
-        message: "Server error",
-      });
-    }
-  }
-
-  /* ======================================================
-     SET PASSWORD
-  ====================================================== */
-  async setPassword(req, res) {
-    const conn = await db.getConnection();
-    try {
-      const { email, password } = req.body;
-
-      if (!email || !password) {
-        return res.status(400).json({
-          success: false,
-          message: "Email and password are required",
-        });
+      const otpMatched = otpRow.otp === otp;
+      console.log("[verifyOtp] OTP matched:", otpMatched);
+      if (!otpMatched) {
+        if (type === "phone") {
+          await AuthModel.incrementPhoneOtpAttempt(otpRow.id);
+        } else {
+          await AuthModel.incrementEmailLoginOtpAttempt(otpRow.id);
+        }
+        return res.status(401).json({ success: false, message: "Invalid OTP" });
       }
 
-      const normalizedEmail = normalizeEmail(email);
-
-      if (password.length < 8) {
-        return res.status(400).json({
-          success: false,
-          message: "Password must be at least 8 characters",
-        });
+      if (type === "phone") {
+        await AuthModel.markPhoneOtpVerified(otpRow.id);
+      } else {
+        await AuthModel.markEmailLoginOtpVerified(otpRow.id);
       }
 
-      const existing = await AuthModel.findByEmail(normalizedEmail);
+      // Duplicate-prevention: check by identifier first, then by company_user_id
+      // (covers the case where an employee's phone/email changed but they already
+      // have a customer row), before creating a new customer.
+      let user =
+        type === "phone"
+          ? await AuthModel.findByPhone(normalizedIdentifier)
+          : await AuthModel.findByEmail(normalizedIdentifier);
+      console.log("[verifyOtp] existing customer found:", !!user);
 
-      if (existing) {
-        return res.status(400).json({
-          success: false,
-          message: "Account already exists",
-        });
+      let isNewCustomer = false;
+      let employeeForNotifications = null;
+
+      if (!user) {
+        const employee =
+          type === "phone"
+            ? await AuthModel.findEmployeeByPhone(normalizedIdentifier)
+            : await AuthModel.findEmployeeByEmail(normalizedIdentifier);
+
+        if (!employee) {
+          return res
+            .status(404)
+            .json({ success: false, message: "Employee record not found" });
+        }
+        employeeForNotifications = employee;
+
+        const existingByEmployee = await AuthModel.findByCompanyUserId(
+          employee.id,
+        );
+        console.log(
+          "[verifyOtp] existing customer by company_user_id:",
+          !!existingByEmployee,
+        );
+
+        if (existingByEmployee) {
+          if (existingByEmployee.phone) {
+            user = await AuthModel.findByPhone(existingByEmployee.phone);
+          } else if (existingByEmployee.email) {
+            user = await AuthModel.findByEmail(existingByEmployee.email);
+          }
+        } else {
+          console.log(
+            "[verifyOtp] creating new customer for",
+            normalizedIdentifier,
+          );
+          await conn.beginTransaction();
+          await AuthModel.createCustomerFromEmployee(employee, conn);
+          await conn.commit();
+          user =
+            type === "phone"
+              ? await AuthModel.findByPhone(normalizedIdentifier)
+              : await AuthModel.findByEmail(normalizedIdentifier);
+          console.log("[verifyOtp] new customer created:", user?.user_id);
+          isNewCustomer = true;
+        }
       }
 
-      const otpVerified = await AuthModel.checkOTPVerified(normalizedEmail);
-
-      if (!otpVerified) {
-        return res.status(403).json({
-          success: false,
-          message: "OTP verification required",
-        });
-      }
-
-      const employee = await AuthModel.findEmployeeByEmail(normalizedEmail);
-
-      if (!employee) {
-        return res.status(404).json({
-          success: false,
-          message: "Employee not found",
-        });
-      }
-
-      const hashedPassword = await bcrypt.hash(password.toString(), 12);
-
-      await conn.beginTransaction();
-
-      await AuthModel.createCustomer(
-        {
-          company_id: employee.company_id,
-          company_user_id: employee.id,
-          name: employee.name,
-          email: employee.email,
-          phone: employee.phone,
-          password: hashedPassword,
-        },
-        conn,
-      );
-
-      await AuthModel.deleteOTP(normalizedEmail, conn);
-
-      await conn.commit();
-
-      const createdUser = await AuthModel.findByEmail(normalizedEmail);
-
-      notifyUser(
-        {
-          userId: createdUser?.user_id,
-          module: "common",
-          type: "account_activated",
-          title: "Account activated",
-          message: "Your RewardPlanners account is ready to use.",
-          icon: "user-check",
-          reference_type: "account",
-          reference_id: createdUser?.user_id,
-          action_url: "/profile",
-        },
-        "account activation notification",
-      );
-
-      setImmediate(() => {
-        accountCreationSuccessMail({
-          name: employee.name,
-          email: employee.email,
-        }).catch((err) => {
-          console.error("Email send failed:", err);
-        });
-      });
-
-      //  NON-BLOCKING WHATSAPP
-      if (employee.phone) {
-        setImmediate(() => {
-          enqueueWhatsApp({
-            eventName: "create_account_notification",
-            ctx: {
-              phone: employee.phone,
-              company_id: employee.company_id ?? null,
-              customer_name: employee.name || "User",
-            },
-          }).catch((err) => {
-            console.error("WhatsApp enqueue failed:", err);
-          });
-        });
-      }
-
-      return res.json({
-        success: true,
-        message: "Account activated successfully",
-      });
-    } catch (err) {
-      await conn.rollback();
-      console.error("SET PASSWORD ERROR:", err);
-
-      return res.status(500).json({
-        success: false,
-        message: "Server error",
-      });
-    } finally {
-      conn.release();
-    }
-  }
-
-  /* ======================================================
-     LOGIN
-  ====================================================== */
-  async loginUser(req, res) {
-    try {
-      const { email, password } = req.body;
-      const normalizedEmail = normalizeEmail(email);
-      if (!normalizedEmail || !password) {
-        return res.status(400).json({
-          success: false,
-          message: "Email and password are required",
-        });
-      }
-
-      const user = await AuthModel.findByEmail(normalizedEmail);
-      if (!user) return res.status(401).json({ success: false });
-
-      if (Number(user.status) !== 1)
+      if (!user) {
         return res
-          .status(403)
-          .json({ success: false, message: "Account inactive" });
-
-      if (!user.is_verified)
-        return res
-          .status(403)
-          .json({ success: false, message: "Email not verified" });
-
-      const employee = await AuthModel.findEmployeeByEmail(normalizedEmail);
-
-      if (!employee) {
-        return res.status(404).json({
-          success: false,
-          message: "Employee not found",
-        });
+          .status(404)
+          .json({ success: false, message: "Account not found" });
       }
 
-      const match = await bcrypt.compare(password, user.password);
-      if (!match) return res.status(401).json({ success: false });
-      // const tokenVersion = Number(user.token_version || 0);
       const accessToken = jwt.sign(
-        // { user_id: user.user_id, token_version: tokenVersion },
         { user_id: user.user_id },
         process.env.ACCESS_TOKEN_SECRET,
         { expiresIn: ACCESS_EXPIRES },
       );
 
       const refreshToken = jwt.sign(
-        // { user_id: user.user_id, token_version: tokenVersion },
         { user_id: user.user_id },
         process.env.REFRESH_TOKEN_SECRET,
         { expiresIn: `${REFRESH_EXPIRES_DAYS}d` },
       );
 
+      await AuthModel.updateRefreshToken(user.user_id, refreshToken);
       await AuthModel.updateLoginMeta(user.user_id, req.ip);
+      console.log("[verifyOtp] login success for user_id:", user.user_id);
 
-      const firstLoginBonus = await WalletModel.createWalletOnFirstLogin(
-        user.user_id,
-      );
-
-      if (firstLoginBonus) {
+      if (isNewCustomer) {
         notifyUser(
           {
             userId: user.user_id,
-            module: "wallet",
-            type: "first_login_reward",
-            title: "Coins credited",
-            message: "You received 3000 reward coins for your first login.",
-            icon: "wallet",
-            reference_type: "wallet",
+            module: "common",
+            type: "account_activated",
+            title: "Account activated",
+            message: "Your RewardPlanners account is ready to use.",
+            icon: "user-check",
+            reference_type: "account",
             reference_id: user.user_id,
-            action_url: "/wallet",
-            metadata: { coins: 3000 },
+            action_url: "/profile",
           },
-          "first login reward notification",
+          "account activation notification",
         );
 
         setImmediate(() => {
-          rewardCreditMail({
-            email: user.email,
-            name: user.name,
-            coins: 3000,
+          accountCreationSuccessMail({
+            name: employeeForNotifications.name,
+            email: employeeForNotifications.email,
           }).catch((err) => {
-            console.error("First login reward email failed:", err);
-          });
-
-          enqueueWhatsApp({
-            eventName: "wallet_credit_first_login",
-            ctx: {
-              phone: employee.phone,
-              company_id: employee.company_id,
-              customer_name: employee.name || "User",
-              coins: 3000,
-            },
-          }).catch((err) => {
-            console.error("First login reward WhatsApp failed:", err);
+            console.error("Email send failed:", err);
           });
         });
+
+        if (employeeForNotifications.phone) {
+          setImmediate(() => {
+            enqueueWhatsApp({
+              eventName: "create_account_notification",
+              ctx: {
+                phone: employeeForNotifications.phone,
+                company_id: employeeForNotifications.company_id ?? null,
+                customer_name: employeeForNotifications.name || "User",
+              },
+            }).catch((err) => {
+              console.error("WhatsApp enqueue failed:", err);
+            });
+          });
+        }
+
+        const firstLoginBonus = await WalletModel.createWalletOnFirstLogin(
+          user.user_id,
+        );
+
+        if (firstLoginBonus) {
+          notifyUser(
+            {
+              userId: user.user_id,
+              module: "wallet",
+              type: "first_login_reward",
+              title: "Coins credited",
+              message: "You received 3000 reward coins for your first login.",
+              icon: "wallet",
+              reference_type: "wallet",
+              reference_id: user.user_id,
+              action_url: "/wallet",
+              metadata: { coins: 3000 },
+            },
+            "first login reward notification",
+          );
+
+          setImmediate(() => {
+            rewardCreditMail({
+              email: user.email,
+              name: user.name,
+              coins: 3000,
+            }).catch((err) => {
+              console.error("First login reward email failed:", err);
+            });
+
+            if (employeeForNotifications.phone) {
+              enqueueWhatsApp({
+                eventName: "wallet_credit_first_login",
+                ctx: {
+                  phone: employeeForNotifications.phone,
+                  company_id: employeeForNotifications.company_id,
+                  customer_name: employeeForNotifications.name || "User",
+                  coins: 3000,
+                },
+              }).catch((err) => {
+                console.error("First login reward WhatsApp failed:", err);
+              });
+            }
+          });
+        }
       }
 
       return res.json({
         success: true,
         accessToken,
         refreshToken,
-        firstLoginReward: {
-          awarded: firstLoginBonus,
-          coins: firstLoginBonus ? 3000 : 0,
+        user: {
+          id: user.user_id,
+          name: user.name,
+          phone: user.phone,
+          email: user.email,
+          terms_accepted: user.terms_accepted,
+          fitness_onboarding_done: user.fitness_onboarding_done,
         },
       });
     } catch (err) {
-      return res.status(500).json({ success: false });
+      try {
+        await conn.rollback();
+      } catch {}
+      console.error("[verifyOtp] ERROR:", err);
+      return res.status(500).json({ success: false, message: "Server error" });
+    } finally {
+      conn.release();
     }
   }
 
-  // Refresh
-  async refreshAccessToken(req, res) {
+  async refreshToken(req, res) {
     try {
       const { refreshToken } = req.body;
       if (!refreshToken) {
         return res.status(400).json({ success: false });
       }
 
-      const payload = jwt.verify(
-        refreshToken,
-        process.env.REFRESH_TOKEN_SECRET,
-      );
+      jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
 
-      const user = await AuthModel.findById(payload.user_id);
+      const user = await AuthModel.findByRefreshToken(refreshToken);
+      console.log("[refreshToken] token recognized:", !!user);
+      if (!user) return res.status(403).json({ success: false });
 
-      if (!user) return res.status(401).json({ success: false });
-
-      if (Number(user.status) !== 1)
+      if (Number(user.status) !== 1) {
+        console.log("[refreshToken] rejected — account inactive");
         return res.status(403).json({ success: false });
-
-      // if (
-      //   Number(user.token_version || 0) !== Number(payload.token_version || 0)
-      // ) {
-      //   return res.status(401).json({ success: false });
-      // }
+      }
 
       const newAccessToken = jwt.sign(
-        { user_id: user.user_id, token_version: user.token_version },
+        { user_id: user.user_id },
         process.env.ACCESS_TOKEN_SECRET,
         { expiresIn: ACCESS_EXPIRES },
       );
 
       return res.json({ success: true, accessToken: newAccessToken });
-    } catch {
+    } catch (err) {
+      console.error("[refreshToken] ERROR:", err.message);
       return res.status(401).json({ success: false });
+    }
+  }
+
+  async logout(req, res) {
+    try {
+      const userId = req.user?.user_id;
+      console.log("[logout] user_id:", userId);
+      if (!userId) {
+        return res
+          .status(401)
+          .json({ success: false, message: "Unauthorized user" });
+      }
+
+      await AuthModel.clearRefreshToken(userId);
+      await AuthModel.clearFcmToken(userId);
+
+      return res.json({ success: true, message: "Logged out" });
+    } catch (err) {
+      console.error("[logout] ERROR:", err);
+      return res.status(500).json({ success: false });
     }
   }
 
@@ -562,354 +536,6 @@ class AuthController {
       return res.status(500).json({
         success: false,
       });
-    }
-  }
-
-  /* ======================================================
-     CHANGE PASSWORD
-  ====================================================== */
-  async changePassword(req, res) {
-    const connection = await db.getConnection();
-    try {
-      const userId = req.user?.user_id;
-      // const userId = 1;
-
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: "Unauthorized user",
-        });
-      }
-
-      const { currentPassword, newPassword } = req.body;
-
-      if (!currentPassword || !newPassword) {
-        return res.status(400).json({
-          success: false,
-          message: "Current password and new password are required",
-        });
-      }
-
-      if (newPassword.length < 8) {
-        return res.status(400).json({
-          success: false,
-          message: "Password must be at least 8 characters",
-        });
-      }
-
-      const user = await AuthModel.getUserPassword(connection, userId);
-
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          message: "User not found",
-        });
-      }
-
-      const isMatch = await bcrypt.compare(currentPassword, user.password);
-
-      if (!isMatch) {
-        return res.status(400).json({
-          success: false,
-          message: "Current password is incorrect",
-        });
-      }
-
-      const hashedPassword = await bcrypt.hash(newPassword, 12);
-
-      await connection.beginTransaction();
-      await AuthModel.updatePassword(connection, userId, hashedPassword);
-
-      await connection.commit();
-
-      notifyUser(
-        {
-          userId,
-          module: "common",
-          type: "password_changed",
-          title: "Password changed",
-          message: "Your account password was changed successfully.",
-          icon: "lock",
-          reference_type: "account",
-          reference_id: userId,
-          action_url: "/profile/security",
-          priority: "high",
-        },
-        "password changed notification",
-      );
-
-      return res.json({
-        success: true,
-        message: "Password changed successfully. Please login again.",
-      });
-    } catch (error) {
-      await connection.rollback();
-      console.error("Change Password Error:", error);
-
-      return res.status(500).json({
-        success: false,
-        message: "Internal server error",
-      });
-    } finally {
-      connection.release();
-    }
-  }
-
-  /* ======================================================
-     LOGOUT USER
-  ====================================================== */
-  async logoutUser(req, res) {
-    try {
-      const userId = req.user?.user_id;
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: "Unauthorized user",
-        });
-      }
-
-      await AuthModel.clearFcmToken(userId);
-      // await AuthModel.incrementTokenVersion(userId);
-
-      return res.json({
-        success: true,
-        message: "Logged out successfully",
-      });
-    } catch (error) {
-      console.error("Logout Error:", error);
-
-      return res.status(500).json({
-        success: false,
-        message: "Something went wrong",
-      });
-    }
-  }
-
-  /* ======================================================
-     FORGOT PASSWORD
-  ====================================================== */
-  async forgotPassword(req, res) {
-    try {
-      const { email } = req.body;
-
-      const normalizedEmail = normalizeEmail(email);
-      if (!normalizedEmail) {
-        return res.status(400).json({
-          success: false,
-          message: "Email is required",
-        });
-      }
-
-      const user = await AuthModel.findByEmail(normalizedEmail);
-
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          message: "Account not found",
-        });
-      }
-
-      await AuthModel.deleteOTPByEmail(normalizedEmail);
-
-      const otp = generateOTP();
-
-      await AuthModel.storeActivationOTP(user.email, otp);
-
-      await sendOtpMail({
-        email: user.email,
-        name: user.name,
-        otp,
-      });
-
-      return res.json({
-        success: true,
-        message: "OTP sent successfully",
-      });
-    } catch (error) {
-      return res.status(500).json({
-        success: false,
-      });
-    }
-  }
-
-  /* ======================================================
-     RESEND OTP
-  ====================================================== */
-  async resendOTP(req, res) {
-    try {
-      const { email } = req.body;
-
-      const normalizedEmail = normalizeEmail(email);
-      if (!normalizedEmail) {
-        return res.status(400).json({
-          success: false,
-          message: "Email is required",
-        });
-      }
-
-      const employee = await AuthModel.findEmployeeByEmail(normalizedEmail);
-
-      if (!employee) {
-        return res.status(404).json({
-          success: false,
-          message: "Employee not found",
-        });
-      }
-
-      const existing = await AuthModel.findByCompanyUserId(employee.id);
-
-      if (!existing) {
-        return res.status(400).json({
-          success: false,
-          message: "User doesn't exist.Please activate the account",
-        });
-      }
-
-      await AuthModel.deleteOTPByEmail(normalizedEmail);
-
-      const otp = generateOTP();
-
-      await AuthModel.storeActivationOTP(normalizedEmail, otp);
-
-      await sendOtpMail({
-        email: normalizedEmail,
-        name: employee.name,
-        otp,
-      });
-
-      return res.json({
-        success: true,
-        message: "OTP resent successfully",
-      });
-    } catch (error) {
-      return res.status(500).json({
-        success: false,
-      });
-    }
-  }
-
-  async verifyForgotPasswordOTP(req, res) {
-    try {
-      const { email, otp } = req.body;
-
-      const normalizedEmail = normalizeEmail(email);
-      if (!normalizedEmail || !otp) {
-        return res.status(400).json({
-          success: false,
-          message: "Email and OTP are required",
-        });
-      }
-
-      const attempt = await AuthModel.getOtpAttempts(normalizedEmail);
-
-      if (attempt && attempt.attempt_count >= 5) {
-        return res.status(429).json({
-          success: false,
-          message: "Too many OTP attempts. Try again later.",
-        });
-      }
-
-      const otpRecord = await AuthModel.verifyOTP(normalizedEmail, otp);
-
-      if (!otpRecord) {
-        await AuthModel.incrementOtpAttempts(normalizedEmail);
-
-        return res.status(400).json({
-          success: false,
-          message: "Invalid or expired OTP",
-        });
-      }
-
-      await AuthModel.markOTPVerified(normalizedEmail);
-
-      return res.json({
-        success: true,
-        message: "OTP verified successfully",
-      });
-    } catch (error) {
-      return res.status(500).json({
-        success: false,
-      });
-    }
-  }
-
-  async resetPassword(req, res) {
-    const conn = await db.getConnection();
-
-    try {
-      const { email, newPassword } = req.body;
-
-      const normalizedEmail = normalizeEmail(email);
-      if (!normalizedEmail) {
-        return res.status(400).json({
-          success: false,
-          message: "Email is required",
-        });
-      }
-
-      const otpVerified = await AuthModel.checkOTPVerified(normalizedEmail);
-
-      if (!otpVerified) {
-        return res.status(403).json({
-          success: false,
-          message: "OTP verification required",
-        });
-      }
-
-      const user = await AuthModel.findByEmail(normalizedEmail);
-
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          message: "User not found",
-        });
-      }
-
-      if (!newPassword || newPassword.length < 8) {
-        return res.status(400).json({
-          success: false,
-          message: "Password must be at least 8 characters",
-        });
-      }
-
-      const hashedPassword = await bcrypt.hash(newPassword, 12);
-
-      await conn.beginTransaction();
-
-      await AuthModel.updatePassword(conn, user.user_id, hashedPassword);
-
-      await AuthModel.deleteOTP(normalizedEmail, conn);
-
-      await conn.commit();
-
-      notifyUser(
-        {
-          userId: user.user_id,
-          module: "common",
-          type: "password_reset",
-          title: "Password reset",
-          message: "Your password was reset successfully.",
-          icon: "lock",
-          reference_type: "account",
-          reference_id: user.user_id,
-          action_url: "/profile/security",
-          priority: "high",
-        },
-        "password reset notification",
-      );
-
-      return res.json({
-        success: true,
-        message: "Password reset successfully",
-      });
-    } catch (error) {
-      await conn.rollback();
-
-      return res.status(500).json({
-        success: false,
-      });
-    } finally {
-      conn.release();
     }
   }
 
