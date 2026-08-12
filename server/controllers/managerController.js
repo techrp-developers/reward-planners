@@ -39,6 +39,15 @@ class ManagerController {
       if (!employee.phone) {
         return res.status(400).json({ success: false, message: "Employee phone is required" });
       }
+      if (!employee.dob) {
+        return res.status(400).json({ success: false, message: "Date of birth is required" });
+      }
+      if (employee.dob) {
+        const dateOfBirth = new Date(`${employee.dob}T00:00:00Z`);
+        if (Number.isNaN(dateOfBirth.getTime()) || dateOfBirth.toISOString().slice(0, 10) !== employee.dob || dateOfBirth > new Date()) {
+          return res.status(400).json({ success: false, message: "Date of birth must be a valid past date" });
+        }
+      }
       if (employee.ctc !== null && (!Number.isFinite(employee.ctc) || employee.ctc < 0)) {
         return res.status(400).json({ success: false, message: "CTC must be a non-negative number" });
       }

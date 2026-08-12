@@ -6,7 +6,8 @@ const servers = {
     apiBaseUrl: "http://localhost:5000",
   },
   live: {
-    apiBaseUrl: "https://rewardplanners.com/api/crm",
+    // Same-origin in production and proxied by Vite during local development.
+    apiBaseUrl: "/api/crm",
   },
 } as const;
 
