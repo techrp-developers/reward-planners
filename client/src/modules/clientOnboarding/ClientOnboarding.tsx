@@ -94,7 +94,7 @@ export default function ClientOnboarding() {
     if (returnStatus === "declined" || returnStatus === "later") {
       setAgreementMessage(returnStatus === "declined" ? "The agreement was declined. Start again when you are ready to sign." : "Signing was postponed. Start again to complete the agreement.");
       setAgreementLoading(false);
-      window.history.replaceState({}, "", "/client-onboarding");
+      window.history.replaceState({}, "", window.location.pathname);
       return;
     }
     void api.post("/client-onboarding/otp/sign/status", { state: signingState }).then((response) => {
@@ -103,7 +103,7 @@ export default function ClientOnboarding() {
       setAgreementMessage(signed ? "Agreement signed and confirmed by Zoho Sign." : "Zoho has not marked the agreement as signed yet. Please open it again and complete all required fields.");
     }).catch((requestError) => setAgreementMessage((requestError as { response?: { data?: { message?: string } } }).response?.data?.message || "Unable to confirm the signed agreement.")).finally(() => {
       setAgreementLoading(false);
-      window.history.replaceState({}, "", "/client-onboarding");
+      window.history.replaceState({}, "", window.location.pathname);
     });
   }, []);
 
@@ -269,7 +269,7 @@ export default function ClientOnboarding() {
         recipientName: data.repName,
         recipientEmail: data.repEmail,
         companyName: data.companyName,
-        returnUrl: `${window.location.origin}/client-onboarding`,
+        returnUrl: `${window.location.origin}${window.location.pathname}`,
       });
       const signUrl = response.data?.data?.signUrl;
       if (!signUrl) throw new Error("Zoho Sign did not return a signing URL.");
