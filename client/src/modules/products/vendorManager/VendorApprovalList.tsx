@@ -7,9 +7,8 @@ import {
   FaClock,
   FaEye,
   FaFileAlt,
-  FaDownload,
 } from "react-icons/fa";
-import { FiUsers, FiSearch } from "react-icons/fi";
+import { FiCalendar, FiDownload, FiSearch, FiUsers, FiX } from "react-icons/fi";
 import { Link } from "react-router-dom";
 import Swal from "sweetalert2";
 import { api } from "../../../common/api/api";
@@ -87,6 +86,10 @@ export default function VendorApprovalList() {
   const debouncedSearch = useDebounce(search.toLowerCase(), 300);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [reportDownloading, setReportDownloading] = useState(false);
+  const [reportSearch, setReportSearch] = useState("");
+  const [reportStatus, setReportStatus] = useState<FilterValue>("All");
 
   const filteredVendors = vendors.filter((v) => {
     const matchesStatus = filter === "All" ? true : v.status === filter;
@@ -115,20 +118,40 @@ export default function VendorApprovalList() {
   }, []);
 
   const handleDownloadVendorReport = async () => {
+    if ((fromDate && !toDate) || (!fromDate && toDate)) {
+      await Swal.fire("Date range incomplete", "Select both From and To dates.", "warning");
+      return;
+    }
+    if (fromDate && toDate && fromDate > toDate) {
+      await Swal.fire("Invalid period", "From date cannot be after To date.", "warning");
+      return;
+    }
     try {
+      setReportDownloading(true);
       const response = await api.get("/manager/download-vendor-report", {
-        params: { status: filter !== "All" ? filter : "" },
+        params: {
+          status: reportStatus !== "All" ? reportStatus : undefined,
+          search: reportSearch.trim() || undefined,
+          fromDate: fromDate || undefined,
+          toDate: toDate || undefined,
+        },
         responseType: "blob",
       });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", "vendor_report.xlsx");
+      link.setAttribute("download", `vendor_report_${new Date().toISOString().slice(0, 10)}.xlsx`);
       document.body.appendChild(link);
       link.click();
       link.remove();
+      window.URL.revokeObjectURL(url);
+      setReportModalOpen(false);
+      await Swal.fire({ icon: "success", title: "Report downloaded", text: "Your filtered vendor report is ready.", timer: 1800, showConfirmButton: false });
     } catch (error) {
       console.error("Download failed", error);
+      await Swal.fire("Download failed", "Unable to generate the vendor report. Please try again.", "error");
+    } finally {
+      setReportDownloading(false);
     }
   };
 
@@ -188,6 +211,18 @@ export default function VendorApprovalList() {
 
   return (
     <div className="mx-auto space-y-6 max-w-7xl">
+      {reportModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget && !reportDownloading) setReportModalOpen(false); }}>
+          <div role="dialog" aria-modal="true" aria-labelledby="vendor-report-title" className="w-full max-w-xl overflow-hidden rounded-3xl border border-white/70 bg-white shadow-[0_28px_90px_rgba(39,20,58,0.3)]">
+            <div className="relative overflow-hidden bg-gradient-to-br from-[#25103d] via-[#64248c] to-[#b72f72] px-6 py-6 text-white"><div className="absolute -right-10 -top-16 h-40 w-40 rounded-full bg-white/10 blur-2xl" /><div className="relative flex items-start justify-between gap-4"><div className="flex items-center gap-4"><div className="grid h-12 w-12 place-items-center rounded-2xl border border-white/15 bg-white/10"><FiDownload size={21} /></div><div><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-purple-200">Vendor analytics</p><h2 id="vendor-report-title" className="mt-1 text-xl font-extrabold">Download vendor report</h2><p className="mt-1 text-xs text-purple-100/75">Export vendor onboarding data matching your selection.</p></div></div><button type="button" disabled={reportDownloading} onClick={() => setReportModalOpen(false)} className="grid h-9 w-9 place-items-center rounded-xl border border-white/15 bg-white/10 transition hover:bg-white/20" aria-label="Close"><FiX /></button></div></div>
+            <div className="space-y-5 p-6">
+              <div className="grid gap-4 sm:grid-cols-2"><div><label htmlFor="vendor-report-search" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Vendor or company</label><div className="relative"><FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" /><input id="vendor-report-search" value={reportSearch} onChange={(event) => setReportSearch(event.target.value)} placeholder="All vendors" className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm outline-none transition focus:border-purple-400 focus:bg-white focus:ring-4 focus:ring-purple-100" /></div></div><div><label htmlFor="vendor-report-status" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Onboarding status</label><select id="vendor-report-status" value={reportStatus} onChange={(event) => setReportStatus(event.target.value as FilterValue)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-purple-400 focus:bg-white focus:ring-4 focus:ring-purple-100"><option value="All">All statuses</option><option value="sent_for_approval">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="deleted">Inactive</option></select></div></div>
+              <div className="rounded-2xl border border-purple-100 bg-purple-50/50 p-4"><div className="mb-3 flex items-center gap-2"><FiCalendar className="text-[#852BAF]" /><div><p className="text-sm font-extrabold text-slate-800">Custom period</p><p className="text-xs text-slate-500">Filter by vendor registration date.</p></div></div><div className="grid gap-3 sm:grid-cols-2"><div><label htmlFor="vendor-report-from" className="mb-1.5 block text-xs font-semibold text-slate-500">From date</label><input id="vendor-report-from" type="date" value={fromDate} max={toDate || undefined} onChange={(event) => setFromDate(event.target.value)} className="w-full rounded-xl border border-purple-100 bg-white px-3 py-2.5 text-sm outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100" /></div><div><label htmlFor="vendor-report-to" className="mb-1.5 block text-xs font-semibold text-slate-500">To date</label><input id="vendor-report-to" type="date" value={toDate} min={fromDate || undefined} onChange={(event) => setToDate(event.target.value)} className="w-full rounded-xl border border-purple-100 bg-white px-3 py-2.5 text-sm outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100" /></div></div></div>
+              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between"><button type="button" disabled={reportDownloading} onClick={() => { setReportSearch(""); setReportStatus("All"); setFromDate(""); setToDate(""); }} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-500 transition hover:bg-slate-50">Clear filters</button><button type="button" disabled={reportDownloading} onClick={() => void handleDownloadVendorReport()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-purple-500/20 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60">{reportDownloading ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Generating...</> : <><FiDownload /> Download Excel</>}</button></div>
+            </div>
+          </div>
+        </div>
+      )}
       {/* ── PAGE HEADER ── */}
       <div
         className="flex items-center justify-between p-5 rounded-2xl"
@@ -225,6 +260,7 @@ export default function VendorApprovalList() {
             {filteredVendors.length} vendor
             {filteredVendors.length !== 1 ? "s" : ""}
           </span>
+          <button type="button" onClick={() => { setReportSearch(search); setReportStatus(filter); setReportModalOpen(true); }} className="inline-flex items-center gap-2 rounded-xl border border-purple-200 bg-white px-4 py-2.5 text-sm font-bold text-[#852BAF] shadow-sm transition hover:-translate-y-0.5 hover:border-[#852BAF] hover:bg-purple-50 hover:shadow-md"><FiDownload /> Vendor report</button>
         </div>
       </div>
 
@@ -285,52 +321,6 @@ export default function VendorApprovalList() {
               />
             </div>
           </div>
-        </div>
-
-        {/* REPORT FILTERS */}
-        <div
-          className="flex flex-wrap items-center justify-between gap-3 px-6 py-3"
-          style={{
-            background: "rgba(133,43,175,0.02)",
-            borderBottom: "1px solid rgba(133,43,175,0.06)",
-          }}
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={filter}
-              onChange={(e) => setFilter(e.target.value as FilterValue)}
-              className={`${inputCls} cursor-pointer`}
-            >
-              <option value="All">All Status</option>
-              <option value="approved">Approved</option>
-              <option value="rejected">Rejected</option>
-              <option value="deleted">Inactive</option>
-              <option value="sent_for_approval">Pending</option>
-            </select>
-            <input
-              type="date"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              className={`${inputCls} cursor-pointer`}
-            />
-            <input
-              type="date"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              className={`${inputCls} cursor-pointer`}
-            />
-          </div>
-
-          <button
-            onClick={handleDownloadVendorReport}
-            disabled={!fromDate && !toDate && filter === "All"}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm text-white cursor-pointer transition-all hover:opacity-90 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{
-              background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
-            }}
-          >
-            <FaDownload size={13} /> Download Report
-          </button>
         </div>
 
         {/* TABLE */}

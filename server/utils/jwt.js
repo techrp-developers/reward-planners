@@ -10,7 +10,8 @@ const getJwtSecret = () => {
 
 exports.generateToken = (payload) => {
   return jwt.sign(payload, getJwtSecret(), {
-    expiresIn: "24h",
+    expiresIn: "15m",
+    algorithm: "HS256",
   });
 };
 

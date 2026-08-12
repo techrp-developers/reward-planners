@@ -14,6 +14,8 @@ interface Company {
   status: number;
   total_employee_count: number;
   active_employee_count: number;
+  android_user_count: number;
+  ios_user_count: number;
 }
 
 interface Customer {
@@ -29,6 +31,7 @@ interface Customer {
   company_name: string | null;
   department: string | null;
   company_role: string | null;
+  device_platform: "android" | "ios" | null;
 }
 
 type Tab = "companies" | "employees";
@@ -79,6 +82,16 @@ function Badge({ active, label }: { active: boolean; label: string }) {
       {label}
     </span>
   );
+}
+
+function PlatformBadge({ platform }: { platform: Customer["device_platform"] }) {
+  const label = platform === "android" ? "Android" : platform === "ios" ? "iOS" : "Unknown";
+  const color = platform === "android"
+    ? "bg-emerald-50 text-emerald-700"
+    : platform === "ios"
+      ? "bg-slate-900 text-white"
+      : "bg-gray-100 text-gray-500";
+  return <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-extrabold uppercase ${color}`}>{label}</span>;
 }
 
 export default function EmployeeDirectory() {
@@ -278,12 +291,12 @@ export default function EmployeeDirectory() {
         ) : tab === "companies" ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="px-5 py-3">Company</th><th className="px-5 py-3">Contact</th><th className="px-5 py-3">Total employees</th><th className="px-5 py-3">Active employees</th><th className="px-5 py-3">Status</th><th className="px-5 py-3 text-right">Action</th></tr></thead>
+              <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="px-5 py-3">Company</th><th className="px-5 py-3">Contact</th><th className="px-5 py-3">Total employees</th><th className="px-5 py-3">Active employees</th><th className="px-5 py-3">Mobile users</th><th className="px-5 py-3">Status</th><th className="px-5 py-3 text-right">Action</th></tr></thead>
               <tbody className="divide-y divide-gray-100">
                 {filteredCompanies.map((company) => <tr key={company.company_id} className="hover:bg-purple-50/30">
                   <td className="px-5 py-4"><div className="flex items-center gap-3">{company.company_logo ? <img src={company.company_logo} alt="" className="h-10 w-10 rounded-xl border border-gray-100 object-contain" /> : <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50 text-[#852BAF]"><FiBriefcase /></span>}<div><p className="font-bold text-gray-900">{company.company_name}</p><p className="text-xs text-gray-400">ID #{company.company_id}</p></div></div></td>
                   <td className="px-5 py-4"><p className="text-gray-700">{company.company_email || "—"}</p><p className="text-xs text-gray-400">{company.company_phone || "—"}</p></td>
-                  <td className="px-5 py-4 font-semibold text-gray-700">{company.total_employee_count}</td><td className="px-5 py-4 font-semibold text-gray-700">{company.active_employee_count}</td>
+                  <td className="px-5 py-4 font-semibold text-gray-700">{company.total_employee_count}</td><td className="px-5 py-4 font-semibold text-gray-700">{company.active_employee_count}</td><td className="px-5 py-4"><div className="flex gap-2 whitespace-nowrap"><span className="rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">Android {company.android_user_count}</span><span className="rounded-lg bg-slate-900 px-2.5 py-1 text-xs font-bold text-white">iOS {company.ios_user_count}</span></div></td>
                   <td className="px-5 py-4"><Badge active={Number(company.status) === 1} label={Number(company.status) === 1 ? "Active" : "Inactive"} /></td>
                   <td className="px-5 py-4 text-right"><div className="inline-flex items-center gap-2"><Link to={`/manager/companies/${company.company_id}/employees`} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-100 px-3 py-2 text-xs font-bold text-blue-600 transition hover:bg-blue-50"><FiEye /> Employees</Link><button onClick={() => openEditCompany(company)} className="inline-flex items-center gap-1.5 rounded-lg border border-purple-100 px-3 py-2 text-xs font-bold text-[#852BAF] transition hover:bg-purple-50"><FiEdit2 /> Edit</button><button onClick={() => void deleteCompany(company)} disabled={deletingCompanyId === company.company_id || Number(company.status) !== 1} className="inline-flex items-center gap-1.5 rounded-lg border border-red-100 px-3 py-2 text-xs font-bold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"><FiTrash2 /> {deletingCompanyId === company.company_id ? "Deleting..." : "Delete"}</button></div></td>
                 </tr>)}
@@ -294,12 +307,13 @@ export default function EmployeeDirectory() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="px-5 py-3">Employee</th><th className="px-5 py-3">Company</th><th className="px-5 py-3">Role / Department</th><th className="px-5 py-3">Account</th><th className="px-5 py-3">Last login</th></tr></thead>
+              <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="px-5 py-3">Employee</th><th className="px-5 py-3">Company</th><th className="px-5 py-3">Role / Department</th><th className="px-5 py-3">Platform</th><th className="px-5 py-3">Account</th><th className="px-5 py-3">Last login</th></tr></thead>
               <tbody className="divide-y divide-gray-100">
                 {filteredCustomers.map((customer) => <tr key={customer.user_id} className="hover:bg-purple-50/30">
                   <td className="px-5 py-4"><p className="font-bold text-gray-900">{customer.name}</p><p className="text-xs text-gray-500">{customer.email || "No email"}</p><p className="text-xs text-gray-400">{customer.phone || "No phone"}</p></td>
                   <td className="px-5 py-4"><p className="font-semibold text-gray-700">{customer.company_name || "Unassigned"}</p><p className="text-xs text-gray-400">Customer #{customer.user_id}</p></td>
                   <td className="px-5 py-4"><p className="text-gray-700">{customer.company_role || "—"}</p><p className="text-xs text-gray-400">{customer.department || "No department"}</p></td>
+                  <td className="px-5 py-4"><PlatformBadge platform={customer.device_platform} /></td>
                   <td className="px-5 py-4"><div className="flex flex-col items-start gap-1"><Badge active={Number(customer.status) === 1} label={Number(customer.status) === 1 ? "Active" : "Inactive"} /><span className="text-[11px] font-semibold text-gray-400">{Number(customer.is_verified) === 1 ? "Verified" : "Not verified"}</span></div></td>
                   <td className="px-5 py-4 text-xs text-gray-500">{customer.last_login_at ? new Date(customer.last_login_at).toLocaleString() : "Never"}</td>
                 </tr>)}

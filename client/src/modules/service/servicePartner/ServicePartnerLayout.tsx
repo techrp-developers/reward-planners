@@ -1,6 +1,7 @@
 import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../../../common/auth/useAuth";
 import ServicePartnerNavbar from "./ServicePartnerSidebar";
+import PremiumPortalShell from "../../../common/layouts/PremiumPortalShell";
 
 export default function ServicePartnerLayout() {
   const { user, loading } = useAuth();
@@ -11,20 +12,5 @@ export default function ServicePartnerLayout() {
     return <Navigate to="/login" replace />;
   }
 
-  return (
-    <div
-      className="min-h-screen"
-      style={{
-        background:
-          "linear-gradient(135deg, #F8F4FF 0%, #FFF5F8 50%, #F4F9FF 100%)",
-      }}
-    >
-      <ServicePartnerNavbar />
-      <main className="ml-64 min-h-screen">
-        <div className="p-5 page-enter">
-          <Outlet />
-        </div>
-      </main>
-    </div>
-  );
+  return <PremiumPortalShell sidebar={<ServicePartnerNavbar />} roleLabel="Service partner workspace" userLabel={user.name || user.email}><Outlet /></PremiumPortalShell>;
 }

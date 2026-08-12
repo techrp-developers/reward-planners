@@ -4,6 +4,7 @@ const {
   generateAndEmailInvoice,
 } = require("./paymentFinalizer");
 const { notifyUser } = require("../../../common/utils/notification");
+const { notifyNewServiceOrder } = require("../../../../services/whatsapp/adminNotificationService");
 const { releaseServiceCoins } = require("../../../../services/rewards/serviceWalletService");
 const ServiceOrderModel = require("../models/serviceOrderModel");
 
@@ -75,6 +76,10 @@ async function processEvent(req) {
       });
 
       await connection.commit();
+
+      notifyNewServiceOrder(parentOrderId).catch((err) => {
+        console.error("[webhook] Admin service-order WhatsApp failed:", err.message);
+      });
 
       const [[orderUser]] = await db.execute(
         `SELECT user_id FROM service_orders WHERE parent_order_id = ? LIMIT 1`,

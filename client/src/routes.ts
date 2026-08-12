@@ -5,6 +5,8 @@ export const routes = {
     dashboard: "/vendor/dashboard",
     onboarding: "/vendor/onboarding",
     changePassword: "/vendor/change-password",
+    profile: "/vendor/profile",
+    tutorialsFaq: "/vendor/tutorials-faq",
    products: {
     add: "/vendor/products/add",
     list: "/vendor/products/list",
@@ -18,12 +20,18 @@ export const routes = {
       summary: "/vendor/orders/summary",
       details: "/vendor/orders/details/:orderId",
     },
+    reports: {
+      stock: "/vendor/reports/stock",
+      products: "/vendor/reports/products",
+      orders: "/vendor/reports/orders",
+    },
     productManagerList: "/vendor/product-managers",
     fleaMarketPurchases: "/vendor/flea-market/purchases",
   },
    manager: {
     dashboard: "/manager/dashboard",
     changePassword: "/manager/change-password",
+    profile: "/manager/profile",
     vendors: "/manager/vendors",
     employees: "/manager/employees",
     companyEmployees: "/manager/companies/:companyId/employees",
@@ -36,8 +44,11 @@ export const routes = {
     addDocument:"/manager/document/DocumentAdd",
     linkDocument:"/manager/document/DocumentCategory",
     attributes: "/manager/attributes",
-    // flashlist: "/manager/flashlist",
-    // flashCreate: "/manager/flash-sale",
+    flashSales: {
+      list: "/manager/flash-sales",
+      create: "/manager/flash-sales/create",
+      edit: "/manager/flash-sales/:id",
+    },
     orders:{
       orderList: "/manager/orders",
       details: "/manager/order-view/:orderId",
@@ -51,6 +62,11 @@ export const routes = {
       service_order_details: "/manager/service-order-details/:parentOrderId",
       cancellation_requests: "/manager/service-cancellation-requests",
       cancellation_detail: "/manager/service-cancellation-detail/:serviceOrderId",
+    },
+    reports: {
+      usage: "/manager/reports/usage",
+      stock: "/manager/reports/stock",
+      orders: "/manager/reports/orders",
     },
     rewards:{
       rewardRule:"/manager/rewards-rule",
@@ -73,6 +89,7 @@ export const routes = {
   admin: {
     dashboard: "/admin/dashboard",
     changePassword: "/admin/change-password",
+    profile: "/admin/profile",
     vendors: "/admin/vendors",
     products: "/admin/products",
     services: "/admin/services",
@@ -82,10 +99,13 @@ export const routes = {
   },
   warehouse: {
     dashboard: "/warehouse/dashboard",
+    changePassword: "/warehouse/change-password",
+    profile: "/warehouse/profile",
   },
   fleaMarket: {
     dashboard: "/flea-market/dashboard",
     changePassword: "/flea-market/change-password",
+    profile: "/flea-market/profile",
     manageEvent: "/flea-market/manage-event",
     billing: {
       page: "/flea-market/billing",
@@ -103,6 +123,7 @@ export const routes = {
   hr: {
     dashboard: "/hr/dashboard",
     changePassword: "/hr/change-password",
+    profile: "/hr/profile",
     onboarding: "/hr/onboarding",
     employees: "/hr/employees",
       rewards: "/hr/rewards",
@@ -110,6 +131,15 @@ export const routes = {
   },
   service: {
     dashboard: "/service/dashboard",
+    profile: "/service/profile",
+    changePassword: "/service/change-password",
+    catalog: "/service/catalog/:section?",
+    enquiries: "/service/enquiries",
+    enquiryDetail: "/service/enquiries/:id",
+    orders: "/service/orders",
+    orderDetail: "/service/orders/:parentOrderId",
+    cancellations: "/service/cancellations",
+    cancellationDetail: "/service/cancellations/:serviceOrderId",
     servicePartners: {
       list: "/service/service-partners",
       onboard: "/service/service-partners/onboard",

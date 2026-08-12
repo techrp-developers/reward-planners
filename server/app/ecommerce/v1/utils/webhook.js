@@ -8,6 +8,7 @@ const {
   orderConfirmationMail,
 } = require("../../../../services/mailBuilder/orderConfirmation");
 const { runNonBlocking } = require("../../../../utils/nonBlocking");
+const { notifyNewEcommerceOrder } = require("../../../../services/whatsapp/adminNotificationService");
 const { notifyUser } = require("../../../common/utils/notification");
 const RefundService = require("../controllers/paymentController");
 const {
@@ -1010,6 +1011,11 @@ async function processEvent(req) {
       runNonBlocking(
         () => sendOrderPlacedWhatsApp(order_id),
         "order placed WhatsApp",
+      );
+
+      runNonBlocking(
+        () => notifyNewEcommerceOrder(order_id),
+        "admin ecommerce order WhatsApp",
       );
 
       runNonBlocking(

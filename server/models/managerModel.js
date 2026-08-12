@@ -97,7 +97,7 @@ class ManagerModel {
   }
 
   // Download vendor Report
-  async getVendorReport({ status, fromDate, toDate }) {
+  async getVendorReport({ status, fromDate, toDate, search }) {
     try {
       const conditions = ["v.status != 'pending'"];
       const params = [];
@@ -105,6 +105,12 @@ class ManagerModel {
       if (status) {
         conditions.push("v.status = ?");
         params.push(status);
+      }
+
+      if (search) {
+        conditions.push("(v.company_name LIKE ? OR v.full_name LIKE ? OR u.email LIKE ? OR u.phone LIKE ?)");
+        const term = `%${search}%`;
+        params.push(term, term, term, term);
       }
 
       if (fromDate && toDate) {

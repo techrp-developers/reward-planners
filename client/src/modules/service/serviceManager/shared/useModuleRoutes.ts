@@ -18,3 +18,18 @@ export function usePartnerManagerRoutes() {
     ? routes.service.partnerManagers
     : routes.manager.partnerManagers;
 }
+
+export function useServiceOperationsRoutes() {
+  const { pathname } = useLocation();
+  return pathname.startsWith("/service/")
+    ? {
+        enquiryDetail: routes.service.enquiryDetail,
+        orderDetail: routes.service.orderDetail,
+        cancellationDetail: routes.service.cancellationDetail,
+      }
+    : {
+        enquiryDetail: routes.manager.services.details,
+        orderDetail: routes.manager.services.service_order_details,
+        cancellationDetail: routes.manager.services.cancellation_detail,
+      };
+}

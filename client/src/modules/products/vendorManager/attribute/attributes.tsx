@@ -1,11 +1,10 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
+import axios from "axios";
 import Swal from "sweetalert2";
-import { FiTrash2, FiEye, FiPlus, FiX, FiSave, FiLayers } from "react-icons/fi";
+import { FiEye, FiPlus, FiX, FiSave, FiLayers, FiSearch, FiSliders, FiCheckCircle, FiBox, FiArchive, FiRotateCcw, FiTrash2 } from "react-icons/fi";
 import { api } from "../../../../common/api/api";
 import { confirmDialog } from "../../../../common/utils/confirmDialog";
 import { getPageNumbers } from "../../../../common/utils/pagination";
-import "datatables.net";
-import "datatables.net-responsive";
 import AttributeValueManager from "./attributeValueManager";
 
 type InputType = "text" | "number" | "select" | "multiselect" | "textarea";
@@ -34,6 +33,8 @@ interface Attribute {
   is_required: number;
   sort_order: number;
   created_at: string;
+  is_active: number;
+  is_used?: number;
 }
 
 export default function CategoryAttributeManagement() {
@@ -46,8 +47,8 @@ export default function CategoryAttributeManagement() {
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selected, setSelected] = useState<Attribute | null>(null);
-  const dataTableRef = useRef<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"active" | "archived" | "all">("active");
 
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 10;
@@ -87,7 +88,7 @@ export default function CategoryAttributeManagement() {
   const fetchCategories = async () => {
     const res = await api.get("/category");
     setCategories(
-      (res.data.data || []).map((c: any) => ({
+      (res.data.data || []).map((c: { category_id: number; category_name: string }) => ({
         category_id: c.category_id,
         name: c.category_name,
       })),
@@ -104,18 +105,11 @@ export default function CategoryAttributeManagement() {
       params: {
         category_id: categoryId || undefined,
         subcategory_id: subcategoryId || undefined,
+        status: statusFilter,
       },
     });
     setAttributes(res.data.data || []);
   };
-
-  useEffect(() => {
-    return () => {
-      if (dataTableRef.current) {
-        dataTableRef.current.destroy(true);
-      }
-    };
-  }, []);
 
   useEffect(() => {
     fetchCategories();
@@ -124,7 +118,9 @@ export default function CategoryAttributeManagement() {
 
   useEffect(() => {
     fetchAttributes();
-  }, [categoryId, subcategoryId]);
+    // The filter values intentionally drive this request.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categoryId, subcategoryId, statusFilter]);
 
   // useEffect(() => {
   //   fetchAttributes();
@@ -135,8 +131,8 @@ export default function CategoryAttributeManagement() {
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!categoryId && !subcategoryId) {
-      return Swal.fire("Select category or subcategory", "", "warning");
+    if (!subcategoryId) {
+      return Swal.fire("Select a subcategory", "Attributes are assigned to a specific product subcategory.", "warning");
     }
 
     try {
@@ -157,25 +153,36 @@ export default function CategoryAttributeManagement() {
 
       fetchAttributes();
       Swal.fire("Created", "Attribute added successfully", "success");
-    } catch (err: any) {
-      Swal.fire("Error", err.response?.data?.message, "error");
+    } catch (err: unknown) {
+      Swal.fire("Error", axios.isAxiosError(err) ? err.response?.data?.message : "Unable to create attribute", "error");
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (attribute: Attribute) => {
+    const used = Boolean(attribute.is_used);
     const confirmed = await confirmDialog({
-      title: "Delete attribute?",
-      text: "This cannot be undone",
+      title: used ? "Archive attribute?" : "Delete unused attribute?",
+      text: used ? "It will be hidden from new products but retained on existing products." : "This unused attribute and its configured options will be permanently deleted.",
     });
 
     if (!confirmed) return;
 
     try {
-      await api.delete(`/manager/category-attributes/${id}`);
+      await api.delete(`/manager/category-attributes/${attribute.id}`);
       fetchAttributes();
-      Swal.fire("Deleted", "", "success");
-    } catch (err: any) {
-      Swal.fire("Blocked", err.response?.data?.message, "error");
+      Swal.fire(used ? "Archived" : "Deleted", used ? "Existing product data remains unchanged." : "The unused attribute was permanently removed.", "success");
+    } catch (err: unknown) {
+      Swal.fire("Blocked", axios.isAxiosError(err) ? err.response?.data?.message : "Unable to delete attribute", "error");
+    }
+  };
+
+  const handleRestore = async (id: number) => {
+    try {
+      await api.patch(`/manager/category-attributes/${id}/restore`);
+      await fetchAttributes();
+      Swal.fire("Restored", "The attribute is available for products again.", "success");
+    } catch (err: unknown) {
+      Swal.fire("Unable to restore", axios.isAxiosError(err) ? err.response?.data?.message : "Please try again", "error");
     }
   };
 
@@ -195,8 +202,8 @@ export default function CategoryAttributeManagement() {
       setDrawerOpen(false); 
 
       Swal.fire("Updated", "", "success");
-    } catch (err: any) {
-      Swal.fire("Error", err.response?.data?.message, "error");
+    } catch (err: unknown) {
+      Swal.fire("Error", axios.isAxiosError(err) ? err.response?.data?.message : "Unable to update attribute", "error");
     }
   };
 
@@ -206,25 +213,38 @@ export default function CategoryAttributeManagement() {
   const inputCls = "w-full h-10 px-3 rounded-xl border border-gray-200 bg-gray-50/60 text-sm font-medium text-gray-800 outline-none focus:ring-2 focus:ring-[#852BAF]/20 focus:border-[#852BAF]/40 transition";
 
   return (
-    <div className="w-full min-h-screen">
-      <div className="p-6 bg-white border border-gray-200 shadow-lg rounded-2xl">
+    <main className="min-h-full bg-gradient-to-br from-[#fdf8ff] via-white to-[#fff5f8] p-4 sm:p-6 lg:p-8">
+      <div className="mx-auto max-w-[1500px] space-y-6">
 
         {/* HEADER */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 bg-gradient-to-r from-[#852BAF] to-[#FC3F78] rounded-full flex items-center justify-center shrink-0 shadow-md">
-              <FiLayers className="text-xl text-white" />
+        <header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#25103d] via-[#68258d] to-[#c33076] p-6 text-white shadow-[0_24px_65px_rgba(91,33,124,0.24)] sm:p-8">
+          <div className="absolute -right-16 -top-24 h-64 w-64 rounded-full bg-white/10 blur-2xl" />
+          <div className="relative flex items-center gap-4">
+            <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-white/20 bg-white/10 shadow-inner">
+              <FiLayers className="text-2xl text-white" />
             </div>
             <div>
-              <h2 className="text-3xl font-bold text-gray-900">Attribute Management</h2>
-              <p className="mt-1 text-sm text-gray-500">Manage category &amp; subcategory attributes</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-purple-200">Product configuration</p>
+              <h1 className="mt-1 text-2xl font-black sm:text-3xl">Category Attributes</h1>
+              <p className="mt-1 text-sm text-purple-100/80">Define reusable product fields, variant rules and required information.</p>
             </div>
           </div>
-        </div>
+        </header>
+
+        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            { label: "Total attributes", value: attributes.length, Icon: FiLayers, tone: "bg-purple-50 text-[#852BAF]" },
+            { label: "Variant attributes", value: attributes.filter((a) => a.is_variant).length, Icon: FiBox, tone: "bg-blue-50 text-blue-600" },
+            { label: "Required fields", value: attributes.filter((a) => a.is_required).length, Icon: FiCheckCircle, tone: "bg-emerald-50 text-emerald-600" },
+            { label: "Selection fields", value: attributes.filter((a) => ["select", "multiselect"].includes(a.input_type)).length, Icon: FiSliders, tone: "bg-pink-50 text-[#FC3F78]" },
+          ].map(({ label, value, Icon, tone }) => <article key={label} className="rounded-2xl border border-purple-100 bg-white p-5 shadow-[0_12px_35px_rgba(67,31,91,0.06)]"><div className="flex items-center justify-between"><div><p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{label}</p><p className="mt-2 text-3xl font-black text-slate-900">{value}</p></div><span className={`grid h-11 w-11 place-items-center rounded-xl ${tone}`}><Icon size={19} /></span></div></article>)}
+        </section>
 
         {/* FILTERS + ADD FORM CARD */}
-        <div className="p-6 mb-6 bg-white border border-gray-100 shadow-sm rounded-2xl">
-          <p className="mb-4 text-xs font-bold tracking-widest text-gray-400 uppercase">Filters</p>
+        <section className="overflow-hidden rounded-3xl border border-purple-100 bg-white shadow-[0_18px_55px_rgba(67,31,91,0.07)]">
+          <div className="border-b border-slate-100 bg-gradient-to-r from-purple-50/70 to-pink-50/40 px-6 py-5"><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-white text-[#852BAF] shadow-sm"><FiSliders /></span><div><h2 className="font-black text-slate-900">Attribute setup</h2><p className="text-xs text-slate-400">Choose where this attribute belongs, then configure its display.</p></div></div></div>
+          <div className="p-6">
+          <p className="mb-4 text-[10px] font-black tracking-[0.18em] text-gray-400 uppercase">Assignment</p>
 
           <div className="grid items-end grid-cols-2 gap-4 mb-6 md:grid-cols-4">
             <div>
@@ -258,10 +278,11 @@ export default function CategoryAttributeManagement() {
             </div>
           </div>
 
-          <p className="mb-4 text-xs font-bold tracking-widest text-gray-400 uppercase">Add New Attribute</p>
+          <div className="my-6 h-px bg-gradient-to-r from-purple-100 via-slate-100 to-transparent" />
+          <p className="mb-4 text-[10px] font-black tracking-[0.18em] text-gray-400 uppercase">Attribute details</p>
 
-          <form onSubmit={handleAdd} className="grid items-end grid-cols-2 gap-4 md:grid-cols-6">
-            <div className="col-span-2">
+          <form onSubmit={handleAdd} className="grid items-end grid-cols-2 gap-4 md:grid-cols-12">
+            <div className="col-span-2 md:col-span-3">
               <label className={labelCls}>Key</label>
               <input
                 placeholder="e.g. color"
@@ -271,7 +292,7 @@ export default function CategoryAttributeManagement() {
               />
             </div>
 
-            <div className="col-span-2">
+            <div className="col-span-2 md:col-span-3">
               <label className={labelCls}>Label</label>
               <input
                 placeholder="e.g. Color"
@@ -281,7 +302,7 @@ export default function CategoryAttributeManagement() {
               />
             </div>
 
-            <div className="col-span-1">
+            <div className="col-span-2 md:col-span-3">
               <label className={labelCls}>Input Type</label>
               <select
                 value={form.input_type}
@@ -296,36 +317,53 @@ export default function CategoryAttributeManagement() {
               </select>
             </div>
 
-            <div className="flex justify-end col-span-1">
+            <div className="col-span-2 md:col-span-3">
+              <label className={labelCls}>Order</label>
+              <input type="number" min="0" value={form.sort_order} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} className={inputCls} />
+            </div>
+
+            <label className="col-span-2 flex h-11 cursor-pointer items-center justify-start gap-3 rounded-xl border border-purple-100 bg-purple-50 px-4 text-xs font-bold text-[#852BAF] md:col-span-3">
+              <input type="checkbox" checked={form.is_variant === 1} onChange={(e) => setForm({ ...form, is_variant: e.target.checked ? 1 : 0, input_type: e.target.checked ? "multiselect" : form.input_type })} className="accent-[#852BAF]" /> Variant
+            </label>
+            <label className="col-span-2 flex h-11 cursor-pointer items-center justify-start gap-3 rounded-xl border border-emerald-100 bg-emerald-50 px-4 text-xs font-bold text-emerald-700 md:col-span-3">
+              <input type="checkbox" checked={form.is_required === 1} onChange={(e) => setForm({ ...form, is_required: e.target.checked ? 1 : 0 })} className="accent-emerald-600" /> Required
+            </label>
+
+            <div className="col-span-2 flex justify-stretch md:col-span-3 md:col-start-10">
               <button
                 type="submit"
-                className="h-10 px-5 whitespace-nowrap flex items-center gap-2 bg-gradient-to-r from-[#852BAF] to-[#FC3F78] text-white text-sm font-semibold rounded-xl shadow-md hover:opacity-90 active:scale-95 transition-all cursor-pointer"
+                className="flex h-11 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-5 text-sm font-semibold text-white shadow-md transition-all hover:opacity-90 active:scale-95 cursor-pointer"
               >
                 <FiPlus /> Add Attribute
               </button>
             </div>
-          </form>
-        </div>
+          </form></div>
+        </section>
 
         {/* TABLE CARD */}
-        <div className="bg-white border border-gray-100 shadow-sm rounded-2xl overflow-hidden">
+        <section className="overflow-hidden rounded-3xl border border-purple-100 bg-white shadow-[0_18px_55px_rgba(67,31,91,0.08)]">
           {/* Table header row with search */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-            <p className="text-xs font-bold tracking-widest text-gray-400 uppercase">Attributes List</p>
+            <div><h2 className="font-black text-slate-900">Attributes library</h2><p className="mt-1 text-xs text-slate-400">{filteredAttributes.length} matching attributes</p></div>
+            <div className="flex items-center gap-2">
+            <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value as typeof statusFilter); setCurrentPage(1); }} className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-600 outline-none focus:border-purple-400"><option value="active">Active</option><option value="archived">Archived</option><option value="all">All statuses</option></select>
+            <label className="relative">
+            <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               placeholder="Search attributes..."
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-              className="w-64 h-9 px-4 text-sm rounded-xl border border-gray-200 bg-gray-50/60 outline-none focus:ring-2 focus:ring-[#852BAF]/20 focus:border-[#852BAF]/40 transition"
+              className="h-10 w-72 rounded-xl border border-gray-200 bg-gray-50/60 py-2 pl-10 pr-4 text-sm outline-none transition focus:border-[#852BAF]/40 focus:ring-4 focus:ring-purple-100"
             />
+            </label></div>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
               <thead style={{ background: "linear-gradient(135deg, #fdf8ff 0%, #fff5f8 100%)" }}>
                 <tr>
-                  {["Category", "Subcategory", "Key", "Label", "Type", "Variant", "Required", "Actions"].map((h) => (
+                  {["Category", "Subcategory", "Key", "Label", "Type", "Variant", "Required", "Status", "Actions"].map((h) => (
                     <th key={h} className="px-4 py-4 text-[10px] font-black tracking-widest text-gray-400 uppercase whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -334,7 +372,7 @@ export default function CategoryAttributeManagement() {
               <tbody className="divide-y divide-gray-50">
                 {paginatedAttributes.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-16 text-sm text-center text-gray-400">No attributes found</td>
+                    <td colSpan={8} className="py-20 text-center"><span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-purple-50 text-xl text-[#852BAF]"><FiLayers /></span><p className="mt-4 font-bold text-slate-700">No attributes found</p><p className="mt-1 text-xs text-slate-400">Adjust the filters or create a new attribute above.</p></td>
                   </tr>
                 ) : (
                   paginatedAttributes.map((a) => (
@@ -358,6 +396,7 @@ export default function CategoryAttributeManagement() {
                           {a.is_required ? "Yes" : "No"}
                         </span>
                       </td>
+                      <td className="px-4 py-3"><span className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${a.is_active ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-100 text-slate-500"}`}>{a.is_active ? "Active" : "Archived"}</span>{Boolean(a.is_used) && <p className="mt-1 text-[10px] font-semibold text-amber-600">Used by products</p>}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <button
@@ -367,13 +406,7 @@ export default function CategoryAttributeManagement() {
                           >
                             <FiEye size={14} />
                           </button>
-                          <button
-                            onClick={() => handleDelete(a.id)}
-                            className="w-8 h-8 flex items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white shadow-sm transition-all cursor-pointer"
-                            title="Delete"
-                          >
-                            <FiTrash2 size={14} />
-                          </button>
+                          {a.is_active ? (a.is_used ? <button onClick={() => handleDelete(a)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-600 shadow-sm transition-all hover:bg-amber-600 hover:text-white" title="Archive used attribute"><FiArchive size={14} /></button> : <button onClick={() => handleDelete(a)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 shadow-sm transition-all hover:bg-red-600 hover:text-white" title="Delete unused attribute"><FiTrash2 size={14} /></button>) : <button onClick={() => void handleRestore(a.id)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-600 shadow-sm transition-all hover:bg-emerald-600 hover:text-white" title="Restore"><FiRotateCcw size={14} /></button>}
                         </div>
                       </td>
                     </tr>
@@ -423,13 +456,13 @@ export default function CategoryAttributeManagement() {
               </button>
             </div>
           </div>
-        </div>
+        </section>
       </div>
 
       {/* DRAWER */}
       {drawerOpen && selected && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/30 backdrop-blur-[2px]">
-          <div className="w-[440px] h-screen bg-white flex flex-col shadow-2xl">
+        <div className="fixed inset-0 z-[1000] flex justify-end bg-slate-950/40 backdrop-blur-sm" onMouseDown={(event) => event.target === event.currentTarget && setDrawerOpen(false)}>
+          <div className="flex h-screen w-full max-w-[480px] flex-col bg-white shadow-2xl">
             {/* Drawer Header */}
             <div className="flex items-center justify-between p-5 border-b border-gray-100" style={{ background: "linear-gradient(135deg, #fdf8ff 0%, #fff5f8 100%)" }}>
               <div className="flex items-center gap-3">
@@ -533,6 +566,6 @@ export default function CategoryAttributeManagement() {
           </div>
         </div>
       )}
-    </div>
+    </main>
   );
 }

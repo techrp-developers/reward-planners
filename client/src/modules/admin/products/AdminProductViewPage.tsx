@@ -15,7 +15,8 @@ import QuillEditor from "../../products/components/QuillEditor";
 
 // const API_BASE = import.meta.env.VITE_API_URL;
 import { api } from "../../../common/api/api";
-const API_BASEIMAGE_URL = "https://rewardplanners.com/api/crm";
+import { SERVER_CONFIG } from "../../../common/config/serverConfig";
+const API_BASEIMAGE_URL = SERVER_CONFIG.apiBaseUrl;
 
 type ProductVariant = {
   variant_id: number;

@@ -20,10 +20,39 @@ function getGreeting() {
   return "Good evening";
 }
 
+const formatCurrency = (amount: number) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(amount);
+
+const statusStyles: Record<string, { bg: string; text: string }> = {
+  pending: { bg: "bg-amber-100", text: "text-amber-800" },
+  paid: { bg: "bg-blue-100", text: "text-blue-800" },
+  shipped: { bg: "bg-indigo-100", text: "text-indigo-700" },
+  delivered: { bg: "bg-emerald-100", text: "text-emerald-700" },
+  cancelled: { bg: "bg-red-100", text: "text-red-700" },
+};
+
+const getStatusStyle = (status: string) =>
+  statusStyles[status?.toLowerCase()] ?? { bg: "bg-gray-100", text: "text-gray-700" };
+
+interface RecentOrder {
+  vendor_order_id: number;
+  order_ref: string;
+  vendor_total: number;
+  shipping_status: string;
+  created_at: string;
+  item_count: number;
+}
+
 export default function VendorDashboard() {
   const [vendorStatus, setVendorStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [productStats, setProductStats] = useState({ totalProducts: 0 });
+  const [orderStats, setOrderStats] = useState({ totalOrders: 0, totalRevenue: 0 });
+  const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
 
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -31,7 +60,7 @@ export default function VendorDashboard() {
   const dashboardStats = [
     {
       title: "Total Revenue",
-      value: "₹0",
+      value: formatCurrency(orderStats.totalRevenue),
       icon: FaWallet,
       color: "text-emerald-600",
       bg: "bg-emerald-50",
@@ -41,7 +70,7 @@ export default function VendorDashboard() {
     },
     {
       title: "Total Orders",
-      value: "0",
+      value: orderStats.totalOrders.toString(),
       icon: FaShoppingCart,
       color: "text-blue-600",
       bg: "bg-blue-50",
@@ -74,6 +103,8 @@ export default function VendorDashboard() {
   useEffect(() => {
     fetchVendorStats();
     fetchVendorStatus();
+    fetchOrderStats();
+    fetchRecentOrders();
   }, []);
 
   const fetchVendorStats = async () => {
@@ -84,6 +115,33 @@ export default function VendorDashboard() {
       }
     } catch (error) {
       console.error("Error fetching stats:", error);
+    }
+  };
+
+  const fetchOrderStats = async () => {
+    try {
+      const res = await api.get("/order/order-stats");
+      if (res.data?.success) {
+        setOrderStats({
+          totalOrders: res.data.stats?.total_orders || 0,
+          totalRevenue: res.data.stats?.total_revenue || 0,
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching order stats:", error);
+    }
+  };
+
+  const fetchRecentOrders = async () => {
+    try {
+      const res = await api.get("/order/order-summary", {
+        params: { page: 1, limit: 5 },
+      });
+      if (res.data?.success) {
+        setRecentOrders(res.data.orders || []);
+      }
+    } catch (error) {
+      console.error("Error fetching recent orders:", error);
     }
   };
 
@@ -239,47 +297,84 @@ export default function VendorDashboard() {
               <FaShoppingCart className="text-[#852BAF]" size={15} />
               <h3 className="text-base font-bold text-gray-800">Recent Orders</h3>
             </div>
-            <button className="text-sm font-bold text-[#852BAF] hover:underline cursor-pointer transition-colors">
-              View All
-            </button>
+            {isApproved && (
+              <button
+                onClick={() => navigate("/vendor/orders/summary")}
+                className="text-sm font-bold text-[#852BAF] hover:underline cursor-pointer transition-colors"
+              >
+                View All
+              </button>
+            )}
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
                 <tr style={{ background: "linear-gradient(90deg, rgba(133,43,175,0.04) 0%, rgba(252,63,120,0.02) 100%)" }}>
-                  <th className="px-6 py-3.5 text-xs font-bold text-gray-400 uppercase tracking-wider">Product</th>
-                  <th className="px-6 py-3.5 text-xs font-bold text-gray-400 uppercase tracking-wider">Customer</th>
+                  <th className="px-6 py-3.5 text-xs font-bold text-gray-400 uppercase tracking-wider">Order</th>
+                  <th className="px-6 py-3.5 text-xs font-bold text-gray-400 uppercase tracking-wider">Items</th>
                   <th className="px-6 py-3.5 text-xs font-bold text-gray-400 uppercase tracking-wider">Status</th>
                   <th className="px-6 py-3.5 text-xs font-bold text-gray-400 uppercase tracking-wider">Amount</th>
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td colSpan={4} className="px-6 text-center py-14">
-                    <div className="flex flex-col items-center gap-3">
-                      <div
-                        className="flex items-center justify-center w-14 h-14 rounded-2xl"
-                        style={{ background: "linear-gradient(135deg, rgba(133,43,175,0.08) 0%, rgba(252,63,120,0.05) 100%)" }}
-                      >
-                        <FaShoppingCart className="text-[#852BAF] opacity-60" size={22} />
-                      </div>
-                      <p className="text-sm font-semibold text-gray-700">No orders yet</p>
-                      <p className="text-xs text-gray-400">
-                        Orders will appear here once customers start purchasing.
-                      </p>
-                      {isApproved && (
-                        <button
-                          onClick={() => navigate("/vendor/products/add")}
-                          className="mt-1 flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl text-white cursor-pointer hover:opacity-90"
-                          style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }}
+                {recentOrders.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-6 text-center py-14">
+                      <div className="flex flex-col items-center gap-3">
+                        <div
+                          className="flex items-center justify-center w-14 h-14 rounded-2xl"
+                          style={{ background: "linear-gradient(135deg, rgba(133,43,175,0.08) 0%, rgba(252,63,120,0.05) 100%)" }}
                         >
-                          <FaPlus size={9} /> Add Your First Product
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
+                          <FaShoppingCart className="text-[#852BAF] opacity-60" size={22} />
+                        </div>
+                        <p className="text-sm font-semibold text-gray-700">No orders yet</p>
+                        <p className="text-xs text-gray-400">
+                          Orders will appear here once customers start purchasing.
+                        </p>
+                        {isApproved && (
+                          <button
+                            onClick={() => navigate("/vendor/products/add")}
+                            className="mt-1 flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl text-white cursor-pointer hover:opacity-90"
+                            style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }}
+                          >
+                            <FaPlus size={9} /> Add Your First Product
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  recentOrders.map((order) => {
+                    const { bg, text } = getStatusStyle(order.shipping_status);
+                    return (
+                      <tr
+                        key={order.vendor_order_id}
+                        onClick={() =>
+                          navigate(`/vendor/orders/details/${order.vendor_order_id}`)
+                        }
+                        className="border-t border-gray-50 cursor-pointer hover:bg-purple-50/30 transition-colors"
+                      >
+                        <td className="px-6 py-3.5 text-sm font-semibold text-gray-800">
+                          {order.order_ref}
+                        </td>
+                        <td className="px-6 py-3.5 text-sm text-gray-600">
+                          {order.item_count}
+                        </td>
+                        <td className="px-6 py-3.5">
+                          <span
+                            className={`inline-block px-3 py-1 rounded-full text-xs font-semibold capitalize ${bg} ${text}`}
+                          >
+                            {order.shipping_status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-3.5 text-sm font-bold text-gray-800">
+                          {formatCurrency(order.vendor_total)}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>

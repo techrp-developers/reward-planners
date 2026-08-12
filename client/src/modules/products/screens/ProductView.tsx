@@ -91,6 +91,36 @@ function FormInput(props: {
   );
 }
 
+function ImageLightbox({
+  src,
+  onClose,
+}: {
+  src: string;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <button
+        onClick={onClose}
+        aria-label="Close"
+        className="absolute flex items-center justify-center w-10 h-10 text-white transition-colors rounded-full cursor-pointer top-5 right-5 bg-white/10 hover:bg-white/20"
+      >
+        <FaTimes />
+      </button>
+
+      <img
+        src={src}
+        alt="Full size preview"
+        onClick={(e) => e.stopPropagation()}
+        className="object-contain max-w-full max-h-full rounded-lg shadow-2xl"
+      />
+    </div>
+  );
+}
+
 import {
   FaTag,
   FaBox,
@@ -99,8 +129,13 @@ import {
   FaSpinner,
   FaArrowLeft,
   FaEdit,
+  FaTrash,
+  FaPaperPlane,
+  FaCheck,
+  FaTimes,
 } from "react-icons/fa";
 import { Link } from "react-router-dom";
+import Swal from "sweetalert2";
 
 // const API_BASE = import.meta.env.VITE_API_URL;
 import { api } from "../../../common/api/api";
@@ -113,11 +148,16 @@ type ProductVariant = {
   mrp: number | null;
   sale_price: number | null;
   stock: number;
+  weight: number | null;
+  length: number | null;
+  breadth: number | null;
+  height: number | null;
   is_visible: number;
   variant_attributes: Record<string, string>;
   manufacturing_date: string | null;
   expiry_date: string | null;
   created_at: string;
+  images?: string[];
 };
 
 interface ProductView {
@@ -166,6 +206,7 @@ export default function ReviewProductPage() {
   const [product, setProduct] = useState<ProductView | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const [productAttributes, setProductAttributes] = useState<
     Record<string, string[]>
   >({});
@@ -295,6 +336,90 @@ export default function ReviewProductPage() {
     }
   };
 
+  const handleDelete = async () => {
+    if (!product?.productId) return;
+
+    const result = await Swal.fire({
+      title: "Delete Product?",
+      text: `Are you sure you want to delete "${product.productName}"?`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Delete",
+      confirmButtonColor: "#DC2626",
+      cancelButtonText: "Cancel",
+      cancelButtonColor: "#9CA3AF",
+      reverseButtons: true,
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      await api.delete(`/product/delete-product/${product.productId}`);
+
+      await Swal.fire({
+        icon: "success",
+        title: "Deleted",
+        text: "Product deleted successfully",
+        timer: 1500,
+        showConfirmButton: false,
+      });
+
+      navigate(-1);
+    } catch (err: any) {
+      Swal.fire({
+        icon: "error",
+        title: "Failed",
+        text:
+          err?.response?.data?.message || "Failed to delete product",
+      });
+    }
+  };
+
+  const handleSendForApproval = async () => {
+    if (!product?.productId) return;
+
+    const result = await Swal.fire({
+      title: "Send for Approval?",
+      text: `Send "${product.productName}" for approval?`,
+      icon: "question",
+      input: "textarea",
+      inputPlaceholder: "Optional note for the reviewer...",
+      showCancelButton: true,
+      confirmButtonText: "Send",
+      confirmButtonColor: "#2563EB",
+      cancelButtonText: "Cancel",
+      cancelButtonColor: "#9CA3AF",
+      reverseButtons: true,
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      const res = await api.post(`/product/submission/${product.productId}`, {
+        reason: result.value || null,
+      });
+
+      setProduct((prev) =>
+        prev ? { ...prev, product_status: "sent_for_approval" } : prev,
+      );
+
+      Swal.fire({
+        icon: "success",
+        title: "Success",
+        text: res.data.message || "Product sent for approval successfully",
+        timer: 1500,
+        showConfirmButton: false,
+      });
+    } catch (err: any) {
+      Swal.fire({
+        icon: "error",
+        title: "Failed",
+        text:
+          err?.response?.data?.message || "Failed to send product for approval",
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -361,22 +486,6 @@ export default function ReviewProductPage() {
             >
               <FaArrowLeft size={12} /> Back
             </button>
-
-            {!["approved", "rejected", "sent_for_approval"].includes(
-              product.product_status ?? "",
-            ) && (
-              <Link
-                to={`/vendor/products/edit/${product.productId}`}
-                className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl text-white cursor-pointer transition-all duration-200 hover:opacity-90 active:scale-95"
-                style={{
-                  background:
-                    "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
-                  boxShadow: "0 4px 14px rgba(133,43,175,0.28)",
-                }}
-              >
-                <FaEdit size={12} /> Edit
-              </Link>
-            )}
           </div>
         </div>
 
@@ -532,8 +641,8 @@ export default function ReviewProductPage() {
                 description="SKU-wise pricing, attributes and stock details"
               />
 
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm text-left text-gray-700">
+              <div className="w-full overflow-x-auto overscroll-x-contain rounded-xl border border-gray-100">
+                <table className="min-w-max text-sm text-left text-gray-700">
                   <thead>
                     <tr
                       style={{
@@ -542,16 +651,22 @@ export default function ReviewProductPage() {
                       }}
                     >
                       {[
+                        "Images",
                         "SKU",
                         "Attributes",
+                        "Weight",
+                        "Dimensions (L x B x H)",
+                        "Billable Weight",
                         "MRP",
                         "Sale Price",
                         "Stock",
                         "Visibility",
+                        "Manufacturing Date",
+                        "Expiry Date",
                       ].map((h) => (
                         <th
                           key={h}
-                          className="px-4 py-3 text-xs font-bold tracking-wider text-gray-500 uppercase"
+                          className="px-4 py-3 text-xs font-bold tracking-wider text-gray-500 uppercase whitespace-nowrap"
                         >
                           {h}
                         </th>
@@ -566,6 +681,30 @@ export default function ReviewProductPage() {
                         className="transition-colors row-animate hover:bg-purple-50/20"
                         style={{ animationDelay: `${index * 35}ms` }}
                       >
+                        <td className="px-4 py-3">
+                          {variant.images && variant.images.length > 0 ? (
+                            <div className="flex flex-nowrap gap-1.5 whitespace-nowrap">
+                              {variant.images.map((img, imgIndex) => (
+                                <div
+                                  key={imgIndex}
+                                  onClick={() =>
+                                    setLightboxImage(resolveImageUrl(img))
+                                  }
+                                  className="w-12 h-12 overflow-hidden border border-gray-200 rounded-lg cursor-pointer shrink-0"
+                                >
+                                  <img
+                                    src={resolveImageUrl(img)}
+                                    alt={`${variant.sku} ${imgIndex + 1}`}
+                                    className="object-cover w-full h-full transition-transform hover:scale-110"
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-300">—</span>
+                          )}
+                        </td>
+
                         <td className="px-4 py-3 font-medium">{variant.sku}</td>
 
                         <td className="px-4 py-3">
@@ -582,6 +721,22 @@ export default function ReviewProductPage() {
                                 ),
                               )}
                           </div>
+                        </td>
+
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {Number(variant.weight) > 0 ? `${Number(variant.weight).toFixed(3)} kg` : "-"}
+                        </td>
+
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {Number(variant.length) > 0 && Number(variant.breadth) > 0 && Number(variant.height) > 0
+                            ? `${Number(variant.length)} x ${Number(variant.breadth)} x ${Number(variant.height)} cm`
+                            : "-"}
+                        </td>
+
+                        <td className="px-4 py-3 whitespace-nowrap font-semibold text-[#852BAF]">
+                          {Number(variant.weight) > 0 && Number(variant.length) > 0 && Number(variant.breadth) > 0 && Number(variant.height) > 0
+                            ? `${Math.max(Number(variant.weight), (Number(variant.length) * Number(variant.breadth) * Number(variant.height)) / 5000).toFixed(3)} kg`
+                            : "-"}
                         </td>
 
                         <td className="px-4 py-3">
@@ -614,6 +769,22 @@ export default function ReviewProductPage() {
                           >
                             {variant.is_visible ? "Visible" : "Hidden"}
                           </span>
+                        </td>
+
+                        <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                          {variant.manufacturing_date
+                            ? new Date(
+                                variant.manufacturing_date,
+                              ).toLocaleDateString("en-IN")
+                            : "—"}
+                        </td>
+
+                        <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                          {variant.expiry_date
+                            ? new Date(variant.expiry_date).toLocaleDateString(
+                                "en-IN",
+                              )
+                            : "—"}
                         </td>
                       </tr>
                     ))}
@@ -750,7 +921,12 @@ export default function ReviewProductPage() {
             <div className="flex flex-wrap gap-3">
               {product.productImages && product.productImages.length > 0 ? (
                 <div
-                  className="w-48 h-48 overflow-hidden shadow-md rounded-2xl"
+                  onClick={() =>
+                    setLightboxImage(
+                      resolveImageUrl(product.productImages![0]),
+                    )
+                  }
+                  className="w-48 h-48 overflow-hidden shadow-md rounded-2xl cursor-pointer"
                   style={{ border: "1px solid rgba(133,43,175,0.15)" }}
                 >
                   <img
@@ -840,8 +1016,63 @@ export default function ReviewProductPage() {
               </div>
             </section>
           )}
+
+          {/* Actions */}
+          <section className="p-5 mt-4 border border-gray-100 vendor-section-card bg-gray-50/50 rounded-2xl">
+            <SectionHeader
+              icon={FaCheck}
+              title="Actions"
+              description="Edit, send for approval, or remove this product"
+            />
+
+            <div className="flex flex-wrap items-center gap-3">
+              {!["approved", "rejected", "sent_for_approval"].includes(
+                product.product_status ?? "",
+              ) && (
+                <Link
+                  to={`/vendor/products/edit/${product.productId}`}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white rounded-xl shadow-sm transition-all cursor-pointer active:scale-95"
+                  style={{
+                    background:
+                      "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
+                  }}
+                >
+                  <FaEdit className="text-xs" /> Edit
+                </Link>
+              )}
+
+              {["pending", "resubmission"].includes(
+                product.product_status ?? "",
+              ) && (
+                <button
+                  onClick={handleSendForApproval}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white rounded-xl shadow-sm transition-all bg-emerald-600 hover:bg-emerald-700 active:scale-95 cursor-pointer"
+                >
+                  <FaPaperPlane className="text-xs" /> Send for Approval
+                </button>
+              )}
+
+              {!["approved", "rejected", "resubmission", "sent_for_approval"].includes(
+                product.product_status ?? "",
+              ) && (
+                <button
+                  onClick={handleDelete}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white rounded-xl shadow-sm transition-all bg-red-500 hover:bg-red-600 active:scale-95 cursor-pointer"
+                >
+                  <FaTrash className="text-xs" /> Delete
+                </button>
+              )}
+            </div>
+          </section>
         </div>
       </div>
+
+      {lightboxImage && (
+        <ImageLightbox
+          src={lightboxImage}
+          onClose={() => setLightboxImage(null)}
+        />
+      )}
     </div>
   );
 }

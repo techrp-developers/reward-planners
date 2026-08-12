@@ -166,6 +166,13 @@ router.delete(
   managerController.deleteDocument,
 );
 
+router.patch(
+  "/category-attributes/:id/restore",
+  authenticateToken,
+  authorizeRoles("admin", "vendor_manager"),
+  CategoryAttributeController.restore,
+);
+
 // create pair of category and documents
 router.post(
   "/create-category-documents",

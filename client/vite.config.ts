@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => {
   // own proxy target, separate from the rest of the app's /api/* traffic
   // (e.g. /api/crm), which still goes to production/staging as before.
   // Override with VITE_DEV_API_PROXY_TARGET if your local server runs elsewhere.
-  const fleaMarketApiTarget = env.VITE_DEV_API_PROXY_TARGET || "http://localhost:5000";
+  const localApiTarget = env.VITE_DEV_API_PROXY_TARGET || "http://localhost:5000";
 
   return {
     base: "/crm/",
@@ -22,15 +22,10 @@ export default defineConfig(({ mode }) => {
       // pointing VITE_DEV_API_PROXY_TARGET at the dev machine's LAN IP too).
       host: true,
       proxy: {
-        "/api/flea-market": {
-          target: fleaMarketApiTarget,
+        "/api": {
+          target: localApiTarget,
           changeOrigin: true,
           secure: false,
-        },
-        "/api": {
-          target: "https://rewardplanners.com",
-          changeOrigin: true,
-          secure: true,
         },
       },
     },

@@ -65,6 +65,7 @@ class wishListModel {
 
     JOIN eproducts p 
       ON p.product_id = w.product_id
+      AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
 
     /* ---- Cheapest Visible Variant (same as category) ---- */
     LEFT JOIN product_variants v

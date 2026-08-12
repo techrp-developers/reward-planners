@@ -35,7 +35,7 @@ export default function AdminNavbar() {
   const { user, logout } = useAuth();
 
   const [open, setOpen] = useState<string | null>(null);
-  const [profileOpen, setProfileOpen] = useState<boolean>(false);
+  const [profileOpen, setProfileOpen] = useState<boolean>(true);
 
   const isActive = (to: string) => pathname === to;
 
@@ -84,7 +84,7 @@ export default function AdminNavbar() {
   ];
 
   return (
-    <nav className="fixed top-0 left-0 flex flex-col w-64 h-full bg-white border-r border-gray-100 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+    <nav className="premium-role-sidebar fixed top-0 left-0 flex flex-col w-64 h-full bg-white border-r border-gray-100 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
       {/* Branding */}
       <div className="px-8 py-10">
         <div className="flex items-center gap-3">
@@ -213,6 +213,14 @@ export default function AdminNavbar() {
 
         {profileOpen && (
           <div className="mt-2 overflow-hidden bg-white border border-gray-100 shadow-xl rounded-2xl">
+            <Link
+              to={routes.admin.profile}
+              className="flex items-center gap-3 px-5 py-4 text-sm font-bold text-gray-600 hover:bg-gray-50"
+            >
+              <FiUser />
+              Profile
+            </Link>
+
             <Link
               to={routes.admin.changePassword}
               className="flex items-center gap-3 px-5 py-4 text-sm font-bold text-gray-600 hover:bg-gray-50"

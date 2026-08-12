@@ -189,6 +189,19 @@ function buildBodyValues(templateKey, ctx) {
     case "order_place_confirm":
       return [name, orderId, amount];
 
+    // --- ADMIN ALERTS ---
+    case "admin_new_service_order":
+      return [name, orderId, amount, String(ctx.service_name || "Service")];
+
+    case "admin_new_service_enquiry":
+      return [name, String(ctx.enquiry_ref || orderId), String(ctx.service_name || "Service"), String(ctx.customer_phone || "N/A")];
+
+    case "admin_new_help_request":
+      return [name, String(ctx.request_id || orderId), orderId, String(ctx.issue_type || "General support")];
+
+    case "admin_new_ecommerce_order":
+      return [name, orderId, amount, String(ctx.item_count || "0")];
+
     case "order_place_arriving":
       return [name, orderId];
 

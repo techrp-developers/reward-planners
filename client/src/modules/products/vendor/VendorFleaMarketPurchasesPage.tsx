@@ -16,7 +16,11 @@ const LIMIT = 20;
 const currency = (value: number) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value);
 
-export default function VendorFleaMarketPurchasesPage() {
+type VendorFleaMarketPurchasesPageProps = {
+  embedded?: boolean;
+};
+
+export default function VendorFleaMarketPurchasesPage({ embedded = false }: VendorFleaMarketPurchasesPageProps) {
   const [schedules, setSchedules] = useState<VendorFleaMarketScheduleOption[]>([]);
   const [scheduleId, setScheduleId] = useState<number | "">("");
   const [fromDate, setFromDate] = useState("");
@@ -81,8 +85,8 @@ export default function VendorFleaMarketPurchasesPage() {
 
   return (
     <div>
-      {/* PAGE HEADER */}
-      <div
+      {!embedded && (
+        <div
         className="flex items-center gap-4 mb-6 p-5 rounded-2xl"
         style={{
           background: "linear-gradient(135deg, rgba(133,43,175,0.06) 0%, rgba(252,63,120,0.04) 100%)",
@@ -103,7 +107,8 @@ export default function VendorFleaMarketPurchasesPage() {
             Which of your products sold, at which event, and who bought them.
           </p>
         </div>
-      </div>
+        </div>
+      )}
 
       {/* SUMMARY CARDS */}
       <div className="grid grid-cols-1 gap-5 mb-6 sm:grid-cols-3">

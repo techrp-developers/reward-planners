@@ -1,13 +1,15 @@
-// Verifies multi-variant support on POST /flea-market/products: backward
+// Verifies multi-variant support on POST /products: backward
 // compatibility with the old flat single-variant payload, the new
 // variants[] array (mixed explicit/omitted SKUs), cross-field validation,
 // and that reward mapping stays product-level (called once, not per variant).
 //
-// Run with: node scripts/verify-multi-variant-quick-create.js
-// Requires: server running on localhost:5000
+// Local: node scripts/verify-multi-variant-quick-create.js
+// Remote: set VERIFY_API_BASE_URL explicitly before running.
 
 require("dotenv").config();
 const db = require("../config/database");
+const API_BASE = (process.env.VERIFY_API_BASE_URL || "http://localhost:5000")
+  .replace(/\/$/, "");
 
 function assert(cond, msg) {
   if (!cond) throw new Error("ASSERTION FAILED: " + msg);
@@ -18,7 +20,7 @@ function assert(cond, msg) {
   const [[vendor]] = await db.execute("SELECT vendor_id FROM vendors LIMIT 1");
 
   console.log("=== 1. Backward-compat: flat single-variant payload (old shape) ===");
-  const r1 = await fetch("http://localhost:5000/api/flea-market/products", {
+  const r1 = await fetch(`${API_BASE}/products`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -37,7 +39,7 @@ function assert(cond, msg) {
 
   console.log("\n=== 2. Multi-variant payload (3 variants, 2 explicit SKUs, 1 omitted) ===");
   const productName2 = "Multi-Variant New " + Date.now();
-  const r2 = await fetch("http://localhost:5000/api/flea-market/products", {
+  const r2 = await fetch(`${API_BASE}/products`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -68,7 +70,7 @@ function assert(cond, msg) {
   assert(JSON.parse(dbRows[0].variant_attributes).size === "500g", "variant_attributes JSON has size label");
 
   console.log("\n=== 3. Validation: salePrice > mrp on one variant should reject the whole request ===");
-  const r3 = await fetch("http://localhost:5000/api/flea-market/products", {
+  const r3 = await fetch(`${API_BASE}/products`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -82,7 +84,7 @@ function assert(cond, msg) {
   assert(r3.status === 400, "salePrice > mrp rejected with 400");
 
   console.log("\n=== 4. Validation: empty variants array should reject ===");
-  const r4 = await fetch("http://localhost:5000/api/flea-market/products", {
+  const r4 = await fetch(`${API_BASE}/products`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -99,7 +101,7 @@ function assert(cond, msg) {
   const [[rule]] = await db.execute(
     "SELECT reward_rule_id FROM reward_rules WHERE is_active=1 AND redemption_type IS NOT NULL AND min_order_amount <= 149 AND (max_order_amount IS NULL OR max_order_amount >= 149) LIMIT 1",
   );
-  const r5 = await fetch("http://localhost:5000/api/flea-market/products", {
+  const r5 = await fetch(`${API_BASE}/products`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
