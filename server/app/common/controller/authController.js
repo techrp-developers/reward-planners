@@ -6,7 +6,12 @@
   const WalletModel = require("../../common/models/walletModel");
   const FitnessService = require("../../step-counter/v1/service/fitnessService");
   const bcrypt = require("bcryptjs");
-  const jwt = require("jsonwebtoken");
+  const crypto = require("crypto");
+  const {
+    issueCustomerSession,
+    rotateCustomerSession,
+    revokeCustomerSession,
+  } = require("../utils/customerAuthSession");
   const {
     accountCreationSuccessMail,
   } = require("../../../services/mailBuilder/accountCreation");
@@ -23,11 +28,8 @@ const { deleteFromR2 } = require("../../../utils/r2delete");
 const { getPublicUrl } = require("../../../utils/publicUrl");
 const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
 
-  const ACCESS_EXPIRES = "30d";
-  const REFRESH_EXPIRES_DAYS = 90;
-
   function generateOTP() {
-    return Math.floor(1000 + Math.random() * 9000).toString();
+    return crypto.randomInt(100000, 1000000).toString();
   }
 
   function normalizeEmail(email) {
@@ -41,8 +43,15 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
   }
 
   function getActivationIdentity(body = {}) {
-    const email = normalizeEmail(body.email);
-    const phone = normalizePhone(body.phone ?? body.mobile ?? body.contact);
+    const rawLogin = [body.login, body.email, body.phone, body.mobile, body.contact].find(
+      (value) => value !== undefined && value !== null && String(value).trim(),
+    );
+    const normalizedLogin =
+      typeof rawLogin === "string" || typeof rawLogin === "number"
+        ? String(rawLogin).trim()
+        : "";
+    const email = normalizedLogin.includes("@") ? normalizeEmail(normalizedLogin) : "";
+    const phone = normalizedLogin && !email ? normalizePhone(normalizedLogin) : "";
 
     return {
       email,
@@ -69,7 +78,8 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
         });
       }
 
-      if (!employee.phone) return;
+      // Send to the channel the employee selected on the login screen.
+      if (email || !employee.phone) return;
 
       enqueueWhatsApp({
         eventName: "onbord_verify",
@@ -198,18 +208,9 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
         const employee = await findEmployeeForActivation(identity);
 
         if (!employee) {
-          return res.status(404).json({
-            success: false,
-            message: "Employee not found",
-          });
-        }
-
-        const existingAccount = await AuthModel.findByCompanyUserId(employee.id);
-
-        if (existingAccount) {
-          return res.status(400).json({
-            success: false,
-            message: "Account already activated",
+          return res.json({
+            success: true,
+            message: "If your employee account is eligible, a code has been sent.",
           });
         }
 
@@ -227,7 +228,7 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
 
         return res.json({
           success: true,
-          message: identity.email ? "OTP sent to email" : "OTP sent to phone",
+          message: "If your employee account is eligible, a code has been sent.",
         });
       } catch (error) {
         console.error("Activate account error:", error);
@@ -251,18 +252,9 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
         const employee = await findEmployeeForActivation(identity);
 
         if (!employee) {
-          return res.status(404).json({
-            success: false,
-            message: "Employee not found",
-          });
-        }
-
-        const existing = await AuthModel.findByCompanyUserId(employee.id);
-
-        if (existing) {
-          return res.status(400).json({
-            success: false,
-            message: "Account already activated",
+          return res.json({
+            success: true,
+            message: "If your employee account is eligible, a code has been sent.",
           });
         }
 
@@ -293,6 +285,7 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
     VERIFY OTP
   ====================================================== */
     async verifyActivationOTP(req, res) {
+      const conn = await db.getConnection();
       try {
         const { otp } = req.body;
         const identity = getActivationIdentity(req.body);
@@ -324,19 +317,147 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
           });
         }
 
-        await AuthModel.markOTPVerified(identity.otpKey);
+        const employee = await findEmployeeForActivation(identity);
+        if (!employee) {
+          return res.status(401).json({
+            success: false,
+            message: "Invalid or expired OTP",
+          });
+        }
+
+        const existingCustomer = await AuthModel.findByCompanyUserId(employee.id);
+        if (existingCustomer && Number(existingCustomer.status) !== 1) {
+          return res.status(403).json({
+            success: false,
+            message: "Account inactive",
+          });
+        }
+
+        // Keep the legacy password column populated with an unusable random value.
+        // Password login is not required for OTP-created accounts.
+        const unusablePassword = await bcrypt.hash(crypto.randomBytes(32).toString("hex"), 12);
+
+        await conn.beginTransaction();
+        const user = await AuthModel.findOrCreateCustomerForEmployee(
+          employee,
+          unusablePassword,
+          conn,
+        );
+        await AuthModel.deleteOTP(identity.otpKey, conn);
+        await conn.commit();
+
+        const tokens = await issueCustomerSession(user.user_id, req, res);
+        await AuthModel.updateLoginMeta(user.user_id, req.ip);
+        const firstLoginBonus = await WalletModel.createWalletOnFirstLogin(user.user_id);
+
+        if (firstLoginBonus) {
+          notifyUser(
+            {
+              userId: user.user_id,
+              module: "wallet",
+              type: "first_login_reward",
+              title: "Coins credited",
+              message: `You received ${FIRST_LOGIN_REWARD_COINS} reward coins for your first login.`,
+              icon: "wallet",
+              reference_type: "wallet",
+              reference_id: user.user_id,
+              action_url: "/wallet",
+              metadata: { coins: FIRST_LOGIN_REWARD_COINS },
+            },
+            "first login reward notification",
+          );
+
+          setImmediate(() => {
+            if (employee.email) {
+              rewardCreditMail({
+                email: employee.email,
+                name: employee.name,
+                coins: FIRST_LOGIN_REWARD_COINS,
+              }).catch((error) => console.error("First login reward email failed:", error));
+            }
+
+            if (employee.phone) {
+              enqueueWhatsApp({
+                eventName: "wallet_credit_first_login",
+                ctx: {
+                  phone: employee.phone,
+                  company_id: employee.company_id,
+                  customer_name: employee.name || "User",
+                  coins: FIRST_LOGIN_REWARD_COINS,
+                },
+              }).catch((error) => console.error("First login reward WhatsApp failed:", error));
+            }
+          });
+        }
+
+        if (user.created) {
+          notifyUser(
+            {
+              userId: user.user_id,
+              module: "common",
+              type: "account_activated",
+              title: "Account activated",
+              message: "Your RewardPlanners account is ready to use.",
+              icon: "user-check",
+              reference_type: "account",
+              reference_id: user.user_id,
+              action_url: "/profile",
+            },
+            "account activation notification",
+          );
+
+          if (employee.email) {
+            setImmediate(() => {
+              accountCreationSuccessMail({
+                name: employee.name,
+                email: employee.email,
+              }).catch((error) => console.error("Email send failed:", error));
+            });
+          }
+
+          if (employee.phone) {
+            setImmediate(() => {
+              enqueueWhatsApp({
+                eventName: "create_account_notification",
+                ctx: {
+                  phone: employee.phone,
+                  company_id: employee.company_id ?? null,
+                  customer_name: employee.name || "User",
+                },
+              }).catch((error) => console.error("WhatsApp enqueue failed:", error));
+            });
+          }
+        }
 
         return res.json({
           success: true,
-          message: "OTP verified successfully",
+          message: user.created
+            ? "Account activated and login successful"
+            : "Login successful",
+          user: {
+            userId: user.user_id,
+            name: employee.name,
+            email: employee.email,
+            phone: employee.phone,
+          },
+          ...tokens,
+          firstLoginReward: {
+            awarded: firstLoginBonus,
+            coins: firstLoginBonus ? FIRST_LOGIN_REWARD_COINS : 0,
+          },
         });
       } catch (err) {
+        try {
+          await conn.rollback();
+        } catch {}
         console.error("Verify activation OTP error:", err);
 
         return res.status(500).json({
           success: false,
           message: "Server error",
         });
+      } finally {
+        conn.release();
       }
     }
 
@@ -480,6 +601,9 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
     async loginUser(req, res) {
       try {
         const { email, phone, login, password } = req.body;
+        if (!password) {
+          return AuthController.prototype.activateAccount(req, res);
+        }
         const loginIdentifier = email ?? phone ?? login;
         const rawIdentifier =
           typeof loginIdentifier === "string" ||
@@ -527,18 +651,10 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
         const match = await bcrypt.compare(password, user.password);
         if (!match) return res.status(401).json({ success: false });
         // const tokenVersion = Number(user.token_version || 0);
-        const accessToken = jwt.sign(
-          // { user_id: user.user_id, token_version: tokenVersion },
-          { user_id: user.user_id },
-          process.env.ACCESS_TOKEN_SECRET,
-          { expiresIn: ACCESS_EXPIRES },
-        );
-
-        const refreshToken = jwt.sign(
-          // { user_id: user.user_id, token_version: tokenVersion },
-          { user_id: user.user_id },
-          process.env.REFRESH_TOKEN_SECRET,
-          { expiresIn: `${REFRESH_EXPIRES_DAYS}d` },
+        const { accessToken, refreshToken } = await issueCustomerSession(
+          user.user_id,
+          req,
+          res,
         );
 
         await AuthModel.updateLoginMeta(user.user_id, req.ip);
@@ -604,36 +720,9 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
     // Refresh
     async refreshAccessToken(req, res) {
       try {
-        const { refreshToken } = req.body;
-        if (!refreshToken) {
-          return res.status(400).json({ success: false });
-        }
-
-        const payload = jwt.verify(
-          refreshToken,
-          process.env.REFRESH_TOKEN_SECRET,
-        );
-
-        const user = await AuthModel.findById(payload.user_id);
-
-        if (!user) return res.status(401).json({ success: false });
-
-        if (Number(user.status) !== 1)
-          return res.status(403).json({ success: false });
-
-        // if (
-        //   Number(user.token_version || 0) !== Number(payload.token_version || 0)
-        // ) {
-        //   return res.status(401).json({ success: false });
-        // }
-
-        const newAccessToken = jwt.sign(
-          { user_id: user.user_id, token_version: user.token_version },
-          process.env.ACCESS_TOKEN_SECRET,
-          { expiresIn: ACCESS_EXPIRES },
-        );
-
-        return res.json({ success: true, accessToken: newAccessToken });
+        const tokens = await rotateCustomerSession(req, res);
+        if (!tokens) return res.status(401).json({ success: false });
+        return res.json({ success: true, ...tokens });
       } catch {
         return res.status(401).json({ success: false });
       }
@@ -771,15 +860,8 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
     async logoutUser(req, res) {
       try {
         const userId = req.user?.user_id;
-        if (!userId) {
-          return res.status(401).json({
-            success: false,
-            message: "Unauthorized user",
-          });
-        }
-
-        await AuthModel.clearFcmToken(userId);
-        // await AuthModel.incrementTokenVersion(userId);
+        await revokeCustomerSession(req, res);
+        if (userId) await AuthModel.clearFcmToken(userId);
 
         return res.json({
           success: true,
