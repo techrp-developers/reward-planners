@@ -105,7 +105,6 @@ import {
   FaFileUpload,
   FaTrash,
   FaSpinner,
-  FaPlus,
 } from "react-icons/fa";
 
 // --- Interfaces matching your backend ---

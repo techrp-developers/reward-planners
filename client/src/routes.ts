@@ -152,6 +152,7 @@ export const routes = {
       edit: "/service/partner-managers/edit/:id",
     },
     serviceListings: "/service/service-listings",
+    finance: "/service/finance/:section?",
     bookings: "/service/bookings",
     reports: "/service/reports",
     settings: "/service/settings",
