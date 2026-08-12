@@ -1,9 +1,8 @@
 import axios, { AxiosError } from "axios";
+import { SERVER_CONFIG } from "../../../common/config/serverConfig";
 
-export const FLEA_MARKET_API_BASE_URL = (
-  import.meta.env.VITE_FLEA_MARKET_API_URL ||
-  (import.meta.env.DEV ? "http://localhost:5000/api/flea-market" : "/api/crm/api/flea-market")
-).replace(/\/$/, "");
+export const FLEA_MARKET_API_BASE_URL =
+  SERVER_CONFIG.apiBaseUrl.replace(/\/$/, "");
 
 /**
  * Thrown centrally by the response interceptor whenever the backend reports
@@ -82,7 +81,7 @@ export async function pingFleaMarketHealth(): Promise<void> {
     await fleaMarketClient.get("/health");
   } catch (error) {
     console.error(
-      "[flea-market] Backend health check failed - is the server running and is VITE_FLEA_MARKET_API_URL correct?",
+      "[flea-market] Backend health check failed - is the selected server running and is serverConfig.ts correct?",
       `API URL: ${FLEA_MARKET_API_BASE_URL}`,
       error,
     );

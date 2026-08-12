@@ -1,81 +1,14 @@
-import { FiGrid, FiHeart, FiUserCheck, FiCheckCircle, FiClock } from "react-icons/fi";
-import { useServicePartners } from "../../servicePartners/store/useServicePartners";
-import { usePartnerManagers } from "../../partnerManagers/store/usePartnerManagers";
+import { FiArrowRight, FiGrid, FiInbox, FiLayers, FiShoppingBag, FiXCircle } from "react-icons/fi";
+import { Link } from "react-router-dom";
+import { routes } from "../../../../../routes";
 
-function StatCard({
-  label,
-  value,
-  Icon,
-}: {
-  label: string;
-  value: number | string;
-  Icon: React.ElementType;
-}) {
-  return (
-    <div
-      className="bg-white rounded-2xl p-6 flex items-center gap-4"
-      style={{ border: "1px solid rgba(133,43,175,0.08)", boxShadow: "0 4px 24px rgba(133,43,175,0.06)" }}
-    >
-      <div
-        className="w-12 h-12 rounded-2xl flex items-center justify-center text-white shrink-0"
-        style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }}
-      >
-        <Icon size={20} />
-      </div>
-      <div>
-        <p className="text-2xl font-black text-gray-900 tracking-tight">{value}</p>
-        <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mt-0.5">{label}</p>
-      </div>
-    </div>
-  );
-}
+const workspaces = [
+  { label: "Services & variants", description: "Manage categories, services and their variants.", to: routes.service.catalog.replace(":section?", "categories"), Icon: FiLayers, tone: "bg-purple-50 text-[#852BAF]" },
+  { label: "Service enquiries", description: "Review and progress incoming customer enquiries.", to: routes.service.enquiries, Icon: FiInbox, tone: "bg-amber-50 text-amber-600" },
+  { label: "Service orders", description: "Track documentation, delivery and completion.", to: routes.service.orders, Icon: FiShoppingBag, tone: "bg-blue-50 text-blue-600" },
+  { label: "Cancellations", description: "Review cancellation and refund requests.", to: routes.service.cancellations, Icon: FiXCircle, tone: "bg-red-50 text-red-600" },
+];
 
 export default function ServiceDashboard() {
-  const { partners, loading: partnersLoading } = useServicePartners();
-  const { managers, loading: managersLoading } = usePartnerManagers();
-
-  const activeCount = partners.filter((p) => p.status === "active").length;
-  const pendingCount = partners.filter((p) => p.status === "pending").length;
-
-  if (partnersLoading || managersLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="w-12 h-12 border-[3px] border-transparent border-t-[#852BAF] border-r-[#FC3F78] rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="max-w-7xl mx-auto space-y-6">
-      <div
-        className="flex items-center gap-4 p-5 rounded-2xl"
-        style={{
-          background: "linear-gradient(135deg, rgba(133,43,175,0.06) 0%, rgba(252,63,120,0.04) 100%)",
-          border: "1px solid rgba(133,43,175,0.1)",
-        }}
-      >
-        <div
-          className="w-11 h-11 rounded-2xl flex items-center justify-center text-white shrink-0"
-          style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)", boxShadow: "0 6px 20px rgba(133,43,175,0.25)" }}
-        >
-          <FiGrid size={20} />
-        </div>
-        <div>
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
-            Services <span className="gradient-text-brand">Dashboard</span>
-          </h1>
-          <p className="text-xs text-gray-500 font-medium mt-0.5">
-            Overview of service partners and partner managers
-          </p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-4 gap-6">
-        <StatCard label="Total Partners" value={partners.length} Icon={FiHeart} />
-        <StatCard label="Active Partners" value={activeCount} Icon={FiCheckCircle} />
-        <StatCard label="Pending Approval" value={pendingCount} Icon={FiClock} />
-        <StatCard label="Partner Managers" value={managers.length} Icon={FiUserCheck} />
-      </div>
-    </div>
-  );
+  return <main className="space-y-7"><header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#25103d] via-[#68258d] to-[#c33076] p-8 text-white shadow-[0_24px_65px_rgba(91,33,124,0.24)]"><div className="absolute -right-16 -top-24 h-72 w-72 rounded-full bg-white/10 blur-2xl" /><div className="relative"><span className="grid h-13 w-13 place-items-center rounded-2xl border border-white/20 bg-white/10"><FiGrid size={23} /></span><p className="mt-6 text-[10px] font-bold uppercase tracking-[0.25em] text-purple-200">Service manager workspace</p><h1 className="mt-1 text-3xl font-black sm:text-4xl">Service Operations Dashboard</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-purple-100/80">Manage the service catalogue and the complete customer order lifecycle from one workspace.</p></div></header><section><div className="mb-4"><h2 className="text-lg font-black text-slate-900">Operations</h2><p className="text-xs text-slate-400">Your primary service-management workspaces</p></div><div className="grid gap-4 md:grid-cols-2">{workspaces.map(({ label, description, to, Icon, tone }) => <Link key={label} to={to} className="group rounded-2xl border border-purple-100 bg-white p-5 shadow-[0_12px_35px_rgba(67,31,91,0.06)] transition hover:-translate-y-0.5 hover:shadow-lg"><div className="flex items-start gap-4"><span className={`grid h-12 w-12 shrink-0 place-items-center rounded-xl ${tone}`}><Icon size={20} /></span><span className="min-w-0 flex-1"><span className="block font-extrabold text-slate-900">{label}</span><span className="mt-1 block text-sm leading-5 text-slate-500">{description}</span></span><FiArrowRight className="mt-3 text-slate-300 transition group-hover:translate-x-1 group-hover:text-[#852BAF]" /></div></Link>)}</div></section></main>;
 }

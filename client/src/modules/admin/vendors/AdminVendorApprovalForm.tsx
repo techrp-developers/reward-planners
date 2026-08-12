@@ -18,7 +18,8 @@ import {
 } from "react-icons/fa";
 
 import { api } from "../../../common/api/api";
-const API_BASEIMAGE_URL = "https://rewardplanners.com/api/crm";
+import { SERVER_CONFIG } from "../../../common/config/serverConfig";
+const API_BASEIMAGE_URL = SERVER_CONFIG.apiBaseUrl;
 
 const resolveImageUrl = (path: string) =>
   path?.startsWith("http") ? path : `${API_BASEIMAGE_URL}/uploads/${path}`;

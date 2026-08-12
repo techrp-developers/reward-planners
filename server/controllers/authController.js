@@ -1,6 +1,6 @@
 const bcrypt = require("bcryptjs");
 const db = require("../config/database");
-const { generateToken } = require("../utils/jwt");
+const { issueSession, rotateSession, revokeSession, revokeUserSessions, isCsrfValid, clearSessionCookies } = require("../utils/authSession");
 const { generateOTP, hashOTP } = require("../utils/otpGenerate");
 const { sendOtpEmail, sendPasswordResetEmail } = require("../config/mail");
 const { sendRegistrationSuccessMail } = require("../services/mailBuilder/authNotification");
@@ -8,6 +8,13 @@ const crypto = require("crypto");
 
 const normalizeEmail = (email) =>
   typeof email === "string" ? email.trim().toLowerCase() : "";
+
+const getClientBaseUrl = () => {
+  const configuredUrl = (process.env.CLIENT_URL || "http://localhost:5173")
+    .split(",")[0]
+    .trim();
+  return configuredUrl.replace(/\/+$/, "");
+};
 
 const authController = {
   /* ============================================================
@@ -166,13 +173,6 @@ const authController = {
         };
       }
     }
-    const token = generateToken({
-      user_id: user.user_id,
-      vendor_id: vendorData?.vendor_id || null,
-      role: user.role,
-      email: user.email,
-    });
-
     // Send mail
     try {
       await sendRegistrationSuccessMail(
@@ -197,7 +197,6 @@ const authController = {
           phone: user.phone,
         },
         vendor: vendorData,
-        token,
       },
     });
   },
@@ -299,13 +298,20 @@ const authController = {
       [user.user_id, tokenHash, expiresAt],
     );
 
-    const resetLink = `https://rewardplanners.com/crm/reset-password?token=${rawToken}`;
+    const resetLink = `${getClientBaseUrl()}/reset-password?token=${encodeURIComponent(rawToken)}`;
 
     // Send mail
     try {
       await sendPasswordResetEmail(user.email, resetLink);
     } catch (mailErr) {
       console.error("PASSWORD RESET MAIL FAILED:", mailErr);
+      await db.execute("DELETE FROM password_reset_tokens WHERE user_id = ?", [
+        user.user_id,
+      ]);
+      return res.status(502).json({
+        success: false,
+        message: "Unable to send the reset email right now. Please try again shortly.",
+      });
     }
 
     return res.json(genericResponse);
@@ -362,6 +368,7 @@ const authController = {
       hashedPassword,
       userId,
     ]);
+    await revokeUserSessions(userId);
 
     await db.execute("DELETE FROM password_reset_tokens WHERE user_id = ?", [
       userId,
@@ -452,7 +459,6 @@ const authController = {
       }
 
       let vendorData = null;
-      let vendorId = null;
 
       if (user.role === "vendor") {
         const [vendorRows] = await db.execute(
@@ -472,17 +478,10 @@ const authController = {
 
         if (vendorRows.length > 0) {
           vendorData = vendorRows[0];
-          vendorId = vendorData.vendor_id;
         }
       }
 
-      //  MUST include vendor_id in token
-      const token = generateToken({
-        user_id: user.user_id,
-        vendor_id: vendorId,
-        email: user.email,
-        role: user.role,
-      });
+      await issueSession(user.user_id, req, res);
 
       return res.json({
         success: true,
@@ -490,7 +489,6 @@ const authController = {
         data: {
           user: safeUser,
           vendor: vendorData,
-          token,
         },
       });
     } catch (err) {
@@ -532,10 +530,79 @@ const authController = {
   },
 
   /* ============================================================
+       UPDATE PROFILE (name, email, phone)
+     ============================================================ */
+  updateProfile: async (req, res) => {
+    try {
+      const userId = req.user.user_id;
+      const { name, phone } = req.body;
+      const normalizedEmail = normalizeEmail(req.body.email);
+
+      if (!name || !name.trim() || !normalizedEmail) {
+        return res.status(400).json({
+          success: false,
+          message: "Name and email are required",
+        });
+      }
+
+      const [existing] = await db.execute(
+        "SELECT user_id FROM eusers WHERE email = ? AND user_id != ?",
+        [normalizedEmail, userId],
+      );
+
+      if (existing.length > 0) {
+        return res.status(409).json({
+          success: false,
+          message: "Email is already in use by another account",
+        });
+      }
+
+      await db.execute(
+        "UPDATE eusers SET name = ?, email = ?, phone = ? WHERE user_id = ?",
+        [name.trim(), normalizedEmail, phone || null, userId],
+      );
+
+      const [rows] = await db.execute(
+        "SELECT user_id, name, email, role, phone FROM eusers WHERE user_id = ?",
+        [userId],
+      );
+
+      return res.json({
+        success: true,
+        message: "Profile updated successfully",
+        data: rows[0],
+      });
+    } catch (err) {
+      console.error("Update Profile Error:", err);
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  },
+
+  /* ============================================================
        LOGOUT
      ============================================================ */
-  logout: (req, res) => {
-    res.clearCookie();
+  refresh: async (req, res) => {
+    try {
+      const userId = await rotateSession(req, res);
+      if (!userId) {
+        clearSessionCookies(res);
+        return res.status(401).json({ success: false, code: "SESSION_EXPIRED", message: "Session expired. Please sign in again." });
+      }
+      return res.json({ success: true });
+    } catch (error) {
+      console.error("Refresh session error:", error);
+      clearSessionCookies(res);
+      return res.status(401).json({ success: false, code: "SESSION_EXPIRED", message: "Session expired. Please sign in again." });
+    }
+  },
+
+  logout: async (req, res) => {
+    if (!isCsrfValid(req)) return res.status(403).json({ success: false, code: "CSRF_INVALID", message: "Invalid security token" });
+    try { await revokeSession(req, res); }
+    catch (error) { console.error("Logout session cleanup error:", error); clearSessionCookies(res); }
     return res.json({ success: true, message: "Logout successful" });
   },
 
@@ -589,6 +656,8 @@ const authController = {
         hashedPassword,
         normalizedEmail,
       ]);
+      const [[changedUser]] = await db.execute("SELECT user_id FROM eusers WHERE email = ? LIMIT 1", [normalizedEmail]);
+      if (changedUser) await revokeUserSessions(changedUser.user_id);
 
       return res.json({
         success: true,

@@ -15,8 +15,8 @@
 // everything else uses the service/model layer directly, matching this
 // repo's existing verification-script convention.
 //
-// Run with: node scripts/verify-cross-event-stock-flow.js
-// Requires: server running on localhost:5000 (npm run dev in server/)
+// Local: node scripts/verify-cross-event-stock-flow.js
+// Remote: set VERIFY_API_BASE_URL explicitly before running.
 
 require("dotenv").config();
 const db = require("../config/database");
@@ -26,7 +26,8 @@ const poolStockModel = require("../flea-market/models/poolStockModel");
 const scheduleModel = require("../flea-market/models/scheduleModel");
 const { poolIdToBarcode } = require("../flea-market/utils/barcode");
 
-const API_BASE = "http://localhost:5000/api/flea-market";
+const API_BASE = (process.env.VERIFY_API_BASE_URL || "http://localhost:5000")
+  .replace(/\/$/, "");
 
 function assert(cond, msg) {
   if (!cond) throw new Error(`ASSERTION FAILED: ${msg}`);

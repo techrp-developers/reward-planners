@@ -254,6 +254,63 @@ ${escapeHTML(invoice.customer_city || "")} ${escapeHTML(invoice.zipcode || "")}
   return html;
 }
 
+async function streamOrderInvoices(res, orderId, userId = null) {
+  const params = [orderId];
+  let query = "SELECT invoice_id FROM invoices WHERE order_id = ?";
+
+  if (userId !== null) {
+    query += " AND user_id = ?";
+    params.push(userId);
+  }
+
+  const [invoiceRows] = await db.query(query, params);
+
+  if (!invoiceRows.length) {
+    return res.status(404).json({ success: false, message: "Invoice not found" });
+  }
+
+  if (invoiceRows.length === 1) {
+    const invoice = await OrderModel.getInvoiceData(invoiceRows[0].invoice_id);
+    const items = await OrderModel.getInvoiceItems(invoiceRows[0].invoice_id);
+    const html = buildInvoiceHTML(invoice, items);
+
+    if (!html || typeof html !== "string") {
+      throw new Error("Invalid HTML generated for invoice");
+    }
+
+    const pdf = await generateInvoicePDF(html);
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${invoice.invoice_number}.pdf"`,
+      "Content-Length": pdf.length,
+    });
+    return res.end(pdf);
+  }
+
+  res.set({
+    "Content-Type": "application/zip",
+    "Content-Disposition": `attachment; filename="invoices-${orderId}.zip"`,
+  });
+
+  const archive = archiver("zip", { zlib: { level: 9 } });
+  archive.pipe(res);
+
+  for (const row of invoiceRows) {
+    const invoice = await OrderModel.getInvoiceData(row.invoice_id);
+    const items = await OrderModel.getInvoiceItems(row.invoice_id);
+    const html = buildInvoiceHTML(invoice, items);
+
+    if (!html || typeof html !== "string") {
+      throw new Error("Invalid HTML generated for invoice");
+    }
+
+    const pdf = await generateInvoicePDF(html);
+    archive.append(pdf, { name: `${invoice.invoice_number}.pdf` });
+  }
+
+  return archive.finalize();
+}
+
 // send whatsapp
 async function sendOrderPlacedWhatsApp(orderId) {
   const [rows] = await db.query(
@@ -695,72 +752,7 @@ class OrderController {
         });
       }
 
-      // Get all invoices
-      const [invoiceRows] = await db.query(
-        `SELECT invoice_id FROM invoices WHERE order_id = ? AND user_id = ?`,
-        [orderId, userId],
-      );
-
-      if (!invoiceRows.length) {
-        return res.status(404).json({
-          success: false,
-          message: "Invoice not found",
-        });
-      }
-
-      // If only one invoice -> return PDF normally
-      if (invoiceRows.length === 1) {
-        const invoiceId = invoiceRows[0].invoice_id;
-
-        const invoice = await OrderModel.getInvoiceData(invoiceId);
-        const items = await OrderModel.getInvoiceItems(invoiceId);
-
-        const html = buildInvoiceHTML(invoice, items);
-
-        if (!html || typeof html !== "string") {
-          throw new Error("Invalid HTML generated for invoice");
-        }
-
-        const pdf = await generateInvoicePDF(html);
-
-        res.set({
-          "Content-Type": "application/pdf",
-          "Content-Disposition": `attachment; filename="${invoice.invoice_number}.pdf"`,
-          "Content-Length": pdf.length,
-        });
-
-        return res.end(pdf);
-      }
-
-      //  Multiple invoices->Zip
-
-      res.set({
-        "Content-Type": "application/zip",
-        "Content-Disposition": `attachment; filename="invoices-${orderId}.zip"`,
-      });
-
-      const archive = archiver("zip", { zlib: { level: 9 } });
-
-      archive.pipe(res);
-
-      for (const row of invoiceRows) {
-        const invoice = await OrderModel.getInvoiceData(row.invoice_id);
-        const items = await OrderModel.getInvoiceItems(row.invoice_id);
-
-        const html = buildInvoiceHTML(invoice, items);
-
-        if (!html || typeof html !== "string") {
-          throw new Error("Invalid HTML generated for invoice");
-        }
-
-        const pdf = await generateInvoicePDF(html);
-
-        archive.append(pdf, {
-          name: `${invoice.invoice_number}.pdf`,
-        });
-      }
-
-      await archive.finalize();
+      await streamOrderInvoices(res, orderId, userId);
     } catch (error) {
       console.error("Invoice ZIP Error:", error);
 
@@ -768,6 +760,21 @@ class OrderController {
         success: false,
         message: "Failed to generate invoices",
       });
+    }
+  }
+
+  async getInvoiceForManager(req, res) {
+    try {
+      await streamOrderInvoices(res, req.params.orderId);
+    } catch (error) {
+      console.error("Manager invoice download error:", error);
+      if (!res.headersSent) {
+        return res.status(500).json({
+          success: false,
+          message: "Failed to generate invoices",
+        });
+      }
+      res.destroy(error);
     }
   }
 }

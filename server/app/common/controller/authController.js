@@ -645,7 +645,7 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
     async updateFcmToken(req, res) {
       try {
         const userId = req.user?.user_id;
-        const { fcm_token } = req.body;
+        const { fcm_token, device_platform } = req.body;
 
         if (!fcm_token) {
           return res.status(400).json({
@@ -654,7 +654,15 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
           });
         }
 
-        await AuthModel.updateFcmToken(userId, fcm_token);
+        const normalizedPlatform = String(device_platform || "").toLowerCase();
+        if (normalizedPlatform && !["android", "ios"].includes(normalizedPlatform)) {
+          return res.status(400).json({
+            success: false,
+            message: "device_platform must be android or ios",
+          });
+        }
+
+        await AuthModel.updateFcmToken(userId, fcm_token, normalizedPlatform || null);
 
         return res.json({
           success: true,

@@ -627,7 +627,11 @@ export default function Onboarding() {
           setRejectionReason(statusRes.data.vendor.rejection_reason || "");
 
           //  THIS IS THE IMPORTANT PART
-          if (status === "rejected" || status === "sent_for_approval") {
+          if (
+            status === "rejected" ||
+            status === "sent_for_approval" ||
+            status === "approved"
+          ) {
             const detailRes = await api.get("/vendor/onboarding-data");
 
             if (detailRes.data?.success) {
@@ -874,23 +878,6 @@ export default function Onboarding() {
       return;
     }
 
-    const token = localStorage.getItem("token");
-    if (!token) {
-      await Swal.fire({
-        icon: "warning",
-        title: "Not logged in",
-        text: "Please login first and try again.",
-        confirmButtonText: "OK",
-        buttonsStyling: false,
-        customClass: {
-          popup: "rounded-full",
-          confirmButton:
-            "px-6 py-2 rounded-full font-bold text-white bg-[#852BAF] hover:bg-linear-to-r hover:from-[#852BAF] hover:to-[#FC3F78] transition-all duration-300 cursor-pointer active:scale-95",
-        },
-      });
-      return;
-    }
-
     try {
       const form = new FormData();
       Object.entries(formData).forEach(([k, v]) => {
@@ -947,19 +934,24 @@ export default function Onboarding() {
     }
   };
 
-  const isReadOnly = vendorStatus === "sent_for_approval";
+  const isReadOnly =
+    vendorStatus === "sent_for_approval" || vendorStatus === "approved";
 
   /* ================= UI ================= */
   return (
-    <div className="max-w-6xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+    <div className="w-full py-2 sm:py-4">
       {/* Header Section */}
       <div className="mb-8 text-left">
         <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
-          Complete Your{" "}
-          <span className="gradient-text-brand">Onboarding</span>
+          {vendorStatus === "approved" ? "Your " : "Complete Your "}
+          <span className="gradient-text-brand">
+            {vendorStatus === "approved" ? "Onboarding Details" : "Onboarding"}
+          </span>
         </h1>
         <p className="text-gray-500 mt-2 font-medium">
-          Verify your business details to start selling.
+          {vendorStatus === "approved"
+            ? "Review the verified business information submitted for your vendor account."
+            : "Verify your business details to start selling."}
         </p>
       </div>
 
@@ -1011,12 +1003,12 @@ export default function Onboarding() {
         </div>
       )}
 
-      {!loadingStatus && vendorStatus !== "approved" && (
+      {!loadingStatus && vendorStatus !== null && (
         <form
           onSubmit={handleSubmit}
           className="space-y-8"
-          style={isReadOnly ? { pointerEvents: "none", opacity: 0.8 } : {}}
         >
+          <fieldset disabled={isReadOnly} className="contents">
           {/* A. Business Information */}
           <section className="space-y-4 bg-white/95 backdrop-blur-xl rounded-2xl p-6 sm:p-8 shadow-lg hover:shadow-2xl transition-shadow duration-300">
             <SectionHeader
@@ -1604,6 +1596,7 @@ export default function Onboarding() {
               </button>
             </div>
           )}
+          </fieldset>
         </form>
       )}
     </div>

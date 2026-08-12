@@ -12,6 +12,7 @@ import {
   FaTimes,
   FaRedo,
   FaTrash,
+  FaTruck,
 } from "react-icons/fa";
 
 import { useNavigate, useParams } from "react-router-dom";
@@ -31,11 +32,16 @@ type ProductVariant = {
   mrp: number | null;
   sale_price: number | null;
   stock: number;
+  weight: number | null;
+  length: number | null;
+  breadth: number | null;
+  height: number | null;
   is_visible: number;
   variant_attributes: Record<string, string>;
   manufacturing_date: string | null;
   expiry_date: string | null;
   created_at: string;
+  images?: string[];
 };
 
 interface ProductView {
@@ -75,6 +81,14 @@ interface ProductView {
   }>;
 
   variants: ProductVariant[];
+}
+
+interface DeliveryFeeEstimate {
+  deliveryFee: number;
+  destinationPincode: string;
+  originPincode: string;
+  variantId: number;
+  courierName: string | null;
 }
 
 const FormInput = ({
@@ -137,6 +151,36 @@ const SectionHeader = ({ icon: Icon, title, description }: any) => (
   </div>
 );
 
+function ImageLightbox({
+  src,
+  onClose,
+}: {
+  src: string;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <button
+        onClick={onClose}
+        aria-label="Close"
+        className="absolute flex items-center justify-center w-10 h-10 text-white transition-colors rounded-full cursor-pointer top-5 right-5 bg-white/10 hover:bg-white/20"
+      >
+        <FaTimes />
+      </button>
+
+      <img
+        src={src}
+        alt="Full size preview"
+        onClick={(e) => e.stopPropagation()}
+        className="object-contain max-w-full max-h-full rounded-lg shadow-2xl"
+      />
+    </div>
+  );
+}
+
 export default function ReviewProductPage() {
   // FIXED: use the correct param name from route
   const { id: productId } = useParams<{ id: string }>();
@@ -145,10 +189,14 @@ export default function ReviewProductPage() {
   const [product, setProduct] = useState<ProductView | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const [productAttributes, setProductAttributes] = useState<
     Record<string, string[]>
   >({});
   const [attributeSchema, setAttributeSchema] = useState<any[]>([]);
+  const [deliveryEstimate, setDeliveryEstimate] =
+    useState<DeliveryFeeEstimate | null>(null);
+  const [deliveryEstimateLoading, setDeliveryEstimateLoading] = useState(false);
 
   useEffect(() => {
     if (!productId) {
@@ -156,8 +204,26 @@ export default function ReviewProductPage() {
       setLoading(false);
       return;
     }
-    fetchProduct(productId);
+    void fetchProduct(productId);
+    void fetchDeliveryEstimate(productId);
   }, [productId]);
+
+  const fetchDeliveryEstimate = async (id: string) => {
+    setDeliveryEstimateLoading(true);
+    setDeliveryEstimate(null);
+
+    try {
+      const response = await api.get(
+        `/product/${encodeURIComponent(id)}/delivery-fee-estimate`,
+      );
+      setDeliveryEstimate(response.data?.estimate ?? null);
+    } catch (estimateError) {
+      // The product review should remain usable when a courier is unavailable.
+      console.error("Unable to calculate delivery fee estimate", estimateError);
+    } finally {
+      setDeliveryEstimateLoading(false);
+    }
+  };
 
   const resolveImageUrl = (path?: string) => {
     if (!path) return "";
@@ -500,12 +566,48 @@ export default function ReviewProductPage() {
               <h1 className="text-3xl font-bold text-gray-900">
                 Product Review
               </h1>
-              <p className="mt-1 text-sm text-gray-400">
-                Product ID:{" "}
-                <span className="font-bold text-[#852BAF]">
-                  #{product.productId}
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                <span className="text-gray-500">
+                  Product ID:{" "}
+                  <span className="font-bold text-[#852BAF]">
+                    #{product.productId}
+                  </span>
                 </span>
-              </p>
+                <span className="hidden h-4 w-px bg-gray-300 sm:block" />
+                <span
+                  className="inline-flex min-h-8 items-center gap-2 rounded-full border border-purple-100 bg-white/90 px-3 py-1 font-semibold text-gray-700 shadow-sm"
+                  title="Estimate for one unit of the first visible variant"
+                >
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-purple-50 text-[#852BAF]">
+                    {deliveryEstimateLoading ? (
+                      <FaSpinner className="animate-spin text-[10px]" />
+                    ) : (
+                      <FaTruck className="text-[10px]" />
+                    )}
+                  </span>
+                  {deliveryEstimateLoading ? (
+                    "Estimating delivery fee..."
+                  ) : deliveryEstimate ? (
+                    <>
+                      Estimated delivery fee:{" "}
+                      <span className="text-[#852BAF]">
+                        {new Intl.NumberFormat("en-IN", {
+                          style: "currency",
+                          currency: "INR",
+                          maximumFractionDigits: 2,
+                        }).format(deliveryEstimate.deliveryFee)}
+                      </span>
+                      <span className="font-normal text-gray-400">
+                        to {deliveryEstimate.destinationPincode}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="font-medium text-gray-400">
+                      Delivery estimate unavailable
+                    </span>
+                  )}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -643,8 +745,8 @@ export default function ReviewProductPage() {
               title="Product Variants"
               description="SKU-wise pricing, attributes and stock details"
             />
-            <div className="overflow-x-auto rounded-xl border border-gray-100">
-              <table className="min-w-full text-sm text-left">
+            <div className="w-full overflow-x-auto overscroll-x-contain rounded-xl border border-gray-100">
+              <table className="min-w-max text-sm text-left">
                 <thead
                   style={{
                     background:
@@ -653,12 +755,18 @@ export default function ReviewProductPage() {
                 >
                   <tr>
                     {[
+                      "Images",
                       "SKU",
                       "Attributes",
+                      "Weight",
+                      "Dimensions (L x B x H)",
+                      "Billable Weight",
                       "MRP",
                       "Sale Price",
                       "Stock",
                       "Visibility",
+                      "Manufacturing Date",
+                      "Expiry Date",
                     ].map((h) => (
                       <th
                         key={h}
@@ -675,6 +783,30 @@ export default function ReviewProductPage() {
                       key={variant.variant_id}
                       className="hover:bg-purple-50/30 transition-colors"
                     >
+                      <td className="px-4 py-3">
+                        {variant.images && variant.images.length > 0 ? (
+                          <div className="flex flex-nowrap gap-1.5 whitespace-nowrap">
+                            {variant.images.map((img, imgIndex) => (
+                              <div
+                                key={imgIndex}
+                                onClick={() =>
+                                  setLightboxImage(resolveImageUrl(img))
+                                }
+                                className="w-12 h-12 overflow-hidden border border-gray-200 rounded-lg cursor-pointer shrink-0"
+                              >
+                                <img
+                                  src={resolveImageUrl(img)}
+                                  alt={`${variant.sku} ${imgIndex + 1}`}
+                                  className="object-cover w-full h-full transition-transform hover:scale-110"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-300">—</span>
+                        )}
+                      </td>
+
                       <td className="px-4 py-3 font-bold text-gray-800 text-xs">
                         {variant.sku}
                       </td>
@@ -693,6 +825,22 @@ export default function ReviewProductPage() {
                               ),
                             )}
                         </div>
+                      </td>
+
+                      <td className="px-4 py-3 whitespace-nowrap text-gray-700">
+                        {Number(variant.weight) > 0 ? `${Number(variant.weight).toFixed(3)} kg` : "-"}
+                      </td>
+
+                      <td className="px-4 py-3 whitespace-nowrap text-gray-700">
+                        {Number(variant.length) > 0 && Number(variant.breadth) > 0 && Number(variant.height) > 0
+                          ? `${Number(variant.length)} x ${Number(variant.breadth)} x ${Number(variant.height)} cm`
+                          : "-"}
+                      </td>
+
+                      <td className="px-4 py-3 whitespace-nowrap font-bold text-[#852BAF]">
+                        {Number(variant.weight) > 0 && Number(variant.length) > 0 && Number(variant.breadth) > 0 && Number(variant.height) > 0
+                          ? `${Math.max(Number(variant.weight), (Number(variant.length) * Number(variant.breadth) * Number(variant.height)) / 5000).toFixed(3)} kg`
+                          : "-"}
                       </td>
 
                       <td className="px-4 py-3 text-gray-700">
@@ -717,6 +865,22 @@ export default function ReviewProductPage() {
                         >
                           {variant.is_visible ? "Visible" : "Hidden"}
                         </span>
+                      </td>
+
+                      <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                        {variant.manufacturing_date
+                          ? new Date(
+                              variant.manufacturing_date,
+                            ).toLocaleDateString("en-IN")
+                          : "—"}
+                      </td>
+
+                      <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                        {variant.expiry_date
+                          ? new Date(variant.expiry_date).toLocaleDateString(
+                              "en-IN",
+                            )
+                          : "—"}
                       </td>
                     </tr>
                   ))}
@@ -833,19 +997,24 @@ export default function ReviewProductPage() {
             description="Single cover image for product listing"
           />
           {coverImage ? (
-            <div className="relative w-36 h-36 overflow-hidden border border-gray-200 rounded-2xl group shadow-sm">
+            <div
+              onClick={() => setLightboxImage(resolveImageUrl(coverImage))}
+              className="relative w-36 h-36 overflow-hidden border border-gray-200 rounded-2xl group shadow-sm cursor-pointer"
+            >
               <img
                 src={resolveImageUrl(coverImage)}
                 alt="Cover Image"
-                className="object-cover w-full h-full"
+                className="object-cover w-full h-full transition-transform group-hover:scale-105"
               />
               <button
-                onClick={() =>
-                  downloadFile(resolveImageUrl(coverImage), "cover-image.jpg")
-                }
-                className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer rounded-2xl"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  downloadFile(resolveImageUrl(coverImage), "cover-image.jpg");
+                }}
+                title="Download"
+                className="absolute top-2 right-2 flex items-center justify-center w-8 h-8 text-white transition-opacity bg-black/50 rounded-full opacity-0 group-hover:opacity-100 cursor-pointer"
               >
-                <FaDownload className="text-white text-lg" />
+                <FaDownload className="text-xs" />
               </button>
             </div>
           ) : (
@@ -968,6 +1137,13 @@ export default function ReviewProductPage() {
           </div>
         </div>
       </div>
+
+      {lightboxImage && (
+        <ImageLightbox
+          src={lightboxImage}
+          onClose={() => setLightboxImage(null)}
+        />
+      )}
     </div>
   );
 }

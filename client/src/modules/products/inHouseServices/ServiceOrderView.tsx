@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../../../common/api/api";
+import { FiCheck, FiFileText, FiX } from "react-icons/fi";
+import Swal from "sweetalert2";
 
 interface Customer {
   name: string;
@@ -30,6 +32,7 @@ interface ServiceItem {
   image_url: string | null;
   price: number;
   status: string;
+  timeline: Array<{ status: string; completed: boolean }>;
 }
 
 interface Bundle {
@@ -68,6 +71,46 @@ interface ApiResponse {
   data: ServiceOrderDetails;
 }
 
+const ServiceItemTimeline = ({ timeline = [] }: { timeline?: ServiceItem["timeline"] }) => (
+  <div className="min-w-[280px] py-1">
+    <div className="grid" style={{ gridTemplateColumns: `repeat(${Math.max(timeline.length, 1)}, minmax(0, 1fr))` }}>
+      {timeline.map((step, index) => {
+        const cancelled = step.status.toLowerCase().includes("cancelled");
+        return <div key={step.status} className="relative flex flex-col items-center text-center">
+          <span className={`absolute left-0 right-0 top-3 h-0.5 ${index === 0 ? "left-1/2" : ""} ${index === timeline.length - 1 ? "right-1/2" : ""} ${cancelled ? "bg-red-300" : step.completed ? "bg-gradient-to-r from-[#852BAF] to-[#FC3F78]" : "bg-slate-200"}`} />
+          <span className={`relative z-10 grid h-6 w-6 place-items-center rounded-full border-2 border-white text-[10px] shadow-sm ${cancelled ? "bg-red-500 text-white" : step.completed ? "bg-gradient-to-br from-[#852BAF] to-[#FC3F78] text-white" : "bg-slate-200 text-slate-400"}`}>{cancelled ? <FiX /> : step.completed ? <FiCheck /> : index + 1}</span>
+          <span className={`mt-2 max-w-20 whitespace-normal text-[9px] font-bold leading-3 ${cancelled ? "text-red-600" : step.completed ? "text-slate-700" : "text-slate-400"}`}>{step.status}</span>
+        </div>;
+      })}
+    </div>
+  </div>
+);
+
+const updatedTimeline = (current: ServiceItem["timeline"], status: string) => {
+  const confirmed = current?.find((step) => step.status === "Order Confirmed")?.completed ?? true;
+  if (status === "cancelled") return [{ status: "Order Confirmed", completed: confirmed }, { status: "Order Cancelled", completed: true }];
+  return [
+    { status: "Order Confirmed", completed: confirmed },
+    { status: "Documents Submitted", completed: ["documents_uploaded", "in_progress", "completed"].includes(status) },
+    { status: "In Progress", completed: ["in_progress", "completed"].includes(status) },
+    { status: "Completed", completed: status === "completed" },
+  ];
+};
+
+const canCancelService = (item: ServiceItem) =>
+  ["documents_pending", "documents_uploaded", "in_progress"].includes(item.status) &&
+  item.timeline?.find((step) => step.status === "Order Confirmed")?.completed === true;
+
+const getParentStatus = (items: ServiceItem[], bundles: Bundle[]) => {
+  const statuses = [...items, ...bundles.flatMap((bundle) => bundle.items)].map((item) => item.status);
+  if (statuses.length > 0 && statuses.every((status) => status === "cancelled")) return "cancelled";
+  if (statuses.some((status) => status === "completed") && statuses.every((status) => ["completed", "cancelled"].includes(status))) return "completed";
+  if (statuses.some((status) => status === "in_progress")) return "in_progress";
+  if (statuses.some((status) => status === "documents_uploaded")) return "documents_uploaded";
+  if (statuses.some((status) => status === "documents_pending")) return "documents_pending";
+  return "pending_payment";
+};
+
 const ServiceOrderView: React.FC = () => {
   const { parentOrderId } = useParams();
   const navigate = useNavigate();
@@ -79,15 +122,11 @@ const ServiceOrderView: React.FC = () => {
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
   const STATUS_OPTIONS = [
-    "pending_payment",
-    "documents_pending",
-    "documents_uploaded",
     "in_progress",
     "completed",
-    "cancelled",
   ];
 
-  const fetchOrder = async () => {
+  const fetchOrder = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -107,13 +146,13 @@ const ServiceOrderView: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [parentOrderId]);
 
   useEffect(() => {
     if (parentOrderId) {
       fetchOrder();
     }
-  }, [parentOrderId]);
+  }, [fetchOrder, parentOrderId]);
 
   const updateServiceStatus = async (serviceId: number, status: string) => {
     try {
@@ -127,12 +166,13 @@ const ServiceOrderView: React.FC = () => {
         if (!prev) return prev;
 
         const updatedItems = prev.items.map((item) =>
-          item.id === serviceId ? { ...item, status } : item,
+          item.id === serviceId ? { ...item, status, timeline: updatedTimeline(item.timeline, status) } : item,
         );
 
         return {
           ...prev,
           items: updatedItems,
+          status: getParentStatus(updatedItems, prev.bundles),
         };
       });
     } catch (err) {
@@ -144,34 +184,43 @@ const ServiceOrderView: React.FC = () => {
   };
 
   const cancelService = async (serviceId: number) => {
-    const confirmCancel = window.confirm(
-      "Are you sure you want to cancel this service?",
-    );
-
-    if (!confirmCancel) return;
-
     try {
-      setUpdatingStatus(true);
+      const commentResult = await Swal.fire({
+        title: "Cancel this service?",
+        text: "The refund and reward reversal workflow will start after confirmation.",
+        input: "textarea",
+        inputLabel: "Admin note",
+        inputPlaceholder: "Explain why this service is being cancelled...",
+        showCancelButton: true,
+        confirmButtonText: "Cancel service",
+        confirmButtonColor: "#dc2626",
+        icon: "warning",
+        inputValidator: (value) => String(value || "").trim() ? undefined : "Please enter an admin note",
+      });
+      if (!commentResult.isConfirmed) return;
 
-      await api.put(`/v1/service-orders/status/${serviceId}`, {
-        status: "cancelled",
+      setUpdatingStatus(true);
+      await api.post(`/order/cancel-service/${serviceId}`, {
+        comment: String(commentResult.value || "").trim(),
       });
 
       setData((prev) => {
         if (!prev) return prev;
 
         const updatedItems = prev.items.map((item) =>
-          item.id === serviceId ? { ...item, status: "cancelled" } : item,
+          item.id === serviceId ? { ...item, status: "cancelled", timeline: updatedTimeline(item.timeline, "cancelled") } : item,
         );
 
         return {
           ...prev,
           items: updatedItems,
+          status: getParentStatus(updatedItems, prev.bundles),
         };
       });
+      await Swal.fire({ icon: "success", title: "Service cancelled", text: "The cancellation was recorded and the refund workflow has started.", confirmButtonColor: "#852BAF" });
     } catch (err) {
       console.error(err);
-      alert("Failed to cancel service");
+      await Swal.fire({ icon: "error", title: "Cancellation failed", text: "The service could not be cancelled. It may not be eligible at this stage.", confirmButtonColor: "#852BAF" });
     } finally {
       setUpdatingStatus(false);
     }
@@ -204,11 +253,11 @@ const ServiceOrderView: React.FC = () => {
   };
 
   if (loading) {
-    return <div className="p-6">Loading service order...</div>;
+    return <div className="grid min-h-[65vh] place-items-center bg-gradient-to-br from-[#fdf8ff] via-white to-[#fff5f8]"><span className="flex flex-col items-center gap-3 text-sm font-bold text-[#852BAF]"><span className="h-9 w-9 animate-spin rounded-full border-4 border-purple-100 border-t-[#852BAF]" />Loading service order...</span></div>;
   }
 
   if (error) {
-    return <div className="p-6 text-red-500">{error}</div>;
+    return <div className="grid min-h-[65vh] place-items-center bg-gradient-to-br from-[#fdf8ff] via-white to-[#fff5f8] p-6 text-center"><div><div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-red-50 text-red-500"><FiFileText size={24} /></div><h2 className="mt-4 text-xl font-extrabold text-slate-900">Order unavailable</h2><p className="mt-1 text-sm text-slate-500">{error}</p><button onClick={() => navigate(-1)} className="mt-5 rounded-xl bg-[#852BAF] px-5 py-2.5 text-sm font-bold text-white">Return to orders</button></div></div>;
   }
 
   if (!data) {
@@ -217,28 +266,28 @@ const ServiceOrderView: React.FC = () => {
 
   return (
     <div
-      className="min-h-screen p-6 md:p-10"
+      className="min-h-screen bg-gradient-to-br from-[#fdf8ff] via-white to-[#fff5f8] p-4 sm:p-6 lg:p-8"
       style={{
         background:
           "linear-gradient(160deg, #fdf8ff 0%, #fff5f8 50%, #f8f9ff 100%)",
       }}
     >
       {/* HEADER */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="relative mb-6 flex items-center justify-between overflow-hidden rounded-3xl bg-gradient-to-br from-[#25103d] via-[#68258d] to-[#c33076] p-6 text-white shadow-[0_24px_65px_rgba(91,33,124,0.24)] sm:p-8">
         <button
           onClick={() => navigate(-1)}
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-semibold bg-gradient-to-r from-[#852BAF] to-[#FC3F78] shadow-lg hover:scale-[1.03] active:scale-95 transition cursor-pointer"
+          className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-white/20"
         >
           ← Back
         </button>
 
-        <h2 className="text-2xl md:text-3xl font-bold text-gray-900">
+        <h2 className="text-2xl font-extrabold text-white md:text-3xl">
           Service Order
         </h2>
       </div>
 
       {/* ORDER SUMMARY */}
-      <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm mb-5">
+      <div className="mb-5 rounded-3xl border border-purple-100 bg-white p-6 shadow-[0_18px_55px_rgba(67,31,91,0.08)]">
         <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">
           Order Summary
         </h3>
@@ -281,7 +330,7 @@ const ServiceOrderView: React.FC = () => {
       </div>
 
       {/* CUSTOMER */}
-      <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm mb-5">
+      <div className="mb-5 rounded-3xl border border-purple-100 bg-white p-6 shadow-[0_18px_55px_rgba(67,31,91,0.08)]">
         <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">
           Customer Details
         </h3>
@@ -315,7 +364,7 @@ const ServiceOrderView: React.FC = () => {
 
       {/* ADDRESS */}
       {data.address && (
-        <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm mb-5">
+        <div className="mb-5 rounded-3xl border border-purple-100 bg-white p-6 shadow-[0_18px_55px_rgba(67,31,91,0.08)]">
           <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">
             Service Address
           </h3>
@@ -345,7 +394,7 @@ const ServiceOrderView: React.FC = () => {
       )}
 
       {/* CUSTOMER DOCUMENTS */}
-      <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm mb-5">
+      <div className="mb-5 rounded-3xl border border-purple-100 bg-white p-6 shadow-[0_18px_55px_rgba(67,31,91,0.08)]">
         <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">
           Customer Documents
         </h3>
@@ -422,7 +471,7 @@ const ServiceOrderView: React.FC = () => {
       </div>
 
       {/* SERVICE ITEMS */}
-      <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm mb-5">
+      <div className="mb-5 rounded-3xl border border-purple-100 bg-white p-6 shadow-[0_18px_55px_rgba(67,31,91,0.08)]">
         <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-5">
           Service Items
         </h3>
@@ -440,6 +489,7 @@ const ServiceOrderView: React.FC = () => {
                   "Service",
                   "Variant",
                   "Price",
+                  "Timeline",
                   "Status / Actions",
                 ].map((h) => (
                   <th
@@ -484,9 +534,16 @@ const ServiceOrderView: React.FC = () => {
                   </td>
 
                   <td className="px-4 py-3">
+                    <ServiceItemTimeline timeline={item.timeline} />
+                  </td>
+
+                  <td className="px-4 py-3">
                     <div className="flex flex-col gap-2">
+                      <span className={getStatusBadge(item.status)}>
+                        {item.status.replaceAll("_", " ")}
+                      </span>
                       <select
-                        value={item.status}
+                        value=""
                         disabled={
                           item.status === "completed" ||
                           item.status === "cancelled" ||
@@ -497,6 +554,9 @@ const ServiceOrderView: React.FC = () => {
                         }
                         className="px-3 py-2 text-sm border border-gray-300 rounded-lg"
                       >
+                        <option value="" disabled>
+                          Choose action
+                        </option>
                         {STATUS_OPTIONS.map((status) => (
                           <option key={status} value={status}>
                             {status.replaceAll("_", " ")}
@@ -504,13 +564,14 @@ const ServiceOrderView: React.FC = () => {
                         ))}
                       </select>
 
-                      {item.status !== "completed" &&
-                        item.status !== "cancelled" && (
+                      {item.status !== "cancelled" && (
                           <button
                             onClick={() => cancelService(item.id)}
-                            className="px-3 py-1 text-xs font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 cursor-pointer"
+                            disabled={!canCancelService(item) || updatingStatus}
+                            title={!canCancelService(item) ? "Cancellation is unavailable at this stage" : "Cancel this service"}
+                            className="px-3 py-1 text-xs font-semibold text-red-600 border border-red-200 rounded-lg hover:bg-red-50 cursor-pointer disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400"
                           >
-                            Cancel Service
+                            {canCancelService(item) ? "Cancel Service" : "Cancellation unavailable"}
                           </button>
                         )}
                     </div>
@@ -524,7 +585,7 @@ const ServiceOrderView: React.FC = () => {
 
       {/* BUNDLES */}
       {data.bundles.length > 0 && (
-        <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm mb-5">
+        <div className="mb-5 rounded-3xl border border-purple-100 bg-white p-6 shadow-[0_18px_55px_rgba(67,31,91,0.08)]">
           <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">
             Bundles
           </h3>
@@ -537,10 +598,10 @@ const ServiceOrderView: React.FC = () => {
 
               <div className="space-y-2">
                 {bundle.items.map((item) => (
-                  <div key={item.id} className="flex justify-between text-sm">
-                    <span>{item.service_name}</span>
-
-                    <span>{formatCurrency(item.price)}</span>
+                  <div key={item.id} className="grid items-center gap-4 rounded-xl bg-slate-50 p-3 text-sm md:grid-cols-[1fr_300px_auto]">
+                    <div><span className="font-semibold text-slate-700">{item.service_name}</span><div className="mt-2"><span className={getStatusBadge(item.status)}>{item.status.replaceAll("_", " ")}</span></div></div>
+                    <ServiceItemTimeline timeline={item.timeline} />
+                    <span className="font-bold text-[#852BAF]">{formatCurrency(item.price)}</span>
                   </div>
                 ))}
               </div>
@@ -554,7 +615,7 @@ const ServiceOrderView: React.FC = () => {
       )}
 
       {/* TOTAL */}
-      <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
+      <div className="rounded-3xl border border-purple-100 bg-gradient-to-r from-white to-purple-50 p-6 shadow-[0_18px_55px_rgba(67,31,91,0.08)]">
         <div className="flex justify-between items-center">
           <span className="text-lg font-semibold text-gray-700">
             Grand Total

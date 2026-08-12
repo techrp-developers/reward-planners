@@ -925,6 +925,7 @@ class ProductController {
         AND p.is_deleted = 0
         AND p.is_visible = 1
         AND p.is_searchable = 1
+        AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
 
       GROUP BY rv.product_id
       ORDER BY rv.viewed_at DESC

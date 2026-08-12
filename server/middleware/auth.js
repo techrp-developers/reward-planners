@@ -1,10 +1,13 @@
 // middleware/auth.js
 const { verifyToken } = require("../utils/jwt");
 const db = require("../config/database");
+const { ACCESS_COOKIE, parseCookies, isCsrfValid } = require("../utils/authSession");
 
 exports.authenticateToken = async (req, res, next) => {
   const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1]; // Bearer TOKEN
+  const bearerToken = authHeader && authHeader.split(" ")[1];
+  const cookieToken = parseCookies(req)[ACCESS_COOKIE];
+  const token = cookieToken || bearerToken;
 
   if (!token) {
     return res.status(401).json({
@@ -15,6 +18,11 @@ exports.authenticateToken = async (req, res, next) => {
 
   try {
     const decoded = verifyToken(token);
+    if (decoded.type && decoded.type !== "access") throw new Error("Invalid token type");
+
+    if (cookieToken && !["GET", "HEAD", "OPTIONS"].includes(req.method) && !isCsrfValid(req)) {
+      return res.status(403).json({ success: false, code: "CSRF_INVALID", message: "Invalid security token" });
+    }
 
     const [[user]] = await db.execute(
       `SELECT user_id, email, role, is_verified
@@ -92,9 +100,11 @@ exports.authenticateToken = async (req, res, next) => {
     next();
   } catch (err) {
     console.error("Token verification error:", err);
-    return res.status(403).json({
+    const expired = err?.name === "TokenExpiredError";
+    return res.status(expired ? 401 : 403).json({
       success: false,
-      message: "Invalid or expired token",
+      code: expired ? "ACCESS_TOKEN_EXPIRED" : "ACCESS_TOKEN_INVALID",
+      message: expired ? "Access token expired" : "Invalid access token",
     });
   }
 };

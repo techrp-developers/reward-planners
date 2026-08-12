@@ -134,6 +134,34 @@ class OrderController {
     }
   }
 
+  // Get vendor order stats (total orders excl. cancelled + total revenue)
+  async getOrderStats(req, res) {
+    try {
+      const vendorId = req.user?.vendor_id;
+
+      if (!vendorId) {
+        return res.status(404).json({
+          success: false,
+          message: "Vendor ID is required",
+        });
+      }
+
+      const stats = await orderModel.getVendorOrderStats(vendorId);
+
+      return res.json({
+        success: true,
+        stats,
+      });
+    } catch (error) {
+      console.error("Vendor order stats error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Unable to fetch order stats",
+      });
+    }
+  }
+
   // view vendor Order Details
   async viewVendorOrderDetails(req, res) {
     try {
@@ -715,6 +743,93 @@ class OrderController {
         success: false,
         message: mapped.message,
       });
+    } finally {
+      conn.release();
+    }
+  }
+
+  // Vendor-manager initiated cancellation. This creates the same cancellation
+  // request/timeline records as the customer flow, then approves it through the
+  // shared refund and wallet-reversal implementation in one transaction.
+  async cancelServiceAsManager(req, res) {
+    const conn = await db.getConnection();
+    let refundData;
+    try {
+      const serviceOrderId = Number(req.params.serviceOrderId);
+      const comment = String(req.body.comment || "").trim() || null;
+      if (!Number.isInteger(serviceOrderId) || serviceOrderId <= 0 || !comment) {
+        return res.status(400).json({ success: false, message: "Service order and admin note are required" });
+      }
+
+      await conn.beginTransaction();
+      const [[order]] = await conn.execute(
+        `SELECT id, user_id, status, payment_status
+         FROM service_orders WHERE id = ? FOR UPDATE`,
+        [serviceOrderId],
+      );
+      if (!order) throw new Error("SERVICE_ORDER_NOT_FOUND");
+      if (!["documents_pending", "documents_uploaded", "in_progress"].includes(order.status)) throw new Error("ORDER_NOT_CANCELLABLE");
+      if (order.payment_status !== "paid") throw new Error("ORDER_NOT_PAID");
+
+      // Manager cancellations use the generic active reason internally; the
+      // manager's note remains the meaningful audit explanation.
+      const [[reason]] = await conn.execute(
+        `SELECT reason_id FROM order_cancellation_reasons
+         WHERE is_active = 1
+         ORDER BY CASE WHEN reason_text LIKE 'My reason%' THEN 0 ELSE 1 END,
+                  sort_order DESC, reason_id DESC
+         LIMIT 1`,
+      );
+      if (!reason) throw new Error("INVALID_CANCELLATION_REASON");
+
+      const [[existing]] = await conn.execute(
+        `SELECT status FROM service_order_cancellations WHERE service_order_id = ? FOR UPDATE`,
+        [serviceOrderId],
+      );
+      if (!existing) {
+        await conn.execute(
+          `INSERT INTO service_order_cancellations
+           (service_order_id, user_id, reason_id, comment, status, refund_status)
+           VALUES (?, ?, ?, ?, 'requested', 'pending')`,
+          [serviceOrderId, order.user_id, reason.reason_id, comment],
+        );
+        await conn.execute(
+          `INSERT INTO service_order_cancellation_timeline (service_order_id, event)
+           VALUES (?, 'cancellation_requested')`,
+          [serviceOrderId],
+        );
+      } else if (existing.status !== "requested") {
+        throw new Error("INVALID_CANCELLATION_STATE");
+      }
+
+      refundData = await ServiceOrderModel.approveCancellation(serviceOrderId, conn);
+      await conn.commit();
+
+      notifyUser({
+        userId: refundData.user_id,
+        module: "service",
+        type: "service_cancellation_approved",
+        title: "Service cancelled",
+        message: refundData.refund_status === "completed"
+          ? "Your service was cancelled and your refund is complete."
+          : "Your service was cancelled and your refund has been initiated.",
+        icon: "x-circle",
+        reference_type: "service_order",
+        reference_id: serviceOrderId,
+        action_url: `/service-orders/${serviceOrderId}`,
+      }, "manager service cancellation notification");
+
+      if (refundData.payment_id && refundData.amount > 0) {
+        ServiceOrderModel.processRefund(refundData).catch((error) => {
+          console.error(`[cancelServiceAsManager] Refund failed for service_order_id=${serviceOrderId}:`, error.message);
+        });
+      }
+      return res.json({ success: true, message: "Service cancelled and refund processing started", data: { status: "cancelled", refund_status: refundData.refund_status } });
+    } catch (error) {
+      await conn.rollback();
+      const mapped = getServiceCancellationError(error);
+      const status = error.message === "SERVICE_ORDER_NOT_FOUND" ? 404 : error.message === "INVALID_CANCELLATION_REASON" ? 400 : mapped.status;
+      return res.status(status).json({ success: false, message: error.message === "INVALID_CANCELLATION_REASON" ? "Invalid cancellation reason" : mapped.message });
     } finally {
       conn.release();
     }

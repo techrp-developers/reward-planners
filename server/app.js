@@ -104,6 +104,7 @@ app.use(
       "X-Location-Id",
       "X-Session-Token",
       "Idempotency-Key",
+      "X-CSRF-Token",
     ],
   }),
 );
@@ -164,7 +165,7 @@ app.use("/mps", mpsRoute);
 
 // Flea Market Routes
 app.use(
-  "/api/flea-market",
+  "/",
   (req, res, next) => {
     // API responses (especially deployment-time 404s) must never be cached by
     // Cloudflare, otherwise a newly deployed route can keep appearing missing.
@@ -206,7 +207,7 @@ app.listen(PORT, () => {
   console.log("Reward Planners Backend Started!");
   console.log(`🔗 Server URL: http://localhost:${PORT}`);
   console.log(`Swagger docs at http://localhost:${PORT}/api-docs`);
-  console.log(`Flea Market API ready at http://localhost:${PORT}/api/flea-market`);
+  console.log(`Flea Market API ready at http://localhost:${PORT}`);
   console.log("CORS allowed origins (parsed):", allowedOrigins);
   console.log("=================================\n");
 

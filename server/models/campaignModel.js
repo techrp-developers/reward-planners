@@ -317,6 +317,7 @@ class CampaignModel {
       WHERE
         ep.status = 'approved'
         AND ep.is_visible = 1
+        AND COALESCE(ep.created_via, '') != 'flea_market_quick_create'
         AND pv.is_visible = 1
         AND pv.stock > 0
 

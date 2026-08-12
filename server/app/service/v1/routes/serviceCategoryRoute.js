@@ -14,7 +14,7 @@ router.get("/all-categories", ServiceCategoryController.getCategories);
 router.post(
   "/create-category",
   authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
+  authorizeRoles("vendor_manager", "service_manager", "admin"),
   upload.single("icon"),
   ServiceCategoryController.createCategory,
 );
@@ -26,7 +26,7 @@ router.get("/find/:id", ServiceCategoryController.getCategoryById);
 router.put(
   "/update/:id",
   authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
+  authorizeRoles("vendor_manager", "service_manager", "admin"),
   upload.single("icon"),
   ServiceCategoryController.updateCategory,
 );
@@ -35,7 +35,7 @@ router.put(
 router.delete(
   "/remove/:id",
   authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
+  authorizeRoles("vendor_manager", "service_manager", "admin"),
   ServiceCategoryController.deleteCategory,
 );
 

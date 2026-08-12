@@ -385,12 +385,13 @@ class authModel {
   //   );
   // }
 
-  async updateFcmToken(userId, fcmToken) {
+  async updateFcmToken(userId, fcmToken, devicePlatform = null) {
     await db.execute(
       `UPDATE customer
-     SET fcm_token = ?
+     SET fcm_token = ?,
+         device_platform = COALESCE(?, device_platform)
      WHERE user_id = ?`,
-      [fcmToken, userId],
+      [fcmToken, devicePlatform, userId],
     );
   }
 

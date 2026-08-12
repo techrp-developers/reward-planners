@@ -91,6 +91,7 @@ class CheckoutModel {
         JOIN eproducts p ON v.product_id = p.product_id
 
         WHERE ci.user_id = ?
+          AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
         `,
         [userId],
       );
@@ -571,6 +572,7 @@ class CheckoutModel {
       JOIN eproducts p ON v.product_id = p.product_id
 
       WHERE v.variant_id = ? AND v.product_id = ?
+        AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
       `,
         [variantId, productId],
       );
@@ -915,6 +917,7 @@ class CheckoutModel {
     LEFT JOIN product_images pi ON p.product_id = pi.product_id
 
     WHERE ci.user_id = ?
+      AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
     GROUP BY ci.cart_item_id
     `,
       [userId],
@@ -1245,6 +1248,7 @@ class CheckoutModel {
       ON p.product_id = pi.product_id
 
     WHERE v.variant_id = ? AND p.product_id = ?
+      AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
     GROUP BY v.variant_id
     `,
       [variantId, productId],

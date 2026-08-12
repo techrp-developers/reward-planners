@@ -248,6 +248,15 @@ class CategoryController {
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Template");
 
+      const metaSheet = XLSX.utils.aoa_to_sheet([
+        ["key", "value"],
+        ["categoryId", categoryId],
+        ["subcategoryId", subcategoryId],
+        ["templateVersion", 2],
+      ]);
+      XLSX.utils.book_append_sheet(wb, metaSheet, "_meta");
+      wb.Workbook = { Sheets: [{ Hidden: 0 }, { Hidden: 2 }] };
+
       const buffer = XLSX.write(wb, {
         type: "buffer",
         bookType: "xlsx",

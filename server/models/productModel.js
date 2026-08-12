@@ -211,6 +211,7 @@ class ProductModel {
   SELECT attribute_key
   FROM category_attributes
   WHERE is_variant = 1
+    AND is_active = 1
     AND (
       subcategory_id = ?
       OR (category_id = ? AND subcategory_id IS NULL)
@@ -344,7 +345,7 @@ class ProductModel {
     const variantAttributes = {};
     variantKeys.forEach((k) => {
       if (Array.isArray(allAttributes[k])) {
-        const normalized = normalize(allAttributes[k]);
+        const normalized = [...new Set(normalize(allAttributes[k]))];
         if (normalized.length) {
           variantAttributes[k] = normalized;
         }
@@ -354,6 +355,9 @@ class ProductModel {
     // CASE 1: Real variant combinations
     if (Object.keys(variantAttributes).length) {
       const combinations = generateCombinations(variantAttributes);
+      if (combinations.length > 100) {
+        throw new Error(`Too many variant combinations (${combinations.length}). Reduce the selected options to 100 combinations or fewer.`);
+      }
 
       for (const combo of combinations) {
         const comboJson = JSON.stringify(combo);
@@ -544,6 +548,10 @@ class ProductModel {
         v.mrp,
         v.sale_price,
         v.stock,
+        v.weight,
+        v.length,
+        v.breadth,
+        v.height,
         v.is_visible,
         v.variant_attributes,
         v.manufacturing_date,
@@ -556,12 +564,33 @@ class ProductModel {
         [productId],
       );
 
+      const variantIds = variants.map((v) => v.variant_id);
+      let variantImagesByVariant = {};
+
+      if (variantIds.length) {
+        const placeholders = variantIds.map(() => "?").join(",");
+        const [variantImages] = await db.execute(
+          `SELECT variant_id, image_url
+           FROM product_variant_images
+           WHERE variant_id IN (${placeholders})
+           ORDER BY sort_order ASC`,
+          variantIds,
+        );
+
+        variantImagesByVariant = variantImages.reduce((acc, row) => {
+          if (!acc[row.variant_id]) acc[row.variant_id] = [];
+          acc[row.variant_id].push(row.image_url);
+          return acc;
+        }, {});
+      }
+
       product.variants = variants.map((v) => ({
         ...v,
         variant_attributes:
           typeof v.variant_attributes === "string"
             ? JSON.parse(v.variant_attributes)
             : v.variant_attributes,
+        images: variantImagesByVariant[v.variant_id] || [],
       }));
 
       return product;
@@ -972,10 +1001,17 @@ class ProductModel {
     role,
     vendorId,
     brand,
+    productType,
   }) {
     try {
       const conditions = ["p.is_deleted = 0"];
       const params = [];
+
+      if (productType === "flea_market") {
+        conditions.push("p.created_via = 'flea_market_quick_create'");
+      } else {
+        conditions.push("COALESCE(p.created_via, '') != 'flea_market_quick_create'");
+      }
 
       if (status) {
         conditions.push("p.status = ?");
@@ -1107,7 +1143,7 @@ class ProductModel {
   }
 
   // Download product Report
-  async getReportData({ vendorId, fromDate, toDate }) {
+  async getReportData({ vendorId, fromDate, toDate, brand, status }) {
     try {
       const conditions = ["p.is_deleted = 0"];
       const params = [];
@@ -1122,6 +1158,16 @@ class ProductModel {
         params.push(fromDate, toDate);
       }
 
+      if (brand) {
+        conditions.push("p.brand_name LIKE ?");
+        params.push(`%${brand}%`);
+      }
+
+      if (status) {
+        conditions.push("p.status = ?");
+        params.push(status);
+      }
+
       const whereClause = `WHERE ${conditions.join(" AND ")}`;
 
       const query = `
@@ -1130,10 +1176,14 @@ class ProductModel {
         p.product_name,
         v.full_name AS vendor_name,
         p.brand_name,
+        COALESCE(c.category_name, p.custom_category) AS category_name,
+        COALESCE(sc.subcategory_name, p.custom_subcategory) AS subcategory_name,
         p.status,
         p.created_at
       FROM eproducts p
       LEFT JOIN vendors v ON p.vendor_id = v.vendor_id
+      LEFT JOIN categories c ON p.category_id = c.category_id
+      LEFT JOIN sub_categories sc ON p.subcategory_id = sc.subcategory_id
       ${whereClause}
       ORDER BY p.created_at DESC
     `;
@@ -1149,7 +1199,7 @@ class ProductModel {
   // Get all products for a specific vendor
   async getProductsByVendor(
     vendorId,
-    { search, status, sortBy, sortOrder, limit, offset },
+    { search, status, brand, sortBy, sortOrder, limit, offset },
   ) {
     try {
       let where = `WHERE p.vendor_id = ? AND p.is_deleted = 0`;
@@ -1163,6 +1213,11 @@ class ProductModel {
       if (search) {
         where += ` AND p.product_name LIKE ?`;
         params.push(`%${search}%`);
+      }
+
+      if (brand) {
+        where += ` AND p.brand_name LIKE ?`;
+        params.push(`%${brand}%`);
       }
 
       const sortableColumns = ["created_at", "product_name", "brand_name"];
