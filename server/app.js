@@ -111,6 +111,20 @@ app.use(
 
 app.use(morgan("dev"));
 
+// Every response produced by this application is dynamic API data. Never let
+// a browser, reverse proxy, or CDN reuse one user's authenticated response for
+// another request. Static frontend assets are served by the web server, not by
+// this Express application.
+app.use((req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("CDN-Cache-Control", "no-store");
+  res.setHeader("Cloudflare-CDN-Cache-Control", "no-store");
+  res.setHeader("Surrogate-Control", "no-store");
+  next();
+});
+
 // webhook use
 app.post(
   "/payment/webhook",

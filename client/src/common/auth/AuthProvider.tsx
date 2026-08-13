@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { AxiosError } from "axios";
@@ -28,6 +28,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(false);
   const [initializing, setInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Any explicit auth action invalidates older /auth/me requests. Without
+  // this guard a slow response for the previous account can arrive after a
+  // successful login and replace the newly authenticated user in React state.
+  const authGeneration = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -35,14 +39,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     const restoreSession = async () => {
+      const generation = authGeneration.current;
       try {
         const { data } = await api.get("/auth/me", {
           headers: { "Cache-Control": "no-cache" },
           params: { _session: Date.now() },
         });
-        if (active && data?.success) setUser(data.data);
+        if (active && generation === authGeneration.current && data?.success) {
+          setUser(data.data);
+        }
       } catch {
-        if (active) setUser(null);
+        if (active && generation === authGeneration.current) setUser(null);
       } finally {
         if (active) setInitializing(false);
       }
@@ -70,6 +77,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const expireSession = () => {
+      authGeneration.current += 1;
       setUser(null);
       const path = window.location.pathname.replace(/^\/crm(?=\/|$)/, "") || "/";
       const publicAuthPaths = new Set([
@@ -148,6 +156,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 };
   const login = async (email: string, password: string) => {
     setError(null);
+    authGeneration.current += 1;
     // Never allow a previous account's role to influence a new login attempt.
     setUser(null);
 
@@ -305,6 +314,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = async () => {
+    authGeneration.current += 1;
     try { await api.post("/auth/logout"); } catch { /* Clear local UI state even if the server is unavailable. */ }
     setUser(null);
     navigate("/login");
