@@ -8,6 +8,8 @@ type RetryableConfig = InternalAxiosRequestConfig & { _sessionRetry?: boolean };
 const readCookie = (name: string) =>
   document.cookie.split(";").map((value) => value.trim()).find((value) => value.startsWith(`${name}=`))?.slice(name.length + 1);
 
+const readCsrfCookie = () => readCookie("rp_csrf_v2") || readCookie("rp_csrf") || "";
+
 export const api = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
@@ -15,7 +17,7 @@ export const api = axios.create({
 
 api.interceptors.request.use((config) => {
   if (!["get", "head", "options"].includes((config.method || "get").toLowerCase())) {
-    const csrfToken = readCookie("rp_csrf");
+    const csrfToken = readCsrfCookie();
     if (csrfToken) config.headers["X-CSRF-Token"] = decodeURIComponent(csrfToken);
   }
   return config;
@@ -35,7 +37,7 @@ api.interceptors.response.use(
     try {
       refreshRequest ||= axios.post(`${API_BASE_URL}/auth/refresh`, null, {
         withCredentials: true,
-        headers: { "X-CSRF-Token": decodeURIComponent(readCookie("rp_csrf") || "") },
+        headers: { "X-CSRF-Token": decodeURIComponent(readCsrfCookie()) },
       }).then(() => undefined).finally(() => { refreshRequest = null; });
       await refreshRequest;
       return api(config);

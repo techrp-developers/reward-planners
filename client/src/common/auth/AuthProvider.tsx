@@ -36,7 +36,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     localStorage.removeItem("user");
     const restoreSession = async () => {
       try {
-        const { data } = await api.get("/auth/me");
+        const { data } = await api.get("/auth/me", {
+          headers: { "Cache-Control": "no-cache" },
+          params: { _session: Date.now() },
+        });
         if (active && data?.success) setUser(data.data);
       } catch {
         if (active) setUser(null);
@@ -62,6 +65,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setInitializing(false);
     } else void restoreSession();
 
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
     const expireSession = () => {
       setUser(null);
       const path = window.location.pathname.replace(/^\/crm(?=\/|$)/, "") || "/";
@@ -75,7 +82,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (!publicAuthPaths.has(path)) navigate("/login", { replace: true });
     };
     window.addEventListener("auth:session-expired", expireSession);
-    return () => { active = false; window.removeEventListener("auth:session-expired", expireSession); };
+    return () => { window.removeEventListener("auth:session-expired", expireSession); };
   }, [navigate]);
 
   const resolveRoute = (role: User["role"]) => {
@@ -141,6 +148,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 };
   const login = async (email: string, password: string) => {
     setError(null);
+    // Never allow a previous account's role to influence a new login attempt.
+    setUser(null);
 
     try {
       setLoading(true);
@@ -157,10 +166,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         throw new Error(data?.message || "Login failed");
       }
 
-      const { user } = data.data;
-      setUser(user);
+      const rawLoginUser = data.data?.user as User | undefined;
+      const normalizedRole = String(rawLoginUser?.role || "").trim().toLowerCase() as User["role"];
+      const loginUser = rawLoginUser ? { ...rawLoginUser, role: normalizedRole } : undefined;
+      if (!loginUser) throw new Error("The server did not return the signed-in user.");
 
-      navigate(resolveDashboard(user.role), { replace: true });
+      const dashboard = resolveDashboard(loginUser.role);
+      if (dashboard === "/") {
+        throw new Error(`No portal is configured for the account role: ${loginUser.role || "unknown"}.`);
+      }
+
+      // The login response is authoritative. Session restoration through
+      // /auth/me remains responsible for refreshes and future page loads.
+      setUser(loginUser);
+
+      navigate(dashboard, { replace: true });
     } catch (err: unknown) {
       if (err instanceof AxiosError) {
         const code = err.response?.data?.code;
@@ -181,6 +201,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } else {
         setError("Login failed");
       }
+      throw err;
     } finally {
       setLoading(false);
     }

@@ -26,7 +26,6 @@ export default defineConfig(({ mode }) => {
           target: apiProxyTarget,
           changeOrigin: true,
           secure: false,
-          cookieDomainRewrite: "localhost",
         },
       },
     },
