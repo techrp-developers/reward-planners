@@ -92,7 +92,7 @@ class authModel {
 
   async findByCompanyUserId(company_user_id) {
     const [rows] = await db.execute(
-      `SELECT user_id, name, email, company_user_id
+      `SELECT user_id, name, email, company_user_id, status, is_verified
      FROM customer
      WHERE company_user_id = ?`,
       [company_user_id],
@@ -190,12 +190,13 @@ class authModel {
 
   async storeActivationOTP(email, otp) {
     const expiry = new Date(Date.now() + 10 * 60 * 1000);
+    const hashedOtp = await bcrypt.hash(otp.toString(), 10);
 
     await db.execute(
       `INSERT INTO email_otps
      (email, otp, expiry)
      VALUES (?, ?, ?)`,
-      [email.toLowerCase(), otp, expiry],
+      [email.toLowerCase(), hashedOtp, expiry],
     );
   }
 
@@ -230,16 +231,22 @@ class authModel {
 
   async verifyOTP(email, otp) {
     const [rows] = await db.execute(
-      `SELECT id, attempt_count
+      `SELECT id, otp, attempt_count
      FROM email_otps
      WHERE email = ?
-     AND otp = ?
      AND expiry > NOW()
+     ORDER BY id DESC
      LIMIT 1`,
-      [email, otp],
+      [email],
     );
 
-    return rows[0];
+    const otpRecord = rows[0];
+    if (!otpRecord) return null;
+
+    const isMatch = await bcrypt.compare(otp.toString(), otpRecord.otp);
+    if (!isMatch) return null;
+
+    return { id: otpRecord.id, attempt_count: otpRecord.attempt_count };
   }
 
   async incrementOtpAttempts(email) {
@@ -323,6 +330,50 @@ class authModel {
     );
 
     return result.insertId;
+  }
+
+  async findOrCreateCustomerForEmployee(employee, password, conn) {
+    const [existingRows] = await conn.execute(
+      `SELECT user_id, name, email, phone, company_user_id, status, is_verified
+       FROM customer
+       WHERE company_user_id = ?
+       LIMIT 1
+       FOR UPDATE`,
+      [employee.id],
+    );
+
+    if (existingRows[0]) {
+      await conn.execute(
+        `UPDATE customer
+         SET is_verified = 1
+         WHERE user_id = ?`,
+        [existingRows[0].user_id],
+      );
+      return { ...existingRows[0], is_verified: 1, created: false };
+    }
+
+    const userId = await this.createCustomer(
+      {
+        company_id: employee.company_id,
+        company_user_id: employee.id,
+        name: employee.name,
+        email: employee.email,
+        phone: employee.phone,
+        password,
+      },
+      conn,
+    );
+
+    return {
+      user_id: userId,
+      name: employee.name,
+      email: employee.email,
+      phone: employee.phone,
+      company_user_id: employee.id,
+      status: 1,
+      is_verified: 1,
+      created: true,
+    };
   }
 
   async getUserPassword(conn, userId) {

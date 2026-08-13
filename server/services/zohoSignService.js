@@ -51,9 +51,10 @@ function authorization(token) {
 }
 
 function safeReturnUrl(returnUrl) {
-  const allowedOrigins = String(process.env.CLIENT_URL || "http://localhost:5173").split(",").map((value) => value.trim()).filter(Boolean);
+  const allowedAppUrls = String(process.env.CLIENT_APP_URL || "http://localhost:5173/client-onboarding").split(",").map((value) => value.trim().replace(/\/$/, "")).filter(Boolean);
   const parsed = new URL(returnUrl);
-  if (!allowedOrigins.includes(parsed.origin) || parsed.pathname !== "/client-onboarding") throw new Error("Invalid signing return URL");
+  const normalizedReturnUrl = `${parsed.origin}${parsed.pathname}`.replace(/\/$/, "");
+  if (!allowedAppUrls.includes(normalizedReturnUrl)) throw new Error("Invalid signing return URL");
   return parsed;
 }
 

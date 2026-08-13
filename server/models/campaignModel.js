@@ -85,7 +85,9 @@ class CampaignModel {
         data.start_at || null,
         data.end_at || null,
         data.redirect_type || null,
-        data.redirect_id || null,
+        Number.isInteger(Number(data.redirect_id)) && Number(data.redirect_id) > 0
+          ? Number(data.redirect_id)
+          : null,
         data.redirect_url || null,
         data.display_order || 0,
         data.status || "draft",
@@ -181,7 +183,11 @@ class CampaignModel {
 
     if (data.redirect_id !== undefined) {
       fields.push("redirect_id = ?");
-      values.push(data.redirect_id);
+      values.push(
+        Number.isInteger(Number(data.redirect_id)) && Number(data.redirect_id) > 0
+          ? Number(data.redirect_id)
+          : null,
+      );
     }
 
     if (data.redirect_url !== undefined) {
