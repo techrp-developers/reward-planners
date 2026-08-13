@@ -16,7 +16,17 @@ export const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  if (!["get", "head", "options"].includes((config.method || "get").toLowerCase())) {
+  const method = (config.method || "get").toLowerCase();
+
+  // Authenticated GET responses were previously cached by the production CDN.
+  // Keep requests unique so a browser can never receive one of those legacy
+  // edge objects. The API also sends no-store headers; this is an additional
+  // client-side safety net during cache remediation.
+  if (method === "get") {
+    config.params = { ...(config.params || {}), _request: Date.now() };
+  }
+
+  if (!["get", "head", "options"].includes(method)) {
     const csrfToken = readCsrfCookie();
     if (csrfToken) config.headers["X-CSRF-Token"] = decodeURIComponent(csrfToken);
   }
