@@ -18,6 +18,9 @@
   const {
     rewardCreditMail,
   } = require("../../../services/mailBuilder/firstTimeReward");
+  const {
+    accountDeletionMail,
+  } = require("../../../services/mailBuilder/accountDeletion");
   const { sendOtpMail } = require("../../../services/mailBuilder/sendOtp");
   const {
     enqueueWhatsApp,
@@ -1700,9 +1703,36 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
 
         await AuthModel.deleteCustomerAccount(userId);
 
+        const gracePeriodDays = 30;
+        const deletionRequestedAt = new Date();
+        const permanentDeletionAt = new Date(deletionRequestedAt);
+        permanentDeletionAt.setUTCDate(
+          permanentDeletionAt.getUTCDate() + gracePeriodDays,
+        );
+
+        if (req.user?.email) {
+          // Keep the 30 in sync with reactivateIfWithinGracePeriod() in
+          // authModel.js and GRACE_PERIOD_DAYS in accountPurgeCron.js.
+          const restoreDeadline = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+            .toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" });
+
+          setImmediate(() => {
+            accountDeletionMail({
+              name: req.user.name,
+              email: req.user.email,
+              restoreDeadline,
+            }).catch((error) => console.error("Account deletion email failed:", error));
+          });
+        }
+
         return res.json({
           success: true,
-          message: "Account deleted successfully",
+          message: "Account deletion scheduled successfully",
+          data: {
+            gracePeriodDays,
+            deletionRequestedAt: deletionRequestedAt.toISOString(),
+            permanentDeletionAt: permanentDeletionAt.toISOString(),
+          },
         });
       } catch (error) {
         console.error("Delete Account Error:", error);
