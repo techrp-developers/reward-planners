@@ -1430,7 +1430,8 @@ class ServiceOrderController {
             const key = `public/service-support/${requestId}/${fileName}`;
 
             // upload to R2
-            const fileUrl = await uploadToR2(file.path, key, file.mimetype);
+            const fileBuffer = fs.readFileSync(file.path);
+            const fileUrl = await uploadToR2(fileBuffer, key, file.mimetype);
 
             // save attachment
             await db.execute(
