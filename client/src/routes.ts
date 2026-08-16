@@ -160,6 +160,7 @@ export const routes = {
     profile: "/rm/profile",
     employees: "/rm/employees",
     companyEmployees: "/rm/companies/:companyId/employees",
+    supportTickets: "/rm/support-tickets",
     reports: {
       usage: "/rm/reports/usage",
     },

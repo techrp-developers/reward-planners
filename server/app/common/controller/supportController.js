@@ -318,6 +318,153 @@ class SupportController {
       });
     }
   }
+
+  /* ======================================================
+    STAFF (RM/ADMIN) — SUPPORT ENQUIRIES
+  ====================================================== */
+
+  // list every ticket, across all customers
+  async getAllTickets(req, res) {
+    try {
+      const { status, support_module, search } = req.query;
+
+      const conditions = [];
+      const params = [];
+
+      if (status && status !== "all") {
+        conditions.push("st.status = ?");
+        params.push(status);
+      }
+
+      if (support_module && support_module !== "all") {
+        conditions.push("st.support_module = ?");
+        params.push(support_module);
+      }
+
+      if (search && String(search).trim()) {
+        const like = `%${String(search).trim()}%`;
+        conditions.push(
+          "(st.subject LIKE ? OR st.description LIKE ? OR c.name LIKE ? OR c.email LIKE ?)",
+        );
+        params.push(like, like, like, like);
+      }
+
+      const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+      const [tickets] = await db.execute(
+        `SELECT
+          st.ticket_id,
+          st.user_id,
+          c.name AS user_name,
+          c.email AS user_email,
+          c.phone AS user_phone,
+          st.subject,
+          st.description,
+          st.category_id,
+          sc.name AS category_name,
+          st.support_module,
+          st.reference_type,
+          st.reference_id,
+          st.reference_label,
+          st.attachment_url,
+          st.status,
+          st.created_at,
+          st.updated_at
+        FROM support_tickets st
+        LEFT JOIN support_categories sc ON sc.category_id = st.category_id
+        LEFT JOIN customer c ON c.user_id = st.user_id
+        ${whereClause}
+        ORDER BY st.ticket_id DESC`,
+        params,
+      );
+
+      const formatted = tickets.map((ticket) => ({
+        ...ticket,
+        attachment_url: getPublicUrl(ticket.attachment_url, ticket.updated_at),
+      }));
+
+      return res.status(200).json({
+        success: true,
+        data: formatted,
+      });
+    } catch (error) {
+      console.error("Get all tickets error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  }
+
+  // change a ticket's status
+  async updateTicketStatus(req, res) {
+    try {
+      const { ticketId } = req.params;
+      const { status } = req.body;
+
+      const allowedStatuses = ["open", "in_progress", "resolved", "closed"];
+      if (!allowedStatuses.includes(status)) {
+        return res.status(400).json({
+          success: false,
+          message: `Status must be one of: ${allowedStatuses.join(", ")}`,
+        });
+      }
+
+      const [[ticket]] = await db.execute(
+        `SELECT ticket_id, user_id, subject
+         FROM support_tickets
+         WHERE ticket_id = ?
+         LIMIT 1`,
+        [ticketId],
+      );
+
+      if (!ticket) {
+        return res.status(404).json({
+          success: false,
+          message: "Ticket not found",
+        });
+      }
+
+      await db.execute(
+        `UPDATE support_tickets SET status = ? WHERE ticket_id = ?`,
+        [status, ticketId],
+      );
+
+      const statusLabels = {
+        open: "reopened",
+        in_progress: "marked in progress",
+        resolved: "resolved",
+        closed: "closed",
+      };
+
+      notifyUser(
+        {
+          userId: ticket.user_id,
+          module: "common",
+          type: "support_ticket_updated",
+          title: "Support ticket updated",
+          message: `Your support ticket #${ticket.ticket_id} (${ticket.subject}) was ${statusLabels[status] || status}.`,
+          icon: "support",
+          reference_type: "support_ticket",
+          reference_id: ticket.ticket_id,
+          action_url: `/support/tickets/${ticket.ticket_id}`,
+          metadata: { status },
+        },
+        "support ticket status update notification",
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: "Ticket status updated",
+      });
+    } catch (error) {
+      console.error("Update ticket status error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  }
 }
 
 module.exports = new SupportController();
