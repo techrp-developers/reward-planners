@@ -27,15 +27,10 @@ const RmLayout = lazy(() => import("./modules/rm/RmLayout.tsx"));
 /* Dashboards */
 const VendorDashboard = lazy(() => import("./modules/products/vendor/Dashboard.tsx"));
 const ManagerDashboard = lazy(() => import("./modules/products/vendorManager/Dashboard.tsx"));
-const ManagerEmployeeDirectory = lazy(
-  () => import("./modules/products/vendorManager/employees/EmployeeDirectory.tsx"),
-);
-const ManagerCompanyEmployees = lazy(
-  () => import("./modules/products/vendorManager/employees/CompanyEmployees.tsx"),
-);
 const RmDashboard = lazy(() => import("./modules/rm/Dashboard.tsx"));
 const RmEmployeeDirectory = lazy(() => import("./modules/rm/employees/EmployeeDirectory.tsx"));
 const RmCompanyEmployees = lazy(() => import("./modules/rm/employees/CompanyEmployees.tsx"));
+const RmReportPage = lazy(() => import("./modules/rm/reports/RmReportPage.tsx"));
 const HrDashboard = lazy(() => import("./modules/hr/dashboard/HrDashboard.tsx"));
 const WarehouseDashboard = lazy(() => import("./modules/warehouse_manager/dashboard/WarehouseDashboard.tsx"));
 const FleaMarketDashboard = lazy(() => import("./modules/flea_market/dashboard/FleaMarketDashboard.tsx"));
@@ -303,8 +298,6 @@ export default function App() {
       <Route element={<ManagerLayout />}>
         <Route path={routes.manager.dashboard} element={<ManagerDashboard />} />
         <Route path={routes.manager.vendors} element={<VendorApprovalList />} />
-        <Route path={routes.manager.employees} element={<ManagerEmployeeDirectory />} />
-        <Route path={routes.manager.companyEmployees} element={<ManagerCompanyEmployees />} />
         <Route
           path={routes.manager.changePassword}
           element={<ChangePasswordPage />}
@@ -362,7 +355,6 @@ export default function App() {
         <Route path={routes.manager.orders.orderList} element={<OrderList />} />
 
         <Route path={routes.manager.orders.details} element={<OrderView />} />
-        <Route path={routes.manager.reports.usage} element={<ManagerReportPage type="usage" />} />
         <Route path={routes.manager.reports.stock} element={<ManagerReportPage type="stock" />} />
         <Route path={routes.manager.reports.orders} element={<ManagerReportPage type="orders" />} />
 
@@ -595,6 +587,7 @@ export default function App() {
         <Route path={routes.rm.dashboard} element={<RmDashboard />} />
         <Route path={routes.rm.employees} element={<RmEmployeeDirectory />} />
         <Route path={routes.rm.companyEmployees} element={<RmCompanyEmployees />} />
+        <Route path={routes.rm.reports.usage} element={<RmReportPage />} />
         <Route path={routes.rm.changePassword} element={<ChangePasswordPage />} />
         <Route path={routes.rm.profile} element={<EditProfilePage />} />
       </Route>

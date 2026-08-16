@@ -1,20 +1,28 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { FiGrid, FiUserCheck, FiChevronDown, FiLogOut, FiLock, FiUser } from "react-icons/fi";
+import { FiGrid, FiUserCheck, FiBarChart2, FiChevronDown, FiChevronRight, FiLogOut, FiLock, FiUser } from "react-icons/fi";
 import { useAuth } from "../../common/auth/useAuth";
 import { routes } from "../../routes";
 import logo from "../../common/assets/logo.svg";
 
-interface NavItem {
+interface NavChild {
   label: string;
   to: string;
+}
+
+interface NavItem {
+  label: string;
+  to?: string;
   Icon: React.ElementType;
+  type: "link" | "dropdown";
+  children?: NavChild[];
 }
 
 export default function RmSidebar() {
   const { pathname } = useLocation();
   const { user, logout } = useAuth();
 
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(true);
 
   const isActive = (to: string) => pathname === to;
@@ -24,11 +32,21 @@ export default function RmSidebar() {
       label: "Dashboard",
       to: routes.rm.dashboard,
       Icon: FiGrid,
+      type: "link",
     },
     {
       label: "Employees",
       to: routes.rm.employees,
       Icon: FiUserCheck,
+      type: "link",
+    },
+    {
+      label: "Reports",
+      Icon: FiBarChart2,
+      type: "dropdown",
+      children: [
+        { label: "Usage Report", to: routes.rm.reports.usage },
+      ],
     },
   ];
 
@@ -81,7 +99,8 @@ export default function RmSidebar() {
       {/* ── NAVIGATION ── */}
       <div className="flex-1 px-3 space-y-0.5 overflow-y-auto vendor-sidebar-scroll pb-2">
         {navItems.map((item, i) => {
-          const isItemActive = isActive(item.to);
+          const isDropdownOpen = openDropdown === item.label;
+          const isItemActive = item.type === "link" && !!item.to && isActive(item.to);
 
           return (
             <div
@@ -92,31 +111,98 @@ export default function RmSidebar() {
                 animationDelay: `${i * 45}ms`,
               }}
             >
-              <Link
-                to={item.to}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
-                  isItemActive
-                    ? "text-white sidebar-link-active"
-                    : "text-gray-500 hover:bg-purple-50/50 hover:text-[#852BAF]"
-                }`}
-                style={
-                  isItemActive
-                    ? {
-                        background:
-                          "linear-gradient(135deg, #852BAF 0%, #C64EFE 100%)",
-                      }
-                    : {}
-                }
-              >
-                <item.Icon
-                  className={`text-lg transition-colors ${
+              {item.type === "dropdown" ? (
+                <>
+                  <button
+                    onClick={() => setOpenDropdown(isDropdownOpen ? null : item.label)}
+                    className={`flex items-center justify-between w-full gap-3 px-4 py-3 rounded-xl transition-all duration-200 group cursor-pointer ${
+                      isDropdownOpen
+                        ? "bg-purple-50/70"
+                        : "hover:bg-purple-50/40 text-gray-500"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <item.Icon
+                        className={`text-lg transition-colors ${
+                          isDropdownOpen
+                            ? "text-[#852BAF]"
+                            : "text-gray-400 group-hover:text-[#852BAF]"
+                        }`}
+                      />
+                      <span
+                        className={`text-sm font-semibold ${
+                          isDropdownOpen ? "text-gray-900" : "text-gray-600"
+                        }`}
+                      >
+                        {item.label}
+                      </span>
+                    </div>
+                    <FiChevronDown
+                      className={`transition-transform duration-300 ${
+                        isDropdownOpen ? "rotate-180 text-[#852BAF]" : "text-gray-400"
+                      }`}
+                    />
+                  </button>
+
+                  <div
+                    className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                      isDropdownOpen ? "max-h-52 opacity-100 mt-1" : "max-h-0 opacity-0"
+                    }`}
+                  >
+                    <div
+                      className="ml-9 space-y-0.5"
+                      style={{ borderLeft: "2px solid rgba(133,43,175,0.15)" }}
+                    >
+                      {item.children?.map((child) => (
+                        <Link
+                          key={child.to}
+                          to={child.to}
+                          className={`flex items-center gap-2 py-2.5 px-4 text-sm transition-all duration-200 rounded-r-xl border-l-2 -ml-0.5 ${
+                            isActive(child.to)
+                              ? "border-[#852BAF] text-[#852BAF] font-semibold bg-purple-50/60"
+                              : "border-transparent text-gray-500 hover:text-[#852BAF] hover:bg-purple-50/60"
+                          }`}
+                        >
+                          <FiChevronRight
+                            className={`text-xs transition-all duration-200 ${
+                              isActive(child.to)
+                                ? "text-[#852BAF] translate-x-1"
+                                : "text-gray-300"
+                            }`}
+                          />
+                          <span>{child.label}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <Link
+                  to={item.to!}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
                     isItemActive
-                      ? "text-white"
-                      : "text-gray-400 group-hover:text-[#852BAF]"
+                      ? "text-white sidebar-link-active"
+                      : "text-gray-500 hover:bg-purple-50/50 hover:text-[#852BAF]"
                   }`}
-                />
-                <span className="text-sm font-semibold">{item.label}</span>
-              </Link>
+                  style={
+                    isItemActive
+                      ? {
+                          background:
+                            "linear-gradient(135deg, #852BAF 0%, #C64EFE 100%)",
+                        }
+                      : {}
+                  }
+                >
+                  <item.Icon
+                    className={`text-lg transition-colors ${
+                      isItemActive
+                        ? "text-white"
+                        : "text-gray-400 group-hover:text-[#852BAF]"
+                    }`}
+                  />
+                  <span className="text-sm font-semibold">{item.label}</span>
+                </Link>
+              )}
             </div>
           );
         })}
