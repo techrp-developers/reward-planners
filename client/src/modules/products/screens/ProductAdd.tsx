@@ -363,7 +363,7 @@ export default function ProductListingDynamic() {
     setProduct((prev) => ({ ...prev, [name]: value }));
   };
 
-  const CHAR_LIMIT = 150;
+  const CHAR_LIMIT = 170;
 
   const handleShortDescriptionChange = (
     e: React.ChangeEvent<
@@ -1151,7 +1151,7 @@ export default function ProductListingDynamic() {
                 name="shortDescription"
                 value={product.shortDescription}
                 onChange={handleShortDescriptionChange}
-                placeholder="Short description (max 150 characters)"
+                placeholder="Short description (max 170 characters)"
                 rows={3}
                 className={`${inputCls} resize-none`}
               />

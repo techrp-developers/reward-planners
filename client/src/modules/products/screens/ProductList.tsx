@@ -115,6 +115,12 @@ interface Subcategory {
   subcategory_name: string;
 }
 
+interface SubSubCategory {
+  sub_subcategory_id: number;
+  subcategory_id: number;
+  name: string;
+}
+
 interface BulkUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -122,6 +128,8 @@ interface BulkUploadModalProps {
   setCategoryId: (val: string) => void;
   subcategoryId: string;
   setSubcategoryId: (val: string) => void;
+  subSubCategoryId: string;
+  setSubSubCategoryId: (val: string) => void;
   onFileUpload: (file: File) => Promise<boolean>;
   validating: boolean;
 }
@@ -140,6 +148,7 @@ interface BulkValidationResult {
   invalidRows: BulkInvalidRow[];
   categoryId: number;
   subcategoryId: number;
+  subSubCategoryId: number | null;
 }
 
 const apiErrorMessage = (error: unknown, fallback: string) =>
@@ -475,11 +484,14 @@ const BulkUploadModal = ({
   setCategoryId,
   subcategoryId,
   setSubcategoryId,
+  subSubCategoryId,
+  setSubSubCategoryId,
   onFileUpload,
   validating,
 }: BulkUploadModalProps) => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
+  const [subSubCategories, setSubSubCategories] = useState<SubSubCategory[]>([]);
 
   const [file, setFile] = useState<File | null>(null);
 
@@ -526,12 +538,36 @@ const BulkUploadModal = ({
   }, [categoryId]);
 
   /* ================================
+        FETCH SUB-SUBCATEGORIES
+  ================================= */
+  useEffect(() => {
+    if (!subcategoryId) {
+      setSubSubCategories([]);
+      setSubSubCategoryId("");
+      return;
+    }
+
+    const fetchSubSubCategories = async () => {
+      try {
+        const res = await api.get(`/subsubcategory/${subcategoryId}`);
+        if (res.data.success) setSubSubCategories(res.data.data);
+      } catch (err) {
+        console.error("Failed to fetch sub-subcategories", err);
+      }
+    };
+
+    fetchSubSubCategories();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subcategoryId]);
+
+  /* ================================
         RESET ON CLOSE
   ================================= */
   useEffect(() => {
     if (!isOpen) {
       setFile(null);
       setSubcategories([]);
+      setSubSubCategories([]);
     }
   }, [isOpen]);
 
@@ -553,8 +589,11 @@ const BulkUploadModal = ({
     try {
       setTemplateLoading(true);
 
+      const params = new URLSearchParams({ categoryId, subcategoryId });
+      if (subSubCategoryId) params.set("subSubCategoryId", subSubCategoryId);
+
       const res = await api.get(
-        `/category/attributes-template?categoryId=${categoryId}&subcategoryId=${subcategoryId}`,
+        `/category/attributes-template?${params.toString()}`,
         { responseType: "blob" },
       );
 
@@ -607,12 +646,13 @@ const BulkUploadModal = ({
         {/* CATEGORY + TEMPLATE */}
         <details className="group mb-5 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
         <summary className="cursor-pointer list-none text-sm font-bold text-slate-700">Need to download a new template? <span className="font-normal text-slate-500">Choose its category here</span></summary>
-        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
           <select
             value={categoryId}
             onChange={(e) => {
               setCategoryId(e.target.value);
               setSubcategoryId("");
+              setSubSubCategoryId("");
             }}
             className="border p-3 rounded-lg outline-none focus:ring-2 focus:ring-[#852BAF] cursor-pointer"
           >
@@ -626,7 +666,10 @@ const BulkUploadModal = ({
 
           <select
             value={subcategoryId}
-            onChange={(e) => setSubcategoryId(e.target.value)}
+            onChange={(e) => {
+              setSubcategoryId(e.target.value);
+              setSubSubCategoryId("");
+            }}
             className="border p-3 rounded-lg outline-none focus:ring-2 focus:ring-[#852BAF] cursor-pointer"
             disabled={!categoryId}
           >
@@ -634,6 +677,22 @@ const BulkUploadModal = ({
             {subcategories.map((s) => (
               <option key={s.subcategory_id} value={s.subcategory_id}>
                 {s.subcategory_name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={subSubCategoryId}
+            onChange={(e) => setSubSubCategoryId(e.target.value)}
+            className="border p-3 rounded-lg outline-none focus:ring-2 focus:ring-[#852BAF] cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={!subcategoryId || !subSubCategories.length}
+          >
+            <option value="">
+              {subSubCategories.length ? "Select Type / Sub-type" : "No type / sub-type"}
+            </option>
+            {subSubCategories.map((s) => (
+              <option key={s.sub_subcategory_id} value={s.sub_subcategory_id}>
+                {s.name}
               </option>
             ))}
           </select>
@@ -726,6 +785,7 @@ export default function ProductManagerList() {
   const [validationResult, setValidationResult] = useState<BulkValidationResult | null>(null);
   const [categoryId, setCategoryId] = useState("");
   const [subcategoryId, setSubcategoryId] = useState("");
+  const [subSubCategoryId, setSubSubCategoryId] = useState("");
   const [validating, setValidating] = useState(false);
   const [bulkUploading, setBulkUploading] = useState(false);
 
@@ -774,6 +834,7 @@ export default function ProductManagerList() {
       setValidationResult(data);
       setCategoryId(String(data.categoryId));
       setSubcategoryId(String(data.subcategoryId));
+      setSubSubCategoryId(data.subSubCategoryId ? String(data.subSubCategoryId) : "");
 
       Swal.fire({
         icon: "success",
@@ -806,6 +867,7 @@ export default function ProductManagerList() {
       const res = await api.post("/product/bulk-upload", {
         categoryId,
         subcategoryId,
+        subSubCategoryId: subSubCategoryId || null,
         rows: validationResult.validRows,
       });
 
@@ -1164,6 +1226,8 @@ export default function ProductManagerList() {
         setCategoryId={setCategoryId}
         subcategoryId={subcategoryId}
         setSubcategoryId={setSubcategoryId}
+        subSubCategoryId={subSubCategoryId}
+        setSubSubCategoryId={setSubSubCategoryId}
         onFileUpload={handleFileUpload}
         validating={validating}
       />
