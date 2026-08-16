@@ -21,6 +21,9 @@
   const {
     accountDeletionMail,
   } = require("../../../services/mailBuilder/accountDeletion");
+  const {
+    sendDeviceChangeApprovalMail,
+  } = require("../../../services/mailBuilder/deviceChangeApproval");
   const { sendOtpMail } = require("../../../services/mailBuilder/sendOtp");
   const {
     enqueueWhatsApp,
@@ -139,6 +142,93 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
           );
         });
     });
+  }
+
+  /* ======================================================
+    DEVICE CHANGE VERIFICATION
+    A device_id the app hasn't sent before on this account is held until the
+    user approves it by email — see allowDeviceChange/denyDeviceChange below.
+  ====================================================== */
+  const DEVICE_CHANGE_TOKEN_TTL_MS = 30 * 60 * 1000;
+
+  function hashDeviceToken(token) {
+    return crypto.createHash("sha256").update(token).digest("hex");
+  }
+
+  function readDeviceFields(body = {}) {
+    return {
+      deviceId: body.device_id || body.deviceId || null,
+      deviceName: body.device_name || body.deviceName || null,
+    };
+  }
+
+  // Returns { ok: true } when the login can proceed (known device, first
+  // device ever seen for the account, or the app didn't send a device id at
+  // all yet). Returns { ok: false, message } when a new device was detected
+  // and the caller must stop the login — an approval email has already been
+  // sent (or one is already pending) at that point.
+  async function verifyDeviceOrChallenge({ userId, knownDeviceId, deviceId, deviceName, email, name, req }) {
+    if (!deviceId) return { ok: true };
+
+    if (!knownDeviceId) {
+      await AuthModel.bootstrapDevice(userId, deviceId, deviceName);
+      return { ok: true };
+    }
+
+    if (knownDeviceId === deviceId) return { ok: true };
+
+    const existing = await AuthModel.findPendingDeviceChangeRequest(userId, deviceId);
+    if (!existing) {
+      const rawToken = crypto.randomBytes(32).toString("hex");
+      await AuthModel.createDeviceChangeRequest({
+        userId,
+        tokenHash: hashDeviceToken(rawToken),
+        deviceId,
+        deviceName,
+        ipAddress: req.ip,
+        userAgent: req.get("user-agent"),
+        expiresAt: new Date(Date.now() + DEVICE_CHANGE_TOKEN_TTL_MS),
+      });
+
+      if (email) {
+        sendDeviceChangeApprovalMail({
+          email,
+          name,
+          deviceName: deviceName || "Unknown device",
+          ipAddress: req.ip || "Unknown",
+          userAgent: req.get("user-agent") || "Unknown",
+          token: rawToken,
+        }).catch((error) => console.error("Device change approval email failed:", error));
+      }
+    }
+
+    return {
+      ok: false,
+      message: "We don't recognize this device. Check your email to approve it, then sign in again.",
+    };
+  }
+
+  // Small standalone HTML page for the allow/deny links opened from the
+  // approval email — these are hit directly in a browser, not by the app.
+  function renderDeviceDecisionPage(res, { heading, message, tone = "success" }) {
+    const color = tone === "success" ? "#16a34a" : tone === "error" ? "#dc2626" : "#852BAF";
+    res.set("Content-Type", "text/html");
+    return res.send(`<!DOCTYPE html>
+<html>
+  <head><meta charset="UTF-8" /><title>${heading}</title></head>
+  <body style="margin:0;padding:0;background:#f4f6f8;font-family:Arial,sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="padding:60px 0;">
+      <tr><td align="center">
+        <table width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:14px;border:1px solid #e5e7eb;padding:40px;text-align:center;">
+          <tr><td>
+            <h2 style="margin:0 0 12px;color:${color};">${heading}</h2>
+            <p style="margin:0;color:#374151;font-size:15px;line-height:1.6;">${message}</p>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>`);
   }
 
   const thoughts = [
@@ -346,6 +436,26 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
           }
         }
 
+        const { deviceId, deviceName } = readDeviceFields(req.body);
+        if (existingCustomer) {
+          const deviceCheck = await verifyDeviceOrChallenge({
+            userId: existingCustomer.user_id,
+            knownDeviceId: existingCustomer.device_id,
+            deviceId,
+            deviceName,
+            email: existingCustomer.email,
+            name: existingCustomer.name,
+            req,
+          });
+          if (!deviceCheck.ok) {
+            return res.status(403).json({
+              success: false,
+              code: "DEVICE_APPROVAL_REQUIRED",
+              message: deviceCheck.message,
+            });
+          }
+        }
+
         // Keep the legacy password column populated with an unusable random value.
         // Password login is not required for OTP-created accounts.
         const unusablePassword = await bcrypt.hash(crypto.randomBytes(32).toString("hex"), 12);
@@ -358,6 +468,12 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
         );
         await AuthModel.deleteOTP(identity.otpKey, conn);
         await conn.commit();
+
+        // A brand-new account has nothing to compare a device against yet —
+        // trust the device this account was created on.
+        if (user.created && deviceId) {
+          await AuthModel.bootstrapDevice(user.user_id, deviceId, deviceName);
+        }
 
         const tokens = await issueCustomerSession(user.user_id, req, res);
         await AuthModel.updateLoginMeta(user.user_id, req.ip);
@@ -1741,6 +1857,81 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
           success: false,
           message: "Something went wrong",
         });
+      }
+    }
+
+    /* ======================================================
+      DEVICE CHANGE — approve/deny links from the email
+    ====================================================== */
+
+    async allowDeviceChange(req, res) {
+      try {
+        const rawToken = req.query.token;
+        if (!rawToken) {
+          return renderDeviceDecisionPage(res, { heading: "Invalid link", message: "This approval link is missing its token.", tone: "error" });
+        }
+
+        const request = await AuthModel.findDeviceChangeRequestByTokenHash(hashDeviceToken(String(rawToken)));
+        if (!request) {
+          return renderDeviceDecisionPage(res, { heading: "Link not found", message: "This approval link is invalid or has already been used.", tone: "error" });
+        }
+
+        if (request.status !== "pending") {
+          return renderDeviceDecisionPage(res, { heading: "Already handled", message: `This device request was already ${request.status}.`, tone: "info" });
+        }
+
+        if (new Date(request.expires_at) <= new Date()) {
+          await AuthModel.decideDeviceChangeRequest(request.id, "expired");
+          return renderDeviceDecisionPage(res, { heading: "Link expired", message: "This approval link has expired. Please sign in again to get a new one.", tone: "error" });
+        }
+
+        await AuthModel.approveDevice(request.user_id, request.new_device_id, request.new_device_name);
+        await AuthModel.decideDeviceChangeRequest(request.id, "allowed");
+
+        return renderDeviceDecisionPage(res, {
+          heading: "Device approved",
+          message: "This device is now approved. You can go back to the app and sign in.",
+          tone: "success",
+        });
+      } catch (error) {
+        console.error("Allow device change error:", error);
+        return renderDeviceDecisionPage(res, { heading: "Something went wrong", message: "Please try again.", tone: "error" });
+      }
+    }
+
+    async denyDeviceChange(req, res) {
+      try {
+        const rawToken = req.query.token;
+        if (!rawToken) {
+          return renderDeviceDecisionPage(res, { heading: "Invalid link", message: "This approval link is missing its token.", tone: "error" });
+        }
+
+        const request = await AuthModel.findDeviceChangeRequestByTokenHash(hashDeviceToken(String(rawToken)));
+        if (!request) {
+          return renderDeviceDecisionPage(res, { heading: "Link not found", message: "This approval link is invalid or has already been used.", tone: "error" });
+        }
+
+        if (request.status !== "pending") {
+          return renderDeviceDecisionPage(res, { heading: "Already handled", message: `This device request was already ${request.status}.`, tone: "info" });
+        }
+
+        await AuthModel.decideDeviceChangeRequest(request.id, "denied");
+
+        // A deny on an unrecognized device can mean someone else has the
+        // password — sign every active session out as a safety measure.
+        await db.execute(
+          `UPDATE customer_auth_sessions SET revoked_at = COALESCE(revoked_at, NOW()) WHERE user_id = ?`,
+          [request.user_id],
+        );
+
+        return renderDeviceDecisionPage(res, {
+          heading: "Device denied",
+          message: "That device has been blocked. If this wasn't you, we recommend changing your password.",
+          tone: "error",
+        });
+      } catch (error) {
+        console.error("Deny device change error:", error);
+        return renderDeviceDecisionPage(res, { heading: "Something went wrong", message: "Please try again.", tone: "error" });
       }
     }
   }

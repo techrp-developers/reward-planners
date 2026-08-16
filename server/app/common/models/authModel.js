@@ -93,7 +93,7 @@ class authModel {
 
   async findByCompanyUserId(company_user_id) {
     const [rows] = await db.execute(
-      `SELECT user_id, name, email, company_user_id, status, is_verified, deleted_at
+      `SELECT user_id, name, email, company_user_id, status, is_verified, deleted_at, device_id, device_name
      FROM customer
      WHERE company_user_id = ?`,
       [company_user_id],
@@ -654,6 +654,77 @@ class authModel {
      SET phone = ?, user_image = ?
      WHERE user_id = ?`,
       [data.phone, data.user_image, userId],
+    );
+  }
+
+  /* ======================================================
+     DEVICE CHANGE VERIFICATION
+  ====================================================== */
+
+  // First time we ever see a device_id for this account: trust it silently,
+  // nothing to compare against yet.
+  async bootstrapDevice(userId, deviceId, deviceName) {
+    await db.execute(
+      `UPDATE customer SET device_id = ?, device_name = ? WHERE user_id = ?`,
+      [deviceId, deviceName || null, userId],
+    );
+  }
+
+  // Called once the user approves a device-change request.
+  async approveDevice(userId, deviceId, deviceName) {
+    await db.execute(
+      `UPDATE customer SET device_id = ?, device_name = ? WHERE user_id = ?`,
+      [deviceId, deviceName || null, userId],
+    );
+  }
+
+  async createDeviceChangeRequest({
+    userId,
+    tokenHash,
+    deviceId,
+    deviceName,
+    ipAddress,
+    userAgent,
+    expiresAt,
+  }) {
+    const [result] = await db.execute(
+      `INSERT INTO device_change_requests
+       (user_id, token_hash, new_device_id, new_device_name, ip_address, user_agent, status, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`,
+      [userId, tokenHash, deviceId, deviceName || null, ipAddress || null, userAgent || null, expiresAt],
+    );
+    return result.insertId;
+  }
+
+  async findPendingDeviceChangeRequest(userId, deviceId) {
+    const [rows] = await db.execute(
+      `SELECT id, token_hash, expires_at
+       FROM device_change_requests
+       WHERE user_id = ? AND new_device_id = ? AND status = 'pending' AND expires_at > NOW()
+       ORDER BY id DESC
+       LIMIT 1`,
+      [userId, deviceId],
+    );
+    return rows[0];
+  }
+
+  async findDeviceChangeRequestByTokenHash(tokenHash) {
+    const [rows] = await db.execute(
+      `SELECT dcr.id, dcr.user_id, dcr.status, dcr.expires_at, dcr.new_device_id, dcr.new_device_name,
+              c.email, c.name
+       FROM device_change_requests dcr
+       JOIN customer c ON c.user_id = dcr.user_id
+       WHERE dcr.token_hash = ?
+       LIMIT 1`,
+      [tokenHash],
+    );
+    return rows[0];
+  }
+
+  async decideDeviceChangeRequest(id, status) {
+    await db.execute(
+      `UPDATE device_change_requests SET status = ?, decided_at = NOW() WHERE id = ?`,
+      [status, id],
     );
   }
 }
