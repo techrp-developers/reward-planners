@@ -8,28 +8,28 @@ const CategoryAttributeController = require("../controllers/categoryAttributeCon
 router.get(
   "/employee-directory/companies",
   authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
+  authorizeRoles("vendor_manager", "admin", "rm"),
   managerController.employeeDirectoryCompanies.bind(managerController),
 );
 
 router.get(
   "/employee-directory/customers",
   authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
+  authorizeRoles("vendor_manager", "admin", "rm"),
   managerController.employeeDirectoryCustomers.bind(managerController),
 );
 
 router.get(
   "/employee-directory/companies/:companyId/employees",
   authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
+  authorizeRoles("vendor_manager", "admin", "rm"),
   managerController.companyEmployees.bind(managerController),
 );
 
 router.post(
   "/employee-directory/employees",
   authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
+  authorizeRoles("vendor_manager", "admin", "rm"),
   managerController.createCompanyEmployee.bind(managerController),
 );
 

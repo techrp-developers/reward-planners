@@ -22,6 +22,7 @@ const WarehouseLayout = lazy(() => import("./modules/warehouse_manager/layout/Wa
 const FleaMarketLayout = lazy(() => import("./modules/flea_market/layout/FleaMarketLayout.tsx"));
 const ServiceLayout = lazy(() => import("./modules/service/serviceManager/ServiceLayout.tsx"));
 const ServicePartnerLayout = lazy(() => import("./modules/service/servicePartner/ServicePartnerLayout.tsx"));
+const RmLayout = lazy(() => import("./modules/rm/RmLayout.tsx"));
 
 /* Dashboards */
 const VendorDashboard = lazy(() => import("./modules/products/vendor/Dashboard.tsx"));
@@ -32,6 +33,9 @@ const ManagerEmployeeDirectory = lazy(
 const ManagerCompanyEmployees = lazy(
   () => import("./modules/products/vendorManager/employees/CompanyEmployees.tsx"),
 );
+const RmDashboard = lazy(() => import("./modules/rm/Dashboard.tsx"));
+const RmEmployeeDirectory = lazy(() => import("./modules/rm/employees/EmployeeDirectory.tsx"));
+const RmCompanyEmployees = lazy(() => import("./modules/rm/employees/CompanyEmployees.tsx"));
 const HrDashboard = lazy(() => import("./modules/hr/dashboard/HrDashboard.tsx"));
 const WarehouseDashboard = lazy(() => import("./modules/warehouse_manager/dashboard/WarehouseDashboard.tsx"));
 const FleaMarketDashboard = lazy(() => import("./modules/flea_market/dashboard/FleaMarketDashboard.tsx"));
@@ -173,6 +177,8 @@ function resolveDashboardPath(role?: string) {
       return routes.servicePartner.dashboard;
     case "flea_market_manager":
       return routes.fleaMarket.dashboard;
+    case "rm":
+      return routes.rm.dashboard;
     default:
       return "/login";
   }
@@ -582,6 +588,15 @@ export default function App() {
         />
         <Route path={routes.hr.profile} element={<EditProfilePage />} />
         <Route path={routes.hr.rewards} element={<ManageRewards />} />
+      </Route>
+
+      {/* ========== RM ========== */}
+      <Route element={<RmLayout />}>
+        <Route path={routes.rm.dashboard} element={<RmDashboard />} />
+        <Route path={routes.rm.employees} element={<RmEmployeeDirectory />} />
+        <Route path={routes.rm.companyEmployees} element={<RmCompanyEmployees />} />
+        <Route path={routes.rm.changePassword} element={<ChangePasswordPage />} />
+        <Route path={routes.rm.profile} element={<EditProfilePage />} />
       </Route>
 
       {/* ========== FALLBACK ========== */}

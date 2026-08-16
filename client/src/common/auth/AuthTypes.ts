@@ -10,7 +10,8 @@ export interface User {
     | "hr"
     | "service_manager"
     | "service_partner"
-    | "flea_market_manager";
+    | "flea_market_manager"
+    | "rm";
   phone?: string;
 }
 export interface AuthContextType {

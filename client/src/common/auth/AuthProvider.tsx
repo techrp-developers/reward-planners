@@ -119,6 +119,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     case "flea_market_manager":
       return "flea_market_manager";
 
+    case "rm":
+      return "rm";
+
     default:
       return "admin";
   }
@@ -149,6 +152,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     case "flea_market_manager":
       return "/flea-market/dashboard";
+
+    case "rm":
+      return "/rm/dashboard";
 
     default:
       return "/";

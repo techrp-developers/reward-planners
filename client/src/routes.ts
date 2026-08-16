@@ -157,6 +157,13 @@ export const routes = {
     reports: "/service/reports",
     settings: "/service/settings",
   },
+  rm: {
+    dashboard: "/rm/dashboard",
+    changePassword: "/rm/change-password",
+    profile: "/rm/profile",
+    employees: "/rm/employees",
+    companyEmployees: "/rm/companies/:companyId/employees",
+  },
   servicePartner: {
     dashboard: "/service-partner/dashboard",
     onboarding: "/service-partner/onboarding",
