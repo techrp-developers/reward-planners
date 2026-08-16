@@ -105,6 +105,7 @@ import {
   FaFileUpload,
   FaTrash,
   FaSpinner,
+  FaPlus,
 } from "react-icons/fa";
 
 // --- Interfaces matching your backend ---
@@ -141,6 +142,12 @@ interface CategoryAttribute {
   is_variant: number;
   input_type: string;
   options?: string[];
+}
+
+interface CustomAttributeRow {
+  id: string;
+  label: string;
+  value: string;
 }
 
 interface ProductData {
@@ -216,6 +223,30 @@ export default function ProductListingDynamic() {
   const [productAttributes, setProductAttributes] = useState<
     Record<string, string[]>
   >({});
+  const [customAttributes, setCustomAttributes] = useState<
+    CustomAttributeRow[]
+  >([]);
+
+  const addCustomAttribute = () => {
+    setCustomAttributes((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), label: "", value: "" },
+    ]);
+  };
+
+  const updateCustomAttribute = (
+    id: string,
+    field: "label" | "value",
+    val: string,
+  ) => {
+    setCustomAttributes((prev) =>
+      prev.map((row) => (row.id === id ? { ...row, [field]: val } : row)),
+    );
+  };
+
+  const removeCustomAttribute = (id: string) => {
+    setCustomAttributes((prev) => prev.filter((row) => row.id !== id));
+  };
 
   useEffect(() => {
     fetchCategories();
@@ -515,7 +546,13 @@ export default function ProductListingDynamic() {
       Object.entries(docFiles).forEach(([docId, file]) => {
         if (file) formData.append(docId, file);
       });
-      formData.append("attributes", JSON.stringify(productAttributes));
+      const cleanedCustomAttributes = customAttributes
+        .filter((row) => row.label.trim() && row.value.trim())
+        .map((row) => ({ label: row.label.trim(), value: row.value.trim() }));
+      const attributesPayload: Record<string, unknown> = { ...productAttributes };
+      if (cleanedCustomAttributes.length)
+        attributesPayload.__custom = cleanedCustomAttributes;
+      formData.append("attributes", JSON.stringify(attributesPayload));
 
       const res = await api.post("/product/create-product", formData, {
         headers: { "Content-Type": "multipart/form-data" },
@@ -1093,6 +1130,52 @@ export default function ProductListingDynamic() {
             </p>
           )}
           {variantAttributes.length > 0 && <div className={`mt-6 rounded-2xl border p-4 ${variantCombinationCount > 100 ? "border-red-200 bg-red-50" : "border-purple-100 bg-purple-50/60"}`}><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-extrabold text-slate-800">Variant matrix preview</p><p className="mt-1 text-xs text-slate-500">Each unique option combination becomes a separately managed SKU.</p></div><span className={`rounded-xl px-4 py-2 text-sm font-black ${variantCombinationCount > 100 ? "bg-red-100 text-red-700" : "bg-white text-[#852BAF] shadow-sm"}`}>{variantCombinationCount} combination{variantCombinationCount === 1 ? "" : "s"}</span></div>{variantCombinationCount > 100 && <p className="mt-3 text-xs font-bold text-red-600">Reduce the selected options to 100 combinations or fewer.</p>}</div>}
+
+          {/* ── CUSTOM ATTRIBUTES ── */}
+          <div className="mt-6 rounded-2xl border border-purple-100 bg-purple-50/40 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-extrabold text-slate-800">Custom Attributes</p>
+                <p className="mt-1 text-xs text-slate-500">Add specifications not covered above, e.g. Fabric Type, Warranty.</p>
+              </div>
+              <button
+                type="button"
+                onClick={addCustomAttribute}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#852BAF] px-3.5 py-2 text-xs font-bold text-white transition hover:bg-[#6f2393]"
+              >
+                <FaPlus size={11} /> Add attribute
+              </button>
+            </div>
+
+            {customAttributes.length > 0 && (
+              <div className="mt-4 space-y-3">
+                {customAttributes.map((row) => (
+                  <div key={row.id} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                    <input
+                      value={row.label}
+                      onChange={(e) => updateCustomAttribute(row.id, "label", e.target.value)}
+                      placeholder="Attribute name (e.g. Fabric Type)"
+                      className={inputCls}
+                    />
+                    <input
+                      value={row.value}
+                      onChange={(e) => updateCustomAttribute(row.id, "value", e.target.value)}
+                      placeholder="Value (e.g. Organic Cotton)"
+                      className={inputCls}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeCustomAttribute(row.id)}
+                      className="flex items-center justify-center rounded-xl border border-red-100 px-3 text-red-600 transition hover:bg-red-50"
+                      aria-label="Remove attribute"
+                    >
+                      <FaTrash size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </section>
 
         {/* ── PRODUCT DESCRIPTION ── */}

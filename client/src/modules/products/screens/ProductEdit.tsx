@@ -18,6 +18,12 @@ interface VideoPreview {
   url: string;
 }
 
+interface CustomAttributeRow {
+  id: string;
+  label: string;
+  value: string;
+}
+
 function SectionHeader({
   icon: Icon,
   title,
@@ -95,6 +101,7 @@ import {
   FaTrash,
   FaSpinner,
   FaLock,
+  FaPlus,
 } from "react-icons/fa";
 
 // const API_BASE = import.meta.env.VITE_API_URL;
@@ -210,6 +217,30 @@ export default function EditProductPage() {
   const [productAttributes, setProductAttributes] = useState<
     Record<string, any>
   >({});
+  const [customAttributes, setCustomAttributes] = useState<
+    CustomAttributeRow[]
+  >([]);
+
+  const addCustomAttribute = () => {
+    setCustomAttributes((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), label: "", value: "" },
+    ]);
+  };
+
+  const updateCustomAttribute = (
+    id: string,
+    field: "label" | "value",
+    val: string,
+  ) => {
+    setCustomAttributes((prev) =>
+      prev.map((row) => (row.id === id ? { ...row, [field]: val } : row)),
+    );
+  };
+
+  const removeCustomAttribute = (id: string) => {
+    setCustomAttributes((prev) => prev.filter((row) => row.id !== id));
+  };
 
   // --- Fetch data from API ---
   useEffect(() => {
@@ -582,6 +613,33 @@ export default function EditProductPage() {
       const p = json.product;
       if (!p) throw new Error("Product not found");
 
+      // Custom attributes live inside the same JSON blob as the schema-driven
+      // ones, so parse them here — independent of whether the product has a
+      // real category/subcategory (loadAttributesForEdit only runs for those).
+      try {
+        if (p.attributes) {
+          let raw =
+            typeof p.attributes === "string"
+              ? JSON.parse(p.attributes)
+              : p.attributes;
+          const parsedAttrs = raw.attributes
+            ? typeof raw.attributes === "string"
+              ? JSON.parse(raw.attributes)
+              : raw.attributes
+            : raw;
+          const custom = Array.isArray(parsedAttrs.__custom)
+            ? parsedAttrs.__custom.map((row: any) => ({
+                id: crypto.randomUUID(),
+                label: String(row.label ?? ""),
+                value: String(row.value ?? ""),
+              }))
+            : [];
+          setCustomAttributes(custom);
+        }
+      } catch (err) {
+        console.error("Failed to parse custom attributes", err);
+      }
+
       // Detect custom taxonomy
       const hasCustomCategory = !p.category_id && !!p.custom_category;
       const hasCustomSubcategory = !p.subcategory_id && !!p.custom_subcategory;
@@ -832,7 +890,13 @@ export default function EditProductPage() {
         if (file) formData.append(docId, file);
       });
 
-      formData.append("attributes", JSON.stringify(productAttributes));
+      const cleanedCustomAttributes = customAttributes
+        .filter((row) => row.label.trim() && row.value.trim())
+        .map((row) => ({ label: row.label.trim(), value: row.value.trim() }));
+      const attributesPayload: Record<string, any> = { ...productAttributes };
+      if (cleanedCustomAttributes.length)
+        attributesPayload.__custom = cleanedCustomAttributes;
+      formData.append("attributes", JSON.stringify(attributesPayload));
 
       /* ================= SUBMIT ================= */
       const response = await api.put(
@@ -1272,6 +1336,52 @@ export default function EditProductPage() {
                 </div>
               </div>
             )}
+
+            {/* ── CUSTOM ATTRIBUTES ── */}
+            <div className="mt-6 rounded-2xl border border-purple-100 bg-purple-50/40 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-extrabold text-slate-800">Custom Attributes</p>
+                  <p className="mt-1 text-xs text-slate-500">Add specifications not covered above, e.g. Fabric Type, Warranty.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={addCustomAttribute}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#852BAF] px-3.5 py-2 text-xs font-bold text-white transition hover:bg-[#6f2393]"
+                >
+                  <FaPlus size={11} /> Add attribute
+                </button>
+              </div>
+
+              {customAttributes.length > 0 && (
+                <div className="mt-4 space-y-3">
+                  {customAttributes.map((row) => (
+                    <div key={row.id} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                      <input
+                        value={row.label}
+                        onChange={(e) => updateCustomAttribute(row.id, "label", e.target.value)}
+                        placeholder="Attribute name (e.g. Fabric Type)"
+                        className="w-full p-2 border rounded-lg"
+                      />
+                      <input
+                        value={row.value}
+                        onChange={(e) => updateCustomAttribute(row.id, "value", e.target.value)}
+                        placeholder="Value (e.g. Organic Cotton)"
+                        className="w-full p-2 border rounded-lg"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeCustomAttribute(row.id)}
+                        className="flex items-center justify-center rounded-lg border border-red-100 px-3 text-red-600 transition hover:bg-red-50"
+                        aria-label="Remove attribute"
+                      >
+                        <FaTrash size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </section>
 
           {/* Product Description */}

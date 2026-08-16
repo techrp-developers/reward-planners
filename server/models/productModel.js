@@ -666,10 +666,19 @@ class ProductModel {
           ? JSON.parse(data.attributes)
           : data.attributes;
 
-      await connection.execute(
+      const [result] = await connection.execute(
         `UPDATE product_attributes SET attributes = ? WHERE product_id = ?`,
         [JSON.stringify(attributes), productId],
       );
+
+      // The product may have been created with no attributes at all (so no
+      // row exists yet in product_attributes) — fall back to inserting one.
+      if (result.affectedRows === 0) {
+        await connection.execute(
+          `INSERT INTO product_attributes (product_id, attributes) VALUES (?, ?)`,
+          [productId, JSON.stringify(attributes)],
+        );
+      }
     }
 
     // ================== 1.3 VARIANTS ==================

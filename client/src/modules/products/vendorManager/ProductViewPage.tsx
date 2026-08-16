@@ -542,6 +542,13 @@ export default function ReviewProductPage() {
   const fieldInput =
     "w-full p-3 text-sm font-medium text-gray-800 border border-gray-200 rounded-xl bg-gray-50/60 focus:outline-none";
 
+  const customAttributeRows: { label: string; value: string }[] = Array.isArray(
+    (productAttributes as Record<string, unknown>).__custom,
+  )
+    ? ((productAttributes as Record<string, unknown>)
+        .__custom as { label: string; value: string }[])
+    : [];
+
   return (
     <div
       className="min-h-screen p-6"
@@ -691,49 +698,93 @@ export default function ReviewProductPage() {
         </div>
 
         {/* Product Attributes */}
-        {attributeSchema.length > 0 && (
+        {(attributeSchema.length > 0 || customAttributeRows.length > 0) && (
           <div className={sc}>
             <SectionHeader
               icon={FaBox}
               title="Product Attributes"
               description="Applies to all variants"
             />
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-              {attributeSchema.map((attr) => {
-                const values = productAttributes[attr.attribute_key] || [];
-                return (
-                  <div
-                    key={attr.attribute_key}
-                    className="p-4 border border-purple-100 bg-purple-50/40 rounded-xl"
-                  >
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] mb-1">
-                      {attr.attribute_label}
-                    </p>
-                    <p className="text-sm font-semibold text-gray-800">
-                      {values.length > 0 ? values.join(", ") : "—"}
-                    </p>
-                  </div>
-                );
-              })}
-              {Object.keys(productAttributes)
-                .filter(
-                  (key) =>
-                    !attributeSchema.some((a) => a.attribute_key === key),
-                )
-                .map((key) => (
-                  <div
-                    key={key}
-                    className="p-4 border border-yellow-100 bg-yellow-50/60 rounded-xl"
-                  >
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] mb-1">
-                      {key.replace(/_/g, " ")} (Legacy)
-                    </p>
-                    <p className="text-sm font-semibold text-gray-800">
-                      {productAttributes[key].join(", ")}
-                    </p>
-                  </div>
-                ))}
-            </div>
+
+            {attributeSchema.length > 0 && (
+              <div>
+                <p className="mb-3 text-[11px] font-bold tracking-widest text-gray-400 uppercase">
+                  Specifications
+                </p>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+                  {attributeSchema.map((attr) => {
+                    const values = productAttributes[attr.attribute_key] || [];
+                    const hasValue = values.length > 0;
+                    return (
+                      <div
+                        key={attr.attribute_key}
+                        className="p-4 transition border border-gray-100 rounded-xl bg-gray-50/70 hover:border-purple-200 hover:bg-purple-50/30"
+                      >
+                        <p className="mb-1.5 text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">
+                          {attr.attribute_label}
+                        </p>
+                        <p
+                          className={`text-sm font-semibold ${hasValue ? "text-gray-800" : "text-gray-300"}`}
+                        >
+                          {hasValue ? values.join(", ") : "—"}
+                        </p>
+                      </div>
+                    );
+                  })}
+                  {Object.keys(productAttributes)
+                    .filter(
+                      (key) =>
+                        key !== "__custom" &&
+                        !attributeSchema.some((a) => a.attribute_key === key),
+                    )
+                    .map((key) => (
+                      <div
+                        key={key}
+                        className="relative p-4 border border-amber-100 rounded-xl bg-amber-50/60"
+                      >
+                        <span className="absolute px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-amber-600 uppercase bg-amber-100 rounded-full top-2.5 right-2.5">
+                          Legacy
+                        </span>
+                        <p className="mb-1.5 text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] pr-14">
+                          {key.replace(/_/g, " ")}
+                        </p>
+                        <p className="text-sm font-semibold text-gray-800">
+                          {productAttributes[key].join(", ")}
+                        </p>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* Vendor-added custom attributes */}
+            {customAttributeRows.length > 0 && (
+              <div className={attributeSchema.length > 0 ? "mt-6" : ""}>
+                <div className="flex items-center gap-2 mb-3">
+                  <p className="text-[11px] font-bold tracking-widest text-gray-400 uppercase">
+                    Custom Attributes
+                  </p>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#852BAF]">
+                    <FaTag size={8} /> Vendor added
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+                  {customAttributeRows.map((row, idx) => (
+                    <div
+                      key={idx}
+                      className="p-4 border border-purple-100 rounded-xl bg-gradient-to-br from-purple-50 to-pink-50/60"
+                    >
+                      <p className="mb-1.5 text-[10px] font-black text-[#852BAF]/80 uppercase tracking-[0.15em]">
+                        {row.label}
+                      </p>
+                      <p className="text-sm font-semibold text-gray-800">
+                        {row.value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
