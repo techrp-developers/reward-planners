@@ -22,11 +22,13 @@ require("./services/Maintenance/maintenanceCron");
 require("./services/Razorpay/orderExpiryCron");
 require("./services/Todo/todoReminderCron");
 require("./services/Todo/birthdayReminderCron");
-// require("./services/Todo/checkoutAbandonmentCron");
 require("./services/Ecommerce/cartRecoveryCron");
+require("./services/Todo/fitnessGoalHookCron");
+require("./services/Todo/accountPurgeCron");
+// require("./services/Todo/checkoutAbandonmentCron");
 // require("./services/Todo/serviceCartRecoveryCron");
 // require("./services/Bbps/billDueReminderCron");
-require("./services/Todo/fitnessGoalHookCron");
+
 
 
 // dashboard Route

@@ -70,7 +70,7 @@ class authModel {
     if (!conditions.length) return null;
 
     const [rows] = await db.execute(
-      `SELECT 
+      `SELECT
         user_id,
         name,
         email,
@@ -79,6 +79,7 @@ class authModel {
         password,
         status,
         is_verified,
+        deleted_at,
         device_id,
         device_name
      FROM customer
@@ -92,7 +93,7 @@ class authModel {
 
   async findByCompanyUserId(company_user_id) {
     const [rows] = await db.execute(
-      `SELECT user_id, name, email, company_user_id, status, is_verified
+      `SELECT user_id, name, email, company_user_id, status, is_verified, deleted_at
      FROM customer
      WHERE company_user_id = ?`,
       [company_user_id],
@@ -600,50 +601,38 @@ class authModel {
     }));
   }
 
-  // Delete Customer
+  // Delete Customer — soft delete only. The account and its cart/wishlist/
+  // addresses/notifications are kept for a 30-day grace period so the user
+  // can get everything back by simply logging in again (see
+  // reactivateIfWithinGracePeriod below). If they don't return in time,
+  // accountPurgeCron.js removes the account and its data for good.
   async deleteCustomerAccount(userId) {
-    const connection = await db.getConnection();
-
-    try {
-      await connection.beginTransaction();
-
-      // Soft delete customer
-      await connection.execute(
-        `UPDATE customer
-       SET status = 0
+    await db.execute(
+      `UPDATE customer
+       SET status = 0, deleted_at = NOW()
        WHERE user_id = ?`,
-        [userId],
-      );
+      [userId],
+    );
+  }
 
-      // Remove cart items
-      await connection.execute(`DELETE FROM cart_items WHERE user_id = ?`, [
-        userId,
-      ]);
+  // Undo a soft delete if the account is still inside its 30-day grace
+  // period. Returns true when the account was reactivated. Callers must
+  // only invoke this after verifying the caller's credentials — reactivation
+  // reverses an account deletion and must never be reachable by someone who
+  // only knows the account's email/phone.
+  async reactivateIfWithinGracePeriod(userId, deletedAt) {
+    if (!deletedAt) return false;
 
-      // Remove wishlist
-      await connection.execute(
-        `DELETE FROM customer_wishlist WHERE user_id = ?`,
-        [userId],
-      );
+    const graceMs = 30 * 24 * 60 * 60 * 1000; // keep in sync with accountPurgeCron.js
+    if (Date.now() - new Date(deletedAt).getTime() > graceMs) return false;
 
-      // Remove addresses
-      await connection.execute(
-        `DELETE FROM customer_addresses WHERE user_id = ?`,
-        [userId],
-      );
-
-      // Remove notifications
-      await connection.execute(`DELETE FROM notifications WHERE user_id = ?`, [
-        userId,
-      ]);
-
-      await connection.commit();
-    } catch (err) {
-      await connection.rollback();
-      throw err;
-    } finally {
-      connection.release();
-    }
+    await db.execute(
+      `UPDATE customer
+       SET status = 1, deleted_at = NULL
+       WHERE user_id = ?`,
+      [userId],
+    );
+    return true;
   }
 
   // Get profile for update

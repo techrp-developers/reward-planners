@@ -327,10 +327,20 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
 
         const existingCustomer = await AuthModel.findByCompanyUserId(employee.id);
         if (existingCustomer && Number(existingCustomer.status) !== 1) {
-          return res.status(403).json({
-            success: false,
-            message: "Account inactive",
-          });
+          // A verified OTP is already proof of ownership, so a soft-deleted
+          // account still inside its 30-day grace period can be reactivated
+          // here rather than blocked.
+          const reactivated = await AuthModel.reactivateIfWithinGracePeriod(
+            existingCustomer.user_id,
+            existingCustomer.deleted_at,
+          );
+
+          if (!reactivated) {
+            return res.status(403).json({
+              success: false,
+              message: "Account inactive",
+            });
+          }
         }
 
         // Keep the legacy password column populated with an unusable random value.
@@ -627,10 +637,25 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
         });
         if (!user) return res.status(401).json({ success: false });
 
-        if (Number(user.status) !== 1)
-          return res
-            .status(403)
-            .json({ success: false, message: "Account inactive" });
+        // Verify credentials before acting on account status: reactivating a
+        // soft-deleted account must require proof of ownership, not just a
+        // known email/phone.
+        const match = await bcrypt.compare(password, user.password);
+        if (!match) return res.status(401).json({ success: false });
+
+        if (Number(user.status) !== 1) {
+          const reactivated = await AuthModel.reactivateIfWithinGracePeriod(
+            user.user_id,
+            user.deleted_at,
+          );
+
+          if (!reactivated)
+            return res
+              .status(403)
+              .json({ success: false, message: "Account inactive" });
+
+          user.status = 1;
+        }
 
         if (!user.is_verified)
           return res
@@ -647,9 +672,6 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
             message: "Employee not found",
           });
         }
-
-        const match = await bcrypt.compare(password, user.password);
-        if (!match) return res.status(401).json({ success: false });
         // const tokenVersion = Number(user.token_version || 0);
         const { accessToken, refreshToken } = await issueCustomerSession(
           user.user_id,
