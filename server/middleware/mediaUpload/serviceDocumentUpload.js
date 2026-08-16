@@ -20,16 +20,30 @@ const storage = multer.diskStorage({
   },
 });
 
-//  Flexible file filter
-const fileFilter = (req, file, cb) => {
-  // Allow everything except dangerous executables
-  const blockedTypes = [
-    "application/x-msdownload", // .exe
-    "application/x-sh",         // shell scripts
-  ];
+const allowedMimeTypes = new Set([
+  "image/jpeg", "image/png", "image/webp", "image/heic",
+  "video/mp4", "video/quicktime", "video/webm",
+  "application/pdf", "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "text/plain", "text/csv", "text/comma-separated-values",
+  "application/octet-stream",
+]);
 
-  if (blockedTypes.includes(file.mimetype)) {
-    return cb(new Error("File type not allowed"), false);
+const allowedExtensions = new Set([
+  ".jpg", ".jpeg", ".png", ".webp", ".heic",
+  ".mp4", ".mov", ".webm", ".pdf", ".doc", ".docx",
+  ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".csv",
+]);
+
+const fileFilter = (req, file, cb) => {
+  const extension = path.extname(file.originalname || "").toLowerCase();
+
+  if (!allowedMimeTypes.has(file.mimetype) || !allowedExtensions.has(extension)) {
+    return cb(new Error("Unsupported document type"), false);
   }
 
   cb(null, true);
@@ -39,6 +53,6 @@ module.exports = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10 MB per document
+    fileSize: 10 * 1024 * 1024,
   },
 });
