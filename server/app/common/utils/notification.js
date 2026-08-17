@@ -25,10 +25,12 @@ function buildPushMessage(data, fcmToken) {
       reference_id: String(data.reference_id || ""),
       action_url: String(data.action_url || ""),
       screen: String(data.screen || ""),
+      priority: String(data.priority || "normal"),
     },
     android: {
       priority: "high",
       notification: {
+        channelId: "reward_planners_general",
         sound: "default",
         defaultSound: true,
         vibrateTimingsMillis: [0, 1000, 500, 1000, 500],
