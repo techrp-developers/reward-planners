@@ -421,6 +421,12 @@ class authModel {
 
   async clearFcmToken(userId) {
     await db.execute(
+      `UPDATE user_push_tokens SET is_active = 0, updated_at = NOW() WHERE user_id = ?`,
+      [userId],
+    ).catch((error) => {
+      if (error.code !== "ER_NO_SUCH_TABLE") throw error;
+    });
+    await db.execute(
       `UPDATE customer
      SET fcm_token = NULL
      WHERE user_id = ?`,
@@ -438,6 +444,21 @@ class authModel {
   // }
 
   async updateFcmToken(userId, fcmToken, devicePlatform = null) {
+    await db.execute(
+      `INSERT INTO user_push_tokens
+       (user_id, fcm_token, platform, is_active, last_seen_at)
+       VALUES (?, ?, ?, 1, NOW())
+       ON DUPLICATE KEY UPDATE
+         user_id = VALUES(user_id),
+         platform = COALESCE(VALUES(platform), platform),
+         is_active = 1,
+         last_seen_at = NOW(),
+         updated_at = NOW()`,
+      [userId, fcmToken, devicePlatform],
+    ).catch((error) => {
+      if (error.code !== "ER_NO_SUCH_TABLE") throw error;
+    });
+
     await db.execute(
       `UPDATE customer
      SET fcm_token = ?,

@@ -437,24 +437,26 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
         }
 
         const { deviceId, deviceName } = readDeviceFields(req.body);
-        if (existingCustomer) {
-          const deviceCheck = await verifyDeviceOrChallenge({
-            userId: existingCustomer.user_id,
-            knownDeviceId: existingCustomer.device_id,
-            deviceId,
-            deviceName,
-            email: existingCustomer.email,
-            name: existingCustomer.name,
-            req,
-          });
-          if (!deviceCheck.ok) {
-            return res.status(403).json({
-              success: false,
-              code: "DEVICE_APPROVAL_REQUIRED",
-              message: deviceCheck.message,
-            });
-          }
-        }
+        // TEMP: device approval disabled until the approve/deny routes are
+        // deployed to production — re-enable once that's live.
+        // if (existingCustomer) {
+        //   const deviceCheck = await verifyDeviceOrChallenge({
+        //     userId: existingCustomer.user_id,
+        //     knownDeviceId: existingCustomer.device_id,
+        //     deviceId,
+        //     deviceName,
+        //     email: existingCustomer.email,
+        //     name: existingCustomer.name,
+        //     req,
+        //   });
+        //   if (!deviceCheck.ok) {
+        //     return res.status(403).json({
+        //       success: false,
+        //       code: "DEVICE_APPROVAL_REQUIRED",
+        //       message: deviceCheck.message,
+        //     });
+        //   }
+        // }
 
         // Keep the legacy password column populated with an unusable random value.
         // Password login is not required for OTP-created accounts.
