@@ -352,6 +352,21 @@ class ProductModel {
       }
     });
 
+    // Vendor-defined attributes are stored with the product itself. Structured
+    // custom attributes marked as variants participate in the same SKU matrix
+    // as manager-configured category attributes, without requiring a DB change.
+    const customAttributes = Array.isArray(allAttributes.__custom)
+      ? allAttributes.__custom
+      : [];
+    customAttributes.forEach((attribute) => {
+      if (Number(attribute?.is_variant) !== 1) return;
+      const key = String(attribute.key || "").trim();
+      const values = Array.isArray(attribute.values)
+        ? [...new Set(normalize(attribute.values))]
+        : [];
+      if (key && values.length) variantAttributes[key] = values;
+    });
+
     // CASE 1: Real variant combinations
     if (Object.keys(variantAttributes).length) {
       const combinations = generateCombinations(variantAttributes);

@@ -3,6 +3,7 @@ import type { ChangeEvent, FormEvent } from "react";
 import type { ComponentType } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import QuillEditor from "../components/QuillEditor";
+import CustomAttributeBuilder, { type CustomAttributeRow } from "../components/CustomAttributeBuilder";
 import { FaArrowLeft } from "react-icons/fa";
 // import imageCompression from "browser-image-compression";
 
@@ -16,12 +17,6 @@ interface ImagePreview {
 interface VideoPreview {
   file: File;
   url: string;
-}
-
-interface CustomAttributeRow {
-  id: string;
-  label: string;
-  value: string;
 }
 
 function SectionHeader({
@@ -101,7 +96,6 @@ import {
   FaTrash,
   FaSpinner,
   FaLock,
-  FaPlus,
 } from "react-icons/fa";
 
 // const API_BASE = import.meta.env.VITE_API_URL;
@@ -220,27 +214,6 @@ export default function EditProductPage() {
   const [customAttributes, setCustomAttributes] = useState<
     CustomAttributeRow[]
   >([]);
-
-  const addCustomAttribute = () => {
-    setCustomAttributes((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), label: "", value: "" },
-    ]);
-  };
-
-  const updateCustomAttribute = (
-    id: string,
-    field: "label" | "value",
-    val: string,
-  ) => {
-    setCustomAttributes((prev) =>
-      prev.map((row) => (row.id === id ? { ...row, [field]: val } : row)),
-    );
-  };
-
-  const removeCustomAttribute = (id: string) => {
-    setCustomAttributes((prev) => prev.filter((row) => row.id !== id));
-  };
 
   // --- Fetch data from API ---
   useEffect(() => {
@@ -629,9 +602,10 @@ export default function EditProductPage() {
             : raw;
           const custom = Array.isArray(parsedAttrs.__custom)
             ? parsedAttrs.__custom.map((row: any) => ({
-                id: crypto.randomUUID(),
-                label: String(row.label ?? ""),
-                value: String(row.value ?? ""),
+                id: crypto.randomUUID(), key: String(row.key ?? ""), label: String(row.label ?? ""),
+                input_type: row.input_type || "text", is_variant: Number(row.is_variant) === 1 ? 1 : 0,
+                is_required: Number(row.is_required) === 1 ? 1 : 0,
+                values: Array.isArray(row.values) ? row.values.map(String) : [String(row.value ?? "")],
               }))
             : [];
           setCustomAttributes(custom);
@@ -772,6 +746,19 @@ export default function EditProductPage() {
         );
       }
 
+      const invalidCustom = customAttributes.find((attr) =>
+        !attr.label.trim() || (attr.is_required === 1 && !attr.values.some((value) => value.trim())),
+      );
+      if (invalidCustom) {
+        throw new Error(!invalidCustom.label.trim() ? "Every custom attribute needs a label." : `${invalidCustom.label} is required.`);
+      }
+
+      const customVariantCount = customAttributes.filter((attr) => attr.is_variant === 1).reduce((count, attr) => {
+        const options = new Set(attr.values.map((value) => value.trim()).filter(Boolean)).size;
+        return options ? count * options : count;
+      }, 1);
+      if (customVariantCount > 100) throw new Error(`This selection creates ${customVariantCount} variants. Reduce it to 100 combinations or fewer.`);
+
       /* ================= DELIVERY VALIDATION ================= */
       const minDays = Number(product.deliveryMinDays);
       const maxDays = Number(product.deliveryMaxDays);
@@ -891,8 +878,13 @@ export default function EditProductPage() {
       });
 
       const cleanedCustomAttributes = customAttributes
-        .filter((row) => row.label.trim() && row.value.trim())
-        .map((row) => ({ label: row.label.trim(), value: row.value.trim() }));
+        .filter((row) => row.label.trim() && row.values.some((value) => value.trim()))
+        .map((row) => ({
+          key: row.key || `custom_${row.id.replaceAll("-", "")}`,
+          label: row.label.trim(), input_type: row.input_type,
+          is_variant: row.is_variant, is_required: row.is_required,
+          values: [...new Set(row.values.map((value) => value.trim()).filter(Boolean))],
+        }));
       const attributesPayload: Record<string, any> = { ...productAttributes };
       if (cleanedCustomAttributes.length)
         attributesPayload.__custom = cleanedCustomAttributes;
@@ -1338,50 +1330,7 @@ export default function EditProductPage() {
             )}
 
             {/* ── CUSTOM ATTRIBUTES ── */}
-            <div className="mt-6 rounded-2xl border border-purple-100 bg-purple-50/40 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-extrabold text-slate-800">Custom Attributes</p>
-                  <p className="mt-1 text-xs text-slate-500">Add specifications not covered above, e.g. Fabric Type, Warranty.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={addCustomAttribute}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#852BAF] px-3.5 py-2 text-xs font-bold text-white transition hover:bg-[#6f2393]"
-                >
-                  <FaPlus size={11} /> Add attribute
-                </button>
-              </div>
-
-              {customAttributes.length > 0 && (
-                <div className="mt-4 space-y-3">
-                  {customAttributes.map((row) => (
-                    <div key={row.id} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
-                      <input
-                        value={row.label}
-                        onChange={(e) => updateCustomAttribute(row.id, "label", e.target.value)}
-                        placeholder="Attribute name (e.g. Fabric Type)"
-                        className="w-full p-2 border rounded-lg"
-                      />
-                      <input
-                        value={row.value}
-                        onChange={(e) => updateCustomAttribute(row.id, "value", e.target.value)}
-                        placeholder="Value (e.g. Organic Cotton)"
-                        className="w-full p-2 border rounded-lg"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeCustomAttribute(row.id)}
-                        className="flex items-center justify-center rounded-lg border border-red-100 px-3 text-red-600 transition hover:bg-red-50"
-                        aria-label="Remove attribute"
-                      >
-                        <FaTrash size={12} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <CustomAttributeBuilder rows={customAttributes} onChange={setCustomAttributes} />
           </section>
 
           {/* Product Description */}

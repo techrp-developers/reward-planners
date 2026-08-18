@@ -542,11 +542,12 @@ export default function ReviewProductPage() {
   const fieldInput =
     "w-full p-3 text-sm font-medium text-gray-800 border border-gray-200 rounded-xl bg-gray-50/60 focus:outline-none";
 
-  const customAttributeRows: { label: string; value: string }[] = Array.isArray(
-    (productAttributes as Record<string, unknown>).__custom,
-  )
-    ? ((productAttributes as Record<string, unknown>)
-        .__custom as { label: string; value: string }[])
+  const rawCustomAttributes = (productAttributes as Record<string, unknown>).__custom;
+  const customAttributeRows: { label: string; value: string }[] = Array.isArray(rawCustomAttributes)
+    ? rawCustomAttributes.map((row: { label?: unknown; value?: unknown; values?: unknown }) => ({
+        label: String(row.label ?? "Custom attribute"),
+        value: Array.isArray(row.values) ? row.values.map(String).join(", ") : String(row.value ?? "—"),
+      }))
     : [];
 
   return (
