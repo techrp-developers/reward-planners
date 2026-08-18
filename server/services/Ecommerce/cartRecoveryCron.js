@@ -57,7 +57,11 @@ async function checkLowStockCarts() {
       INNER JOIN customer c ON ci.user_id = c.user_id
       LEFT JOIN notifications n ON n.user_id = ci.user_id 
                                AND n.type = 'cart_low_stock'
-                               AND n.reference_id = CAST(v.variant_id AS CHAR)
+                               -- reference_id is text while variant_id is numeric.
+                               -- Compare their binary string forms so databases
+                               -- with mixed legacy utf8mb4 collations behave
+                               -- consistently without changing stored data.
+                               AND CAST(n.reference_id AS BINARY) = CAST(v.variant_id AS BINARY)
                                AND n.created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
       WHERE v.stock <= 3 AND v.stock > 0
         AND n.notification_id IS NULL
@@ -94,7 +98,7 @@ async function checkPriceDrops() {
       INNER JOIN customer c ON ci.user_id = c.user_id
       LEFT JOIN notifications n ON n.user_id = ci.user_id 
                                AND n.type = 'cart_price_drop'
-                               AND n.reference_id = CAST(v.variant_id AS CHAR)
+                               AND CAST(n.reference_id AS BINARY) = CAST(v.variant_id AS BINARY)
                                AND n.created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
       WHERE v.updated_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
         AND v.sale_price < v.mrp
