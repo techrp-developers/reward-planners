@@ -1,7 +1,7 @@
 const cron = require("node-cron");
 const xpressService = require("../xpressbees_service");
 const db = require("../../../config/database");
-const NotificationModel = require("../../../app/common/models/notificationModel");
+const { notifyUser } = require("../../../app/common/utils/notification");
 const {
   processShipmentsAfterPayment,
 } = require("../../../app/ecommerce/v1/utils/webhook");
@@ -198,11 +198,26 @@ async function syncOrderStatus(orderId) {
   );
 
   // =====================
-  // NOTIFICATION (ONLY ON DELIVERY)
+  // CUSTOMER NOTIFICATIONS (ONLY WHEN THE PARENT STATUS CHANGES)
   // =====================
+  if (result.affectedRows > 0 && finalStatus === "shipped") {
+    notifyUser({
+      userId,
+      module: "ecommerce",
+      type: "order_shipped",
+      title: "Order shipped",
+      message: "Your order is on its way.",
+      icon: "truck",
+      reference_type: "order",
+      reference_id: orderId,
+      action_url: `/orders/order-details/${orderId}`,
+      screen: "OrderDetails",
+    }, "order shipped notification");
+  }
+
   if (finalStatus === "delivered" && result.affectedRows > 0) {
-    NotificationModel.create({
-      user_id: userId,
+    notifyUser({
+      userId,
       module: "ecommerce",
       type: "delivery",
       title: "Order delivered",
@@ -211,12 +226,13 @@ async function syncOrderStatus(orderId) {
       reference_type: "order",
       reference_id: orderId,
       action_url: `/orders/order-details/${orderId}`,
-    }).catch((err) => console.error("Delivery notification failed:", err));
+      screen: "OrderDetails",
+    }, "order delivered notification");
 
     creditDeliveredOrderRewards(orderId).catch((err) =>
       console.error("Delivered-order reward credit failed:", err),
     );
-  }
+  }  
 }
 
 async function syncTrackingHistory(shipment, history) {
@@ -371,6 +387,22 @@ async function updateShipmentTracking(shipment) {
       [shipment.id, newStatus, rawStatus, rawStatus],
     );
 
+    if (newStatus === "out_for_delivery" && userId) {
+      notifyUser({
+        userId,
+        module: "ecommerce",
+        type: "order_out_for_delivery",
+        title: "Out for delivery",
+        message: "Your package is out for delivery today.",
+        icon: "truck",
+        reference_type: "order",
+        reference_id: shipment.order_id,
+        action_url: `/orders/order-details/${shipment.order_id}`,
+        screen: "OrderDetails",
+        priority: "high",
+      }, "order out-for-delivery notification");
+    }
+
     // =====================
     // SLA TRACKING
     // =====================
@@ -443,8 +475,8 @@ async function updateShipmentTracking(shipment) {
         );
 
         if (userId) {
-          NotificationModel.create({
-            user_id: userId,
+          notifyUser({
+            userId,
             module: "ecommerce",
             type: "ndr",
             title: "Delivery failed",
@@ -455,7 +487,7 @@ async function updateShipmentTracking(shipment) {
             reference_id: shipment.order_id,
             action_url: `/orders/order-details/${shipment.order_id}`,
             priority: "high",
-          }).catch((err) => console.error("NDR notification failed:", err));
+          }, "NDR notification");
         }
       }
     }
@@ -565,8 +597,8 @@ async function updateShipmentTracking(shipment) {
           );
 
           if (!existingNotif.length && userId) {
-            NotificationModel.create({
-              user_id: userId,
+            notifyUser({
+              userId,
               module: "ecommerce",
               type: "rto",
               title: "Order returned",
@@ -576,7 +608,7 @@ async function updateShipmentTracking(shipment) {
               reference_type: "order",
               reference_id: shipment.order_id,
               action_url: `/orders/order-details/${shipment.order_id}`,
-            }).catch((err) => console.error("RTO notification failed:", err));
+            }, "RTO notification");
           }
         } else {
           await conn.rollback();

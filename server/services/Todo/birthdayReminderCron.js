@@ -13,14 +13,12 @@ async function sendBirthdayWishes() {
   try {
     const [users] = await db.query(
       `
-      SELECT c.user_id, c.name, c.fcm_token
+      SELECT c.user_id, c.name
       FROM customer c
       INNER JOIN company_users e ON c.company_user_id = e.id
       WHERE MONTH(e.dob) = MONTH(CURDATE())
         AND DAY(e.dob) = DAY(CURDATE())
         AND c.status = 1
-        AND c.fcm_token IS NOT NULL
-        AND c.fcm_token != ''
       `
     );
 

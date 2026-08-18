@@ -19,16 +19,14 @@ async function checkMidDayGoalHook() {
   try {
     const [stats] = await db.query(
       `
-      SELECT g.user_id, g.daily_steps, COALESCE(s.steps, 0) AS steps, c.fcm_token
+      SELECT g.user_id, g.daily_steps, COALESCE(s.steps, 0) AS steps
       FROM fitness_goals g
       INNER JOIN customer c ON g.user_id = c.user_id
       LEFT JOIN fitness_steps s ON g.user_id = s.user_id AND s.step_date = CURDATE()
       LEFT JOIN notifications n ON n.user_id = g.user_id
                                AND n.type = 'fitness_midday_hook'
                                AND n.created_at >= CURDATE()
-      WHERE c.fcm_token IS NOT NULL
-        AND c.fcm_token != ''
-        AND n.notification_id IS NULL
+      WHERE n.notification_id IS NULL
         AND COALESCE(s.steps, 0) < (g.daily_steps * 0.3)
       `
     );
@@ -56,16 +54,14 @@ async function checkAlmostCompletedPush() {
   try {
     const [stats] = await db.query(
       `
-      SELECT g.user_id, g.daily_steps, COALESCE(s.steps, 0) AS steps, c.fcm_token
+      SELECT g.user_id, g.daily_steps, COALESCE(s.steps, 0) AS steps
       FROM fitness_goals g
       INNER JOIN customer c ON g.user_id = c.user_id
       LEFT JOIN fitness_steps s ON g.user_id = s.user_id AND s.step_date = CURDATE()
       LEFT JOIN notifications n ON n.user_id = g.user_id
                                AND n.type = 'fitness_almost_completed'
                                AND n.created_at >= CURDATE()
-      WHERE c.fcm_token IS NOT NULL
-        AND c.fcm_token != ''
-        AND n.notification_id IS NULL
+      WHERE n.notification_id IS NULL
         AND COALESCE(s.steps, 0) >= (g.daily_steps * 0.8)
         AND COALESCE(s.steps, 0) < g.daily_steps
       `

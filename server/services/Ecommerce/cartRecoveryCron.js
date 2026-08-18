@@ -15,7 +15,7 @@ async function checkCartRecovery() {
   try {
     const [abandonedCarts] = await db.query(
       `
-      SELECT DISTINCT ci.user_id, p.product_name, c.fcm_token
+      SELECT DISTINCT ci.user_id, p.product_name
       FROM cart_items ci
       JOIN eproducts p ON ci.product_id = p.product_id
       INNER JOIN customer c ON ci.user_id = c.user_id
@@ -24,8 +24,6 @@ async function checkCartRecovery() {
                                AND n.created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
       WHERE ci.created_at <= DATE_SUB(NOW(), INTERVAL 2 HOUR)
         AND n.notification_id IS NULL
-        AND c.fcm_token IS NOT NULL
-        AND c.fcm_token != ''
       `
     );
 
@@ -52,7 +50,7 @@ async function checkLowStockCarts() {
   try {
     const [lowStockItems] = await db.query(
       `
-      SELECT DISTINCT ci.user_id, p.product_name, v.stock, v.variant_id, c.fcm_token
+      SELECT DISTINCT ci.user_id, p.product_name, v.stock, v.variant_id
       FROM cart_items ci
       JOIN eproducts p ON ci.product_id = p.product_id
       JOIN product_variants v ON ci.variant_id = v.variant_id
@@ -63,8 +61,6 @@ async function checkLowStockCarts() {
                                AND n.created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
       WHERE v.stock <= 3 AND v.stock > 0
         AND n.notification_id IS NULL
-        AND c.fcm_token IS NOT NULL
-        AND c.fcm_token != ''
       `
     );
 
@@ -91,7 +87,7 @@ async function checkPriceDrops() {
   try {
     const [priceDrops] = await db.query(
       `
-      SELECT DISTINCT ci.user_id, p.product_name, v.sale_price, v.variant_id, c.fcm_token
+      SELECT DISTINCT ci.user_id, p.product_name, v.sale_price, v.variant_id
       FROM cart_items ci
       JOIN eproducts p ON ci.product_id = p.product_id
       JOIN product_variants v ON ci.variant_id = v.variant_id
@@ -103,8 +99,6 @@ async function checkPriceDrops() {
       WHERE v.updated_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
         AND v.sale_price < v.mrp
         AND n.notification_id IS NULL
-        AND c.fcm_token IS NOT NULL
-        AND c.fcm_token != ''
       `
     );
 
