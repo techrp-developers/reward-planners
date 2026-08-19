@@ -23,6 +23,9 @@ const {
   getCourierBookingEligibleAt,
   isCourierBookingGraceActive,
 } = require("./bookingGracePolicy");
+const {
+  buildXpressOrderNumber,
+} = require("../../../../services/ExpressBees/xpressbees_policy");
 
 // booking payload
 async function buildXpressBookingPayload(orderId, vendorId) {
@@ -117,7 +120,7 @@ async function buildXpressBookingPayload(orderId, vendorId) {
   );
 
   return {
-    order_number: `${order.order_ref}-V${vendorId}`,
+    order_number: buildXpressOrderNumber(order.order_ref, vendorId),
     unique_order_number: "yes",
     shipping_charges: shipment.shipping_charges,
     discount: vendorDiscount,

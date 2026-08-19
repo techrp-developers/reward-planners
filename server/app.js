@@ -14,7 +14,9 @@ const swaggerSpec = require("./config/swagger");
 // setupTodoReminderDB();
 
 require("dotenv").config();
-require("./services/ExpressBees/cron/shipmentCron");
+if (String(process.env.RUN_SCHEDULED_JOBS ?? "true").toLowerCase() === "true") {
+  require("./services/ExpressBees/cron/shipmentCron");
+}
 require("./services/Bbps/retryCron");
 require("./services/Bbps/refundCron");
 require("./services/Razorpay/retryCron");

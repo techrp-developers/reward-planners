@@ -14,6 +14,10 @@ const { cronPing, checkCronHealth } = require("../../../services/cronMonitor");
 const {
   vendorStatusForShipment,
 } = require("../../../app/ecommerce/v1/utils/lifecyclePolicy");
+const {
+  isXpressRtoDelivered,
+  mapXpressStatusCode,
+} = require("../xpressbees_policy");
 
 // =====================
 // STATUS MAPPING
@@ -107,7 +111,10 @@ const STATUS_TIME_COLUMNS = {
   rto: "rto_at",
 };
 
-function mapXpressStatus(status) {
+function mapXpressStatus(status, statusCode) {
+  const codeStatus = mapXpressStatusCode(statusCode);
+  if (codeStatus) return codeStatus;
+
   if (!status || typeof status !== "string") return null;
 
   const s = status.toLowerCase().trim();
@@ -239,7 +246,7 @@ async function syncTrackingHistory(shipment, history) {
   if (!Array.isArray(history)) return;
 
   for (const event of [...history].reverse()) {
-    const status = mapXpressStatus(event?.message);
+    const status = mapXpressStatus(event?.message, event?.status_code);
     if (!status || !event?.event_time) continue;
 
     const timeColumn = STATUS_TIME_COLUMNS[status];
@@ -306,12 +313,20 @@ async function updateShipmentTracking(shipment) {
       [JSON.stringify(response.data), shipment.id],
     );
 
-    // The current XpressBees response uses `data.status`. The other values are
-    // fallbacks for older/newer payload variants.
+    const history = Array.isArray(response.data.history)
+      ? response.data.history
+      : [];
+    const latestHistoryEvent = history.reduce((latest, event) => {
+      if (!latest) return event;
+      return new Date(event.event_time) > new Date(latest.event_time)
+        ? event
+        : latest;
+    }, null);
+    // Prefer provider summary fields, then the chronologically latest event.
     const rawStatus =
       response.data.current_status ||
       response.data.status ||
-      response.data.history?.[0]?.message;
+      latestHistoryEvent?.message;
 
     if (!rawStatus) {
       console.warn(
@@ -320,7 +335,13 @@ async function updateShipmentTracking(shipment) {
       return;
     }
 
-    const newStatus = mapXpressStatus(rawStatus);
+    const providerStatusCode =
+      response.data.status_code || latestHistoryEvent?.status_code;
+    const newStatus = mapXpressStatus(rawStatus, providerStatusCode);
+    const rtoDelivered = isXpressRtoDelivered(
+      providerStatusCode,
+      response.data.rto_status === "delivered" ? "rto delivered" : rawStatus,
+    );
 
     if (!newStatus) return;
 
@@ -328,7 +349,7 @@ async function updateShipmentTracking(shipment) {
 
     if (
       newStatus === shipment.shipping_status &&
-      !(newStatus === "rto" && !shipment.rto_processed)
+      !(newStatus === "rto" && !shipment.rto_processed && rtoDelivered)
     ) {
       await syncVendorOrderStatus(shipment.vendor_order_id, newStatus);
       await syncOrderStatus(shipment.order_id);
@@ -352,7 +373,8 @@ async function updateShipmentTracking(shipment) {
     // =====================
     const timeColumn = STATUS_TIME_COLUMNS[newStatus];
     const statusEventTime = response.data.history?.find(
-      (event) => mapXpressStatus(event?.message) === newStatus,
+      (event) =>
+        mapXpressStatus(event?.message, event?.status_code) === newStatus,
     )?.event_time;
 
     // =====================
@@ -495,7 +517,7 @@ async function updateShipmentTracking(shipment) {
     // =====================
     // RTO Logic
     // =====================
-    if (newStatus === "rto" && !shipment.rto_processed) {
+    if (newStatus === "rto" && !shipment.rto_processed && rtoDelivered) {
       const conn = await db.getConnection();
 
       try {
@@ -655,7 +677,7 @@ cron.schedule("*/30 * * * *", async () => {
   } catch (err) {
     console.error("Tracking cron error:", err);
   }
-});
+}, { name: "xpressbees-tracking", noOverlap: true });
 
 // =====================
 // RETRY FAILED BOOKINGS
@@ -693,7 +715,7 @@ cron.schedule("*/10 * * * *", async () => {
   } catch (err) {
     console.error("Booking retry cron error:", err);
   }
-});
+}, { name: "xpressbees-booking-retry", noOverlap: true });
 
 // Retry courier cancellations that failed after the local order transaction
 // committed. The local cancellation stays authoritative while this converges.
@@ -739,4 +761,4 @@ cron.schedule("*/15 * * * *", async () => {
   } catch (error) {
     console.error("Courier cancellation retry cron failed:", error);
   }
-});
+}, { name: "xpressbees-cancellation-retry", noOverlap: true });

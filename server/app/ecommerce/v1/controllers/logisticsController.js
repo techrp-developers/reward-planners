@@ -393,7 +393,7 @@ class LogisticsController {
         return res.status(400).json({ success: false, message: err.message });
       }
 
-      if (err.message === "Courier cancel failed") {
+      if (err.code === "COURIER_CANCELLATION_FAILED") {
         return res.status(502).json({ success: false, message: "Courier cancellation failed. Please try again." });
       }
 

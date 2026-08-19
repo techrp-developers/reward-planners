@@ -1,6 +1,13 @@
 const axios = require("axios");
 const db = require("../../config/database");
-const AddressModel = require("../../app/common/models/addressModel");
+const XPRESS_BASE_URL = (
+  process.env.XPRESS_BASE_URL || "https://shipment.xpressbees.com/api"
+).replace(/\/$/, "");
+const parsedTimeout = Number(process.env.XPRESS_TIMEOUT_MS || 15000);
+const XPRESS_TIMEOUT_MS =
+  Number.isFinite(parsedTimeout) && parsedTimeout >= 1000
+    ? parsedTimeout
+    : 15000;
 
 let cachedToken = null;
 let tokenExpiry = null;
@@ -10,6 +17,10 @@ let tokenPromise = null;
 // TOKEN HANDLER
 // ==========================
 async function getXpressToken() {
+  if (!process.env.XPRESS_EMAIL || !process.env.XPRESS_PASSWORD) {
+    throw new Error("XpressBees credentials are not configured");
+  }
+
   if (cachedToken && tokenExpiry && Date.now() < tokenExpiry) {
     return cachedToken;
   }
@@ -22,11 +33,12 @@ async function getXpressToken() {
   tokenPromise = (async () => {
     try {
       const response = await axios.post(
-        "https://shipment.xpressbees.com/api/users/login",
+        `${XPRESS_BASE_URL}/users/login`,
         {
           email: process.env.XPRESS_EMAIL,
           password: process.env.XPRESS_PASSWORD,
         },
+        { timeout: XPRESS_TIMEOUT_MS },
       );
 
       if (!response.data.status) {
@@ -72,6 +84,7 @@ async function requestWithXpressToken(config) {
   const sendRequest = (authToken) =>
     axios({
       ...config,
+      timeout: config.timeout || XPRESS_TIMEOUT_MS,
       headers: {
         ...config.headers,
         Authorization: `Bearer ${authToken}`,
@@ -115,7 +128,7 @@ async function bookShipment(payload) {
   try {
     const response = await requestWithXpressToken({
       method: "post",
-      url: "https://shipment.xpressbees.com/api/shipments2",
+      url: `${XPRESS_BASE_URL}/shipments2`,
       data: payload,
     });
 
@@ -136,7 +149,7 @@ async function checkServiceability(payload) {
   try {
     const response = await requestWithXpressToken({
       method: "post",
-      url: "https://shipment.xpressbees.com/api/courier/serviceability",
+      url: `${XPRESS_BASE_URL}/courier/serviceability`,
       data: payload,
     });
 
@@ -158,7 +171,7 @@ async function createNDRException(actions) {
   try {
     const response = await requestWithXpressToken({
       method: "post",
-      url: "https://shipment.xpressbees.com/api/ndr/create",
+      url: `${XPRESS_BASE_URL}/ndr/create`,
       data: actions,
     });
 
@@ -177,6 +190,10 @@ async function createNDRException(actions) {
 // Resolve NDR
 // ==========================
 async function resolveNDR({ shipmentId, action, new_address_id, notes }) {
+  if (!["retry", "address_update", "cancel"].includes(action)) {
+    throw new Error("Unsupported NDR action");
+  }
+
   const conn = await db.getConnection();
 
   try {
@@ -211,8 +228,12 @@ async function resolveNDR({ shipmentId, action, new_address_id, notes }) {
       }
 
       const [addrRows] = await conn.query(
-        `SELECT * FROM customer_addresses WHERE address_id = ?`,
-        [new_address_id],
+        `SELECT ca.*
+         FROM customer_addresses ca
+         JOIN eorders eo ON eo.user_id = ca.user_id
+         WHERE ca.address_id = ? AND eo.order_id = ?
+         LIMIT 1`,
+        [new_address_id, shipment.order_id],
       );
 
       address = addrRows[0];
@@ -271,11 +292,14 @@ async function resolveNDR({ shipmentId, action, new_address_id, notes }) {
         );
 
         // Log failure but don't hard-fail — courier may have already cancelled
-        if (!cancelResult.status) {
-          console.warn(
-            `Courier cancel failed for shipment ${shipmentId}:`,
-            cancelResult.error,
-          );
+        if (!cancelResult?.status) {
+          const message =
+            cancelResult?.error?.message ||
+            cancelResult?.error ||
+            "Courier cancel failed";
+          const error = new Error(message);
+          error.code = "COURIER_CANCELLATION_FAILED";
+          throw error;
         }
       }
     }
@@ -285,24 +309,12 @@ async function resolveNDR({ shipmentId, action, new_address_id, notes }) {
     // ==========================
 
     // Determine new shipping_status
-    const newShippingStatus =
-      action === "cancel"
-        ? "cancelled"
-        : action === "rto"
-          ? "rto"
-          : action === "retry"
-            ? "in_transit"
-            : action === "address_update"
-              ? "in_transit"
-              : null;
+    // An accepted NDR action is not proof that the parcel is moving again.
+    // Tracking will promote retry/address updates when XpressBees reports it.
+    const newShippingStatus = action === "cancel" ? "cancelled" : null;
 
     if (newShippingStatus) {
-      const timestampCol =
-        action === "cancel"
-          ? "cancelled_at"
-          : action === "rto"
-            ? "rto_at"
-            : null;
+      const timestampCol = action === "cancel" ? "cancelled_at" : null;
 
       const tsFragment = timestampCol ? `, ${timestampCol} = NOW()` : "";
 
@@ -361,7 +373,7 @@ async function trackShipment(awbNumber) {
   try {
     const response = await requestWithXpressToken({
       method: "get",
-      url: `https://shipment.xpressbees.com/api/shipments2/track/${awbNumber}`,
+      url: `${XPRESS_BASE_URL}/shipments2/track/${encodeURIComponent(awbNumber)}`,
     });
 
     return response.data;
@@ -385,7 +397,7 @@ async function cancelShipmentExpressBees(awb) {
   try {
     const response = await requestWithXpressToken({
       method: "post",
-      url: "https://shipment.xpressbees.com/api/shipments2/cancel",
+      url: `${XPRESS_BASE_URL}/shipments2/cancel`,
       data: { awb },
     });
 
@@ -429,7 +441,7 @@ async function cancelShipment(shipmentId) {
     // that moved to in_transit between the API call and the lock
     // ==========================
     if (
-      !["pending", "booked", "picked_up"].includes(shipment.shipping_status)
+      !["pending", "booked"].includes(shipment.shipping_status)
     ) {
       throw new Error("Cancellation not allowed at current shipment stage");
     }
@@ -445,9 +457,11 @@ async function cancelShipment(shipmentId) {
       );
 
       if (!cancelResponse.status) {
-        throw new Error(
-          cancelResponse.error?.message || "Courier cancel failed",
-        );
+        const error = new Error("Courier cancel failed");
+        error.code = "COURIER_CANCELLATION_FAILED";
+        error.courierMessage =
+          cancelResponse.error?.message || cancelResponse.error || null;
+        throw error;
       }
     }
     // If no AWB yet (status = 'pending', not yet booked at courier),
