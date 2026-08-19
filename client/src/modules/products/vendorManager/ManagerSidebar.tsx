@@ -16,6 +16,7 @@ import {
   FiUserCheck,
   FiBarChart2,
   FiZap,
+  FiImage,
 } from "react-icons/fi";
 import { FaFileAlt } from "react-icons/fa";
 import { useAuth } from "../../../common/auth/useAuth";
@@ -97,6 +98,16 @@ export default function ManagerNavbar() {
       to: routes.manager.attributes,
       Icon: FiSliders,
       type: "link",
+    },
+    {
+      label: "Content",
+      Icon: FiImage,
+      type: "dropdown",
+      children: [
+        { label: "Product", to: routes.manager.content.product },
+        { label: "Service", to: routes.manager.content.service },
+        { label: "Payment", to: routes.manager.content.payment },
+      ],
     },
     {
       label: "Orders",

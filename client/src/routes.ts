@@ -85,6 +85,11 @@ export const routes = {
       onboard: "/manager/partner-managers/onboard",
       edit: "/manager/partner-managers/edit/:id",
     },
+    content: {
+      product: "/manager/content/product",
+      service: "/manager/content/service",
+      payment: "/manager/content/payment",
+    },
   },
   admin: {
     dashboard: "/admin/dashboard",
