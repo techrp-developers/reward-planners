@@ -12,16 +12,16 @@ import {
   FiShoppingCart,
   FiGift,
   FiLock,
-  FiHeart,
+  FiUser,
   FiUserCheck,
+  FiBarChart2,
+  FiZap,
 } from "react-icons/fi";
-import { FaFileAlt, FaBolt } from "react-icons/fa";
+import { FaFileAlt } from "react-icons/fa";
 import { useAuth } from "../../../common/auth/useAuth";
 import { routes } from "../../../routes";
 import logo from "../../../common/assets/logo.svg";
-import { serviceCategories } from "../../service/serviceManager/shared/serviceCategories";
 import { useNotification } from "../../../common/notifications/useNotification";
-import NotificationBell from "../../../common/notifications/components/NotificationBell";
 
 interface NavChild {
   label: string;
@@ -43,7 +43,7 @@ export default function ManagerNavbar() {
   const { unreadCountByCategory } = useNotification();
 
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(true);
 
   const isActive = (to: string) => pathname === to;
 
@@ -62,27 +62,15 @@ export default function ManagerNavbar() {
       badgeCount: unreadCountByCategory("vendor_onboarding"),
     },
     {
-      label: "Products",
-      to: routes.manager.products,
-      Icon: FiPackage,
+      label: "Employees",
+      to: routes.manager.employees,
+      Icon: FiUserCheck,
       type: "link",
     },
     {
-      label: "Service Partners",
-      Icon: FiHeart,
-      type: "dropdown",
-      children: [
-        { label: "All Partners", to: routes.manager.servicePartners.list },
-        ...serviceCategories.map((c) => ({
-          label: c.name,
-          to: `${routes.manager.servicePartners.list}?category=${encodeURIComponent(c.name)}`,
-        })),
-      ],
-    },
-    {
-      label: "Partner Managers",
-      to: routes.manager.partnerManagers.list,
-      Icon: FiUserCheck,
+      label: "Products",
+      to: routes.manager.products,
+      Icon: FiPackage,
       type: "link",
     },
     {
@@ -111,15 +99,6 @@ export default function ManagerNavbar() {
       type: "link",
     },
     {
-      label: "Service",
-      Icon: FaBolt,
-      type: "dropdown",
-      children: [
-        { label: "Service Enquiries", to: routes.manager.services.enquiries },
-        { label: "Service Orders", to: routes.manager.services.service_orders },
-      ],
-    },
-    {
       label: "Orders",
       Icon: FiShoppingCart,
       type: "dropdown",
@@ -129,6 +108,22 @@ export default function ManagerNavbar() {
           label: "Cancellation Request",
           to: routes.manager.orders.cancellationRequest,
         },
+      ],
+    },
+    {
+      label: "Flash Sales",
+      to: routes.manager.flashSales.list,
+      Icon: FiZap,
+      type: "link",
+    },
+    {
+      label: "Reports",
+      Icon: FiBarChart2,
+      type: "dropdown",
+      children: [
+        { label: "Usage Report", to: routes.manager.reports.usage },
+        { label: "Stock Report", to: routes.manager.reports.stock },
+        { label: "Order Report", to: routes.manager.reports.orders },
       ],
     },
     {
@@ -144,7 +139,7 @@ export default function ManagerNavbar() {
 
   return (
     <nav
-      className="fixed top-0 left-0 flex flex-col w-64 h-full font-sans"
+      className="premium-role-sidebar fixed top-0 left-0 flex flex-col w-64 h-full font-sans"
       style={{
         background:
           "linear-gradient(180deg, #ffffff 0%, #fdf8ff 60%, #fff5f8 100%)",
@@ -189,19 +184,15 @@ export default function ManagerNavbar() {
       </div>
 
       {/* ── MANAGER BADGE ── */}
-      <div className="px-4 mb-2">
+      {/* <div className="px-4 mb-2">
         <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold bg-purple-50 text-purple-700 border border-purple-100">
           <FiGrid className="shrink-0" size={13} />
           <span>Manager Console</span>
           <div className="ml-auto w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
         </div>
-      </div>
+      </div> */}
 
       {/* ── NOTIFICATIONS ── */}
-      <div className="px-4 mb-2">
-        <NotificationBell align="left" />
-      </div>
-
       {/* ── NAVIGATION ── */}
       <div className="flex-1 px-3 space-y-0.5 overflow-y-auto vendor-sidebar-scroll pb-2">
         {navItems.map((item, i) => {
@@ -379,7 +370,7 @@ export default function ManagerNavbar() {
 
         <div
           className={`overflow-hidden transition-all duration-300 ${
-            isProfileOpen ? "max-h-28 mt-3 opacity-100" : "max-h-0 opacity-0"
+            isProfileOpen ? "max-h-44 mt-3 opacity-100" : "max-h-0 opacity-0"
           }`}
         >
           <div
@@ -390,6 +381,13 @@ export default function ManagerNavbar() {
             }}
           />
           <div className="space-y-0.5">
+            <Link
+              to={routes.manager.profile}
+              className="flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-white/80 hover:text-[#852BAF] rounded-xl transition-all duration-150"
+            >
+              <FiUser className="text-base text-gray-400 shrink-0" />
+              Profile
+            </Link>
             <Link
               to="/manager/change-password"
               className="flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-white/80 hover:text-[#852BAF] rounded-xl transition-all duration-150"

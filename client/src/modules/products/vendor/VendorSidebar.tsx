@@ -6,15 +6,18 @@ import {
   FiLogOut,
   FiLayout,
   FiPackage,
+  FiBox,
   FiPlusSquare,
   FiBriefcase,
   FiChevronRight,
   FiShoppingCart,
   FiLock,
   FiShield,
-  FiCheckCircle,
   FiClock,
-  FiBox,
+  FiUser,
+  FiX,
+  FiBarChart2,
+  FiBookOpen,
 } from "react-icons/fi";
 import { api } from "../../../common/api/api";
 import { useAuth } from "../../../common/auth/useAuth";
@@ -36,23 +39,24 @@ interface NavDropdown {
 
 type NavItem = NavLink | NavDropdown;
 
-export default function VendorNavbar() {
+type VendorNavbarProps = {
+  isOpen?: boolean;
+  onClose?: () => void;
+};
+
+export default function VendorNavbar({ isOpen = false, onClose }: VendorNavbarProps) {
   const { user, logout } = useAuth();
   const { pathname } = useLocation();
 
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [vendorStatus, setVendorStatus] = useState<"approved" | "pending" | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(true);
 
   useEffect(() => {
     const fetchStatus = async () => {
       try {
-        const token = localStorage.getItem("token");
-        if (!token) return;
-        const res = await api.get("/vendor/my-details", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await api.get("/vendor/my-details");
         setVendorStatus(res.data.vendor.status);
       } catch {
         setVendorStatus(null);
@@ -68,14 +72,11 @@ export default function VendorNavbar() {
 
   const navItems: NavItem[] = [
     { label: "Dashboard", to: "/vendor/dashboard", Icon: FiLayout },
-    !isApproved
-      ? { label: "Onboarding", to: "/vendor/onboarding", Icon: FiBriefcase }
-      : {
-          label: "Verified Partner",
-          to: "#",
-          Icon: FiCheckCircle,
-          isDisabled: true,
-        },
+    {
+      label: isApproved ? "Onboarding Details" : "Onboarding",
+      to: "/vendor/onboarding",
+      Icon: FiBriefcase,
+    },
     isApproved && {
       label: "Products",
       Icon: FiTag,
@@ -90,9 +91,18 @@ export default function VendorNavbar() {
       Icon: FiShoppingCart,
     },
     isApproved && {
-      label: "Flea Market Purchases",
-      to: "/vendor/flea-market/purchases",
-      Icon: FiBox,
+      label: "Reports",
+      Icon: FiBarChart2,
+      children: [
+        { label: "Stock Report", to: "/vendor/reports/stock", Icon: FiBox },
+        { label: "Product Report", to: "/vendor/reports/products", Icon: FiPackage },
+        { label: "Order Report", to: "/vendor/reports/orders", Icon: FiShoppingCart },
+      ],
+    },
+    {
+      label: "Tutorials & FAQ",
+      to: "/vendor/tutorials-faq",
+      Icon: FiBookOpen,
     },
   ].filter(Boolean) as NavItem[];
 
@@ -100,12 +110,11 @@ export default function VendorNavbar() {
 
   return (
     <nav
-      className="fixed top-0 left-0 flex flex-col w-64 h-full font-sans"
+      className={`premium-role-sidebar fixed left-0 top-0 z-50 flex h-full w-64 flex-col font-sans transition-transform duration-300 lg:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full"}`}
       style={{
         background: "linear-gradient(180deg, #ffffff 0%, #fdf8ff 60%, #fff5f8 100%)",
         borderRight: "1px solid rgba(133,43,175,0.1)",
         boxShadow: "4px 0 32px rgba(133,43,175,0.08)",
-        animation: "slideInLeft 0.35s cubic-bezier(.22,.68,0,1.2) both",
       }}
     >
       {/* ── BRAND LOGO ── */}
@@ -129,6 +138,9 @@ export default function VendorNavbar() {
               Vendor Portal
             </p>
           </div>
+          <button onClick={onClose} aria-label="Close navigation" className="ml-auto grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 lg:hidden">
+            <FiX size={18} />
+          </button>
         </div>
 
         <div
@@ -231,6 +243,7 @@ export default function VendorNavbar() {
                         <Link
                           key={child.to}
                           to={child.to}
+                          onClick={onClose}
                           className={`flex items-center gap-2 py-2.5 px-4 text-sm transition-all duration-200 rounded-r-xl border-l-2 -ml-0.5 ${
                             isActive(child.to)
                               ? "border-[#852BAF] text-[#852BAF] font-semibold bg-purple-50/60"
@@ -253,6 +266,7 @@ export default function VendorNavbar() {
               ) : (
                 <Link
                   to={item.to}
+                  onClick={onClose}
                   className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
                     item.isDisabled
                       ? "bg-emerald-50 text-emerald-700 cursor-default opacity-90 border border-emerald-100"
@@ -338,7 +352,7 @@ export default function VendorNavbar() {
         {/* PROFILE DROPDOWN */}
         <div
           className={`overflow-hidden transition-all duration-300 ${
-            isProfileOpen ? "max-h-28 mt-3 opacity-100" : "max-h-0 opacity-0"
+            isProfileOpen ? "max-h-44 mt-3 opacity-100" : "max-h-0 opacity-0"
           }`}
         >
           <div
@@ -349,7 +363,16 @@ export default function VendorNavbar() {
           />
           <div className="space-y-0.5">
             <Link
+              to="/vendor/profile"
+              onClick={onClose}
+              className="flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-white/80 hover:text-[#852BAF] rounded-xl transition-all duration-150"
+            >
+              <FiUser className="text-base text-gray-400 shrink-0" />
+              Profile
+            </Link>
+            <Link
               to="/vendor/change-password"
+              onClick={onClose}
               className="flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-white/80 hover:text-[#852BAF] rounded-xl transition-all duration-150"
             >
               <FiLock className="text-base text-gray-400 shrink-0" />

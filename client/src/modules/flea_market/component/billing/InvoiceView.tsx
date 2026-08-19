@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useState } from "react";
 import { FiAward, FiCheckCircle, FiDownload, FiMail, FiPhone, FiPlusCircle, FiPrinter } from "react-icons/fi";
 import type { CheckoutInvoiceSummary } from "../../api/fleaMarketCheckoutApi";
-import { fetchInvoice, type InvoiceDetail } from "../../api/fleaMarketInvoiceApi";
+import { downloadInvoicePdf, emailInvoice, fetchInvoice, type InvoiceDetail } from "../../api/fleaMarketInvoiceApi";
 import { maskEmail, maskPhone } from "../../utils/mask";
 import RPlogo from "../../../../common/assets/logo.svg";
 import Avatar from "../ui/Avatar";
@@ -34,6 +34,7 @@ function InvoiceViewImpl({
   const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set());
   const [errorIds, setErrorIds] = useState<Set<number>>(new Set());
   const [pdfMessage, setPdfMessage] = useState("");
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   // Fetch itemized detail for every invoice in the batch up front — with 2-3
   // invoices typical for a multi-vendor cart, prefetching all is simpler than
@@ -62,10 +63,34 @@ function InvoiceViewImpl({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleDownloadPdf = useCallback(() => {
-    // No PDF-generation endpoint exists on the backend yet.
-    setPdfMessage("PDF download isn't available yet — no invoice PDF service is wired up.");
-  }, []);
+  const handleDownloadPdf = useCallback(async () => {
+    const invoice = invoices.find((item) => item.invoiceId === activeInvoiceId);
+    if (!invoice) return;
+    setPdfMessage("");
+    try {
+      await downloadInvoicePdf(invoice.invoiceId, invoice.invoiceNumber);
+    } catch {
+      setPdfMessage("Unable to download the invoice PDF right now.");
+    }
+  }, [activeInvoiceId, invoices]);
+
+  const handleEmailInvoice = useCallback(async () => {
+    if (!customer.email) {
+      setPdfMessage("This customer has no email address on file.");
+      return;
+    }
+    if (!activeInvoiceId) return;
+    setSendingEmail(true);
+    setPdfMessage("");
+    try {
+      setPdfMessage(await emailInvoice(activeInvoiceId));
+    } catch (error) {
+      const message = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setPdfMessage(message || "Unable to email the invoice right now.");
+    } finally {
+      setSendingEmail(false);
+    }
+  }, [activeInvoiceId, customer.email]);
 
   const handlePrint = useCallback(() => {
     window.print();
@@ -176,13 +201,9 @@ function InvoiceViewImpl({
                   <p className="text-sm font-bold text-gray-900">Invoice {invoice.invoiceNumber}</p>
                   {detail && <p className="text-xs text-gray-400">{new Date(detail.issuedAt).toLocaleString()}</p>}
                 </div>
-                <div className="flex items-center gap-1.5 pl-4 border-l border-gray-100 shrink-0">
-                  <img src={RPlogo} alt="Reward Planners" className="w-5 h-5" />
-                  <span className="text-[10px] font-semibold leading-tight text-gray-400">
-                    Powered by
-                    <br />
-                    Reward Planners
-                  </span>
+                <div className="flex items-center gap-3 pl-4 border-l border-gray-100 shrink-0">
+                  <img src={RPlogo} alt="Reward Planners" className="object-contain w-16 h-12" />
+                  <span className="text-sm font-bold leading-tight text-purple-700">Reward Planners</span>
                 </div>
               </div>
             </div>
@@ -247,6 +268,15 @@ function InvoiceViewImpl({
                   >
                     <FiDownload className="w-4 h-4" />
                     Download PDF
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleEmailInvoice()}
+                    disabled={sendingEmail}
+                    className="flex items-center justify-center flex-1 gap-2 py-2.5 text-sm font-bold text-purple-700 transition-colors border border-purple-200 rounded-xl hover:bg-purple-50 disabled:opacity-60"
+                  >
+                    <FiMail className="w-4 h-4" />
+                    {sendingEmail ? "Sending..." : "Send Invoice"}
                   </button>
                   <button
                     type="button"

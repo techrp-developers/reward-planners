@@ -34,6 +34,31 @@ const generateRequestHash = (payloadString) => {
     .digest("base64");
 };
 
+const buildPayBillHashPayload = (
+  timestamp,
+  utilityAccNo,
+  amount,
+  userCode,
+) => `${timestamp}${utilityAccNo}${amount}${userCode}`;
+
+const formatPayBillAmount = (amount) => {
+  const normalizedAmount = String(amount || "").trim();
+
+  if (!normalizedAmount) {
+    return normalizedAmount;
+  }
+
+  const numericAmount = Number(normalizedAmount);
+
+  if (!Number.isFinite(numericAmount)) {
+    return normalizedAmount;
+  }
+
+  return Number.isInteger(numericAmount)
+    ? String(numericAmount)
+    : numericAmount.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+};
+
 const buildBaseHeaders = (timestamp, secret_key) => ({
   "Content-Type": "application/json",
   developer_key: process.env.EKO_DEVELOPER_KEY,
@@ -54,9 +79,14 @@ exports.fetchHeaders = async () => {
 exports.payHeaders = async (utility_acc_no, amount, user_code) => {
   const timestamp = getTimestamp();
   const secret_key = generateSecretKey(timestamp);
+  const formattedAmount = formatPayBillAmount(amount);
 
-  //  VERY IMPORTANT: payload string format
-  const payloadString = `${utility_acc_no}|${amount}|${user_code}`;
+  const payloadString = buildPayBillHashPayload(
+    timestamp,
+    utility_acc_no,
+    formattedAmount,
+    user_code,
+  );
 
   const request_hash = generateRequestHash(payloadString);
 
@@ -67,3 +97,6 @@ exports.payHeaders = async (utility_acc_no, amount, user_code) => {
 
   return headers;
 };
+
+exports.formatPayBillAmount = formatPayBillAmount;
+exports.buildPayBillHashPayload = buildPayBillHashPayload;

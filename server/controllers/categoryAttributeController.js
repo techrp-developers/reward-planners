@@ -7,11 +7,12 @@ class CategoryAttributeController {
   // Get all attributes
   async list(req, res) {
     try {
-      const { category_id, subcategory_id } = req.query;
+      const { category_id, subcategory_id, status = "active" } = req.query;
 
       const rows = await CategoryAttributeModel.list({
         subcategory_id,
         category_id,
+        status,
       });
 
       return res.json({ success: true, data: rows });
@@ -121,23 +122,26 @@ class CategoryAttributeController {
         });
       }
 
-      const isUsed = await CategoryAttributeModel.isAttributeUsed(
-        attribute.attribute_key,
-      );
-
+      const isUsed = await CategoryAttributeModel.isAttributeUsed(attribute.attribute_key);
       if (isUsed) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "This attribute is already used by one or more products and cannot be deleted",
-        });
+        await CategoryAttributeModel.remove(attributeId);
+        return res.json({ success: true, action: "archived", message: "Attribute archived successfully" });
       }
 
-      await CategoryAttributeModel.remove(attributeId);
-
-      res.json({ success: true });
+      await CategoryAttributeModel.hardRemove(attributeId);
+      return res.json({ success: true, action: "deleted", message: "Unused attribute deleted permanently" });
     } catch (error) {
       console.error(error);
+      return res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  async restore(req, res) {
+    try {
+      const restored = await CategoryAttributeModel.restore(req.params.id);
+      if (!restored) return res.status(404).json({ success: false, message: "Attribute not found" });
+      return res.json({ success: true, message: "Attribute restored successfully" });
+    } catch (error) {
       return res.status(500).json({ success: false, message: error.message });
     }
   }

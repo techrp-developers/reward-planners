@@ -17,7 +17,12 @@ async function handleWebhook(req, res) {
       .update(rawBody)
       .digest("hex");
 
-    if (expected !== signature) {
+    const expectedBuffer = Buffer.from(expected, "hex");
+    const receivedBuffer = Buffer.from(signature || "", "hex");
+    if (
+      expectedBuffer.length !== receivedBuffer.length ||
+      !crypto.timingSafeEqual(expectedBuffer, receivedBuffer)
+    ) {
       return res.status(400).send("Invalid signature");
     }
 
@@ -31,8 +36,26 @@ async function handleWebhook(req, res) {
       event: body.event,
       payment_id: body?.payload?.payment?.entity?.id,
       order_id: body?.payload?.payment?.entity?.order_id,
-      module: body?.payload?.payment?.entity?.notes?.module,
+      refund_id: body?.payload?.refund?.entity?.id,
+      module:
+        body?.payload?.payment?.entity?.notes?.module ||
+        body?.payload?.refund?.entity?.notes?.module,
     });
+
+    if (body?.event === "refund.processed" || body?.event === "refund.failed") {
+      const refundModule = body?.payload?.refund?.entity?.notes?.module;
+      if (refundModule === "service") {
+        await serviceWebhook.processEvent(req);
+      } else if (refundModule === "bbps") {
+        await bbpsWebhook.processEvent(req);
+      } else {
+        await Promise.all([
+          serviceWebhook.processEvent(req),
+          bbpsWebhook.processEvent(req),
+        ]);
+      }
+      return res.sendStatus(200);
+    }
 
     //  FAN-OUT (parallel execution)
     // await Promise.all([

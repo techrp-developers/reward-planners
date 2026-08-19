@@ -1,6 +1,7 @@
 import { Navigate, Outlet } from "react-router-dom";
 import ServiceNavbar from "./ServiceSidebar";
 import { useAuth } from "../../../common/auth/useAuth";
+import PremiumPortalShell from "../../../common/layouts/PremiumPortalShell";
 
 export default function ServiceLayout() {
   const { user, loading } = useAuth();
@@ -8,17 +9,5 @@ export default function ServiceLayout() {
   if (loading) return null;
   if (!user || user.role !== "service_manager") return <Navigate to="/login" replace />;
 
-  return (
-    <div
-      className="flex min-h-screen"
-      style={{ background: "linear-gradient(160deg, #fdf8ff 0%, #fff5f8 50%, #f8f9ff 100%)" }}
-    >
-      <ServiceNavbar />
-      <main className="flex-1 min-w-0 ml-64 overflow-hidden">
-        <div className="p-4 md:p-8 page-enter">
-          <Outlet />
-        </div>
-      </main>
-    </div>
-  );
+  return <PremiumPortalShell sidebar={<ServiceNavbar />} roleLabel="Service manager workspace" userLabel={user.name || user.email}><Outlet /></PremiumPortalShell>;
 }

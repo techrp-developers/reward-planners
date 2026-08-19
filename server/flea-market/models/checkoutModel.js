@@ -122,11 +122,14 @@ class CheckoutModel {
          inv.*,
          c.company_name AS fm_company_name,
          c.company_logo AS fm_company_logo,
-         v.company_name AS fm_vendor_name
+         v.company_name AS fm_vendor_name,
+         customer.name AS customer_name,
+         customer.email AS customer_email
        FROM invoices inv
        LEFT JOIN flea_market_locations fl ON fl.location_id = inv.location_id
        LEFT JOIN companies c ON c.company_id = fl.company_id
        LEFT JOIN vendors v ON v.vendor_id = inv.vendor_id
+       LEFT JOIN customer ON customer.user_id = inv.user_id
        WHERE inv.invoice_id = ?`,
       [invoiceId],
     );

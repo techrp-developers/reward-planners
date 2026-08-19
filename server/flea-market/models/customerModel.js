@@ -5,23 +5,36 @@ class CustomerModel {
   async search(companyId, query, limit) {
     const like = `%${query}%`;
     const [rows] = await db.execute(
-      `SELECT user_id, name, email, phone
-       FROM customer
-       WHERE company_id = ?
-         AND status = 1
-         AND (name LIKE ? OR email LIKE ? OR phone LIKE ?)
+      `SELECT c.user_id, c.name, c.email, c.phone
+       FROM customer c
+       WHERE (
+           c.company_id = ?
+           OR EXISTS (
+             SELECT 1 FROM company_users cu
+             WHERE cu.id = c.company_user_id AND cu.company_id = ?
+           )
+         )
+         AND c.status = 1
+         AND (c.name LIKE ? OR c.email LIKE ? OR c.phone LIKE ?)
        LIMIT ?`,
-      [companyId, like, like, like, limit],
+      [companyId, companyId, like, like, like, limit],
     );
     return rows;
   }
 
   async findByIdAndCompany(userId, companyId) {
     const [rows] = await db.execute(
-      `SELECT user_id, company_id, name, email, phone, status, is_verified
-       FROM customer
-       WHERE user_id = ? AND company_id = ?`,
-      [userId, companyId],
+      `SELECT c.user_id, c.company_id, c.name, c.email, c.phone, c.status, c.is_verified
+       FROM customer c
+       WHERE c.user_id = ?
+         AND (
+           c.company_id = ?
+           OR EXISTS (
+             SELECT 1 FROM company_users cu
+             WHERE cu.id = c.company_user_id AND cu.company_id = ?
+           )
+         )`,
+      [userId, companyId, companyId],
     );
     return rows[0];
   }

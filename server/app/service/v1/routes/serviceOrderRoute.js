@@ -9,17 +9,32 @@ const {
   authorizeRoles,
 } = require("../../../../middleware/auth");
 const drainMode = require("../../../../middleware/drainMode");
+const {
+  paymentLimiter,
+} = require("../../../common/middlewares/rateLimiter");
 
 // create razorpay order
 router.post(
   "/create-order",
   auth,
+  paymentLimiter,
   drainMode,
   ServiceOrderController.createPaymentOrder,
 );
 
 // verify payment
-router.post("/verify-payment", auth, ServiceOrderController.verifyPayment);
+router.post(
+  "/verify-payment",
+  auth,
+  paymentLimiter,
+  ServiceOrderController.verifyPayment,
+);
+
+router.get(
+  "/payment-status/:parentOrderId",
+  auth,
+  ServiceOrderController.paymentStatus,
+);
 
 // Get all orders
 router.get("/my-orders", auth, ServiceOrderController.getMyOrders);
@@ -50,7 +65,7 @@ router.post(
 router.get(
   "/admin-orders",
   authenticateToken,
-  authorizeRoles("admin", "vendor_manager"),
+  authorizeRoles("admin", "vendor_manager", "service_manager"),
   ServiceOrderController.adminOrderList,
 );
 
@@ -58,7 +73,7 @@ router.get(
 router.get(
   "/admin-order-details/:parentOrderId",
   authenticateToken,
-  authorizeRoles("admin", "vendor_manager"),
+  authorizeRoles("admin", "vendor_manager", "service_manager"),
   ServiceOrderController.adminOrderDetails,
 );
 
@@ -66,7 +81,7 @@ router.get(
 router.put(
   "/status/:id",
   authenticateToken,
-  authorizeRoles("admin", "vendor_manager"),
+  authorizeRoles("admin", "vendor_manager", "service_manager"),
   ServiceOrderController.updateOrderStatus,
 );
 

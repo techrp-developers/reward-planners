@@ -1,6 +1,7 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import Swal from "sweetalert2";
+import { hrApi } from "../../../common/api/hrApi";
 import {
   FiUser,
   FiMail,
@@ -41,6 +42,18 @@ export default function EmployeeOnboarding() {
   const [formData, setFormData] = useState<EmployeeForm>(initialForm);
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [departments, setDepartments] = useState<string[]>([]);
+  const [departmentsLoading, setDepartmentsLoading] = useState(true);
+
+  useEffect(() => {
+    hrApi
+      .get("/employees/departments")
+      .then((response) =>
+        setDepartments((response.data?.data || []).map((item: { name: string }) => item.name)),
+      )
+      .catch((error) => console.error("Unable to load departments:", error))
+      .finally(() => setDepartmentsLoading(false));
+  }, []);
 
   /* ================= HANDLERS ================= */
 
@@ -63,17 +76,24 @@ export default function EmployeeOnboarding() {
 
     setIsSubmitting(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      Swal.fire({
+    try {
+      await hrApi.post("/employees", formData);
+      await Swal.fire({
         title: "Success!",
         text: "Employee has been onboarded successfully!",
         icon: "success",
         confirmButtonColor: "#852BAF",
       });
       setFormData(initialForm);
+    } catch (error: any) {
+      await Swal.fire(
+        "Unable to add employee",
+        error.response?.data?.message || "Please check that the local server is running.",
+        "error",
+      );
+    } finally {
       setIsSubmitting(false);
-    }, 1000);
+    }
   };
 
   const handleCSVUpload = async () => {
@@ -84,17 +104,26 @@ export default function EmployeeOnboarding() {
 
     setIsSubmitting(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      Swal.fire({
+    try {
+      const uploadData = new FormData();
+      uploadData.append("file", csvFile);
+      const response = await hrApi.post("/employees/bulk-upload", uploadData);
+      await Swal.fire({
         title: "Success!",
-        text: `Successfully uploaded ${csvFile.name}`,
+        text: response.data?.message || `Successfully uploaded ${csvFile.name}`,
         icon: "success",
         confirmButtonColor: "#852BAF",
       });
       setCsvFile(null);
+    } catch (error: any) {
+      await Swal.fire(
+        "Unable to upload CSV",
+        error.response?.data?.message || "Please check the CSV and try again.",
+        "error",
+      );
+    } finally {
       setIsSubmitting(false);
-    }, 1000);
+    }
   };
 
   /* ================= UI ================= */
@@ -103,7 +132,7 @@ export default function EmployeeOnboarding() {
     <div className="max-w-5xl p-4 mx-auto md:p-6">
 
       {/* HEADER */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div>
           <Link
             to="/hr/dashboard"
@@ -120,10 +149,10 @@ export default function EmployeeOnboarding() {
       </div>
 
       {/* TAB SWITCH */}
-      <div className="flex inline-flex gap-2 p-1 mb-6 bg-gray-100 rounded-xl">
+      <div className="inline-flex flex-wrap gap-2 p-1 mb-6 bg-gray-100 rounded-xl">
         <button
           onClick={() => setActiveTab("form")}
-          className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+          className={`px-4 sm:px-5 py-2.5 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
             activeTab === "form"
               ? "bg-white text-purple-600 shadow-md"
               : "text-gray-600 hover:text-gray-900"
@@ -135,7 +164,7 @@ export default function EmployeeOnboarding() {
 
         <button
           onClick={() => setActiveTab("bulk")}
-          className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+          className={`px-4 sm:px-5 py-2.5 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
             activeTab === "bulk"
               ? "bg-white text-purple-600 shadow-md"
               : "text-gray-600 hover:text-gray-900"
@@ -219,17 +248,14 @@ export default function EmployeeOnboarding() {
                   name="department"
                   value={formData.department}
                   onChange={handleChange}
-                  className="w-full py-3 pl-12 pr-4 transition-all bg-white border border-gray-200 appearance-none rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full py-3 pl-12 pr-4 transition-all bg-white border border-gray-200 appearance-none rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent cursor-pointer"
                 >
-                  <option value="">Select Department</option>
-                  <option value="Human Resources">Human Resources</option>
-                  <option value="Engineering">Engineering</option>
-                  <option value="Marketing">Marketing</option>
-                  <option value="Finance">Finance</option>
-                  <option value="Operations">Operations</option>
-                  <option value="Sales">Sales</option>
-                  <option value="IT">IT</option>
-                  <option value="Customer Support">Customer Support</option>
+                  <option value="">
+                    {departmentsLoading ? "Loading Departments..." : "Select Department"}
+                  </option>
+                  {departments.map((department) => (
+                    <option key={department} value={department}>{department}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -257,7 +283,7 @@ export default function EmployeeOnboarding() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex items-center gap-2 px-8 py-3 font-semibold text-white transition-all duration-300 shadow-lg rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] hover:from-[#9B3DCF] hover:to-[#FD4F88] shadow-purple-500/30 hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-8 py-3 font-semibold text-white transition-all duration-300 shadow-lg rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] hover:from-[#9B3DCF] hover:to-[#FD4F88] shadow-purple-500/30 hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
             >
               {isSubmitting ? (
                 <>
@@ -332,7 +358,7 @@ export default function EmployeeOnboarding() {
             <button
               onClick={handleCSVUpload}
               disabled={isSubmitting || !csvFile}
-              className="flex items-center gap-2 px-8 py-3 font-semibold text-white transition-all duration-300 shadow-lg rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 shadow-emerald-500/30 hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-8 py-3 font-semibold text-white transition-all duration-300 shadow-lg rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 shadow-emerald-500/30 hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
             >
               {isSubmitting ? (
                 <>

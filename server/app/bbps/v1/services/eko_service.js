@@ -58,57 +58,131 @@ const FETCH_BILL_TIMEOUT_MS =
   Number.isFinite(configuredFetchBillTimeout) && configuredFetchBillTimeout > 0
     ? configuredFetchBillTimeout
     : 30000;
+const configuredCatalogCacheTtl = Number(
+  process.env.EKO_CATALOG_CACHE_TTL_MS || 5 * 60 * 1000,
+);
+const CATALOG_CACHE_TTL_MS =
+  Number.isFinite(configuredCatalogCacheTtl) && configuredCatalogCacheTtl > 0
+    ? configuredCatalogCacheTtl
+    : 5 * 60 * 1000;
+const catalogCache = new Map();
+
+const normalizeProviderError = (error, fallbackMessage) => {
+  const isTimeout =
+    error.code === "ECONNABORTED" ||
+    /timeout/i.test(String(error.message || ""));
+  const statusCode = isTimeout ? 504 : error.response?.status || error.statusCode || 500;
+  const providerData = error.response?.data;
+  const hasHtmlBody =
+    typeof providerData === "string" && /<\s*html/i.test(providerData);
+  const providerMessage =
+    (typeof providerData === "object" &&
+      (providerData?.message || providerData?.error)) ||
+    (typeof providerData === "string" && !hasHtmlBody ? providerData : null) ||
+    error.providerMessage ||
+    error.message;
+
+  const normalizedError = new Error(
+    isTimeout
+      ? `BBPS provider timed out after ${FETCH_BILL_TIMEOUT_MS}ms`
+      : statusCode === 401
+      ? "Provider authorization failed"
+      : statusCode === 403
+        ? "Provider access forbidden"
+        : providerMessage || fallbackMessage || "Provider request failed",
+  );
+
+  normalizedError.statusCode = statusCode;
+  normalizedError.details =
+    providerData && typeof providerData === "object" ? providerData : undefined;
+  normalizedError.providerMessage = providerMessage;
+  normalizedError.providerResponse = {
+    statusCode,
+    message: normalizedError.message,
+    providerMessage,
+    providerBodyType: hasHtmlBody ? "html" : typeof providerData,
+  };
+
+  return normalizedError;
+};
+
+const withCatalogCache = async (key, loader) => {
+  const cached = catalogCache.get(key);
+
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.value;
+  }
+
+  const pending = Promise.resolve().then(loader);
+  catalogCache.set(key, {
+    value: pending,
+    expiresAt: Date.now() + CATALOG_CACHE_TTL_MS,
+  });
+
+  try {
+    return await pending;
+  } catch (error) {
+    catalogCache.delete(key);
+    throw error;
+  }
+};
 
 // 0. Get Locations
 exports.getLocations = async () => {
-  const headers = await headerUtil.fetchHeaders();
-  const res = await axios.get(ekoUrl("billpayments/operators_location"), {
-    headers,
+  return withCatalogCache("locations", async () => {
+    const headers = await headerUtil.fetchHeaders();
+    const res = await axios.get(ekoUrl("billpayments/operators_location"), {
+      headers,
+    });
+    return res.data;
   });
-  return res.data;
 };
 
 // 1. Categories
 exports.getCategories = async () => {
-  const headers = await headerUtil.fetchHeaders();
-  const res = await axios.get(ekoUrl("billpayments/operators_category"), {
-    headers,
+  return withCatalogCache("categories", async () => {
+    const headers = await headerUtil.fetchHeaders();
+    const res = await axios.get(ekoUrl("billpayments/operators_category"), {
+      headers,
+    });
+    return res.data;
   });
-  return res.data;
 };
 
 // 2. Operators
 exports.getOperators = async (category_id) => {
-  const headers = await headerUtil.fetchHeaders();
+  const data = await withCatalogCache("operators", async () => {
+    const headers = await headerUtil.fetchHeaders();
+    const res = await axios.get(ekoUrl("billpayments/operators"), { headers });
+    return res.data;
+  });
 
-  const res = await axios.get(ekoUrl("billpayments/operators"), { headers });
-
-  let operators = res.data?.data || [];
+  let operators = data?.data || [];
 
   if (category_id) {
     operators = operators.filter((op) => op.operator_category == category_id);
   }
 
   return {
-    ...res.data,
+    ...data,
     data: operators,
   };
 };
 
 // 2.5 Grouped operators
 exports.getOperatorsGrouped = async (category_id, search = "") => {
-  const headers = await headerUtil.fetchHeaders();
-
-  const [operatorsRes, locationRes] = await Promise.all([
-    axios.get(ekoUrl("billpayments/operators"), { headers }),
-    axios.get(ekoUrl("billpayments/operators_location"), { headers }),
+  const [operatorsResponse, locationResponse] = await Promise.all([
+    exports.getOperators(),
+    exports.getLocations(),
   ]);
 
-  let operators = operatorsRes.data?.data || [];
-  const locations = locationRes.data?.data || [];
+  let operators = operatorsResponse?.data || [];
+  const locations = locationResponse?.data || [];
 
-  //  STEP 1: FILTER BY CATEGORY_ID
-  operators = operators.filter((op) => op.operator_category == category_id);
+  //  STEP 1: FILTER BY CATEGORY_ID (optional - omit to search across all operators)
+  if (category_id) {
+    operators = operators.filter((op) => op.operator_category == category_id);
+  }
 
   //  STEP 2: SEARCH (optional)
   if (search) {
@@ -143,13 +217,36 @@ exports.getOperatorsGrouped = async (category_id, search = "") => {
   return grouped;
 };
 
+// 2.6 Search operators across ALL categories (no category_id scoping)
+exports.searchOperators = async (keyword = "") => {
+  const term = String(keyword || "").trim().toLowerCase();
+
+  if (!term) {
+    return [];
+  }
+
+  const data = await exports.getOperators();
+  const operators = data?.data || [];
+
+  return operators
+    .filter((op) => op.name?.toLowerCase().includes(term))
+    .map((op) => ({
+      operator_id: op.operator_id,
+      name: op.name,
+      operator_category: op.operator_category,
+      location_id: op.location_id,
+    }));
+};
+
 // 3. Operator details
 exports.getOperatorDetails = async (id) => {
-  const headers = await headerUtil.fetchHeaders();
-  const res = await axios.get(ekoUrl(`billpayments/operators/${id}`), {
-    headers,
+  return withCatalogCache(`operator:${id}`, async () => {
+    const headers = await headerUtil.fetchHeaders();
+    const res = await axios.get(ekoUrl(`billpayments/operators/${id}`), {
+      headers,
+    });
+    return res.data;
   });
-  return res.data;
 };
 
 exports.getRechargePlans = async ({ mobile, operatorCode, circleId }) => {
@@ -191,34 +288,95 @@ exports.getRechargePlans = async ({ mobile, operatorCode, circleId }) => {
   const planGroups = Array.isArray(providerResponse.dependent_params)
     ? providerResponse.dependent_params
     : [];
-  const rawPlans = planGroups.flatMap((group) =>
-    Array.isArray(group?.value) ? group.value : [],
-  );
-  const uniquePlans = new Map();
 
-  for (const plan of rawPlans) {
+  const buildPlan = (plan) => {
     const amount = String(plan?.amount || "").trim();
     const validity = String(plan?.validity || "").trim();
     const description = String(plan?.plan_description || "").trim();
 
     if (!/^\d+(?:\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) {
-      continue;
+      return null;
     }
 
     const fingerprint = `${operatorCode}|${circleId}|${amount}|${validity}|${description}`;
+    return {
+      planId: createHash("sha256")
+        .update(fingerprint)
+        .digest("hex")
+        .slice(0, 20),
+      amount,
+      validity: validity || null,
+      description: description || null,
+      _fp: fingerprint,
+    };
+  };
 
-    if (!uniquePlans.has(fingerprint)) {
-      uniquePlans.set(fingerprint, {
-        planId: createHash("sha256")
-          .update(fingerprint)
-          .digest("hex")
-          .slice(0, 20),
-        amount,
-        validity: validity || null,
-        description: description || null,
-      });
+  // Keyword-based fallback used when EKO doesn't supply category labels
+  const AUTO_CATEGORIES = [
+    {
+      label: "OTT & Premium",
+      test: (d) =>
+        /netflix|amazon prime|jiohotstar|sonyliv|zee5|fancode|vi movies & tv/i.test(d),
+    },
+    {
+      label: "Unlimited",
+      test: (d) => /full day unlimited data|\d+(\.\d+)?\s*gb\/day/i.test(d),
+    },
+    {
+      label: "Combo",
+      test: (d) => /pack combo/i.test(d),
+    },
+    {
+      label: "Data Pack",
+      test: (d) => /\d+\s*gb\b/i.test(d),
+    },
+  ];
+
+  const autoCategory = (description) => {
+    for (const rule of AUTO_CATEGORIES) {
+      if (rule.test(description)) return rule.label;
     }
+    return "Other";
+  };
+
+  // Build grouped structure, deduplicating within each group
+  let groups = planGroups
+    .map((group) => {
+      const label = String(group?.key || "").trim();
+      const seen = new Set();
+      const plans = (Array.isArray(group?.value) ? group.value : [])
+        .map(buildPlan)
+        .filter((p) => p !== null && !seen.has(p._fp) && seen.add(p._fp))
+        .map(({ _fp, ...rest }) => rest)
+        .sort((a, b) => Number(a.amount) - Number(b.amount));
+      return { label, plans };
+    })
+    .filter((g) => g.plans.length > 0);
+
+  // If EKO didn't provide category labels, auto-categorize by description keywords
+  const hasRealLabels = groups.some((g) => g.label !== "");
+  if (!hasRealLabels) {
+    const allPlans = groups.flatMap((g) => g.plans);
+    const buckets = {};
+    for (const plan of allPlans) {
+      const cat = autoCategory(plan.description || "");
+      if (!buckets[cat]) buckets[cat] = [];
+      buckets[cat].push(plan);
+    }
+    const ORDER = ["Unlimited", "Combo", "Data Pack", "OTT & Premium", "Other"];
+    groups = ORDER.filter((cat) => buckets[cat]?.length)
+      .map((cat) => ({ label: cat, plans: buckets[cat] }));
+  } else {
+    groups = groups.map((g) => ({ ...g, label: g.label || "Other" }));
   }
+
+  // Flat deduplicated list for internal plan-id lookups (e.g. payment validation)
+  const allSeen = new Set();
+  const plans = groups
+    .flatMap((g) => g.plans.map((p) => ({ ...p, _fp: `${p.planId}` })))
+    .filter((p) => !allSeen.has(p._fp) && allSeen.add(p._fp))
+    .map(({ _fp, ...rest }) => rest)
+    .sort((a, b) => Number(a.amount) - Number(b.amount));
 
   return {
     status: providerResponse.status,
@@ -227,10 +385,9 @@ exports.getRechargePlans = async ({ mobile, operatorCode, circleId }) => {
     operatorId: operatorCode ? String(operatorCode) : null,
     circleId: circleId ? String(circleId) : null,
     mobile,
-    count: uniquePlans.size,
-    plans: Array.from(uniquePlans.values()).sort(
-      (first, second) => Number(first.amount) - Number(second.amount),
-    ),
+    count: plans.length,
+    groups,
+    plans,
   };
 };
 
@@ -386,6 +543,10 @@ exports.fetchBill = async (body, req) => {
       status: res.status,
       success: res.data?.success,
       message: res.data?.message,
+      reason: res.data?.data?.reason,
+      providerStatus: res.data?.status,
+      responseTypeId: res.data?.response_type_id,
+      responseStatusId: res.data?.response_status_id,
       responseKeys:
         res.data && typeof res.data === "object" ? Object.keys(res.data) : [],
       dataKeys:
@@ -403,44 +564,15 @@ exports.fetchBill = async (body, req) => {
 
     return res.data;
   } catch (error) {
-    const isTimeout =
-      error.code === "ECONNABORTED" ||
-      /timeout/i.test(String(error.message || ""));
-    const statusCode = isTimeout ? 504 : error.response?.status || 500;
-    const providerData = error.response?.data;
-    const hasHtmlBody =
-      typeof providerData === "string" && /<\s*html/i.test(providerData);
-    const providerMessage =
-      (typeof providerData === "object" &&
-        (providerData?.message || providerData?.error)) ||
-      (typeof providerData === "string" && !hasHtmlBody
-        ? providerData
-        : null) ||
-      error.message;
-
-    const normalizedError = new Error(
-      isTimeout
-        ? `BBPS provider timed out after ${FETCH_BILL_TIMEOUT_MS}ms`
-        : statusCode === 401
-        ? "Provider authorization failed"
-        : statusCode === 403
-          ? "Provider access forbidden"
-          : providerMessage || "Provider request failed",
+    const normalizedError = normalizeProviderError(
+      error,
+      "Provider request failed",
     );
-    normalizedError.statusCode = statusCode;
-    normalizedError.details =
-      providerData && typeof providerData === "object"
-        ? providerData
-        : undefined;
-    normalizedError.providerMessage = providerMessage;
 
     console.error("[BBPS][provider][fetch-bill] error", {
-      statusCode,
+      statusCode: normalizedError.statusCode,
       message: normalizedError.message,
-      providerMessage:
-        typeof providerData === "object"
-          ? providerData?.message || providerData?.error
-          : providerMessage,
+      providerMessage: normalizedError.providerMessage,
     });
 
     throw normalizedError;
@@ -449,30 +581,85 @@ exports.fetchBill = async (body, req) => {
 
 // 5. Pay bill
 exports.payBill = async (body, req) => {
+  if (
+    !BASE ||
+    !process.env.EKO_DEVELOPER_KEY ||
+    !process.env.EKO_ACCESS_KEY ||
+    !process.env.EKO_USER_CODE ||
+    !process.env.EKO_INITIATOR_ID
+  ) {
+    const envErr = new Error("Missing BBPS provider environment configuration");
+    envErr.statusCode = 500;
+    throw envErr;
+  }
+
+  const formattedAmount = headerUtil.formatPayBillAmount(body.amount);
   const headers = await headerUtil.payHeaders(
     body.utility_acc_no,
-    body.amount,
+    formattedAmount,
     process.env.EKO_USER_CODE,
   );
   const sourceIp = await getBbpsSourceIP(req);
 
   const payload = {
     ...body,
+    amount: formattedAmount,
     user_code: process.env.EKO_USER_CODE,
     client_ref_id: body.client_ref_id || Date.now().toString(),
-    hc_channel: "0",
+    hc_channel: 0,
     source_ip: sourceIp,
+    ...(process.env.EKO_LATLONG
+      ? { latlong: process.env.EKO_LATLONG.trim() }
+      : {}),
   };
 
-  const res = await retry(() =>
-    axios.post(
-      ekoUrl(
-        `billpayments/paybill?initiator_id=${process.env.EKO_INITIATOR_ID}`,
-      ),
-      payload,
-      { headers, timeout: 10000 },
-    ),
+  const endpoint = ekoUrl(
+    `billpayments/paybill?initiator_id=${process.env.EKO_INITIATOR_ID}`,
   );
 
-  return res.data;
+  console.info("[BBPS][provider][pay-bill] request-meta", {
+    operator_id: payload.operator_id,
+    amount: payload.amount,
+    client_ref_id: payload.client_ref_id,
+    source_ip: payload.source_ip,
+    initiator_id_location: "query",
+    hc_channel: payload.hc_channel,
+    endpoint,
+  });
+
+  try {
+    const res = await retry(
+      () =>
+        axios.post(endpoint, payload, {
+          headers,
+          timeout: FETCH_BILL_TIMEOUT_MS,
+        }),
+      0,
+    );
+
+    console.info("[BBPS][provider][pay-bill] response", {
+      status: res.status,
+      success: res.data?.success,
+      message: res.data?.message,
+      providerStatus: res.data?.status,
+      responseTypeId: res.data?.response_type_id,
+      responseStatusId: res.data?.response_status_id,
+    });
+
+    return res.data;
+  } catch (error) {
+    const normalizedError = normalizeProviderError(
+      error,
+      "Provider payment request failed",
+    );
+
+    console.error("[BBPS][provider][pay-bill] error", {
+      statusCode: normalizedError.statusCode,
+      message: normalizedError.message,
+      providerMessage: normalizedError.providerMessage,
+      providerBodyType: normalizedError.providerResponse.providerBodyType,
+    });
+
+    throw normalizedError;
+  }
 };

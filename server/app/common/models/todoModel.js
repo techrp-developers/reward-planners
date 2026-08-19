@@ -113,6 +113,49 @@ const TodoModel = {
     return rows;
   },
 
+  async getTodoById(id, created_by) {
+    const [rows] = await db.query(
+      `
+      SELECT 
+        id,
+        created_by,
+        task_date,
+        start_time,
+        end_time,
+        title,
+        subtitle,
+        reminder_time,
+        completed,
+        status,
+        created_at,
+        updated_at
+      FROM todos
+      WHERE id = ?
+      AND created_by = ?
+      LIMIT 1
+      `,
+      [id, created_by]
+    );
+
+    return rows[0] || null;
+  },
+
+  async getTodoIdsByUser(ids, created_by) {
+    if (!Array.isArray(ids) || !ids.length) return [];
+
+    const [rows] = await db.query(
+      `
+      SELECT id
+      FROM todos
+      WHERE created_by = ?
+      AND id IN (?)
+      `,
+      [created_by, ids]
+    );
+
+    return rows.map((row) => row.id);
+  },
+
   async updateTodo(id, created_by, data) {
     const fields = [];
     const params = [];

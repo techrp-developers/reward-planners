@@ -1,9 +1,9 @@
 const crypto = require("crypto");
 const TransactionModel = require("../models/transactionModel");
 const BillFetchModel = require("../models/billFetchModel");
+const RefundModel = require("../models/refundModel");
 const razorpay = require("../services/razorpay_service");
 const ekoService = require("../services/eko_service");
-const rechargeService = require("../services/recharge_service");
 const { processTransaction } = require("../services/paymentProcessor");
 const db = require("../../../../config/database");
 const { notifyUser } = require("../../../common/utils/notification");
@@ -12,6 +12,7 @@ class PaymentController {
   //   create Order
   async createOrder(req, res) {
     const conn = await db.getConnection();
+    let razorpayOrder = null;
 
     try {
       await conn.beginTransaction();
@@ -27,7 +28,7 @@ class PaymentController {
         });
       }
 
-      const { operator_id, bill_fetch_id } = req.body;
+      const { operator_id, bill_fetch_id, plan_id, circle_id } = req.body;
 
       if (!operator_id) {
         await conn.rollback();
@@ -79,6 +80,8 @@ class PaymentController {
       let senderName = req.body.sender_name || null;
       let billFetchId = null;
       let providerBillRefId = null;
+      let rechargePlanId = null;
+      let rechargeCircleId = null;
 
       if (fetchBillFlag === 1) {
         if (!bill_fetch_id) {
@@ -119,16 +122,43 @@ class PaymentController {
         billFetchId = fetchedBill.id;
         providerBillRefId = fetchedBill.provider_ref_id;
       } else {
-        if (!rechargeService.isConfigured()) {
+        utilityAccountNo = String(req.body.utility_acc_no || "").trim();
+        senderName = String(req.body.sender_name || "").trim();
+
+        if (
+          !/^[1-9][0-9]{9}$/.test(utilityAccountNo) ||
+          !plan_id ||
+          !senderName
+        ) {
           await conn.rollback();
-          return res.status(503).json({
+          return res.status(400).json({
             success: false,
-            message: "Recharge provider is not configured",
+            message:
+              "A valid mobile number, plan_id, and sender_name are required",
           });
         }
 
-        amount = Number(req.body.amount);
-        utilityAccountNo = String(req.body.utility_acc_no || "").trim();
+        const planResponse = await ekoService.getRechargePlans({
+          mobile: utilityAccountNo,
+          operatorCode: String(operator_id),
+          circleId: circle_id ? String(circle_id) : "",
+        });
+        const selectedPlan = planResponse.plans.find(
+          (plan) => plan.planId === String(plan_id),
+        );
+
+        if (!selectedPlan) {
+          await conn.rollback();
+          return res.status(400).json({
+            success: false,
+            message: "Selected recharge plan is invalid or no longer available",
+          });
+        }
+
+        amount = Number(selectedPlan.amount);
+        confirmationMobileNo = utilityAccountNo;
+        rechargePlanId = selectedPlan.planId;
+        rechargeCircleId = circle_id ? String(circle_id) : null;
       }
 
       if (
@@ -144,10 +174,7 @@ class PaymentController {
         });
       }
 
-      const providerClientRefId =
-        fetchBillFlag === 1
-          ? `${Date.now()}${crypto.randomInt(100, 1000)}`
-          : null;
+      const providerClientRefId = `${Date.now()}${crypto.randomInt(100, 1000)}`;
 
       // 1. create transaction
       const transaction_id = await TransactionModel.create(
@@ -163,6 +190,8 @@ class PaymentController {
           bill_fetch_id: billFetchId,
           provider_client_ref_id: providerClientRefId,
           provider_bill_ref_id: providerBillRefId,
+          recharge_plan_id: rechargePlanId,
+          recharge_circle_id: rechargeCircleId,
         },
         conn,
       );
@@ -172,7 +201,7 @@ class PaymentController {
       }
 
       // 2. create razorpay order
-      const razorpayOrder = await razorpay.orders.create({
+      razorpayOrder = await razorpay.orders.create({
         amount: Math.round(amount * 100),
         currency: "INR",
         receipt: `bbps_${transaction_id}`,
@@ -203,11 +232,140 @@ class PaymentController {
       });
     } catch (err) {
       await conn.rollback();
+
+      if (razorpayOrder?.id) {
+        razorpay.orders.cancel(razorpayOrder.id).catch((cancelError) => {
+          console.error("[BBPS][create-order] orphan cancellation failed", {
+            razorpay_order_id: razorpayOrder.id,
+            message: cancelError.message,
+          });
+        });
+      }
+
+      // A lost create-order response can be retried by the client. Reuse the
+      // recent untouched recharge order instead of creating a second payable
+      // transaction. Fetched-bill orders already have single-use protection.
+      if (fetchBillFlag === 0) {
+        const [[existingOrder]] = await conn.execute(
+          `SELECT t.id AS transaction_id, ro.razorpay_order_id, ro.amount
+           FROM bbps_transactions t
+           JOIN razorpay_orders ro
+             ON ro.ref_id = t.id AND ro.module = 'bbps'
+           WHERE t.user_id = ?
+             AND t.operator_id = ?
+             AND t.utility_acc_no = ?
+             AND t.recharge_plan_id = ?
+             AND COALESCE(t.recharge_circle_id, '') = COALESCE(?, '')
+             AND t.amount = ?
+             AND t.bbps_status = 'INIT'
+             AND ro.status = 'created'
+             AND t.created_at >= DATE_SUB(NOW(), INTERVAL 10 MINUTE)
+           ORDER BY t.id DESC
+           LIMIT 1
+           FOR UPDATE`,
+          [
+            userId,
+            operator_id,
+            utilityAccountNo,
+            rechargePlanId,
+            rechargeCircleId,
+            amount,
+          ],
+        );
+
+        if (existingOrder) {
+          await conn.commit();
+          return res.json({
+            success: true,
+            data: {
+              key: process.env.RAZOR_API_KEY,
+              orderId: existingOrder.razorpay_order_id,
+              amount: Math.round(Number(existingOrder.amount) * 100),
+              currency: "INR",
+              transaction_id: existingOrder.transaction_id,
+              reused: true,
+            },
+          });
+        }
+      }
+
       console.error("createOrder error:", err);
 
       return res.status(500).json({
         success: false,
         message: err.message,
+      });
+    } finally {
+      conn.release();
+    }
+  }
+
+  async cancelUnpaidOrder(req, res) {
+    const conn = await db.getConnection();
+    try {
+      const userId = req.user?.user_id;
+      const transactionId = Number(req.body?.transaction_id);
+
+      if (!userId) {
+        return res.status(401).json({ success: false, message: "Unauthorized user" });
+      }
+      if (!Number.isInteger(transactionId) || transactionId <= 0) {
+        return res.status(400).json({ success: false, message: "Valid transaction_id required" });
+      }
+
+      await conn.beginTransaction();
+      const txn = await TransactionModel.getByIdForUpdate(transactionId, conn);
+      if (!txn || Number(txn.user_id) !== Number(userId)) {
+        await conn.rollback();
+        return res.status(404).json({ success: false, message: "Transaction not found" });
+      }
+      if (txn.bbps_status !== "INIT") {
+        await conn.rollback();
+        return res.status(409).json({
+          success: false,
+          status: txn.bbps_status,
+          message: "Transaction can no longer be cancelled as unpaid",
+        });
+      }
+
+      const [[rpOrder]] = await conn.execute(
+        `SELECT razorpay_order_id, status, razorpay_payment_id
+         FROM razorpay_orders
+         WHERE ref_id = ? AND module = 'bbps'
+         LIMIT 1 FOR UPDATE`,
+        [transactionId],
+      );
+      if (!rpOrder || rpOrder.status !== "created" || rpOrder.razorpay_payment_id) {
+        await conn.rollback();
+        return res.status(409).json({
+          success: false,
+          message: "Payment may already be in progress",
+        });
+      }
+
+      // Razorpay rejects cancellation once an order has a payment attempt,
+      // which makes this the authoritative safety check before local expiry.
+      await razorpay.orders.cancel(rpOrder.razorpay_order_id);
+
+      await conn.execute(
+        `UPDATE razorpay_orders SET status = 'failed'
+         WHERE razorpay_order_id = ? AND status = 'created'`,
+        [rpOrder.razorpay_order_id],
+      );
+      await TransactionModel.updateStatus(
+        transactionId,
+        "PAYMENT_FAILED",
+        { message: "Customer cancelled before payment" },
+        conn,
+      );
+      await conn.commit();
+      return res.json({ success: true, status: "cancelled", transaction_id: transactionId });
+    } catch (error) {
+      await conn.rollback();
+      console.error("[BBPS][cancel-order] error", error);
+      return res.status(409).json({
+        success: false,
+        message: "Payment could not be safely cancelled",
       });
     } finally {
       conn.release();
@@ -319,15 +477,27 @@ class PaymentController {
 
       // DUPLICATE PAYMENT PROTECTION
       const [existingPayment] = await conn.execute(
-        `SELECT id FROM razorpay_orders WHERE razorpay_payment_id=?`,
+        `SELECT ro.ref_id, t.user_id, t.bbps_status
+         FROM razorpay_orders ro
+         JOIN bbps_transactions t ON t.id = ro.ref_id
+         WHERE ro.razorpay_payment_id = ? AND ro.module = 'bbps'`,
         [razorpay_payment_id],
       );
 
       if (existingPayment.length) {
+        const duplicate = existingPayment[0];
         await conn.rollback();
+        if (Number(duplicate.user_id) !== Number(userId)) {
+          return res.status(403).json({
+            success: false,
+            message: "Unauthorized payment",
+          });
+        }
         return res.json({
-          success: true,
+          success: duplicate.bbps_status === "PAID",
           message: "Already processed",
+          transaction_id: duplicate.ref_id,
+          status: duplicate.bbps_status,
         });
       }
 
@@ -412,11 +582,32 @@ class PaymentController {
           result,
         });
       } catch (err) {
-        console.error("BBPS Error:", err);
+        console.error("[BBPS][verify-payment][provider] error", {
+          transaction_id: txn.id,
+          statusCode: err.statusCode || err.response?.status || 500,
+          message: err.message,
+          retryable: err.retryable !== false,
+          providerResponse: err.providerResponse,
+        });
 
-        const failureStatus =
-          err.retryable === false ? "FAILED_FINAL" : "FAILED_RETRY";
+        const failureStatus = err.reconciliationRequired
+          ? "RECONCILIATION_REQUIRED"
+          : err.retryable === false
+            ? "FAILED_FINAL"
+            : "FAILED_RETRY";
         const willRetry = failureStatus === "FAILED_RETRY";
+        const needsReconciliation = failureStatus === "RECONCILIATION_REQUIRED";
+        const pendingProviderAction = willRetry || needsReconciliation;
+        const notificationType = willRetry
+          ? "bbps_payment_retry"
+          : needsReconciliation
+            ? "bbps_payment_reconciliation"
+            : "bbps_payment_failed";
+        const notificationMessage = willRetry
+          ? "Your payment was captured, but bill processing will be retried automatically."
+          : needsReconciliation
+            ? "Your payment was captured and the provider response is pending review."
+            : "The provider rejected the bill payment. Your refund has been initiated.";
 
         await TransactionModel.updateStatus(
           txn.id,
@@ -425,20 +616,22 @@ class PaymentController {
           conn,
         );
 
+        if (failureStatus === "FAILED_FINAL") {
+          await RefundModel.queueForTransaction(txn.id, conn);
+        }
+
         await conn.commit();
 
         notifyUser(
           {
             userId,
             module: "bbps",
-            type: willRetry
-              ? "bbps_payment_retry"
-              : "bbps_payment_failed",
-            title: willRetry ? "Bill payment pending" : "Bill payment failed",
-            message: willRetry
-              ? "Your payment was captured, but bill processing will be retried automatically."
-              : "Your payment was captured, but the provider rejected the bill payment.",
-            icon: willRetry ? "clock" : "x-circle",
+            type: notificationType,
+            title: pendingProviderAction
+              ? "Bill payment pending"
+              : "Bill payment failed",
+            message: notificationMessage,
+            icon: pendingProviderAction ? "clock" : "x-circle",
             reference_type: "bbps_transaction",
             reference_id: txn.id,
             action_url: `/bbps/transactions/${txn.id}`,
@@ -448,18 +641,25 @@ class PaymentController {
           "bbps retry notification",
         );
 
-        return res.status(err.retryable === false ? 422 : 202).json({
+        return res
+          .status(err.retryable === false && !needsReconciliation ? 422 : 202)
+          .json({
           success: false,
           message:
-            err.retryable === false
-              ? "Payment was captured, but the provider rejected the transaction"
+            needsReconciliation
+              ? "Payment was captured and the provider response is pending reconciliation"
+              : err.retryable === false
+              ? "The provider rejected the transaction and a refund was initiated"
               : "Payment was captured and bill processing will be retried automatically",
           transaction_id: txn.id,
-        });
+          });
       }
     } catch (err) {
       await conn.rollback();
-      console.error("verifyPayment error:", err);
+      console.error("[BBPS][verify-payment] error", {
+        statusCode: err.statusCode || err.response?.status || 500,
+        message: err.message,
+      });
 
       return res.status(500).json({
         success: false,
@@ -554,17 +754,36 @@ class PaymentController {
     } catch (err) {
       await conn.rollback();
 
-      if (
-        txn &&
-        (err.retryable === false || txn.retry_count + 1 >= txn.max_retry)
-      ) {
-        await TransactionModel.updateStatus(
-          txn.id,
-          "FAILED_FINAL",
-          err.providerResponse || err.message,
-        );
-      } else {
-        await TransactionModel.incrementRetry(transaction_id);
+      if (txn) {
+        await conn.beginTransaction();
+
+        if (err.reconciliationRequired) {
+          await TransactionModel.updateStatus(
+            txn.id,
+            "RECONCILIATION_REQUIRED",
+            err.providerResponse || err.message,
+            conn,
+          );
+        } else if (err.retryable === false) {
+          await TransactionModel.updateStatus(
+            txn.id,
+            "FAILED_FINAL",
+            err.providerResponse || err.message,
+            conn,
+          );
+          await RefundModel.queueForTransaction(txn.id, conn);
+        } else if (txn.retry_count + 1 >= txn.max_retry) {
+          await TransactionModel.updateStatus(
+            txn.id,
+            "RECONCILIATION_REQUIRED",
+            err.providerResponse || err.message,
+            conn,
+          );
+        } else {
+          await TransactionModel.incrementRetry(transaction_id, conn);
+        }
+
+        await conn.commit();
       }
 
       return res.status(500).json({

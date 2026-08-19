@@ -1,8 +1,9 @@
 const db = require("../config/database");
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
-function getPublicUrl(path) {
+function getPublicUrl(path, updatedAt) {
   if (!path) return null;
-  return `${CDN_BASE_URL}/${path}`;
+  const version = updatedAt ? `?v=${encodeURIComponent(updatedAt)}` : "";
+  return `${CDN_BASE_URL}/${path}${version}`;
 }
 
 class CampaignModel {
@@ -84,7 +85,9 @@ class CampaignModel {
         data.start_at || null,
         data.end_at || null,
         data.redirect_type || null,
-        data.redirect_id || null,
+        Number.isInteger(Number(data.redirect_id)) && Number(data.redirect_id) > 0
+          ? Number(data.redirect_id)
+          : null,
         data.redirect_url || null,
         data.display_order || 0,
         data.status || "draft",
@@ -180,7 +183,11 @@ class CampaignModel {
 
     if (data.redirect_id !== undefined) {
       fields.push("redirect_id = ?");
-      values.push(data.redirect_id);
+      values.push(
+        Number.isInteger(Number(data.redirect_id)) && Number(data.redirect_id) > 0
+          ? Number(data.redirect_id)
+          : null,
+      );
     }
 
     if (data.redirect_url !== undefined) {
@@ -316,6 +323,7 @@ class CampaignModel {
       WHERE
         ep.status = 'approved'
         AND ep.is_visible = 1
+        AND COALESCE(ep.created_via, '') != 'flea_market_quick_create'
         AND pv.is_visible = 1
         AND pv.stock > 0
 
@@ -477,6 +485,7 @@ class CampaignModel {
       campaign_id,
       title,
       banner_image,
+      updated_at,
       redirect_type,
       redirect_id,
       redirect_url
@@ -494,6 +503,7 @@ class CampaignModel {
         campaign_id,
         title,
         banner_image,
+        updated_at,
         redirect_type,
         redirect_id,
         redirect_url
@@ -511,6 +521,7 @@ class CampaignModel {
       campaign_id,
       title,
       banner_image,
+      updated_at,
       start_at,
       end_at
     FROM campaigns
@@ -525,15 +536,15 @@ class CampaignModel {
     return {
       posters: posters.map((item) => ({
         ...item,
-        banner_image: getPublicUrl(item.banner_image),
+        banner_image: getPublicUrl(item.banner_image, item.updated_at),
       })),
       dashboard_posters: dashboardPosters.map((item) => ({
         ...item,
-        banner_image: getPublicUrl(item.banner_image),
+        banner_image: getPublicUrl(item.banner_image, item.updated_at),
       })),
       flash_sales: flashSales.map((item) => ({
         ...item,
-        banner_image: getPublicUrl(item.banner_image),
+        banner_image: getPublicUrl(item.banner_image, item.updated_at),
       })),
     };
   }
@@ -545,6 +556,7 @@ class CampaignModel {
       title,
       campaign_type,
       banner_image,
+      updated_at,
       start_at,
       end_at
     FROM campaigns
@@ -567,7 +579,10 @@ class CampaignModel {
 
     const [rows] = await db.query(sql, values);
 
-    return rows;
+    return rows.map((item) => ({
+      ...item,
+      banner_image: getPublicUrl(item.banner_image, item.updated_at),
+    }));
   }
 
   async getUserCampaignById(campaignId) {
@@ -578,6 +593,7 @@ class CampaignModel {
       title,
       campaign_type,
       banner_image,
+      updated_at,
       start_at,
       end_at,
       redirect_type,
@@ -599,7 +615,7 @@ class CampaignModel {
 
     return {
       ...rows[0],
-      banner_image: getPublicUrl(rows[0].banner_image),
+      banner_image: getPublicUrl(rows[0].banner_image, rows[0].updated_at),
     };
   }
 
@@ -629,7 +645,8 @@ class CampaignModel {
         ELSE pv.sale_price
       END AS final_price,
 
-      pi.image_url
+      pi.image_url,
+      pi.updated_at AS image_updated_at
 
     FROM campaign_items ci
 

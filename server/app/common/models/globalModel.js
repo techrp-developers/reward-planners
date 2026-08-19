@@ -6,10 +6,17 @@ class GlobalModel {
   async getGlobalSuggestions(search) {
     const result = {};
 
-    result.products = await ProductModel.getSearchSuggestions({
+    const ecommerceSuggestions = await ProductModel.getSearchSuggestions({
       search,
       limit: 5,
     });
+
+    // Keep the global-search response backward compatible as a flat list.
+    result.products = [
+      ...ecommerceSuggestions.categories,
+      ...ecommerceSuggestions.subcategories,
+      ...ecommerceSuggestions.products,
+    ].slice(0, 5);
 
     result.services = await ServiceModel.getSearchSuggestions({
       search,
@@ -114,20 +121,26 @@ class GlobalModel {
         id,
         company_id,
         name,
+        email,
         contact
      FROM company_users
      WHERE company_id = ?
-     AND status = 1
-     AND contact IS NOT NULL
-     AND contact <> ''`,
+       AND status = 1
+       AND contact IS NOT NULL
+       AND TRIM(contact) <> ''
+       AND (
+         email IS NULL
+         OR TRIM(email) = ''
+         OR LOWER(TRIM(email)) NOT LIKE 'temp%'
+       )`,
       [companyId],
     );
 
     return rows;
   }
 
-  // all the employees
-  async getCampaignRecipients() {
+  // Active campaign recipients for a single company
+  async getCampaignRecipients(companyId) {
     const [rows] = await db.execute(
       `SELECT
         id,
@@ -135,9 +148,11 @@ class GlobalModel {
         name,
         contact
      FROM company_users
-     WHERE status = 1
+     WHERE company_id = ?
+       AND status = 1
        AND contact IS NOT NULL
        AND TRIM(contact) <> ''`,
+      [companyId],
     );
 
     return rows;

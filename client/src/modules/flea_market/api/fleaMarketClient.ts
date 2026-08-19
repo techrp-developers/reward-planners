@@ -1,4 +1,8 @@
 import axios, { AxiosError } from "axios";
+import { SERVER_CONFIG } from "../../../common/config/serverConfig";
+
+export const FLEA_MARKET_API_BASE_URL =
+  SERVER_CONFIG.apiBaseUrl.replace(/\/$/, "");
 
 /**
  * Thrown centrally by the response interceptor whenever the backend reports
@@ -25,13 +29,24 @@ export function setFleaMarketLocationId(locationId: number | null): void {
 }
 
 export const fleaMarketClient = axios.create({
-  baseURL: "/api/flea-market",
+  baseURL: FLEA_MARKET_API_BASE_URL,
 });
 
 // Injects the session/location context on every call instead of every call
 // site threading it through manually.
 fleaMarketClient.interceptors.request.use((config) => {
   config.headers = config.headers ?? {};
+
+  // The live CRM reverse proxy currently gives API responses a browser cache
+  // lifetime. Give every read a unique URL so lists, searches, stock, reports,
+  // invoices, and health checks always reflect the current database state.
+  if (config.method?.toLowerCase() === "get") {
+    if (config.params instanceof URLSearchParams) {
+      config.params.set("_", String(Date.now()));
+    } else {
+      config.params = { ...(config.params ?? {}), _: Date.now() };
+    }
+  }
 
   if (currentSessionToken) {
     config.headers["X-Session-Token"] = currentSessionToken;
@@ -66,7 +81,8 @@ export async function pingFleaMarketHealth(): Promise<void> {
     await fleaMarketClient.get("/health");
   } catch (error) {
     console.error(
-      "[flea-market] Backend health check failed - is the server running and is VITE_DEV_API_PROXY_TARGET correct?",
+      "[flea-market] Backend health check failed - is the selected server running and is serverConfig.ts correct?",
+      `API URL: ${FLEA_MARKET_API_BASE_URL}`,
       error,
     );
   }

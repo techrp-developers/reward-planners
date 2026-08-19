@@ -132,6 +132,50 @@ class SupportController {
       });
     }
   }
+    // fetch tickets data
+  async getMyTickets(req, res) {
+    try {
+      const userId = req.user?.user_id;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      const [tickets] = await db.execute(
+        `SELECT
+          st.ticket_id,
+          st.user_id,
+          st.subject,
+          st.description,
+          st.category_id,
+          sc.name AS category_name,
+          st.attachment_url,
+          st.status,
+          st.created_at,
+          st.updated_at
+        FROM support_tickets st
+        LEFT JOIN support_categories sc
+          ON sc.category_id = st.category_id
+        WHERE st.user_id = ?
+        ORDER BY st.ticket_id DESC`,
+        [userId],
+      );
+
+      return res.status(200).json({
+        success: true,
+        data: tickets,
+      });
+    } catch (error) {
+      console.error("Get my tickets error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  }
 }
 
 module.exports = new SupportController();

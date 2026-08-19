@@ -5,10 +5,14 @@ const optionalAuth = require("../../../common/middlewares/optionalAuth");
 /* ======================================================Product Listing============================================ */
 
 // Product Listing
-router.get("/all-products", ProductController.getAllProducts);
+router.get("/all-products", optionalAuth, ProductController.getAllProducts);
 
 // get Products by Category
-router.get("/by-category/:categoryId", ProductController.getProductsByCategory);
+router.get(
+  "/by-category/:categoryId",
+  optionalAuth,
+  ProductController.getProductsByCategory,
+);
 
 // Get a Product by ID
 router.get(
@@ -20,6 +24,7 @@ router.get(
 // products by subcategory ID
 router.get(
   "/by-subcategory/:subcategoryId",
+  optionalAuth,
   ProductController.getProductsBySubcategory,
 );
 
@@ -43,7 +48,7 @@ router.get(
 /* ======================================================Promotional============================================ */
 
 // similar Products
-router.get("/similar/:productId", ProductController.getSimilarProducts);
+router.get("/similar/:productId", optionalAuth, ProductController.getSimilarProducts);
 
 // Recent Products
 router.get(
@@ -60,25 +65,26 @@ router.get(
 );
 
 // New Arrivals
-router.get("/new-arrivals", ProductController.getNewArrivals);
+router.get("/new-arrivals", optionalAuth, ProductController.getNewArrivals);
 
 // Customer also bought
 router.get(
   "/:productId/customers-also-bought",
+  optionalAuth,
   ProductController.getCustomersAlsoBought,
 );
 
 // Trending Products
-router.get("/trending", ProductController.getTrendingProducts);
+router.get("/trending", optionalAuth, ProductController.getTrendingProducts);
 
 // Best seller
-router.get("/best-sellers", ProductController.getBestSellers);
+router.get("/best-sellers", optionalAuth, ProductController.getBestSellers);
 
 // Most viewed products
-router.get("/most-viewed", ProductController.getMostViewedProducts);
+router.get("/most-viewed", optionalAuth, ProductController.getMostViewedProducts);
 
 // Top rated products
-router.get("/top-rated", ProductController.getTopRatedProducts);
+router.get("/top-rated", optionalAuth, ProductController.getTopRatedProducts);
 
 /* ======================================================Suggestions and History============================================ */
 
@@ -86,7 +92,7 @@ router.get("/top-rated", ProductController.getTopRatedProducts);
 router.get("/search/suggestions", ProductController.getSearchSuggestions);
 
 // Load Products
-router.get("/search/products", ProductController.loadProducts);
+router.get("/search/products", optionalAuth, ProductController.loadProducts);
 
 // save search history
 router.post(

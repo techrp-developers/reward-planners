@@ -1,13 +1,23 @@
 const db = require("../../../../config/database");
 const {
   finalizePaidServiceOrder,
-  generateInvoiceOnce,
+  generateAndEmailInvoice,
 } = require("./paymentFinalizer");
 const { notifyUser } = require("../../../common/utils/notification");
+const { notifyNewServiceOrder } = require("../../../../services/whatsapp/adminNotificationService");
+const { releaseServiceCoins } = require("../../../../services/rewards/serviceWalletService");
+const ServiceOrderModel = require("../models/serviceOrderModel");
 
 async function processEvent(req) {
   const body = req.parsedBody;
   const event = body.event;
+
+  if (event === "refund.processed" || event === "refund.failed") {
+    const refund = body?.payload?.refund?.entity;
+    if (!refund) return;
+    await ServiceOrderModel.reconcileRefundEntity(refund, event);
+    return;
+  }
 
   // =========================
   //  PAYMENT SUCCESS
@@ -18,11 +28,24 @@ async function processEvent(req) {
     const paymentId = payment.id;
 
     const [rpOrder] = await db.execute(
-      `SELECT ref_id FROM razorpay_orders WHERE razorpay_order_id = ?`,
+      `SELECT ref_id, amount FROM razorpay_orders WHERE razorpay_order_id = ?`,
       [razorpayOrderId],
     );
 
     if (!rpOrder.length) return;
+
+    if (
+      payment.currency !== "INR" ||
+      Number(payment.amount) !== Math.round(Number(rpOrder[0].amount) * 100)
+    ) {
+      console.error("[service webhook] Captured payment amount mismatch", {
+        razorpayOrderId,
+        expected: Math.round(Number(rpOrder[0].amount) * 100),
+        received: payment.amount,
+        currency: payment.currency,
+      });
+      return;
+    }
 
     const parentOrderId = rpOrder[0].ref_id;
 
@@ -54,6 +77,10 @@ async function processEvent(req) {
 
       await connection.commit();
 
+      notifyNewServiceOrder(parentOrderId).catch((err) => {
+        console.error("[webhook] Admin service-order WhatsApp failed:", err.message);
+      });
+
       const [[orderUser]] = await db.execute(
         `SELECT user_id FROM service_orders WHERE parent_order_id = ? LIMIT 1`,
         [parentOrderId],
@@ -74,9 +101,9 @@ async function processEvent(req) {
         "service webhook paid notification",
       );
 
-      generateInvoiceOnce(parentOrderId).catch((err) => {
+      generateAndEmailInvoice(parentOrderId).catch((err) => {
         console.error(
-          `[webhook] Invoice generation failed for parent_order_id=${parentOrderId}:`,
+          `[webhook] Invoice email failed for parent_order_id=${parentOrderId}:`,
           err.message,
         );
       });
@@ -104,13 +131,25 @@ async function processEvent(req) {
 
     const parentOrderId = rpOrder[0].ref_id;
 
-    await db.execute(
+    const failureConn = await db.getConnection();
+    try {
+      await failureConn.beginTransaction();
+      const released = await releaseServiceCoins(failureConn, parentOrderId);
+      await failureConn.execute(
       `UPDATE service_orders
-       SET payment_status = 'failed'
+       SET payment_status = 'failed',
+           reward_coins_used = CASE WHEN ? THEN 0 ELSE reward_coins_used END
        WHERE parent_order_id = ?
-       AND payment_status NOT IN ('paid', 'failed')`,
-      [parentOrderId],
-    );
+       AND COALESCE(payment_status, 'pending') NOT IN ('paid', 'failed')`,
+      [released ? 1 : 0, parentOrderId],
+      );
+      await failureConn.commit();
+    } catch (error) {
+      await failureConn.rollback();
+      throw error;
+    } finally {
+      failureConn.release();
+    }
 
     const [[orderUser]] = await db.execute(
       `SELECT user_id FROM service_orders WHERE parent_order_id = ? LIMIT 1`,

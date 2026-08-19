@@ -20,11 +20,28 @@ router.post(
   GlobalController.creditWallet,
 );
 
-// router.post(
-//   "/campaigns/launch-event",
-//   authenticateToken,
-//   authorizeRoles("vendor_manager", "admin"),
-//   GlobalController.sendLaunchCampaign,
-// );
+// campaign launch event
+router.post(
+  "/campaigns/launch-event",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  GlobalController.sendLaunchCampaign,
+);
+
+// IOS available
+router.post(
+  "/campaign-ios-update",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  GlobalController.iosUpdateCampaign,
+);
+
+// Flea Market Inamdar event
+router.post(
+  "/campaign-flea-market-inamdar",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  GlobalController.fleaMarketInamdarCampaign,
+);
 
 module.exports = router;

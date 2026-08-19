@@ -1,20 +1,5 @@
 const pool = require("../../config/database");
-
-function normalizePhone(phone) {
-  if (!phone) return null;
-  let p = String(phone).trim();
-  p = p.replace(/\s+/g, "");
-
-  if (p.startsWith("0")) p = p.slice(1);
-
-  // already +91?
-  if (!p.startsWith("+91")) {
-    if (p.length === 10) p = "+91" + p;
-    else if (!p.startsWith("+")) p = "+91" + p;
-  }
-
-  return p;
-}
+const { normalizeIndianMobile } = require("./phone");
 
 function safeJsonParse(maybeJson, fallback = null) {
   if (maybeJson == null) return fallback;
@@ -62,8 +47,8 @@ async function enqueueWhatsApp({ eventName, ctx }) {
   }
 
   // ctx must include: phone, company_id, etc.
-  const phone_full = normalizePhone(ctx.phone);
-  if (!phone_full) return { ok: false, reason: "MISSING_PHONE" };
+  const phone_full = normalizeIndianMobile(ctx.phone);
+  if (!phone_full) return { ok: false, reason: "INVALID_PHONE" };
 
   try {
     // 1) Find matching Rule (company rules first, then global)
@@ -204,6 +189,19 @@ function buildBodyValues(templateKey, ctx) {
     case "order_place_confirm":
       return [name, orderId, amount];
 
+    // --- ADMIN ALERTS ---
+    case "admin_new_service_order":
+      return [name, orderId, amount, String(ctx.service_name || "Service")];
+
+    case "admin_new_service_enquiry":
+      return [name, String(ctx.enquiry_ref || orderId), String(ctx.service_name || "Service"), String(ctx.customer_phone || "N/A")];
+
+    case "admin_new_help_request":
+      return [name, String(ctx.request_id || orderId), orderId, String(ctx.issue_type || "General support")];
+
+    case "admin_new_ecommerce_order":
+      return [name, orderId, amount, String(ctx.item_count || "0")];
+
     case "order_place_arriving":
       return [name, orderId];
 
@@ -230,7 +228,15 @@ function buildBodyValues(templateKey, ctx) {
     case "rewardpointsupdate":
       return [name, String(points), String(balance)];
 
+    case "reward_planners_launch_inamdar":
+    case "reward_planners_launch_ddm":
+    case "reward_planners_launch_lavender":
+    case "reward_planners_launch":
     case "reward_planners_launch_invitation":
+      return [name];
+
+    case "reward_planners_ios_launch":
+    case "flea_market_inamdar":
       return [name];
 
     case "create_account_notification":

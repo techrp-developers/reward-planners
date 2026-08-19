@@ -12,6 +12,8 @@ const {
 } = require("../../../../services/whatsapp/waEnqueueService");
 const { runNonBlocking } = require("../../../../utils/nonBlocking");
 const { notifyUser } = require("../../../common/utils/notification");
+const { canRequestCancellation } = require("../utils/lifecyclePolicy");
+const ItemCancellationModel = require("../models/itemCancellationModel");
 
 function positiveInt(value, fallback, max = 100) {
   const parsed = Number.parseInt(value, 10);
@@ -157,7 +159,8 @@ function buildInvoiceHTML(invoice = {}, items = []) {
         </tr>
         `,
     )
-    .join("");
+    .join("")
+    .replace(/\n\s*.*GST\s+[^<\n]*%/g, "");
 
   let html = template;
 
@@ -203,6 +206,11 @@ function buildInvoiceHTML(invoice = {}, items = []) {
     escapeHTML(invoice.contact_name || ""),
   );
 
+  html = html.replace(
+    /{{customer_phone}}/g,
+    escapeHTML(invoice.customer_phone || ""),
+  );
+
   const customerAddress = `
 ${escapeHTML(invoice.address1 || "")} ${escapeHTML(invoice.address2 || "")}<br>
 ${escapeHTML(invoice.customer_city || "")} ${escapeHTML(invoice.zipcode || "")}
@@ -221,9 +229,22 @@ ${escapeHTML(invoice.customer_city || "")} ${escapeHTML(invoice.zipcode || "")}
   // ------------------------
 
   html = html.replace(/{{subtotal}}/g, money(invoice.subtotal));
-  html = html.replace(/{{tax_total}}/g, money(invoice.tax_total));
   html = html.replace(/{{shipping_amount}}/g, money(invoice.shipping_amount));
+  html = html.replace(
+    /{{reward_discount}}/g,
+    money(invoice.reward_discount),
+  );
   html = html.replace(/{{grand_total}}/g, money(invoice.grand_total));
+
+  const rewardDiscountRow =
+    Number(invoice.reward_discount || 0) > 0
+      ? `<div class="total-row">
+<span>Reward Coins Discount</span>
+<span>-₹{{reward_discount}}</span>
+</div>`.replace(/{{reward_discount}}/g, money(invoice.reward_discount))
+      : "";
+
+  html = html.replace(/{{reward_discount_row}}/g, rewardDiscountRow);
 
   // amount to words
   const amountWords = amountToWords(Number(invoice.grand_total || 0));
@@ -231,6 +252,63 @@ ${escapeHTML(invoice.customer_city || "")} ${escapeHTML(invoice.zipcode || "")}
   html = html.replace(/{{amount_words}}/g, escapeHTML(amountWords));
 
   return html;
+}
+
+async function streamOrderInvoices(res, orderId, userId = null) {
+  const params = [orderId];
+  let query = "SELECT invoice_id FROM invoices WHERE order_id = ?";
+
+  if (userId !== null) {
+    query += " AND user_id = ?";
+    params.push(userId);
+  }
+
+  const [invoiceRows] = await db.query(query, params);
+
+  if (!invoiceRows.length) {
+    return res.status(404).json({ success: false, message: "Invoice not found" });
+  }
+
+  if (invoiceRows.length === 1) {
+    const invoice = await OrderModel.getInvoiceData(invoiceRows[0].invoice_id);
+    const items = await OrderModel.getInvoiceItems(invoiceRows[0].invoice_id);
+    const html = buildInvoiceHTML(invoice, items);
+
+    if (!html || typeof html !== "string") {
+      throw new Error("Invalid HTML generated for invoice");
+    }
+
+    const pdf = await generateInvoicePDF(html);
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${invoice.invoice_number}.pdf"`,
+      "Content-Length": pdf.length,
+    });
+    return res.end(pdf);
+  }
+
+  res.set({
+    "Content-Type": "application/zip",
+    "Content-Disposition": `attachment; filename="invoices-${orderId}.zip"`,
+  });
+
+  const archive = archiver("zip", { zlib: { level: 9 } });
+  archive.pipe(res);
+
+  for (const row of invoiceRows) {
+    const invoice = await OrderModel.getInvoiceData(row.invoice_id);
+    const items = await OrderModel.getInvoiceItems(row.invoice_id);
+    const html = buildInvoiceHTML(invoice, items);
+
+    if (!html || typeof html !== "string") {
+      throw new Error("Invalid HTML generated for invoice");
+    }
+
+    const pdf = await generateInvoicePDF(html);
+    archive.append(pdf, { name: `${invoice.invoice_number}.pdf` });
+  }
+
+  return archive.finalize();
 }
 
 // send whatsapp
@@ -476,7 +554,7 @@ class OrderController {
         });
       }
 
-      if (["shipped", "delivered"].includes(order.status)) {
+      if (!canRequestCancellation(order.status)) {
         await conn.rollback();
         return res.status(400).json({
           success: false,
@@ -551,6 +629,83 @@ class OrderController {
     }
   }
 
+  async requestItemCancellation(req, res) {
+    try {
+      const userId = req.user?.user_id;
+      const orderItemId = Number(req.params.orderItemId);
+      const reasonId = Number(req.body.reason_id);
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+      if (!Number.isInteger(orderItemId) || orderItemId <= 0 || !reasonId) {
+        return res.status(400).json({
+          success: false,
+          message: "Valid order item and cancellation reason are required",
+        });
+      }
+
+      const data = await ItemCancellationModel.request({
+        userId,
+        orderItemId,
+        reasonId,
+        comment: req.body.comment,
+      });
+
+      return res.json({
+        success: true,
+        message: "Item cancellation request submitted successfully",
+        data,
+      });
+    } catch (error) {
+      const errors = {
+        ITEM_NOT_FOUND: [404, "Order item not found"],
+        ITEM_NOT_CANCELLABLE: [
+          409,
+          "This item cannot be cancelled after pickup or from a booked multi-item shipment",
+        ],
+        INVALID_REASON: [400, "Invalid cancellation reason"],
+        CANCELLATION_ALREADY_REQUESTED: [
+          409,
+          "Cancellation was already requested for this item",
+        ],
+      };
+      const [status, message] = errors[error.message] || [
+        500,
+        "Unable to submit item cancellation request",
+      ];
+      if (status === 500) {
+        console.error("Item cancellation request error:", error);
+      }
+      return res.status(status).json({ success: false, message });
+    }
+  }
+
+  async itemCancellationDetails(req, res) {
+    try {
+      const data = await ItemCancellationModel.details({
+        userId: req.user?.user_id,
+        orderItemId: Number(req.params.orderItemId),
+      });
+      return res.json({ success: true, data });
+    } catch (error) {
+      if (error.message === "ITEM_NOT_FOUND") {
+        return res.status(404).json({
+          success: false,
+          message: "Order item not found",
+        });
+      }
+      console.error("Item cancellation details error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Unable to fetch item cancellation details",
+      });
+    }
+  }
+
   // Cancellation Details
   async cancellationDetails(req, res) {
     try {
@@ -589,7 +744,6 @@ class OrderController {
     try {
       const { orderId } = req.params;
       const userId = req.user?.user_id;
-      // const userId = 1;
 
       if (!userId) {
         return res.status(401).json({
@@ -598,71 +752,7 @@ class OrderController {
         });
       }
 
-      // Get all invoices
-      const [invoiceRows] = await db.query(
-        `SELECT invoice_id FROM invoices WHERE order_id = ? AND user_id = ?`,
-        [orderId, userId],
-      );
-
-      if (!invoiceRows.length) {
-        return res.status(404).json({
-          success: false,
-          message: "Invoice not found",
-        });
-      }
-
-      // If only one invoice -> return PDF normally
-      if (invoiceRows.length === 1) {
-        const invoiceId = invoiceRows[0].invoice_id;
-
-        const invoice = await OrderModel.getInvoiceData(invoiceId);
-        const items = await OrderModel.getInvoiceItems(invoiceId);
-
-        const html = buildInvoiceHTML(invoice, items);
-
-        if (!html || typeof html !== "string") {
-          throw new Error("Invalid HTML generated for invoice");
-        }
-
-        const pdf = await generateInvoicePDF(html);
-
-        res.set({
-          "Content-Type": "application/pdf",
-          "Content-Disposition": `attachment; filename="${invoice.invoice_number}.pdf"`,
-        });
-
-        return res.send(pdf);
-      }
-
-      //  Multiple invoices->Zip
-
-      res.set({
-        "Content-Type": "application/zip",
-        "Content-Disposition": `attachment; filename="invoices-${orderId}.zip"`,
-      });
-
-      const archive = archiver("zip", { zlib: { level: 9 } });
-
-      archive.pipe(res);
-
-      for (const row of invoiceRows) {
-        const invoice = await OrderModel.getInvoiceData(row.invoice_id);
-        const items = await OrderModel.getInvoiceItems(row.invoice_id);
-
-        const html = buildInvoiceHTML(invoice, items);
-
-        if (!html || typeof html !== "string") {
-          throw new Error("Invalid HTML generated for invoice");
-        }
-
-        const pdf = await generateInvoicePDF(html);
-
-        archive.append(pdf, {
-          name: `${invoice.invoice_number}.pdf`,
-        });
-      }
-
-      await archive.finalize();
+      await streamOrderInvoices(res, orderId, userId);
     } catch (error) {
       console.error("Invoice ZIP Error:", error);
 
@@ -670,6 +760,21 @@ class OrderController {
         success: false,
         message: "Failed to generate invoices",
       });
+    }
+  }
+
+  async getInvoiceForManager(req, res) {
+    try {
+      await streamOrderInvoices(res, req.params.orderId);
+    } catch (error) {
+      console.error("Manager invoice download error:", error);
+      if (!res.headersSent) {
+        return res.status(500).json({
+          success: false,
+          message: "Failed to generate invoices",
+        });
+      }
+      res.destroy(error);
     }
   }
 }

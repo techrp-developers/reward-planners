@@ -3,6 +3,9 @@ const fs = require("fs");
 const path = require("path");
 const AddressModel = require("../../../common/models/addressModel");
 const xpressService = require("../../../../services/ExpressBees/xpressbees_service");
+const {
+  reserveWalletCoins,
+} = require("../../../../services/rewards/ecommerceWalletService");
 const RewardModel = require("../../../../models/rewardModel");
 const { generateOrderRef } = require("../utils/orderRef");
 const {
@@ -10,6 +13,9 @@ const {
   resolveRedemption,
   calculateRedeemableCoins,
 } = require("../utils/rewardCalculate");
+const {
+  deliveryChargeForUser,
+} = require("../utils/deliveryFeePolicy");
 
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
 function getPublicUrl(path) {
@@ -39,8 +45,6 @@ class CheckoutModel {
     const conn = await db.getConnection();
 
     try {
-      await conn.beginTransaction();
-
       // ===============================
       // ENSURE WALLET EXISTS
       // ===============================
@@ -56,7 +60,7 @@ class CheckoutModel {
       // 0. WALLET (LOCK)
       // ===============================
       const [[wallet]] = await conn.execute(
-        `SELECT balance FROM customer_wallet WHERE user_id = ? FOR UPDATE`,
+        `SELECT balance FROM customer_wallet WHERE user_id = ?`,
         [userId],
       );
 
@@ -86,8 +90,8 @@ class CheckoutModel {
         JOIN product_variants v ON ci.variant_id = v.variant_id
         JOIN eproducts p ON v.product_id = p.product_id
 
-        WHERE ci.user_id = ?  
-        FOR UPDATE
+        WHERE ci.user_id = ?
+          AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
         `,
         [userId],
       );
@@ -289,7 +293,10 @@ class CheckoutModel {
           vendor_id: Number(vendorId),
           courier_id: selectedCourier.id || selectedCourier.courier_id || null,
           courier_name: selectedCourier.name,
-          shipping_charges: Number(selectedCourier.total_charges),
+          shipping_charges: deliveryChargeForUser({
+            userId,
+            calculatedCharge: selectedCourier.total_charges,
+          }),
           chargeable_weight: selectedCourier.chargeable_weight,
           package_weight: weightGrams,
           length,
@@ -307,6 +314,40 @@ class CheckoutModel {
       );
 
       const finalTotal = productTotal - totalRedeemed + shippingTotal;
+
+      // External serviceability calls are complete. Start the transaction now
+      // and revalidate mutable checkout state while holding short-lived locks.
+      await conn.beginTransaction();
+
+      const [[lockedWallet]] = await conn.execute(
+        `SELECT balance FROM customer_wallet WHERE user_id = ? FOR UPDATE`,
+        [userId],
+      );
+      if (totalRedeemed > Number(lockedWallet?.balance || 0)) {
+        throw new Error("WALLET_BALANCE_CHANGED");
+      }
+
+      const [lockedCart] = await conn.execute(
+        `SELECT ci.variant_id, ci.quantity, v.sale_price, v.stock
+         FROM cart_items ci
+         JOIN product_variants v ON v.variant_id = ci.variant_id
+         WHERE ci.user_id = ? FOR UPDATE`,
+        [userId],
+      );
+      const cartUnchanged =
+        lockedCart.length === cartItems.length &&
+        cartItems.every((item) => {
+          const current = lockedCart.find(
+            (row) => Number(row.variant_id) === Number(item.variant_id),
+          );
+          return (
+            current &&
+            Number(current.quantity) === Number(item.quantity) &&
+            Number(current.sale_price) === Number(item.sale_price) &&
+            Number(current.stock) >= Number(item.quantity)
+          );
+        });
+      if (!cartUnchanged) throw new Error("CHECKOUT_CHANGED");
 
       /* ===============================
        VALIDATION (ANTI-TAMPER)
@@ -356,6 +397,12 @@ class CheckoutModel {
           );
 
           orderId = orderRes.insertId;
+
+          await reserveWalletCoins(conn, {
+            orderId,
+            userId,
+            coins: totalRedeemed,
+          });
           break;
         } catch (err) {
           if (err.code === "ER_DUP_ENTRY" && refAttempts < 2) {
@@ -485,8 +532,6 @@ class CheckoutModel {
     const conn = await db.getConnection();
 
     try {
-      await conn.beginTransaction();
-
       // ===============================
       // 1. ENSURE WALLET EXISTS
       // ===============================
@@ -498,7 +543,7 @@ class CheckoutModel {
       );
 
       const [[wallet]] = await conn.execute(
-        `SELECT balance FROM customer_wallet WHERE user_id = ? FOR UPDATE`,
+        `SELECT balance FROM customer_wallet WHERE user_id = ?`,
         [userId],
       );
 
@@ -527,6 +572,7 @@ class CheckoutModel {
       JOIN eproducts p ON v.product_id = p.product_id
 
       WHERE v.variant_id = ? AND v.product_id = ?
+        AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
       `,
         [variantId, productId],
       );
@@ -611,7 +657,10 @@ class CheckoutModel {
 
       if (!courier) throw new Error("NOT_SERVICEABLE");
 
-      const shippingCharge = Number(courier.total_charges);
+      const shippingCharge = deliveryChargeForUser({
+        userId,
+        calculatedCharge: courier.total_charges,
+      });
 
       // =====================
       // DELIVERY DATE (FIXED)
@@ -634,6 +683,30 @@ class CheckoutModel {
       }
 
       const finalTotal = finalItemTotal + shippingCharge;
+
+      await conn.beginTransaction();
+
+      const [[lockedWallet]] = await conn.execute(
+        `SELECT balance FROM customer_wallet WHERE user_id = ? FOR UPDATE`,
+        [userId],
+      );
+      if (redeemable > Number(lockedWallet?.balance || 0)) {
+        throw new Error("WALLET_BALANCE_CHANGED");
+      }
+
+      const [[lockedItem]] = await conn.execute(
+        `SELECT sale_price, stock
+         FROM product_variants
+         WHERE variant_id = ? AND product_id = ? FOR UPDATE`,
+        [variantId, productId],
+      );
+      if (
+        !lockedItem ||
+        Number(lockedItem.sale_price) !== Number(item.sale_price) ||
+        Number(lockedItem.stock) < Number(quantity)
+      ) {
+        throw new Error("CHECKOUT_CHANGED");
+      }
 
       /* ===============================
        VALIDATION (ANTI-TAMPER)
@@ -686,6 +759,12 @@ class CheckoutModel {
           );
 
           orderId = orderRes.insertId;
+
+          await reserveWalletCoins(conn, {
+            orderId,
+            userId,
+            coins: redeemable,
+          });
           break;
         } catch (err) {
           if (err.code === "ER_DUP_ENTRY" && refAttempts < 2) {
@@ -791,7 +870,7 @@ class CheckoutModel {
   }
 
   // Get checkout details
-  async getCheckoutCart(userId, useRewards = true) {
+  async getCheckoutCart(userId, useRewards = true, addressId = null) {
     // ===============================
     // 1. WALLET
     // ===============================
@@ -838,6 +917,7 @@ class CheckoutModel {
     LEFT JOIN product_images pi ON p.product_id = pi.product_id
 
     WHERE ci.user_id = ?
+      AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
     GROUP BY ci.cart_item_id
     `,
       [userId],
@@ -952,15 +1032,22 @@ class CheckoutModel {
     // ===============================
     // 5. FETCH DEFAULT ADDRESS
     // ===============================
-    const [addressRows] = await db.execute(
-      `SELECT zipcode FROM customer_addresses
-     WHERE user_id = ? AND is_default = 1 LIMIT 1`,
-      [userId],
-    );
+    const [addressRows] = addressId
+      ? await db.execute(
+          `SELECT zipcode FROM customer_addresses
+           WHERE user_id = ? AND address_id = ? LIMIT 1`,
+          [userId, addressId],
+        )
+      : await db.execute(
+          `SELECT zipcode FROM customer_addresses
+           WHERE user_id = ? AND is_default = 1 LIMIT 1`,
+          [userId],
+        );
 
-    if (!addressRows.length) throw new Error("INVALID_ADDRESS");
+    // if (!addressRows.length) throw new Error("INVALID_ADDRESS");
 
-    const destinationPincode = addressRows[0].zipcode;
+    const destinationPincode = addressRows[0]?.zipcode || null;
+    const addressRequired = !destinationPincode;
 
     // ===============================
     // 6. GROUP ITEMS BY VENDOR
@@ -982,7 +1069,9 @@ class CheckoutModel {
 
       const group = vendorGroups[vendorId];
       group.totalWeightKg += item.quantity * item.weight;
-      group.totalAmount += item.itemTotal;
+      // Keep the courier quote identical to checkoutCart(), which uses the
+      // merchandise amount remaining after reward redemption.
+      group.totalAmount += item.itemTotal - item.redeemable;
       group.length = Math.max(group.length, item.length);
       group.breadth = Math.max(group.breadth, item.breadth);
       group.height += item.height * item.quantity;
@@ -994,79 +1083,84 @@ class CheckoutModel {
     let shippingTotal = 0;
     const shippingBreakdown = [];
     const eddList = [];
-
-    // Map of vendorId → EDD so we can stamp it onto each item
     const vendorEDDMap = {};
+    // Shipping cannot be calculated until the user selects an address.
+    if (!addressRequired) {
+      for (const vendorId in vendorGroups) {
+        const vendor = vendorGroups[vendorId];
 
-    for (const vendorId in vendorGroups) {
-      const vendor = vendorGroups[vendorId];
+        const [[vendorAddress]] = await db.execute(
+          `SELECT pincode
+       FROM vendor_addresses
+       WHERE vendor_id = ? AND type = 'shipping'
+       LIMIT 1`,
+          [vendorId],
+        );
 
-      const [[vendorAddress]] = await db.execute(
-        `SELECT pincode FROM vendor_addresses
-       WHERE vendor_id = ? AND type = 'shipping' LIMIT 1`,
-        [vendorId],
-      );
+        if (!vendorAddress?.pincode) continue;
 
-      if (!vendorAddress) continue;
+        const serviceResponse = await xpressService.checkServiceability({
+          origin: vendorAddress.pincode,
+          destination: destinationPincode,
+          payment_type: "prepaid",
+          order_amount: vendor.totalAmount.toString(),
+          weight: Math.round(vendor.totalWeightKg * 1000).toString(),
+          length: Math.round(vendor.length).toString(),
+          breadth: Math.round(vendor.breadth).toString(),
+          height: Math.round(vendor.height).toString(),
+        });
 
-      const serviceResponse = await xpressService.checkServiceability({
-        origin: vendorAddress.pincode,
-        destination: destinationPincode,
-        payment_type: "prepaid",
-        order_amount: vendor.totalAmount.toString(),
-        weight: Math.round(vendor.totalWeightKg * 1000).toString(),
-        length: Math.round(vendor.length).toString(),
-        breadth: Math.round(vendor.breadth).toString(),
-        height: Math.round(vendor.height).toString(),
-      });
+        const courierOptions = Array.isArray(serviceResponse?.data)
+          ? serviceResponse.data
+          : [];
 
-      if (!serviceResponse.status || !serviceResponse.data.length) continue;
+        if (!serviceResponse?.status || courierOptions.length === 0) {
+          continue;
+        }
 
-      const courier = serviceResponse.data
-        .filter((o) => o.total_charges > 0)
-        .sort((a, b) => a.total_charges - b.total_charges)[0];
+        const courier = courierOptions
+          .filter((option) => Number(option.total_charges) > 0)
+          .sort((a, b) => Number(a.total_charges) - Number(b.total_charges))[0];
 
-      if (!courier) continue;
+        if (!courier) continue;
 
-      shippingTotal += Number(courier.total_charges);
+        const shippingCharge = deliveryChargeForUser({
+          userId,
+          calculatedCharge: courier.total_charges,
+        });
+        shippingTotal += shippingCharge;
 
-      // ==========================
-      // CALCULATE EDD
-      // ==========================
-      let edd;
+        let edd;
 
-      if (courier.estimated_delivery_date) {
-        edd = new Date(courier.estimated_delivery_date);
-      } else if (courier.estimated_delivery_days) {
-        edd = new Date(Date.now() + courier.estimated_delivery_days * 86400000);
-      } else {
-        // fallback: 5 days
-        edd = new Date(Date.now() + 5 * 86400000);
+        if (courier.estimated_delivery_date) {
+          edd = new Date(courier.estimated_delivery_date);
+        } else if (courier.estimated_delivery_days) {
+          edd = new Date(
+            Date.now() + Number(courier.estimated_delivery_days) * 86400000,
+          );
+        } else {
+          edd = new Date(Date.now() + 5 * 86400000);
+        }
+
+        eddList.push(edd);
+        vendorEDDMap[Number(vendorId)] = edd;
+
+        shippingBreakdown.push({
+          vendor_id: Number(vendorId),
+          courier_name: courier.name,
+          shipping_charges: shippingCharge,
+          estimated_delivery_date: edd,
+        });
       }
-
-      eddList.push(edd);
-
-      // ==========================
-      // STORE EDD PER VENDOR
-      // ==========================
-      vendorEDDMap[Number(vendorId)] = edd;
-
-      shippingBreakdown.push({
-        vendor_id: Number(vendorId),
-        courier_name: courier.name,
-        shipping_charges: Number(courier.total_charges),
-        estimated_delivery_date: edd,
-      });
     }
 
-    // ==========================
-    // STAMP EDD ONTO EACH ITEM
-    // ==========================
     for (const item of items) {
       item.estimated_delivery_date = vendorEDDMap[item.vendor_id] || null;
     }
 
-    const overallEDD = eddList.length ? eddList.sort((a, b) => b - a)[0] : null;
+    const overallEDD = eddList.length
+      ? eddList.sort((a, b) => b.getTime() - a.getTime())[0]
+      : null;
 
     // ===============================
     // 8. FINAL TOTAL
@@ -1095,8 +1189,10 @@ class CheckoutModel {
       totalDiscount: totalRedeemed,
       shippingTotal,
       payableAmount,
-      shippingBreakdown,
       estimated_delivery_date: overallEDD,
+      addressRequired,
+      shippingCalculated: !addressRequired,
+      shippingBreakdown,
     };
   }
 
@@ -1107,6 +1203,7 @@ class CheckoutModel {
     quantity,
     useRewards = true,
     userId,
+    addressId = null,
   }) {
     // ===============================
     // 1. WALLET
@@ -1151,6 +1248,7 @@ class CheckoutModel {
       ON p.product_id = pi.product_id
 
     WHERE v.variant_id = ? AND p.product_id = ?
+      AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
     GROUP BY v.variant_id
     `,
       [variantId, productId],
@@ -1209,55 +1307,78 @@ class CheckoutModel {
     // ===============================
     // 6. SHIPPING (UNCHANGED)
     // ===============================
-    const [addressRows] = await db.execute(
-      `SELECT zipcode FROM customer_addresses
-     WHERE user_id = ? AND is_default = 1 LIMIT 1`,
-      [userId],
-    );
+    const [addressRows] = addressId
+      ? await db.execute(
+          `SELECT zipcode FROM customer_addresses
+           WHERE user_id = ? AND address_id = ? LIMIT 1`,
+          [userId, addressId],
+        )
+      : await db.execute(
+          `SELECT zipcode FROM customer_addresses
+           WHERE user_id = ? AND is_default = 1 LIMIT 1`,
+          [userId],
+        );
 
-    if (!addressRows.length) throw new Error("INVALID_ADDRESS");
+    const destinationPincode = addressRows[0]?.zipcode || null;
+    const addressRequired = !destinationPincode;
 
-    const destinationPincode = addressRows[0].zipcode;
-
-    const [[vendorAddress]] = await db.execute(
-      `SELECT pincode FROM vendor_addresses
-     WHERE vendor_id = ? AND type = 'shipping' LIMIT 1`,
-      [row.vendor_id],
-    );
-
-    if (!vendorAddress) throw new Error("VENDOR_ADDRESS_MISSING");
-
-    const serviceResponse = await xpressService.checkServiceability({
-      origin: vendorAddress.pincode,
-      destination: destinationPincode,
-      payment_type: "prepaid",
-      order_amount: itemTotal.toString(),
-      weight: Math.round(quantity * Number(row.weight) * 1000).toString(),
-      length: Math.round(row.length).toString(),
-      breadth: Math.round(row.breadth).toString(),
-      height: Math.round(quantity * Number(row.height)).toString(),
-    });
-
-    if (!serviceResponse.status || !serviceResponse.data.length) {
-      throw new Error("NOT_SERVICEABLE");
-    }
-
-    const courier = serviceResponse.data
-      .filter((o) => o.total_charges > 0)
-      .sort((a, b) => a.total_charges - b.total_charges)[0];
-
-    if (!courier) throw new Error("NOT_SERVICEABLE");
-
-    const shippingCharge = Number(courier.total_charges);
-
+    let shippingCharge = 0;
     let expectedDeliveryDate = null;
+    let shippingBreakdown = [];
 
-    if (courier.estimated_delivery_date) {
-      expectedDeliveryDate = courier.estimated_delivery_date;
-    } else if (courier.estimated_delivery_days) {
-      const date = new Date();
-      date.setDate(date.getDate() + Number(courier.estimated_delivery_days));
-      expectedDeliveryDate = date.toISOString().split("T")[0];
+    if (!addressRequired) {
+      const [[vendorAddress]] = await db.execute(
+        `SELECT pincode FROM vendor_addresses
+     WHERE vendor_id = ? AND type = 'shipping' LIMIT 1`,
+        [row.vendor_id],
+      );
+
+      if (!vendorAddress) throw new Error("VENDOR_ADDRESS_MISSING");
+
+      const serviceResponse = await xpressService.checkServiceability({
+        origin: vendorAddress.pincode,
+        destination: destinationPincode,
+        payment_type: "prepaid",
+        // Keep the courier quote identical to buyNow(), which uses the
+        // merchandise amount remaining after reward redemption.
+        order_amount: finalItemTotal.toString(),
+        weight: Math.round(quantity * Number(row.weight) * 1000).toString(),
+        length: Math.round(row.length).toString(),
+        breadth: Math.round(row.breadth).toString(),
+        height: Math.round(quantity * Number(row.height)).toString(),
+      });
+
+      if (!serviceResponse.status || !serviceResponse.data?.length) {
+        throw new Error("NOT_SERVICEABLE");
+      }
+
+      const courier = serviceResponse.data
+        .filter((o) => Number(o.total_charges) > 0)
+        .sort((a, b) => Number(a.total_charges) - Number(b.total_charges))[0];
+
+      if (!courier) throw new Error("NOT_SERVICEABLE");
+
+      shippingCharge = deliveryChargeForUser({
+        userId,
+        calculatedCharge: courier.total_charges,
+      });
+
+      if (courier.estimated_delivery_date) {
+        expectedDeliveryDate = courier.estimated_delivery_date;
+      } else if (courier.estimated_delivery_days) {
+        const date = new Date();
+        date.setDate(date.getDate() + Number(courier.estimated_delivery_days));
+        expectedDeliveryDate = date.toISOString().split("T")[0];
+      }
+
+      shippingBreakdown = [
+        {
+          vendor_id: row.vendor_id,
+          courier_name: courier.name,
+          shipping_charges: shippingCharge,
+          estimated_delivery_date: expectedDeliveryDate,
+        },
+      ];
     }
 
     // ===============================
@@ -1304,16 +1425,9 @@ class CheckoutModel {
       totalDiscount: totalRedeemed,
       shippingTotal: shippingCharge,
       payableAmount,
-
-      shippingBreakdown: [
-        {
-          vendor_id: row.vendor_id,
-          courier_name: courier.name,
-          shipping_charges: shippingCharge,
-          estimated_delivery_date: expectedDeliveryDate,
-        },
-      ],
-
+      addressRequired,
+      shippingCalculated: !addressRequired,
+      shippingBreakdown,
       estimated_delivery_date: expectedDeliveryDate,
     };
   }
@@ -1360,6 +1474,7 @@ class CheckoutModel {
       ON ca.country_id = c.country_id
     WHERE o.order_id = ?
       AND o.user_id = ?
+      AND o.paid_at IS NOT NULL
     `,
       [orderId, userId],
     );
@@ -1444,9 +1559,6 @@ class CheckoutModel {
       expectedDeliveryDate = fallback;
     }
 
-    // static for Now
-    const bagDiscount = 1032;
-
     return {
       orderId: order.order_id,
       orderRef: order.order_ref,
@@ -1468,7 +1580,7 @@ class CheckoutModel {
 
       items: items.map((i) => ({
         product_name: i.product_name,
-        image: i.image,
+        image: i.image ? getPublicUrl(i.image) : null,
         quantity: i.quantity,
         price: Number(i.price),
         item_total: Number(i.price) * i.quantity,
@@ -1479,7 +1591,13 @@ class CheckoutModel {
       bill: {
         item_total: Number(order.product_total),
         delivery_fee: Number(order.shipping_total),
-        bag_discount: 0, // add later if coupons implemented
+        bag_discount: Math.max(
+          0,
+          Number(order.product_total) +
+            Number(order.shipping_total) -
+            Number(order.reward_discount) -
+            Number(order.total_amount),
+        ),
         reward_discount: Number(order.reward_discount),
         order_total: Number(order.total_amount),
       },

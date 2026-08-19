@@ -7,6 +7,10 @@ const {
 const { notifyUser } = require("../utils/notification");
 const { runNonBlocking } = require("../../../utils/nonBlocking");
 
+const LAUNCH_CAMPAIGN_COMPANY_ID = 7;
+const IOS_LAUNCH_COMPANY_ID = 5;
+const FLEA_MARKET_INAMDAR_COMPANY_ID = 5;
+
 class GlobalController {
   // get balance
   async getGlobalSuggestions(req, res) {
@@ -148,7 +152,9 @@ class GlobalController {
   // Launch event message
   async sendLaunchCampaign(req, res) {
     try {
-      const employees = await GlobalModel.getCampaignRecipients();
+      const employees = await GlobalModel.getEmployeesForCampaign(
+        LAUNCH_CAMPAIGN_COMPANY_ID,
+      );
 
       runNonBlocking(async () => {
         let queued = 0;
@@ -162,7 +168,7 @@ class GlobalController {
           }
 
           const waResult = await enqueueWhatsApp({
-            eventName: "reward_planners_launch_invitation",
+            eventName: "reward_planners_launch_lavender",
             ctx: {
               phone: employee.contact,
               company_id: employee.company_id,
@@ -184,6 +190,7 @@ class GlobalController {
         }
 
         console.info("[LAUNCH_CAMPAIGN_WA] Completed", {
+          company_id: LAUNCH_CAMPAIGN_COMPANY_ID,
           total: employees.length,
           queued,
           failed,
@@ -194,6 +201,133 @@ class GlobalController {
       return res.json({
         success: true,
         message: "Launch campaign queued",
+        company_id: LAUNCH_CAMPAIGN_COMPANY_ID,
+        total: employees.length,
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  // IOS update campaign
+  async iosUpdateCampaign(req, res) {
+    try {
+      const employees = await GlobalModel.getCampaignRecipients(
+        IOS_LAUNCH_COMPANY_ID,
+      );
+
+      runNonBlocking(async () => {
+        let queued = 0;
+        let failed = 0;
+        let skipped = 0;
+
+        for (const employee of employees) {
+          if (!employee.contact) {
+            skipped += 1;
+            continue;
+          }
+
+          const waResult = await enqueueWhatsApp({
+            eventName: "reward_planners_ios_launch",
+            ctx: {
+              phone: employee.contact,
+              company_id: employee.company_id,
+              customer_name: employee.name || "Employee",
+              contact: employee.contact,
+            },
+          });
+
+          if (waResult.ok) {
+            queued += 1;
+          } else {
+            failed += 1;
+            console.warn("[IOS_UPDATE_CAMPAIGN_WA] WhatsApp not queued:", {
+              employee_id: employee.id,
+              phone: employee.contact,
+              result: waResult,
+            });
+          }
+        }
+
+        console.info("[IOS_UPDATE_CAMPAIGN_WA] Completed", {
+          company_id: IOS_LAUNCH_COMPANY_ID,
+          total: employees.length,
+          queued,
+          failed,
+          skipped,
+        });
+      }, "iOS update campaign WhatsApp");
+
+      return res.json({
+        success: true,
+        message: "iOS update campaign queued",
+        company_id: IOS_LAUNCH_COMPANY_ID,
+        total: employees.length,
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  // Flea Market Inamdar event campaign
+  async fleaMarketInamdarCampaign(req, res) {
+    try {
+      const employees = await GlobalModel.getCampaignRecipients(
+        FLEA_MARKET_INAMDAR_COMPANY_ID,
+      );
+
+      runNonBlocking(async () => {
+        let queued = 0;
+        let failed = 0;
+        let skipped = 0;
+
+        for (const employee of employees) {
+          if (!employee.contact) {
+            skipped += 1;
+            continue;
+          }
+
+          const waResult = await enqueueWhatsApp({
+            eventName: "flea_market_inamdar",
+            ctx: {
+              phone: employee.contact,
+              company_id: employee.company_id,
+              customer_name: employee.name || "Employee",
+              contact: employee.contact,
+            },
+          });
+
+          if (waResult.ok) {
+            queued += 1;
+          } else {
+            failed += 1;
+            console.warn("[FLEA_MARKET_INAMDAR_WA] WhatsApp not queued:", {
+              employee_id: employee.id,
+              phone: employee.contact,
+              result: waResult,
+            });
+          }
+        }
+
+        console.info("[FLEA_MARKET_INAMDAR_WA] Completed", {
+          company_id: FLEA_MARKET_INAMDAR_COMPANY_ID,
+          total: employees.length,
+          queued,
+          failed,
+          skipped,
+        });
+      }, "Flea Market Inamdar WhatsApp");
+
+      return res.json({
+        success: true,
+        message: "Flea Market Inamdar campaign queued",
+        company_id: FLEA_MARKET_INAMDAR_COMPANY_ID,
         total: employees.length,
       });
     } catch (err) {

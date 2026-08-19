@@ -17,10 +17,14 @@ class CategoryAttributeModel {
   }
 
   //  LIST
-  async list({ category_id, subcategory_id }) {
+  async list({ category_id, subcategory_id, status = "active" }) {
     let sql = `
     SELECT 
       ca.*,
+      EXISTS(
+        SELECT 1 FROM product_attributes pa
+        WHERE pa.attributes LIKE CONCAT('%"', ca.attribute_key, '":%')
+      ) AS is_used,
       c.category_name,
       sc.subcategory_name
     FROM category_attributes ca
@@ -28,10 +32,13 @@ class CategoryAttributeModel {
       ON ca.category_id = c.category_id
     LEFT JOIN sub_categories sc 
       ON ca.subcategory_id = sc.subcategory_id
-    WHERE ca.is_active = 1
+    WHERE 1 = 1
   `;
 
     const params = [];
+
+    if (status === "archived") sql += " AND ca.is_active = 0";
+    else if (status !== "all") sql += " AND ca.is_active = 1";
 
     if (subcategory_id) {
       sql += " AND ca.subcategory_id = ?";
@@ -126,6 +133,30 @@ class CategoryAttributeModel {
       [id],
     );
     return result.affectedRows > 0;
+  }
+
+  async restore(id) {
+    const [result] = await db.query(
+      `UPDATE category_attributes SET is_active = 1 WHERE id = ?`,
+      [id],
+    );
+    return result.affectedRows > 0;
+  }
+
+  async hardRemove(id) {
+    const connection = await db.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.query(`DELETE FROM category_attribute_values WHERE attribute_id = ?`, [id]);
+      const [result] = await connection.query(`DELETE FROM category_attributes WHERE id = ?`, [id]);
+      await connection.commit();
+      return result.affectedRows > 0;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   }
 
   // Exist check

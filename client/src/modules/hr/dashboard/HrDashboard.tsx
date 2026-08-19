@@ -15,6 +15,7 @@ import {
   FiStar,
 } from "react-icons/fi";
 import { useAuth } from "../../../common/auth/useAuth";
+import { hrApi } from "../../../common/api/hrApi";
 
 /* ================= TYPES ================= */
 
@@ -25,7 +26,7 @@ interface Employee {
   phone: string;
   department: string;
   role: string;
-  status: "active" | "pending";
+  status: "active" | "pending" | "inactive";
   created_at: string;
   totalRewards: number; // added for rewards tracking
 }
@@ -45,12 +46,33 @@ interface DepartmentData {
   color: string;
 }
 
+interface DashboardData {
+  summary: {
+    total_employees: number;
+    active_employees: number;
+    inactive_employees: number;
+    pending_onboarding: number;
+    departments: number;
+  };
+  department_distribution: Array<{ name: string; count: number }>;
+  top_earners: Array<{
+    id: number;
+    name: string;
+    role: string;
+    department: string;
+    total_rewards: number;
+  }>;
+  total_rewards_distributed: number;
+  recent_employees: Array<Omit<Employee, "totalRewards">>;
+}
+
 /* ================= COMPONENT ================= */
 
 export default function HrDashboard() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
 
   /* ================= MOCK DATA WITH REWARDS ================= */
   useEffect(() => {
@@ -167,29 +189,50 @@ export default function HrDashboard() {
           totalRewards: 54000,
         },
       ];
-      setEmployees(mockEmployees);
-      setLoading(false);
+      void mockEmployees;
     }, 800);
 
     return () => clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    hrApi
+      .get("/employees/dashboard")
+      .then((response) => {
+        const data: DashboardData = response.data.data;
+        setDashboard(data);
+        setEmployees(
+          data.recent_employees.map((employee) => ({
+            ...employee,
+            totalRewards: 0,
+          })),
+        );
+      })
+      .catch((error) => console.error("Unable to load HR dashboard:", error))
+      .finally(() => setLoading(false));
+  }, []);
+
   // Top 10 employees by totalRewards
-  const topTenEmployees = [...employees]
-    .sort((a, b) => b.totalRewards - a.totalRewards)
-    .slice(0, 10);
+  const topTenEmployees = (dashboard?.top_earners || []).map((employee) => ({
+    ...employee,
+    totalRewards: employee.total_rewards,
+  }));
 
   // Total rewards distributed across all employees
-  const totalRewardsDistributed = employees.reduce(
-    (acc, curr) => acc + curr.totalRewards,
-    0
-  );
+  const totalRewardsDistributed = dashboard?.total_rewards_distributed || 0;
+  const summary = dashboard?.summary ?? {
+    total_employees: 0,
+    active_employees: 0,
+    inactive_employees: 0,
+    pending_onboarding: 0,
+    departments: 0,
+  };
 
   /* ================= STATS ================= */
   const stats: StatCard[] = [
     {
       title: "Total Employees",
-      value: employees.length,
+      value: summary.total_employees,
       icon: FiUsers,
       gradient: "from-[#852BAF] to-[#FC3F78]",
       trend: "+12%",
@@ -197,7 +240,7 @@ export default function HrDashboard() {
     },
     {
       title: "Active Employees",
-      value: employees.filter((e) => e.status === "active").length,
+      value: summary.active_employees,
       icon: FiUserCheck,
       gradient: "from-emerald-500 to-teal-600",
       trend: "+5%",
@@ -205,7 +248,7 @@ export default function HrDashboard() {
     },
     {
       title: "Pending Onboarding",
-      value: employees.filter((e) => e.status === "pending").length,
+      value: summary.pending_onboarding,
       icon: FiUserX,
       gradient: "from-amber-500 to-orange-600",
       trend: "-3%",
@@ -213,7 +256,7 @@ export default function HrDashboard() {
     },
     {
       title: "Departments",
-      value: [...new Set(employees.map((e) => e.department))].length,
+      value: summary.departments,
       icon: FiBriefcase,
       gradient: "from-rose-500 to-pink-600",
       trend: "+1",
@@ -222,17 +265,12 @@ export default function HrDashboard() {
   ];
 
   /* ================= DEPARTMENT DATA ================= */
-  const departmentCounts = employees.reduce((acc, emp) => {
-    acc[emp.department] = (acc[emp.department] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
-  const departmentData: DepartmentData[] = Object.entries(departmentCounts).map(
-    ([name, count], idx) => {
+  const departmentData: DepartmentData[] = (
+    dashboard?.department_distribution || []
+  ).map(({ name, count }, idx) => {
       const colors = ["#852BAF", "#FC3F78", "#8B5CF6", "#10B981", "#F59E0B", "#3B82F6", "#EC4899"];
       return { name, count, color: colors[idx % colors.length] };
-    }
-  );
+    });
 
   const maxCount = Math.max(...departmentData.map((d) => d.count), 1);
 
@@ -283,7 +321,7 @@ export default function HrDashboard() {
         {stats.map((stat, index) => (
           <div
             key={index}
-            className="relative overflow-hidden transition-all duration-300 bg-white border border-gray-100 shadow-md rounded-2xl hover:shadow-xl group"
+            className="relative overflow-hidden transition-all duration-300 bg-white border border-gray-100 shadow-md rounded-2xl hover:shadow-xl group cursor-pointer"
           >
             <div
               className="absolute top-0 right-0 w-24 h-24 -mt-8 -mr-8 transition-transform duration-500 rounded-full bg-gradient-to-br opacity-10 group-hover:scale-150"
@@ -327,7 +365,7 @@ export default function HrDashboard() {
         {/* Department Distribution Chart */}
         <div className="p-6 bg-white border border-gray-100 shadow-md rounded-2xl">
           <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-gradient-to-r from-[#852BAF] to-[#FC3F78] rounded-xl">
+            <div className="p-2 bg-gradient-to-r from-[#852BAF] to-[#FC3F78] rounded-xl cursor-pointer">
               <FiBriefcase className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -366,14 +404,14 @@ export default function HrDashboard() {
         {/* Status Overview Chart */}
         <div className="p-6 bg-white border border-gray-100 shadow-md rounded-2xl">
           <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-gradient-to-r from-[#852BAF] to-[#FC3F78] rounded-xl">
+            <div className="p-2 bg-gradient-to-r from-[#852BAF] to-[#FC3F78] rounded-xl cursor-pointer">
               <FiUsers className="w-5 h-5 text-white" />
             </div>
             <div>
               <h2 className="text-lg font-bold text-gray-900">
                 Employee Status
               </h2>
-              <p className="text-sm text-gray-500">Active vs Pending overview</p>
+              <p className="text-sm text-gray-500">Active vs Inactive overview</p>
             </div>
           </div>
 
@@ -393,8 +431,8 @@ export default function HrDashboard() {
                   stroke="url(#gradientActive)"
                   strokeWidth="12"
                   strokeDasharray={`${
-                    (employees.filter((e) => e.status === "active").length /
-                      employees.length) *
+                    (summary.active_employees /
+                      Math.max(summary.total_employees, 1)) *
                     251.2
                   } 251.2`}
                   strokeLinecap="round"
@@ -407,13 +445,13 @@ export default function HrDashboard() {
                   stroke="#F59E0B"
                   strokeWidth="12"
                   strokeDasharray={`${
-                    (employees.filter((e) => e.status === "pending").length /
-                      employees.length) *
+                    (summary.inactive_employees /
+                      Math.max(summary.total_employees, 1)) *
                     251.2
                   } 251.2`}
                   strokeDashoffset={`-${
-                    (employees.filter((e) => e.status === "active").length /
-                      employees.length) *
+                    (summary.active_employees /
+                      Math.max(summary.total_employees, 1)) *
                     251.2
                   }`}
                   strokeLinecap="round"
@@ -428,7 +466,7 @@ export default function HrDashboard() {
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="text-center">
                   <p className="text-3xl font-bold text-gray-900">
-                    {employees.length}
+                    {summary.total_employees}
                   </p>
                   <p className="text-xs text-gray-500">Total</p>
                 </div>
@@ -441,7 +479,7 @@ export default function HrDashboard() {
                 <div className="w-4 h-4 rounded-full bg-gradient-to-r from-[#852BAF] to-[#FC3F78]"></div>
                 <div>
                   <p className="text-sm font-bold text-gray-900">
-                    {employees.filter((e) => e.status === "active").length}
+                    {summary.active_employees}
                   </p>
                   <p className="text-xs text-gray-500">Active</p>
                 </div>
@@ -450,9 +488,9 @@ export default function HrDashboard() {
                 <div className="w-4 h-4 rounded-full bg-amber-500"></div>
                 <div>
                   <p className="text-sm font-bold text-gray-900">
-                    {employees.filter((e) => e.status === "pending").length}
+                    {summary.inactive_employees}
                   </p>
-                  <p className="text-xs text-gray-500">Pending</p>
+                  <p className="text-xs text-gray-500">Inactive</p>
                 </div>
               </div>
             </div>
@@ -466,7 +504,7 @@ export default function HrDashboard() {
         <div className="flex flex-col bg-white border border-gray-100 shadow-md lg:col-span-1 rounded-2xl">
           <div className="flex items-center justify-between p-5 border-b border-gray-100">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-amber-100 text-amber-600">
+              <div className="p-2 rounded-lg bg-amber-100 text-amber-600 cursor-pointer">
                 <FiStar className="w-5 h-5" />
               </div>
               <h2 className="text-sm font-bold tracking-widest text-gray-900 uppercase">
@@ -478,7 +516,17 @@ export default function HrDashboard() {
             </div>
           </div>
           <div className="flex-1 overflow-y-auto max-h-[500px] p-2 space-y-1">
-            {topTenEmployees.map((emp, index) => (
+            {topTenEmployees.length === 0 ? (
+              <div className="flex flex-col items-center justify-center px-4 py-12 text-center">
+                <div className="flex items-center justify-center w-14 h-14 mb-3 rounded-full bg-amber-50">
+                  <FiStar className="w-7 h-7 text-amber-300" />
+                </div>
+                <p className="text-sm font-semibold text-gray-700">No records available</p>
+                <p className="mt-1 text-xs text-gray-400">
+                  Reward earners will appear here after points are distributed.
+                </p>
+              </div>
+            ) : topTenEmployees.map((emp, index) => (
               <div
                 key={emp.id}
                 className="flex items-center justify-between p-3 transition-colors rounded-xl hover:bg-gray-50 group"
@@ -509,7 +557,7 @@ export default function HrDashboard() {
                     <div
                       className="h-full bg-emerald-500"
                       style={{
-                        width: `${(emp.totalRewards / topTenEmployees[0].totalRewards) * 100}%`,
+                        width: `${(emp.totalRewards / Math.max(topTenEmployees[0]?.totalRewards || 0, 1)) * 100}%`,
                       }}
                     ></div>
                   </div>
@@ -517,18 +565,18 @@ export default function HrDashboard() {
               </div>
             ))}
           </div>
-          <div className="p-4 border-t border-gray-50 bg-gray-50/50 rounded-b-2xl">
+          {/* <div className="p-4 border-t border-gray-50 bg-gray-50/50 rounded-b-2xl">
             <button className="w-full py-2 text-xs font-bold text-purple-600 transition-colors hover:text-purple-800">
               Download Rewards Report
             </button>
-          </div>
+          </div> */}
         </div>
 
         {/* Recent Employees Table */}
         <div className="overflow-hidden bg-white border border-gray-100 shadow-md lg:col-span-2 rounded-2xl">
           <div className="flex items-center justify-between p-5 border-b border-gray-100">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-gradient-to-r from-[#852BAF] to-[#FC3F78] rounded-xl">
+              <div className="p-2 bg-gradient-to-r from-[#852BAF] to-[#FC3F78] rounded-xl cursor-pointer">
                 <FiUsers className="w-5 h-5 text-white" />
               </div>
               <div>
@@ -547,59 +595,36 @@ export default function HrDashboard() {
             </Link>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr className="text-xs font-semibold tracking-wider text-left text-gray-500 uppercase">
-                  <th className="px-5 py-4">Employee</th>
-                  <th className="px-5 py-4">Contact</th>
-                  <th className="px-5 py-4">Department</th>
-                  <th className="px-5 py-4">Role</th>
-                  <th className="px-5 py-4">Status</th>
-                  <th className="px-5 py-4">Joined</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
+          {employees.length === 0 ? (
+            <div className="px-5 py-12 text-center">
+              <div className="flex items-center justify-center w-14 h-14 mx-auto mb-3 rounded-full bg-purple-50">
+                <FiUsers className="w-7 h-7 text-purple-300" />
+              </div>
+              <p className="text-sm font-semibold text-gray-700">No recent employees available</p>
+              <p className="mt-1 text-xs text-gray-400">
+                Newly added employees will appear here.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Mobile / Tablet card list */}
+              <div className="divide-y divide-gray-100 lg:hidden">
                 {employees.slice(0, 5).map((employee) => (
-                  <tr
-                    key={employee.id}
-                    className="transition-colors hover:bg-gray-50"
-                  >
-                    <td className="px-5 py-4">
+                  <div key={employee.id} className="p-4">
+                    <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3">
-                        <div className="flex items-center justify-center w-10 h-10 font-bold text-white rounded-full bg-gradient-to-r from-purple-500 to-pink-500">
+                        <div className="flex items-center justify-center w-10 h-10 font-bold text-white rounded-full shrink-0 bg-gradient-to-r from-purple-500 to-pink-500">
                           {employee.name.charAt(0)}
                         </div>
-                        <span className="font-semibold text-gray-900">
-                          {employee.name}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-5 py-4">
-                      <div className="text-sm">
-                        <div className="flex items-center gap-2 text-gray-600">
-                          <FiMail className="w-3 h-3" />
-                          {employee.email}
-                        </div>
-                        <div className="flex items-center gap-2 text-gray-500 mt-0.5">
-                          <FiPhone className="w-3 h-3" />
-                          {employee.phone}
+                        <div>
+                          <p className="font-semibold text-gray-900">{employee.name}</p>
+                          <p className="text-xs text-gray-500">
+                            {employee.role || "—"} · {employee.department || "—"}
+                          </p>
                         </div>
                       </div>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className="text-sm font-medium text-gray-700">
-                        {employee.department}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className="text-sm text-gray-600">
-                        {employee.role}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4">
                       <span
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold shrink-0 ${
                           employee.status === "active"
                             ? "bg-emerald-100 text-emerald-700"
                             : "bg-amber-100 text-amber-700"
@@ -613,21 +638,146 @@ export default function HrDashboard() {
                         ) : (
                           <>
                             <FiClock className="w-3 h-3" />
-                            Pending
+                            Inactive
                           </>
                         )}
                       </span>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className="text-sm text-gray-500">
-                        {employee.created_at}
-                      </span>
-                    </td>
-                  </tr>
+                    </div>
+                    <div className="flex flex-col gap-1 mt-3 text-sm">
+                      {employee.email ? (
+                        <a
+                          href={`mailto:${employee.email}`}
+                          className="flex items-center gap-2 text-gray-600 transition-colors hover:text-purple-600 hover:underline"
+                        >
+                          <FiMail className="w-3 h-3" />
+                          {employee.email}
+                        </a>
+                      ) : (
+                        <div className="flex items-center gap-2 text-gray-400">
+                          <FiMail className="w-3 h-3" /> No email
+                        </div>
+                      )}
+                      {employee.phone ? (
+                        <a
+                          href={`tel:${employee.phone}`}
+                          className="flex items-center gap-2 text-gray-500 transition-colors hover:text-emerald-600 hover:underline"
+                        >
+                          <FiPhone className="w-3 h-3" />
+                          {employee.phone}
+                        </a>
+                      ) : (
+                        <div className="flex items-center gap-2 text-gray-400">
+                          <FiPhone className="w-3 h-3" /> No phone
+                        </div>
+                      )}
+                      <p className="mt-1 text-xs text-gray-400">Joined {employee.created_at}</p>
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </div>
+
+              {/* Desktop table */}
+              <div className="hidden overflow-x-auto lg:block">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr className="text-xs font-semibold tracking-wider text-left text-gray-500 uppercase">
+                      <th className="px-5 py-4">Employee</th>
+                      <th className="px-5 py-4">Contact</th>
+                      <th className="px-5 py-4">Department</th>
+                      <th className="px-5 py-4">Role</th>
+                      <th className="px-5 py-4">Status</th>
+                      <th className="px-5 py-4">Joined</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {employees.slice(0, 5).map((employee) => (
+                      <tr
+                        key={employee.id}
+                        className="transition-colors hover:bg-gray-50"
+                      >
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center justify-center w-10 h-10 font-bold text-white rounded-full bg-gradient-to-r from-purple-500 to-pink-500">
+                              {employee.name.charAt(0)}
+                            </div>
+                            <span className="font-semibold text-gray-900">
+                              {employee.name}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-5 py-4">
+                          <div className="text-sm">
+                            {employee.email ? (
+                              <a
+                                href={`mailto:${employee.email}`}
+                                className="flex items-center gap-2 text-gray-600 transition-colors hover:text-purple-600 hover:underline"
+                              >
+                                <FiMail className="w-3 h-3" />
+                                {employee.email}
+                              </a>
+                            ) : (
+                              <div className="flex items-center gap-2 text-gray-400">
+                                <FiMail className="w-3 h-3" /> No email
+                              </div>
+                            )}
+                            {employee.phone ? (
+                              <a
+                                href={`tel:${employee.phone}`}
+                                className="flex items-center gap-2 text-gray-500 mt-0.5 transition-colors hover:text-emerald-600 hover:underline"
+                              >
+                                <FiPhone className="w-3 h-3" />
+                                {employee.phone}
+                              </a>
+                            ) : (
+                              <div className="flex items-center gap-2 text-gray-400 mt-0.5">
+                                <FiPhone className="w-3 h-3" /> No phone
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className="text-sm font-medium text-gray-700">
+                            {employee.department}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className="text-sm text-gray-600">
+                            {employee.role}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
+                              employee.status === "active"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-amber-100 text-amber-700"
+                            }`}
+                          >
+                            {employee.status === "active" ? (
+                              <>
+                                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+                                Active
+                              </>
+                            ) : (
+                              <>
+                                <FiClock className="w-3 h-3" />
+                                Inactive
+                              </>
+                            )}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className="text-sm text-gray-500">
+                            {employee.created_at}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -659,15 +809,14 @@ export default function HrDashboard() {
           </div>
         </Link>
 
-        <div className="flex items-center gap-4 p-5 text-white shadow-lg bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl">
-          <div className="p-3 rounded-xl bg-white/20">
-            <FiUserX className="w-6 h-6" />
+        <div className="flex items-center gap-4 p-5 transition-all duration-300 bg-white border border-gray-100 shadow-md rounded-2xl hover:shadow-lg hover:border-amber-200 group">
+          <div className="p-3 transition-transform rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 group-hover:scale-110">
+            <FiUserX className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h3 className="font-semibold">Pending Approvals</h3>
-            <p className="text-sm text-purple-100">
-              {employees.filter((e) => e.status === "pending").length} employees
-              waiting
+            <h3 className="font-semibold text-gray-900">Pending Approvals</h3>
+            <p className="text-sm text-gray-500">
+              {summary.pending_onboarding} employees waiting
             </p>
           </div>
         </div>

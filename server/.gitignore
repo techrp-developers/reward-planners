@@ -1,5 +1,7 @@
 node_modules
 .env
+.env.zoho-sign,example
 uploads
 files
+config/firebase-service-account.json
 dist

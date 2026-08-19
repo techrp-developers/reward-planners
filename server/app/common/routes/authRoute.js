@@ -12,9 +12,70 @@ router.post("/verify-otp", authLimiter, authController.verifyOtp);
 router.post("/refresh-token", authLimiter, authController.refreshToken);
 router.post("/logout", auth, authController.logout);
 
+<<<<<<< HEAD
 // Fcm token
 router.post("/update-fcm-token", auth, authController.updateFcmToken);
 
+=======
+// Passwordless login: request a code for a preloaded employee.
+router.post("/request-otp", authLimiter, authController.activateAccount);
+
+//resend activation otp
+router.post(
+  "/resend-activation-otp",
+  authLimiter,
+  authController.resendActivationOTP,
+);
+
+// verify OTP
+router.post(
+  "/verify-activation-otp",
+  authLimiter,
+  authController.verifyActivationOTP,
+);
+
+// Passwordless login: verify the code, activate on first use, and create a session.
+router.post(
+  "/verify-otp",
+  authLimiter,
+  authController.verifyActivationOTP,
+);
+
+// set the password
+router.post("/set-password", authLimiter, authController.setPassword);
+
+//Login user
+router.post("/login", authLimiter, authController.loginUser);
+
+// refresh(not updated)
+router.post("/refresh", authLimiter, authController.refreshAccessToken);
+
+// Fcm token(not updated)
+router.post("/update-fcm-token", auth, authController.updateFcmToken);
+
+// Logout user
+router.post("/logout", optionalAuth, authController.logoutUser);
+
+// Forgot password
+router.post("/forgot-password", authLimiter, authController.forgotPassword);
+
+//resend  otp
+router.post("/resend-otp", authLimiter, authController.resendOTP);
+
+// verify forgot password OTP
+router.post(
+  "/verify-forgot-password-otp",
+  authLimiter,
+  authController.verifyForgotPasswordOTP,
+);
+
+// Reset password
+router.post("/reset-password", authLimiter, authController.resetPassword);
+
+// change password
+router.put("/change-password", auth, authController.changePassword);
+
+>>>>>>> 4cfa1e749c7dad89747af3835a6f272bb9c30801
 /*=============================================Address================================================*/
 // Fetch all the countries
 // router.get("/countries", authController.getCountries);

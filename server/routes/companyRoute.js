@@ -4,25 +4,28 @@ const upload = require("../middleware/mediaUpload/serviceCategoryUpload");
 const companyController = require("../controllers/companyController");
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 
-const adminGuard = [authenticateToken, authorizeRoles("admin")];
+const companyWriteGuard = [
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+];
 
 router.post(
   "/create-company",
-  ...adminGuard,
+  ...companyWriteGuard,
   upload.single("company_logo"),
   companyController.createCompany,
 );
 
 router.put(
   "/update-company/:id",
-  ...adminGuard,
+  ...companyWriteGuard,
   upload.single("company_logo"),
   companyController.updateCompany,
 );
 
 router.delete(
   "/delete-company/:id",
-  ...adminGuard,
+  ...companyWriteGuard,
   companyController.deleteCompany,
 );
 

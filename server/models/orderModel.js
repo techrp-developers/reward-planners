@@ -1,6 +1,55 @@
 const db = require("../config/database");
 const Razorpay = require("razorpay");
 const xpressService = require("../services/ExpressBees/xpressbees_service");
+const {
+  addWalletAdjustment,
+} = require("../services/rewards/ecommerceWalletService");
+const {
+  TRACKING_STEPS,
+  mapShipmentStatusToStep,
+} = require("../app/ecommerce/v1/utils/orderProgress");
+
+function formatShipmentProgress(shipment) {
+  if (shipment.shipping_status === "cancelled") {
+    return {
+      vendor_order_id: shipment.vendor_order_id,
+      courier_name: shipment.courier_name,
+      awb_number: shipment.awb_number,
+      shipping_status: "cancelled",
+      expected_delivery_date: null,
+      current_step: 1,
+      steps: [
+        { key: "processing", label: "Processing", completed: true, current: false },
+        { key: "cancelled", label: "Cancelled", completed: false, current: true },
+      ],
+      timeline: [
+        { label: "Order Processed", time: shipment.booked_at || shipment.shipment_created_at },
+        { label: "Order Cancelled", time: shipment.cancelled_at },
+      ].filter((event) => event.time),
+    };
+  }
+  const currentStep = mapShipmentStatusToStep(shipment.shipping_status);
+  return {
+    vendor_order_id: shipment.vendor_order_id,
+    courier_name: shipment.courier_name,
+    awb_number: shipment.awb_number,
+    shipping_status: shipment.shipping_status,
+    expected_delivery_date: shipment.expected_delivery_date,
+    current_step: currentStep,
+    steps: TRACKING_STEPS.map((step, index) => ({
+      ...step,
+      completed: index < currentStep,
+      current: index === currentStep,
+    })),
+    timeline: [
+      { label: "Order Processed", time: shipment.booked_at },
+      { label: "Picked Up", time: shipment.picked_up_at },
+      { label: "In Transit", time: shipment.in_transit_at },
+      { label: "Out for Delivery", time: shipment.out_for_delivery_at },
+      { label: "Delivered", time: shipment.delivered_at },
+    ].filter((event) => event.time),
+  };
+}
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZOR_API_KEY,
@@ -149,8 +198,24 @@ class OrderModel {
       o.order_id,
       o.order_ref,
       o.total_amount,
+      o.product_total,
+      o.reward_discount,
+      o.reward_coins_used,
+      o.reward_coins_earned,
+      o.shipping_total,
+      (
+        SELECT COALESCE(SUM(vo.vendor_total), 0)
+        FROM vendor_orders vo
+        WHERE vo.order_id = o.order_id
+      ) AS vendor_total,
       o.status,
       o.cancellation_status,
+      (
+        SELECT MAX(oct.event_time)
+        FROM order_cancellation_timeline oct
+        WHERE oct.order_id = o.order_id
+          AND oct.event = 'cancellation_confirmed'
+      ) AS cancelled_at,
       o.created_at,
 
       cu.user_id,
@@ -233,6 +298,31 @@ class OrderModel {
       [orderId],
     );
 
+    const [shipments] = await db.execute(
+      `SELECT vendor_order_id, courier_name, awb_number, shipping_status,
+              booked_at, picked_up_at, in_transit_at, out_for_delivery_at,
+              delivered_at, cancelled_at, created_at AS shipment_created_at,
+              expected_delivery_date
+       FROM order_shipments
+       WHERE order_id = ?
+       ORDER BY id ASC`,
+      [orderId],
+    );
+
+    const [vendorBreakdown] = await db.execute(
+      `SELECT vo.vendor_order_id, vo.vendor_id,
+              COALESCE(v.company_name, v.full_name, CONCAT('Vendor #', vo.vendor_id)) AS vendor_name,
+              vo.vendor_total, vo.shipping_status,
+              COALESCE(SUM(os.shipping_charges), 0) AS delivery_charge
+       FROM vendor_orders vo
+       LEFT JOIN vendors v ON v.vendor_id = vo.vendor_id
+       LEFT JOIN order_shipments os ON os.vendor_order_id = vo.vendor_order_id
+       WHERE vo.order_id = ?
+       GROUP BY vo.vendor_order_id
+       ORDER BY vo.vendor_order_id`,
+      [orderId],
+    );
+
     const processedItems = items.map((i) => {
       let attributes = {};
 
@@ -266,6 +356,12 @@ class OrderModel {
         order_ref: order.order_ref,
         status: order.status,
         total_amount: order.total_amount,
+        vendor_total: Number(order.vendor_total || 0),
+        product_total: Number(order.product_total || 0),
+        reward_discount: Number(order.reward_discount || 0),
+        reward_coins_used: Number(order.reward_coins_used || 0),
+        reward_coins_earned: Number(order.reward_coins_earned || 0),
+        shipping_total: Number(order.shipping_total || 0),
         created_at: order.created_at,
       },
 
@@ -302,6 +398,16 @@ class OrderModel {
         item_total: itemTotal,
         order_total: order.total_amount,
       },
+      shipments: shipments.length
+        ? shipments.map(formatShipmentProgress)
+        : order.status === "cancelled"
+          ? [formatShipmentProgress({ shipping_status: "cancelled", shipment_created_at: order.created_at, cancelled_at: order.cancelled_at })]
+          : [],
+      vendor_breakdown: vendorBreakdown.map((vendor) => ({
+        ...vendor,
+        vendor_total: Number(vendor.vendor_total || 0),
+        delivery_charge: Number(vendor.delivery_charge || 0),
+      })),
     };
   }
 
@@ -362,6 +468,31 @@ class OrderModel {
     };
   }
 
+  // Get vendor order stats (excludes cancelled orders from count/revenue)
+  async getVendorOrderStats(vendorId) {
+    const [[stats]] = await db.execute(
+      `
+    SELECT
+      COUNT(*) AS total_orders,
+      COALESCE(SUM(vo.vendor_total), 0) AS total_revenue
+
+    FROM vendor_orders vo
+
+    JOIN eorders o
+      ON vo.order_id = o.order_id
+
+    WHERE vo.vendor_id = ?
+      AND o.status != 'cancelled'
+    `,
+      [vendorId],
+    );
+
+    return {
+      total_orders: Number(stats.total_orders) || 0,
+      total_revenue: Number(stats.total_revenue) || 0,
+    };
+  }
+
   // view vendor details
   async viewVendorOrderDetails(vendorOrderId, vendorId) {
     const [[order]] = await db.execute(
@@ -395,7 +526,15 @@ class OrderModel {
 
       sh.awb_number,
       sh.courier_name,
-      sh.shipping_status
+      COALESCE(sh.shipping_status, vo.shipping_status) AS shipping_status,
+      sh.booked_at,
+      sh.picked_up_at,
+      sh.in_transit_at,
+      sh.out_for_delivery_at,
+      sh.delivered_at,
+      sh.cancelled_at,
+      sh.created_at AS shipment_created_at,
+      sh.expected_delivery_date
 
     FROM vendor_orders vo
 
@@ -528,6 +667,7 @@ class OrderModel {
         item_total: itemTotal,
         vendor_total: order.vendor_total,
       },
+      shipments: [formatShipmentProgress(order)],
     };
   }
 
@@ -714,7 +854,8 @@ class OrderModel {
        status,
        cancellation_status,
        user_id,
-       reward_coins_used
+       reward_coins_used,
+       reward_coins_earned
      FROM eorders
      WHERE order_id = ?
      FOR UPDATE`,
@@ -729,6 +870,10 @@ class OrderModel {
 
     if (order.status === "cancelled") {
       throw new Error("ORDER_ALREADY_CANCELLED");
+    }
+
+    if (!["paid", "processing"].includes(order.status)) {
+      throw new Error("CANCELLATION_NOT_ALLOWED");
     }
 
     // ==========================
@@ -778,49 +923,42 @@ class OrderModel {
     // 4. REVERSE REWARD COINS
     // Check wallet_transactions for existing credit, not order_refunds
     // ==========================
-    if (order.reward_coins_used > 0) {
-      const [[walletCreditExists]] = await conn.execute(
-        `SELECT 1
-       FROM wallet_transactions
-       WHERE reference_id = ?
-         AND transaction_type = 'credit'
-         AND reason_code = 'ADMIN_ADJUSTMENT'
-       LIMIT 1`,
-        [orderId],
+    const returnedUsedCoins = await addWalletAdjustment(conn, {
+      userId: order.user_id,
+      coins: order.reward_coins_used,
+      orderId,
+      transactionType: "credit",
+      reasonCode: "ORDER_REFUND",
+      title: "Coins refunded for cancelled order",
+      description: "Redeemed coins returned after cancellation",
+    });
+    if (returnedUsedCoins) {
+      await conn.query(
+        `INSERT INTO order_refunds
+          (order_id, refund_amount, refund_method, status, refund_key)
+         VALUES (?, ?, 'wallet', 'completed', ?)`,
+        [orderId, order.reward_coins_used, `wallet_order_${orderId}_refund`],
       );
+    }
 
-      if (!walletCreditExists) {
-        // Update wallet balance
-        await conn.execute(
-          `UPDATE customer_wallet
-         SET balance = balance + ?
-         WHERE user_id = ?`,
-          [order.reward_coins_used, order.user_id],
-        );
-
-        const expiryDate = new Date();
-        expiryDate.setMonth(
-          expiryDate.getMonth() +
-            parseInt(process.env.WALLET_EXPIRY_MONTHS || "3", 10),
-        );
-
-        // Wallet transaction log
-        await conn.execute(
-          `INSERT INTO wallet_transactions
-         (user_id, title, transaction_type, coins, category,
-          reference_id, expiry_date, reason_code)
-         VALUES (?, 'Coins refunded for cancelled order', 'credit', ?, 'order', ?, ?, 'ADMIN_ADJUSTMENT')`,
-          [order.user_id, order.reward_coins_used, orderId, expiryDate],
-        );
-
-        // Wallet refund record
-        await conn.execute(
-          `INSERT INTO order_refunds
-         (order_id, refund_amount, refund_method, status)
-         VALUES (?, ?, 'wallet', 'completed')`,
-          [orderId, order.reward_coins_used],
-        );
-      }
+    // Compatibility for orders created before rewards moved to delivery time.
+    const [[creditedReward]] = await conn.query(
+      `SELECT coins FROM wallet_transactions
+       WHERE user_id = ? AND reference_id = ?
+         AND transaction_type = 'credit' AND reason_code = 'ORDER_REWARD'
+       LIMIT 1`,
+      [order.user_id, orderId],
+    );
+    if (creditedReward) {
+      await addWalletAdjustment(conn, {
+        userId: order.user_id,
+        coins: creditedReward.coins,
+        orderId,
+        transactionType: "debit",
+        reasonCode: "ORDER_REWARD_REVERSAL",
+        title: "Cancelled order reward reversed",
+        description: "Reward coins removed after cancellation",
+      });
     }
 
     // ==========================
@@ -856,22 +994,7 @@ class OrderModel {
       [orderId],
     );
 
-    // ==========================
-    // 8. CANCEL SHIPMENTS IN DB
-    // Courier cancel happens AFTER commit (external API call)
-    // ==========================
-    await conn.execute(
-      `UPDATE order_shipments
-     SET shipping_status = 'cancelled',
-         cancelled_at = NOW()
-     WHERE order_id = ?`,
-      [orderId],
-    );
-
-    // ==========================
-    // 9. FETCH SHIPMENTS FOR COURIER CANCEL (after DB commit)
-    // Return AWBs so controller can cancel at courier post-commit
-    // ==========================
+    // Capture cancellable AWBs before changing their local status.
     const [shipments] = await conn.execute(
       `SELECT id, awb_number, shipping_status
      FROM order_shipments
@@ -880,9 +1003,26 @@ class OrderModel {
       [orderId],
     );
 
-    const cancellableAwbs = shipments
-      .filter((s) => ["booked", "picked_up"].includes(s.shipping_status))
-      .map((s) => s.awb_number);
+    const cancellableShipments = shipments.filter((s) =>
+      ["booked", "picked_up"].includes(s.shipping_status),
+    );
+
+    // ==========================
+    // 8. CANCEL SHIPMENTS IN DB
+    // Courier cancel happens AFTER commit (external API call)
+    // ==========================
+    await conn.execute(
+      `UPDATE order_shipments
+     SET cancel_sync_status = CASE
+           WHEN awb_number IS NOT NULL
+             AND shipping_status IN ('booked','picked_up') THEN 'pending'
+           ELSE 'not_needed'
+         END,
+         shipping_status = 'cancelled',
+         cancelled_at = NOW()
+     WHERE order_id = ?`,
+      [orderId],
+    );
 
     // ==========================
     // 10. TIMELINE EVENT
@@ -893,25 +1033,9 @@ class OrderModel {
       [orderId],
     );
 
-    // ==========================
-    // 11. CREATE REFUND RECORD
-    // ==========================
-    let refundId = null;
-
-    if (payment) {
-      const [result] = await conn.execute(
-        `INSERT INTO order_refunds
-       (order_id, refund_amount, refund_method, status)
-       VALUES (?, ?, 'original', 'pending')`,
-        [orderId, payment.amount],
-      );
-
-      refundId = result.insertId;
-    }
-
     return payment
-      ? { ...payment, refundId, cancellableAwbs }
-      : { refundId: null, cancellableAwbs };
+      ? { ...payment, cancellableShipments }
+      : { cancellableShipments };
   }
 
   async rejectCancellation(orderId, conn) {

@@ -11,6 +11,7 @@ const RegisterPage = lazy(() => import("./common/auth/RegisterPage.tsx"));
 const ForgotPassword = lazy(() => import("./common/auth/ForgotPassword.tsx"));
 const ResetPassword = lazy(() => import("./common/auth/ResetPassword.tsx"));
 const VerifyOtpPage = lazy(() => import("./common/auth/VerifyOtpPage.tsx"));
+const ClientOnboarding = lazy(() => import("./modules/clientOnboarding/ClientOnboarding.tsx"));
 
 /* Layouts */
 const VendorLayout = lazy(() => import("./modules/products/vendor/VendorLayout.tsx"));
@@ -25,6 +26,12 @@ const ServicePartnerLayout = lazy(() => import("./modules/service/servicePartner
 /* Dashboards */
 const VendorDashboard = lazy(() => import("./modules/products/vendor/Dashboard.tsx"));
 const ManagerDashboard = lazy(() => import("./modules/products/vendorManager/Dashboard.tsx"));
+const ManagerEmployeeDirectory = lazy(
+  () => import("./modules/products/vendorManager/employees/EmployeeDirectory.tsx"),
+);
+const ManagerCompanyEmployees = lazy(
+  () => import("./modules/products/vendorManager/employees/CompanyEmployees.tsx"),
+);
 const HrDashboard = lazy(() => import("./modules/hr/dashboard/HrDashboard.tsx"));
 const WarehouseDashboard = lazy(() => import("./modules/warehouse_manager/dashboard/WarehouseDashboard.tsx"));
 const FleaMarketDashboard = lazy(() => import("./modules/flea_market/dashboard/FleaMarketDashboard.tsx"));
@@ -53,6 +60,7 @@ const SubSubCategoryManagement = lazy(() => import("./modules/products/vendorMan
 const ProductViewPage = lazy(() => import("./modules/products/vendorManager/ProductViewPage.tsx"));
 const Onboarding = lazy(() => import("./modules/products/vendor/Onboarding.tsx"));
 const ChangePasswordPage = lazy(() => import("./common/auth/changePassword.tsx"));
+const EditProfilePage = lazy(() => import("./common/auth/EditProfile.tsx"));
 const ProductListingDynamic = lazy(() => import("./modules/products/screens/ProductAdd.tsx"));
 const ProductManagerList = lazy(() => import("./modules/products/screens/ProductList.tsx"));
 const ProductManage = lazy(() => import("./modules/products/screens/ProductManage.tsx"));
@@ -73,17 +81,25 @@ const NotFoundPage = lazy(() => import("./common/auth/NotFound.tsx"));
 // Vendor Orders
 const OrderSummary = lazy(() => import("./modules/products/vendor/OrderSummary.tsx"));
 const OrderDetail = lazy(() => import("./modules/products/vendor/OrderDetail.tsx"));
-const VendorFleaMarketPurchasesPage = lazy(() => import("./modules/products/vendor/VendorFleaMarketPurchasesPage.tsx"));
+const VendorReportPage = lazy(() => import("./modules/products/vendor/reports/VendorReportPage.tsx"));
+const VendorTutorialsFaq = lazy(() => import("./modules/products/vendor/tutorials/VendorTutorialsFaq.tsx"));
 
 // Manager Order
 const OrderList = lazy(() => import("./modules/products/vendorManager/order/OrderList.tsx"));
 const OrderView = lazy(() => import("./modules/products/vendorManager/order/OrderView.tsx"));
+const ManagerReportPage = lazy(() => import("./modules/products/vendorManager/reports/ManagerReportPage.tsx"));
 
 // Service
 const ServiceEnquiries = lazy(() => import("./modules/products/inHouseServices/ServiceEnquiries.tsx"));
 const ServiceDetails = lazy(() => import("./modules/products/inHouseServices/ServiceDetails.tsx"));
 const ServiceOrderList = lazy(() => import("./modules/products/inHouseServices/ServiceOrderList.tsx"));
 const ServiceOrderView = lazy(() => import("./modules/products/inHouseServices/ServiceOrderView.tsx"));
+const ServiceCancellationRequest = lazy(
+  () => import("./modules/products/inHouseServices/ServiceCancellationRequest.tsx"),
+);
+const ServiceCancellationDetail = lazy(
+  () => import("./modules/products/inHouseServices/ServiceCancellationDetail.tsx"),
+);
 
 // Manage Rewards
 const RewardRule = lazy(() => import("./modules/products/vendorManager/reward/RewardRule.tsx"));
@@ -92,6 +108,8 @@ const ProductRewardMapping = lazy(() => import("./modules/products/vendorManager
 
 /* Attribute */
 const AttributeManagement = lazy(() => import("./modules/products/vendorManager/attribute/attributes.tsx"));
+const FlashSaleList = lazy(() => import("./modules/products/vendorManager/flashSale/FlashSaleList.tsx"));
+const FlashSaleEditor = lazy(() => import("./modules/products/vendorManager/flashSale/FlashSaleEditor.tsx"));
 
 /* Sales */
 // import FlashSaleCreate from "./vendor/components/feature/manager/flashSale/FlashSaleCreate";
@@ -111,6 +129,7 @@ const PartnerManagerList = lazy(() => import("./modules/service/serviceManager/p
 const PartnerManagerOnboard = lazy(() => import("./modules/service/serviceManager/partnerManagers/pages/PartnerManagerOnboard.tsx"));
 const ServiceDashboard = lazy(() => import("./modules/service/serviceManager/dashboard/pages/ServiceDashboard.tsx"));
 const ServiceListingsPage = lazy(() => import("./modules/service/serviceManager/serviceListings/pages/ServiceListingsPage.tsx"));
+const ServiceCatalogPage = lazy(() => import("./modules/service/serviceManager/serviceListings/pages/ServiceCatalogPage.tsx"));
 const BookingsPage = lazy(() => import("./modules/service/serviceManager/bookings/pages/BookingsPage.tsx"));
 const ServiceReportsPage = lazy(() => import("./modules/service/serviceManager/reports/pages/ServiceReportsPage.tsx"));
 const ServiceSettingsPage = lazy(() => import("./modules/service/serviceManager/settings/pages/ServiceSettingsPage.tsx"));
@@ -200,6 +219,7 @@ export default function App() {
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/verify-otp" element={<VerifyOtpPage />} />
+        <Route path="/client-onboarding" element={<ClientOnboarding />} />
       </Route>
 
       {/* ========== VENDOR ========== */}
@@ -212,6 +232,8 @@ export default function App() {
           path={routes.vendor.changePassword}
           element={<ChangePasswordPage />}
         />
+
+        <Route path={routes.vendor.profile} element={<EditProfilePage />} />
 
         <Route
           path={routes.vendor.products.add}
@@ -260,18 +282,28 @@ export default function App() {
         <Route path={routes.vendor.orders.summary} element={<OrderSummary />} />
 
         <Route path={routes.vendor.orders.details} element={<OrderDetail />} />
+        <Route path={routes.vendor.reports.stock} element={<VendorReportPage type="stock" />} />
+        <Route path={routes.vendor.reports.products} element={<VendorReportPage type="products" />} />
+        <Route path={routes.vendor.reports.orders} element={<VendorReportPage type="orders" />} />
+        <Route path={routes.vendor.tutorialsFaq} element={<VendorTutorialsFaq />} />
 
-        <Route path={routes.vendor.fleaMarketPurchases} element={<VendorFleaMarketPurchasesPage />} />
+        <Route
+          path={routes.vendor.fleaMarketPurchases}
+          element={<Navigate to={`${routes.vendor.orders.summary}?tab=flea-market`} replace />}
+        />
       </Route>
 
       {/* ========== MANAGER ========== */}
       <Route element={<ManagerLayout />}>
         <Route path={routes.manager.dashboard} element={<ManagerDashboard />} />
         <Route path={routes.manager.vendors} element={<VendorApprovalList />} />
+        <Route path={routes.manager.employees} element={<ManagerEmployeeDirectory />} />
+        <Route path={routes.manager.companyEmployees} element={<ManagerCompanyEmployees />} />
         <Route
           path={routes.manager.changePassword}
           element={<ChangePasswordPage />}
         />
+        <Route path={routes.manager.profile} element={<EditProfilePage />} />
         <Route
           path={routes.manager.products}
           element={<ProductApprovalList />}
@@ -316,25 +348,17 @@ export default function App() {
           element={<AttributeManagement />}
         />
 
-        {/* Flash Sale */}
-        {/* <Route path={routes.manager.flashlist} element={<FlashSaleList />} />
-
-        <Route
-          path={routes.manager.flashCreate}
-          element={<FlashSaleCreate />}
-        />
-
-        <Route path="/manager/flash-sale/:id" element={<FlashSaleCreate />} />
-
-        <Route
-          path="/manager/flash-variants/:flashId"
-          element={<FlashSaleVariant />}
-        /> */}
+        <Route path={routes.manager.flashSales.list} element={<FlashSaleList />} />
+        <Route path={routes.manager.flashSales.create} element={<FlashSaleEditor />} />
+        <Route path={routes.manager.flashSales.edit} element={<FlashSaleEditor />} />
 
         {/* Orders */}
         <Route path={routes.manager.orders.orderList} element={<OrderList />} />
 
         <Route path={routes.manager.orders.details} element={<OrderView />} />
+        <Route path={routes.manager.reports.usage} element={<ManagerReportPage type="usage" />} />
+        <Route path={routes.manager.reports.stock} element={<ManagerReportPage type="stock" />} />
+        <Route path={routes.manager.reports.orders} element={<ManagerReportPage type="orders" />} />
 
         <Route
           path={routes.manager.orders.cancellationRequest}
@@ -344,24 +368,6 @@ export default function App() {
         <Route
           path={routes.manager.orders.cancellationDetail}
           element={<CancellationDetail />}
-        />
-
-        {/* Services */}
-        <Route
-          path={routes.manager.services.enquiries}
-          element={<ServiceEnquiries />}
-        />
-        <Route
-          path={routes.manager.services.details}
-          element={<ServiceDetails />}
-        />
-        <Route
-          path={routes.manager.services.service_orders}
-          element={<ServiceOrderList />}
-        />
-        <Route
-          path={routes.manager.services.service_order_details}
-          element={<ServiceOrderView />}
         />
 
         {/* Rewards */}
@@ -384,37 +390,6 @@ export default function App() {
           element={<ProductRewardMapping />}
         />
 
-        {/* Service Partners */}
-        <Route
-          path={routes.manager.servicePartners.list}
-          element={<ServicePartnerList />}
-        />
-        <Route
-          path={routes.manager.servicePartners.onboard}
-          element={<ServicePartnerOnboard />}
-        />
-        <Route
-          path={routes.manager.servicePartners.edit}
-          element={<ServicePartnerOnboard />}
-        />
-        <Route
-          path={routes.manager.servicePartners.profile}
-          element={<ServicePartnerProfile />}
-        />
-
-        {/* Partner Managers */}
-        <Route
-          path={routes.manager.partnerManagers.list}
-          element={<PartnerManagerList />}
-        />
-        <Route
-          path={routes.manager.partnerManagers.onboard}
-          element={<PartnerManagerOnboard />}
-        />
-        <Route
-          path={routes.manager.partnerManagers.edit}
-          element={<PartnerManagerOnboard />}
-        />
       </Route>
 
       {/* ========== ADMIN ========== */}
@@ -428,6 +403,7 @@ export default function App() {
           path={routes.admin.changePassword}
           element={<ChangePasswordPage />}
         />
+        <Route path={routes.admin.profile} element={<EditProfilePage />} />
         <Route
           path={routes.admin.products}
           element={<AdminProductApprovalList />}
@@ -446,6 +422,15 @@ export default function App() {
       {/* ========== SERVICES ========== */}
       <Route element={<ServiceLayout />}>
         <Route path={routes.service.dashboard} element={<ServiceDashboard />} />
+        <Route path={routes.service.profile} element={<EditProfilePage />} />
+        <Route path={routes.service.changePassword} element={<ChangePasswordPage />} />
+        <Route path={routes.service.catalog} element={<ServiceCatalogPage />} />
+        <Route path={routes.service.enquiries} element={<ServiceEnquiries />} />
+        <Route path={routes.service.enquiryDetail} element={<ServiceDetails />} />
+        <Route path={routes.service.orders} element={<ServiceOrderList />} />
+        <Route path={routes.service.orderDetail} element={<ServiceOrderView />} />
+        <Route path={routes.service.cancellations} element={<ServiceCancellationRequest />} />
+        <Route path={routes.service.cancellationDetail} element={<ServiceCancellationDetail />} />
 
         {/* Service Partners */}
         <Route
@@ -538,6 +523,11 @@ export default function App() {
           path={routes.warehouse.dashboard}
           element={<WarehouseDashboard />}
         />
+        <Route
+          path={routes.warehouse.changePassword}
+          element={<ChangePasswordPage />}
+        />
+        <Route path={routes.warehouse.profile} element={<EditProfilePage />} />
       </Route>
 
       {/* ========== FLEA MARKET ========== */}
@@ -550,6 +540,7 @@ export default function App() {
           path={routes.fleaMarket.changePassword}
           element={<ChangePasswordPage />}
         />
+        <Route path={routes.fleaMarket.profile} element={<EditProfilePage />} />
         <Route
           path={routes.fleaMarket.manageEvent}
           element={<FleaMarketSchedulePage />}
@@ -589,6 +580,7 @@ export default function App() {
           path={routes.hr.changePassword}
           element={<ChangePasswordPage />}
         />
+        <Route path={routes.hr.profile} element={<EditProfilePage />} />
         <Route path={routes.hr.rewards} element={<ManageRewards />} />
       </Route>
 

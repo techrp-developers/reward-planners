@@ -39,3 +39,18 @@ export async function fetchInvoice(invoiceId: number): Promise<InvoiceDetail> {
   const { data } = await fleaMarketClient.get<InvoiceApiResponse>(`/invoices/${invoiceId}`);
   return data.data;
 }
+
+export async function downloadInvoicePdf(invoiceId: number, invoiceNumber: string): Promise<void> {
+  const response = await fleaMarketClient.get<Blob>(`/invoices/${invoiceId}/pdf`, { responseType: "blob" });
+  const url = URL.createObjectURL(response.data);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${invoiceNumber}.pdf`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function emailInvoice(invoiceId: number): Promise<string> {
+  const { data } = await fleaMarketClient.post<{ success: true; message: string }>(`/invoices/${invoiceId}/email`);
+  return data.message;
+}

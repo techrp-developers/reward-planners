@@ -1,323 +1,105 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { AxiosError } from "axios";
+import { AlertCircle, ArrowRight, Eye, EyeOff, LockKeyhole, Mail, Phone, UserRound } from "lucide-react";
 import { useAuth } from "./useAuth";
-import logoImage from "../assets/logo.svg";
-import { Eye, EyeOff } from "lucide-react";
-
-type Role = "vendor";
-
-type FieldProps = {
-  label: string;
-  htmlFor: string;
-  labelClass: string;
-  children: React.ReactNode;
-};
-
-const FullScreenLoader = ({ text }: { text: string }) => (
-  <div
-    className="min-h-screen flex items-center justify-center
-                  bg-gradient-to-tr from-[#38bdf8] via-[#a855f7] to-[#ec4899]"
-  >
-    <div className="px-8 py-6 text-center bg-white shadow-xl rounded-2xl">
-      <div
-        className="animate-spin h-8 w-8 mx-auto mb-3 rounded-full
-                      border-4 border-[#852BAF] border-t-transparent"
-      />
-      <p className="text-sm font-semibold text-gray-600">{text}</p>
-    </div>
-  </div>
-);
-
-function Field({ label, htmlFor, labelClass, children }: FieldProps) {
-  return (
-    <div className="min-w-0">
-      <label htmlFor={htmlFor} className={labelClass}>
-        {label}
-      </label>
-
-      <div className="relative mt-1.5">
-        <div
-          className="pointer-events-none absolute -inset-0.5 rounded-xl opacity-0 blur-lg transition
-                     bg-gradient-to-r from-[#852BAF]/25 to-[#FC3F78]/25
-                     focus-within:opacity-100"
-        />
-        <div className="relative">{children}</div>
-      </div>
-    </div>
-  );
-}
+import AuthShell from "./AuthShell";
 
 export default function RegisterPage() {
   const { register, loading, error: authError } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    password: "",
-    confirmPassword: "",
-    role: "vendor" as Role,
-    phone: "",
-  });
-
   const [error, setError] = useState("");
+  const [formData, setFormData] = useState({ name: "", email: "", phone: "", password: "", confirmPassword: "" });
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
-  ) => {
-    const { name, value } = e.target;
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = event.target;
+    setError("");
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setSubmitting(true);
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     setError("");
-
     if (formData.password !== formData.confirmPassword) {
-      setError("Passwords do not match");
-      setSubmitting(false);
+      setError("Passwords do not match. Please try again.");
       return;
     }
 
+    setSubmitting(true);
     try {
-      await register(
-        formData.name.trim(),
-        formData.email.trim(),
-        formData.password,
-        "vendor",
-        formData.phone.trim(),
-      );
+      await register(formData.name.trim(), formData.email.trim(), formData.password, "vendor", formData.phone.trim());
     } catch (err: unknown) {
-      if (err instanceof AxiosError) {
-        setError(err.response?.data?.message ?? "Register failed");
-        setSubmitting(false);
-      } else {
-        setError("Unexpected error occurred");
-        setSubmitting(false);
-      }
+      setError(err instanceof AxiosError ? (err.response?.data?.message ?? "Registration failed") : "Unexpected error occurred");
+      setSubmitting(false);
     }
   };
 
-  const labelClass = "text-sm font-semibold text-slate-700";
-  const inputBase =
-    "w-full px-4 py-2.5 rounded-xl bg-white text-slate-900 placeholder:text-slate-400 " +
-    "border border-slate-200 shadow-sm outline-none transition-all duration-300 " +
-    "focus:border-transparent focus:ring-4 focus:ring-[#852BAF]/15";
-
-  if (submitting) {
-    return <FullScreenLoader text="Creating your account..." />;
-  }
+  const inputWrap = "group flex h-12 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 px-4 transition focus-within:border-purple-400 focus-within:bg-white focus-within:ring-4 focus-within:ring-purple-100";
+  const labelClass = "mb-2 block text-sm font-semibold text-slate-700";
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center bg-gradient-to-tr from-[#38bdf8] via-[#a855f7] to-[#ec4899] px-4">
-      <div className="relative z-10 grid w-full max-w-5xl grid-cols-1 overflow-hidden bg-white shadow-2xl rounded-3xl md:grid-cols-2">
-        {/* LEFT SIDE */}
-        <div className="relative items-center justify-center hidden p-6 bg-white md:flex">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_circle_at_15%_20%,rgba(56,189,248,0.12),transparent_55%),radial-gradient(900px_circle_at_85%_30%,rgba(168,85,247,0.10),transparent_55%),radial-gradient(900px_circle_at_50%_110%,rgba(236,72,153,0.08),transparent_55%)]" />
-          <div className="pointer-events-none absolute inset-0 opacity-[0.08] bg-[radial-gradient(#000_1px,transparent_1px)] [background-size:18px_18px]" />
+    <AuthShell compact eyebrow="Get started" title="Create your account" description="Enter your details to set up your secure workspace.">
+      {(error || authError) && (
+        <div role="alert" className="mb-4 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> {error || String(authError)}
+        </div>
+      )}
 
-          <img
-            src={logoImage}
-            alt="Register"
-            className="relative w-full max-w-sm select-none"
-            draggable={false}
-          />
-
-          <div className="absolute bottom-8 left-8 right-8 text-slate-900">
-            <p className="text-2xl font-extrabold leading-tight">
-              Create your account
-            </p>
-            <p className="mt-2 text-[16px] font-medium text-gray-600 leading-relaxed">
-              Join us and manage everything in one place.
-            </p>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label htmlFor="name" className={labelClass}>Full name</label>
+          <div className={inputWrap}>
+            <UserRound className="h-4.5 w-4.5 text-slate-400 transition group-focus-within:text-purple-600" />
+            <input id="name" name="name" required autoComplete="name" placeholder="Your full name" value={formData.name} onChange={handleChange} className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400" />
           </div>
         </div>
 
-        {/* FORM */}
-        <div className="w-full p-5 md:p-6">
-          <h2 className="text-xl font-extrabold text-gray-900 mb-0.5">
-            Create Account
-          </h2>
-          <p className="mb-3 text-sm text-gray-500">
-            Join us and manage everything in one place.
-          </p>
-
-          {(error || authError) && (
-            <div className="p-3 mb-3 text-sm text-red-700 border border-red-200 rounded-lg bg-red-50">
-              {error || (authError as string)}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label htmlFor="email" className={labelClass}>Email address</label>
+            <div className={inputWrap}>
+              <Mail className="h-4.5 w-4.5 shrink-0 text-slate-400 transition group-focus-within:text-purple-600" />
+              <input id="email" name="email" type="email" required autoComplete="email" placeholder="you@company.com" value={formData.email} onChange={(e) => setFormData((p) => ({ ...p, email: e.target.value.trimStart() }))} className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400" />
             </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <div className="grid grid-cols-1 gap-3">
-              <Field label="Full Name" htmlFor="name" labelClass={labelClass}>
-                <input
-                  id="name"
-                  name="name"
-                  className={inputBase}
-                  value={formData.name}
-                  onChange={handleChange}
-                  required
-                />
-              </Field>
-
-              <Field
-                label="Email Address"
-                htmlFor="email"
-                labelClass={labelClass}
-              >
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  className={inputBase}
-                  value={formData.email}
-                  onChange={(e) =>
-                    setFormData((p) => ({
-                      ...p,
-                      email: e.target.value.trimStart(),
-                    }))
-                  }
-                  required
-                  autoComplete="email"
-                />
-              </Field>
-
-              <Field
-                label="Phone Number"
-                htmlFor="phone"
-                labelClass={labelClass}
-              >
-                <input
-                  id="phone"
-                  name="phone"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  className={inputBase}
-                  value={formData.phone}
-                  onChange={(e) =>
-                    setFormData((p) => ({
-                      ...p,
-                      phone: e.target.value.replace(/\D/g, ""),
-                    }))
-                  }
-                />
-              </Field>
-
-              <Field label="Role" htmlFor="role" labelClass={labelClass}>
-                <select
-                  id="role"
-                  name="role"
-                  value={formData.role}
-                  onChange={handleChange}
-                  className={inputBase + " cursor-pointer"}
-                >
-                  <option value="vendor">Vendor</option>
-                  <option value="vendor_manager">Vendor Manager</option>
-                  <option value="admin">Admin</option>
-                  <option value="warehouse_manager">Warehouse Manager</option>
-                  <option value="hr">HR</option>
-                  <option value="service_manager">Service Manager</option>
-                  <option value="service_partner">Service Partner</option>
-                </select>
-              </Field>
-
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <Field
-                  label="Password"
-                  htmlFor="password"
-                  labelClass={labelClass}
-                >
-                  <div className="relative">
-                    <input
-                      id="password"
-                      name="password"
-                      autoComplete="new-password"
-                      type={showPassword ? "text" : "password"}
-                      className={inputBase}
-                      value={formData.password}
-                      onChange={handleChange}
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute text-gray-400 -translate-y-1/2 right-3 top-1/2 hover:text-gray-700"
-                    >
-                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                    </button>
-                  </div>
-                </Field>
-
-                <Field
-                  label="Confirm Password"
-                  htmlFor="confirmPassword"
-                  labelClass={labelClass}
-                >
-                  <div className="relative">
-                    <input
-                      id="confirmPassword"
-                      name="confirmPassword"
-                      type={showConfirmPassword ? "text" : "password"}
-                      className={inputBase}
-                      value={formData.confirmPassword}
-                      onChange={handleChange}
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowConfirmPassword(!showConfirmPassword)
-                      }
-                      className="absolute text-gray-400 -translate-y-1/2 right-3 top-1/2 hover:text-gray-700"
-                    >
-                      {showConfirmPassword ? (
-                        <EyeOff size={18} />
-                      ) : (
-                        <Eye size={18} />
-                      )}
-                    </button>
-                  </div>
-                </Field>
-              </div>
-
-              <button
-                type="submit"
-                disabled={submitting || loading}
-                className="w-full mt-6 text-white font-bold py-3.5 rounded-full text-xl
-                           bg-gradient-to-r from-[#852BAF] to-[#FC3F78]
-                           shadow-lg shadow-[#852BAF]/25 transition-all duration-300
-                           hover:from-[#FC3F78] hover:to-[#852BAF]
-                           hover:shadow-xl active:scale-95
-                           disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
-              >
-                {submitting ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <span className="w-4 h-4 border-2 border-white rounded-full animate-spin border-t-transparent" />
-                    Creating Account...
-                  </span>
-                ) : (
-                  "Register"
-                )}
-              </button>
-
-              <p className="text-sm text-center text-gray-600">
-                Already have an account?{" "}
-                <Link
-                  to="/login"
-                  className="font-semibold text-[#852BAF] hover:underline"
-                >
-                  Login
-                </Link>
-              </p>
+          </div>
+          <div>
+            <label htmlFor="phone" className={labelClass}>Phone number <span className="font-normal text-slate-400">(optional)</span></label>
+            <div className={inputWrap}>
+              <Phone className="h-4.5 w-4.5 shrink-0 text-slate-400 transition group-focus-within:text-purple-600" />
+              <input id="phone" name="phone" inputMode="numeric" autoComplete="tel" placeholder="98765 43210" value={formData.phone} onChange={(e) => setFormData((p) => ({ ...p, phone: e.target.value.replace(/\D/g, "").slice(0, 15) }))} className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400" />
             </div>
-          </form>
+          </div>
         </div>
-      </div>
-    </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label htmlFor="password" className={labelClass}>Password</label>
+            <div className={inputWrap}>
+              <LockKeyhole className="h-4.5 w-4.5 shrink-0 text-slate-400 transition group-focus-within:text-purple-600" />
+              <input id="password" name="password" type={showPassword ? "text" : "password"} required autoComplete="new-password" placeholder="Create password" value={formData.password} onChange={handleChange} className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400" />
+              <button type="button" onClick={() => setShowPassword((v) => !v)} aria-label={showPassword ? "Hide password" : "Show password"} className="text-slate-400 hover:text-slate-700">{showPassword ? <EyeOff className="h-4.5 w-4.5" /> : <Eye className="h-4.5 w-4.5" />}</button>
+            </div>
+          </div>
+          <div>
+            <label htmlFor="confirmPassword" className={labelClass}>Confirm password</label>
+            <div className={inputWrap}>
+              <LockKeyhole className="h-4.5 w-4.5 shrink-0 text-slate-400 transition group-focus-within:text-purple-600" />
+              <input id="confirmPassword" name="confirmPassword" type={showConfirmPassword ? "text" : "password"} required autoComplete="new-password" placeholder="Repeat password" value={formData.confirmPassword} onChange={handleChange} className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400" />
+              <button type="button" onClick={() => setShowConfirmPassword((v) => !v)} aria-label={showConfirmPassword ? "Hide password" : "Show password"} className="text-slate-400 hover:text-slate-700">{showConfirmPassword ? <EyeOff className="h-4.5 w-4.5" /> : <Eye className="h-4.5 w-4.5" />}</button>
+            </div>
+          </div>
+        </div>
+
+        <p className="text-xs leading-5 text-slate-400">By creating an account, you agree to use the platform responsibly and keep your account details secure.</p>
+
+        <button type="submit" disabled={submitting || loading} className="group flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-[#1d102b] px-5 text-sm font-bold text-white shadow-[0_12px_28px_rgba(29,16,43,0.22)] transition hover:-translate-y-0.5 hover:bg-[#852baf] hover:shadow-[0_16px_32px_rgba(133,43,175,0.28)] active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-55">
+          {submitting || loading ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Creating account...</> : <>Create account <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" /></>}
+        </button>
+      </form>
+
+      <p className="mt-5 text-center text-sm text-slate-500">Already have an account? <Link to="/login" className="font-bold text-purple-700 hover:text-pink-600">Sign in</Link></p>
+    </AuthShell>
   );
 }

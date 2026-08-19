@@ -3,19 +3,19 @@ import { Link, useLocation } from "react-router-dom";
 import {
   FiGrid,
   FiHeart,
-  FiUserCheck,
   FiList,
-  FiCalendar,
-  FiBarChart2,
-  FiSettings,
+  FiInbox,
+  FiShoppingBag,
+  FiXCircle,
   FiChevronDown,
   FiChevronRight,
   FiLogOut,
+  FiUser,
+  FiLock,
 } from "react-icons/fi";
 import { useAuth } from "../../../common/auth/useAuth";
 import { routes } from "../../../routes";
 import logo from "../../../common/assets/logo.svg";
-import { serviceCategories } from "./shared/serviceCategories";
 
 interface NavChild {
   label: string;
@@ -35,7 +35,7 @@ export default function ServiceNavbar() {
   const { user, logout } = useAuth();
 
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(true);
 
   const isActive = (to: string) => pathname === to;
 
@@ -47,52 +47,38 @@ export default function ServiceNavbar() {
       type: "link",
     },
     {
-      label: "Service Partners",
-      Icon: FiHeart,
+      label: "Service Catalogue",
+      Icon: FiList,
       type: "dropdown",
       children: [
-        { label: "All Partners", to: routes.service.servicePartners.list },
-        ...serviceCategories.map((c) => ({
-          label: c.name,
-          to: `${routes.service.servicePartners.list}?category=${encodeURIComponent(c.name)}`,
-        })),
+        { label: "Categories", to: routes.service.catalog.replace(":section?", "categories") },
+        { label: "Services", to: routes.service.catalog.replace(":section?", "services") },
+        { label: "Variants", to: routes.service.catalog.replace(":section?", "variants") },
       ],
     },
     {
-      label: "Partner Managers",
-      to: routes.service.partnerManagers.list,
-      Icon: FiUserCheck,
+      label: "Service Enquiries",
+      to: routes.service.enquiries,
+      Icon: FiInbox,
       type: "link",
     },
     {
-      label: "Service Listings",
-      to: routes.service.serviceListings,
-      Icon: FiList,
+      label: "Service Orders",
+      to: routes.service.orders,
+      Icon: FiShoppingBag,
       type: "link",
     },
     {
-      label: "Bookings",
-      to: routes.service.bookings,
-      Icon: FiCalendar,
-      type: "link",
-    },
-    {
-      label: "Reports",
-      to: routes.service.reports,
-      Icon: FiBarChart2,
-      type: "link",
-    },
-    {
-      label: "Settings",
-      to: routes.service.settings,
-      Icon: FiSettings,
+      label: "Order Cancellations",
+      to: routes.service.cancellations,
+      Icon: FiXCircle,
       type: "link",
     },
   ];
 
   return (
     <nav
-      className="fixed top-0 left-0 flex flex-col w-64 h-full font-sans"
+      className="premium-role-sidebar fixed top-0 left-0 flex flex-col w-64 h-full font-sans"
       style={{
         background: "linear-gradient(180deg, #ffffff 0%, #fdf8ff 60%, #fff5f8 100%)",
         borderRight: "1px solid rgba(133,43,175,0.1)",
@@ -310,7 +296,7 @@ export default function ServiceNavbar() {
 
         <div
           className={`overflow-hidden transition-all duration-300 ${
-            isProfileOpen ? "max-h-28 mt-3 opacity-100" : "max-h-0 opacity-0"
+            isProfileOpen ? "max-h-44 mt-3 opacity-100" : "max-h-0 opacity-0"
           }`}
         >
           <div
@@ -320,6 +306,26 @@ export default function ServiceNavbar() {
             }}
           />
           <div className="space-y-0.5">
+            <Link
+              to={routes.service.profile}
+              className={`flex items-center gap-2.5 w-full px-3 py-2 text-sm font-medium rounded-xl transition-all duration-150 ${
+                pathname === routes.service.profile
+                  ? "bg-purple-100 text-[#852BAF]"
+                  : "text-gray-600 hover:bg-purple-50 hover:text-[#852BAF]"
+              }`}
+            >
+              <FiUser className="text-base shrink-0" /> Profile
+            </Link>
+            <Link
+              to={routes.service.changePassword}
+              className={`flex items-center gap-2.5 w-full px-3 py-2 text-sm font-medium rounded-xl transition-all duration-150 ${
+                pathname === routes.service.changePassword
+                  ? "bg-purple-100 text-[#852BAF]"
+                  : "text-gray-600 hover:bg-purple-50 hover:text-[#852BAF]"
+              }`}
+            >
+              <FiLock className="text-base shrink-0" /> Change Password
+            </Link>
             <button
               onClick={logout}
               className="flex items-center gap-2.5 w-full px-3 py-2 text-sm font-medium text-red-500 hover:bg-red-50 hover:text-red-600 rounded-xl transition-all duration-150 cursor-pointer"

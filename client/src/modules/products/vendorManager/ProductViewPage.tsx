@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Swal from "sweetalert2";
 import {
   FaTag,
   FaBox,
@@ -7,6 +8,11 @@ import {
   FaSpinner,
   FaArrowLeft,
   FaDownload,
+  FaCheck,
+  FaTimes,
+  FaRedo,
+  FaTrash,
+  FaTruck,
 } from "react-icons/fa";
 
 import { useNavigate, useParams } from "react-router-dom";
@@ -14,8 +20,11 @@ import QuillEditor from "../components/QuillEditor";
 
 // const API_BASE = import.meta.env.VITE_API_URL;
 import { api } from "../../../common/api/api";
+import { routes } from "../../../routes";
 // const API_BASEIMAGE_URL = "https://rewardplanners.com/api/crm";
 const R2_BASE_URL = "https://cdn.rewardplanners.com";
+
+type ActionType = "approve" | "reject" | "request_resubmission";
 
 type ProductVariant = {
   variant_id: number;
@@ -23,11 +32,16 @@ type ProductVariant = {
   mrp: number | null;
   sale_price: number | null;
   stock: number;
+  weight: number | null;
+  length: number | null;
+  breadth: number | null;
+  height: number | null;
   is_visible: number;
   variant_attributes: Record<string, string>;
   manufacturing_date: string | null;
   expiry_date: string | null;
   created_at: string;
+  images?: string[];
 };
 
 interface ProductView {
@@ -67,6 +81,14 @@ interface ProductView {
   }>;
 
   variants: ProductVariant[];
+}
+
+interface DeliveryFeeEstimate {
+  deliveryFee: number;
+  destinationPincode: string;
+  originPincode: string;
+  variantId: number;
+  courierName: string | null;
 }
 
 const FormInput = ({
@@ -129,6 +151,36 @@ const SectionHeader = ({ icon: Icon, title, description }: any) => (
   </div>
 );
 
+function ImageLightbox({
+  src,
+  onClose,
+}: {
+  src: string;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <button
+        onClick={onClose}
+        aria-label="Close"
+        className="absolute flex items-center justify-center w-10 h-10 text-white transition-colors rounded-full cursor-pointer top-5 right-5 bg-white/10 hover:bg-white/20"
+      >
+        <FaTimes />
+      </button>
+
+      <img
+        src={src}
+        alt="Full size preview"
+        onClick={(e) => e.stopPropagation()}
+        className="object-contain max-w-full max-h-full rounded-lg shadow-2xl"
+      />
+    </div>
+  );
+}
+
 export default function ReviewProductPage() {
   // FIXED: use the correct param name from route
   const { id: productId } = useParams<{ id: string }>();
@@ -137,10 +189,14 @@ export default function ReviewProductPage() {
   const [product, setProduct] = useState<ProductView | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const [productAttributes, setProductAttributes] = useState<
     Record<string, string[]>
   >({});
   const [attributeSchema, setAttributeSchema] = useState<any[]>([]);
+  const [deliveryEstimate, setDeliveryEstimate] =
+    useState<DeliveryFeeEstimate | null>(null);
+  const [deliveryEstimateLoading, setDeliveryEstimateLoading] = useState(false);
 
   useEffect(() => {
     if (!productId) {
@@ -148,8 +204,26 @@ export default function ReviewProductPage() {
       setLoading(false);
       return;
     }
-    fetchProduct(productId);
+    void fetchProduct(productId);
+    void fetchDeliveryEstimate(productId);
   }, [productId]);
+
+  const fetchDeliveryEstimate = async (id: string) => {
+    setDeliveryEstimateLoading(true);
+    setDeliveryEstimate(null);
+
+    try {
+      const response = await api.get(
+        `/product/${encodeURIComponent(id)}/delivery-fee-estimate`,
+      );
+      setDeliveryEstimate(response.data?.estimate ?? null);
+    } catch (estimateError) {
+      // The product review should remain usable when a courier is unavailable.
+      console.error("Unable to calculate delivery fee estimate", estimateError);
+    } finally {
+      setDeliveryEstimateLoading(false);
+    }
+  };
 
   const resolveImageUrl = (path?: string) => {
     if (!path) return "";
@@ -261,6 +335,176 @@ export default function ReviewProductPage() {
     document.body.removeChild(link);
   };
 
+  const okBtnClass =
+    "px-6 py-2 rounded-xl font-bold text-white bg-[#852BAF] transition-all duration-300 cursor-pointer " +
+    "hover:bg-gradient-to-r hover:from-[#852BAF] hover:to-[#FC3F78] active:scale-95";
+
+  const handleProductAction = async (action: ActionType) => {
+    if (!product) return;
+
+    const modalConfigs: Record<
+      ActionType,
+      {
+        title: string;
+        text: string;
+        icon: "warning" | "question" | "success" | "error" | "info";
+        confirmText: string;
+        confirmColor: string;
+        needsReason: boolean;
+        placeholder?: string;
+      }
+    > = {
+      approve: {
+        title: "Approve Product?",
+        text: `Do you want to approve "${product.productName}"?`,
+        icon: "success",
+        confirmText: "Approve",
+        confirmColor: "#16A34A",
+        needsReason: false,
+      },
+      reject: {
+        title: "Reject Product?",
+        text: `Do you want to reject "${product.productName}"?`,
+        icon: "error",
+        confirmText: "Reject",
+        confirmColor: "#DC2626",
+        needsReason: true,
+        placeholder: "Provide rejection reason...",
+      },
+      request_resubmission: {
+        title: "Allow Resubmission?",
+        text: `Allow vendor to resubmit "${product.productName}"?`,
+        icon: "info",
+        confirmText: "Allow",
+        confirmColor: "#2563EB",
+        needsReason: true,
+        placeholder: "Reason for resubmission...",
+      },
+    };
+
+    const cfg = modalConfigs[action];
+
+    const result = await Swal.fire({
+      title: cfg.title,
+      text: cfg.text,
+      icon: cfg.icon,
+      showCancelButton: true,
+      confirmButtonText: cfg.confirmText,
+      cancelButtonText: "Cancel",
+      confirmButtonColor: cfg.confirmColor,
+      cancelButtonColor: "#9CA3AF",
+      reverseButtons: true,
+      input: cfg.needsReason ? "textarea" : undefined,
+      inputPlaceholder: cfg.needsReason ? cfg.placeholder : undefined,
+      inputAttributes: cfg.needsReason ? { "aria-label": "Reason" } : undefined,
+      preConfirm: (value) => {
+        if (cfg.needsReason && (!value || !String(value).trim())) {
+          Swal.showValidationMessage("Reason is required.");
+          return false;
+        }
+        return value;
+      },
+      buttonsStyling: false,
+      customClass: {
+        actions: "gap-[7px]",
+        confirmButton:
+          action === "approve"
+            ? "px-6 py-2 rounded-xl font-bold text-white bg-green-600 hover:bg-green-700 transition-all duration-300 cursor-pointer active:scale-95"
+            : action === "request_resubmission"
+              ? "px-6 py-2 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-700 transition-all duration-300 cursor-pointer active:scale-95"
+              : "px-6 py-2 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 transition-all duration-300 cursor-pointer active:scale-95",
+        cancelButton:
+          "px-6 py-2 rounded-xl font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-all duration-300 cursor-pointer",
+        popup: "rounded-2xl",
+      },
+    });
+
+    if (!result.isConfirmed) return;
+
+    const reason = cfg.needsReason
+      ? String(result.value || "").trim()
+      : undefined;
+
+    try {
+      const endpoint =
+        action === "request_resubmission" ? "resubmission" : action;
+
+      const res = await api.put(
+        `/manager/product/${endpoint}/${product.productId}`,
+        reason ? { reason } : {},
+      );
+
+      if (!res.data.success)
+        throw new Error(res.data.message || "Action failed");
+
+      await Swal.fire({
+        title: "Success!",
+        text: res.data.message || "Action completed successfully.",
+        icon: "success",
+        timer: 1400,
+        showConfirmButton: false,
+        customClass: { popup: "rounded-2xl" },
+      });
+
+      navigate(routes.manager.products);
+    } catch (error: any) {
+      await Swal.fire({
+        title: "Failed",
+        text: error?.message || "Something went wrong.",
+        icon: "error",
+        confirmButtonText: "OK",
+        buttonsStyling: false,
+        customClass: {
+          confirmButton: okBtnClass,
+          popup: "rounded-2xl",
+        },
+      });
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!product) return;
+
+    const result = await Swal.fire({
+      title: "Delete Product?",
+      text: `Are you sure you want to delete "${product.productName}"?`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Delete",
+      confirmButtonColor: "#DC2626",
+      cancelButtonText: "Cancel",
+      reverseButtons: true,
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      const res = await api.delete(
+        `/product/remove-product/${product.productId}`,
+      );
+
+      if (!res.data.success) {
+        throw new Error(res.data.message || "Delete failed");
+      }
+
+      await Swal.fire({
+        title: "Deleted!",
+        text: "Product deleted successfully.",
+        icon: "success",
+        timer: 1200,
+        showConfirmButton: false,
+      });
+
+      navigate(routes.manager.products);
+    } catch (error: any) {
+      await Swal.fire({
+        title: "Error",
+        text: error?.message || "Failed to delete product.",
+        icon: "error",
+      });
+    }
+  };
+
 
   if (loading) {
     return (
@@ -322,12 +566,48 @@ export default function ReviewProductPage() {
               <h1 className="text-3xl font-bold text-gray-900">
                 Product Review
               </h1>
-              <p className="mt-1 text-sm text-gray-400">
-                Product ID:{" "}
-                <span className="font-bold text-[#852BAF]">
-                  #{product.productId}
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                <span className="text-gray-500">
+                  Product ID:{" "}
+                  <span className="font-bold text-[#852BAF]">
+                    #{product.productId}
+                  </span>
                 </span>
-              </p>
+                <span className="hidden h-4 w-px bg-gray-300 sm:block" />
+                <span
+                  className="inline-flex min-h-8 items-center gap-2 rounded-full border border-purple-100 bg-white/90 px-3 py-1 font-semibold text-gray-700 shadow-sm"
+                  title="Estimate for one unit of the first visible variant"
+                >
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-purple-50 text-[#852BAF]">
+                    {deliveryEstimateLoading ? (
+                      <FaSpinner className="animate-spin text-[10px]" />
+                    ) : (
+                      <FaTruck className="text-[10px]" />
+                    )}
+                  </span>
+                  {deliveryEstimateLoading ? (
+                    "Estimating delivery fee..."
+                  ) : deliveryEstimate ? (
+                    <>
+                      Estimated delivery fee:{" "}
+                      <span className="text-[#852BAF]">
+                        {new Intl.NumberFormat("en-IN", {
+                          style: "currency",
+                          currency: "INR",
+                          maximumFractionDigits: 2,
+                        }).format(deliveryEstimate.deliveryFee)}
+                      </span>
+                      <span className="font-normal text-gray-400">
+                        to {deliveryEstimate.destinationPincode}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="font-medium text-gray-400">
+                      Delivery estimate unavailable
+                    </span>
+                  )}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -465,8 +745,8 @@ export default function ReviewProductPage() {
               title="Product Variants"
               description="SKU-wise pricing, attributes and stock details"
             />
-            <div className="overflow-x-auto rounded-xl border border-gray-100">
-              <table className="min-w-full text-sm text-left">
+            <div className="w-full overflow-x-auto overscroll-x-contain rounded-xl border border-gray-100">
+              <table className="min-w-max text-sm text-left">
                 <thead
                   style={{
                     background:
@@ -475,12 +755,18 @@ export default function ReviewProductPage() {
                 >
                   <tr>
                     {[
+                      "Images",
                       "SKU",
                       "Attributes",
+                      "Weight",
+                      "Dimensions (L x B x H)",
+                      "Billable Weight",
                       "MRP",
                       "Sale Price",
                       "Stock",
                       "Visibility",
+                      "Manufacturing Date",
+                      "Expiry Date",
                     ].map((h) => (
                       <th
                         key={h}
@@ -497,6 +783,30 @@ export default function ReviewProductPage() {
                       key={variant.variant_id}
                       className="hover:bg-purple-50/30 transition-colors"
                     >
+                      <td className="px-4 py-3">
+                        {variant.images && variant.images.length > 0 ? (
+                          <div className="flex flex-nowrap gap-1.5 whitespace-nowrap">
+                            {variant.images.map((img, imgIndex) => (
+                              <div
+                                key={imgIndex}
+                                onClick={() =>
+                                  setLightboxImage(resolveImageUrl(img))
+                                }
+                                className="w-12 h-12 overflow-hidden border border-gray-200 rounded-lg cursor-pointer shrink-0"
+                              >
+                                <img
+                                  src={resolveImageUrl(img)}
+                                  alt={`${variant.sku} ${imgIndex + 1}`}
+                                  className="object-cover w-full h-full transition-transform hover:scale-110"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-300">—</span>
+                        )}
+                      </td>
+
                       <td className="px-4 py-3 font-bold text-gray-800 text-xs">
                         {variant.sku}
                       </td>
@@ -515,6 +825,22 @@ export default function ReviewProductPage() {
                               ),
                             )}
                         </div>
+                      </td>
+
+                      <td className="px-4 py-3 whitespace-nowrap text-gray-700">
+                        {Number(variant.weight) > 0 ? `${Number(variant.weight).toFixed(3)} kg` : "-"}
+                      </td>
+
+                      <td className="px-4 py-3 whitespace-nowrap text-gray-700">
+                        {Number(variant.length) > 0 && Number(variant.breadth) > 0 && Number(variant.height) > 0
+                          ? `${Number(variant.length)} x ${Number(variant.breadth)} x ${Number(variant.height)} cm`
+                          : "-"}
+                      </td>
+
+                      <td className="px-4 py-3 whitespace-nowrap font-bold text-[#852BAF]">
+                        {Number(variant.weight) > 0 && Number(variant.length) > 0 && Number(variant.breadth) > 0 && Number(variant.height) > 0
+                          ? `${Math.max(Number(variant.weight), (Number(variant.length) * Number(variant.breadth) * Number(variant.height)) / 5000).toFixed(3)} kg`
+                          : "-"}
                       </td>
 
                       <td className="px-4 py-3 text-gray-700">
@@ -539,6 +865,22 @@ export default function ReviewProductPage() {
                         >
                           {variant.is_visible ? "Visible" : "Hidden"}
                         </span>
+                      </td>
+
+                      <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                        {variant.manufacturing_date
+                          ? new Date(
+                              variant.manufacturing_date,
+                            ).toLocaleDateString("en-IN")
+                          : "—"}
+                      </td>
+
+                      <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                        {variant.expiry_date
+                          ? new Date(variant.expiry_date).toLocaleDateString(
+                              "en-IN",
+                            )
+                          : "—"}
                       </td>
                     </tr>
                   ))}
@@ -655,19 +997,24 @@ export default function ReviewProductPage() {
             description="Single cover image for product listing"
           />
           {coverImage ? (
-            <div className="relative w-36 h-36 overflow-hidden border border-gray-200 rounded-2xl group shadow-sm">
+            <div
+              onClick={() => setLightboxImage(resolveImageUrl(coverImage))}
+              className="relative w-36 h-36 overflow-hidden border border-gray-200 rounded-2xl group shadow-sm cursor-pointer"
+            >
               <img
                 src={resolveImageUrl(coverImage)}
                 alt="Cover Image"
-                className="object-cover w-full h-full"
+                className="object-cover w-full h-full transition-transform group-hover:scale-105"
               />
               <button
-                onClick={() =>
-                  downloadFile(resolveImageUrl(coverImage), "cover-image.jpg")
-                }
-                className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer rounded-2xl"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  downloadFile(resolveImageUrl(coverImage), "cover-image.jpg");
+                }}
+                title="Download"
+                className="absolute top-2 right-2 flex items-center justify-center w-8 h-8 text-white transition-opacity bg-black/50 rounded-full opacity-0 group-hover:opacity-100 cursor-pointer"
               >
-                <FaDownload className="text-white text-lg" />
+                <FaDownload className="text-xs" />
               </button>
             </div>
           ) : (
@@ -746,7 +1093,57 @@ export default function ReviewProductPage() {
             </div>
           </div>
         )}
+
+        {/* Actions */}
+        <div className={sc}>
+          <SectionHeader
+            icon={FaCheck}
+            title="Actions"
+            description="Approve, reject or manage this product"
+          />
+          <div className="flex flex-wrap items-center gap-3">
+            {(product.product_status === "pending" ||
+              product.product_status === "sent_for_approval") && (
+              <>
+                <button
+                  onClick={() => handleProductAction("approve")}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white rounded-xl shadow-sm transition-all bg-green-600 hover:bg-green-700 active:scale-95 cursor-pointer"
+                >
+                  <FaCheck className="text-xs" /> Approve
+                </button>
+
+                <button
+                  onClick={() => handleProductAction("reject")}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white rounded-xl shadow-sm transition-all bg-red-500 hover:bg-red-600 active:scale-95 cursor-pointer"
+                >
+                  <FaTimes className="text-xs" /> Reject
+                </button>
+              </>
+            )}
+
+            <button
+              onClick={() => handleProductAction("request_resubmission")}
+              className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white rounded-xl shadow-sm transition-all bg-[#852BAF] hover:opacity-90 active:scale-95 cursor-pointer"
+            >
+              <FaRedo className="text-xs" /> Request Resubmission
+            </button>
+
+            <button
+              onClick={handleDelete}
+              className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white rounded-xl shadow-sm transition-all bg-red-500 hover:bg-red-600 active:scale-95 cursor-pointer"
+            >
+              <FaTrash className="text-xs" /> Delete
+            </button>
+          </div>
+        </div>
       </div>
+
+      {lightboxImage && (
+        <ImageLightbox
+          src={lightboxImage}
+          onClose={() => setLightboxImage(null)}
+        />
+      )}
     </div>
   );
 }

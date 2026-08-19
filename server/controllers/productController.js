@@ -7,6 +7,101 @@ const { compressVideo } = require("../utils/videoCompression");
 const ExcelJS = require("exceljs");
 const { uploadToR2 } = require("../utils/r2upload");
 const sharp = require("sharp");
+const XLSX = require("xlsx");
+const xpressService = require("../services/ExpressBees/xpressbees_service");
+
+const BULK_BASE_FIELDS = new Set([
+  "productName", "brandName", "manufacturer", "gstSlab", "hsnSacCode",
+  "description", "shortDescription", "brandDescription",
+  "is_discount_eligible", "is_returnable", "return_window_days",
+  "delivery_sla_min_days", "delivery_sla_max_days", "shipping_class",
+]);
+
+async function getBulkUploadContext(executor, categoryId, subcategoryId) {
+  const category = Number(categoryId);
+  const subcategory = Number(subcategoryId);
+  if (!Number.isInteger(category) || !Number.isInteger(subcategory)) {
+    const error = new Error("A valid category and subcategory are required");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const [[mapping]] = await executor.execute(
+    "SELECT subcategory_id FROM sub_categories WHERE subcategory_id = ? AND category_id = ? LIMIT 1",
+    [subcategory, category],
+  );
+  if (!mapping) {
+    const error = new Error("The selected subcategory does not belong to the selected category");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const [attributes] = await executor.execute(
+    `SELECT ca.attribute_key, ca.input_type, ca.is_required,
+            GROUP_CONCAT(cav.value ORDER BY cav.sort_order) AS options
+       FROM category_attributes ca
+       LEFT JOIN category_attribute_values cav ON cav.attribute_id = ca.id
+      WHERE ca.is_active = 1
+        AND (ca.subcategory_id = ? OR (ca.category_id = ? AND ca.subcategory_id IS NULL))
+      GROUP BY ca.id`,
+    [subcategory, category],
+  );
+
+  const attributeMap = Object.fromEntries(attributes.map((attribute) => [
+    attribute.attribute_key,
+    {
+      inputType: attribute.input_type,
+      required: Boolean(attribute.is_required),
+      options: attribute.options ? attribute.options.split(",").map((value) => value.trim()) : [],
+    },
+  ]));
+  return { category, subcategory, attributes, attributeMap };
+}
+
+function validateBulkRows(rows, attributeMap) {
+  const validRows = [];
+  const invalidRows = [];
+  const isBlank = (value) => value === undefined || value === null || String(value).trim() === "";
+  const isFlag = (value) => ["0", "1", 0, 1, false, true, "false", "true"].includes(value);
+
+  rows.forEach((sourceRow, index) => {
+    const row = sourceRow && typeof sourceRow === "object" && !Array.isArray(sourceRow) ? sourceRow : {};
+    const errors = [];
+    if (!isBlank(row.hsnSacCode)) {
+      row.hsnSacCode = String(row.hsnSacCode).replace(/[\s,]/g, "").replace(/\.0+$/, "");
+    }
+    if (isBlank(row.productName)) errors.push("productName is required");
+    if (isBlank(row.brandName)) errors.push("brandName is required");
+
+    if (!isBlank(row.gstSlab) && (!Number.isFinite(Number(row.gstSlab)) || Number(row.gstSlab) < 0 || Number(row.gstSlab) > 100)) errors.push("gstSlab must be a number between 0 and 100");
+    if (!isBlank(row.hsnSacCode) && !/^\d{6,8}$/.test(String(row.hsnSacCode).trim())) errors.push("hsnSacCode must contain 6 to 8 digits");
+    if (!isBlank(row.is_discount_eligible) && !isFlag(row.is_discount_eligible)) errors.push("is_discount_eligible must be 0 or 1");
+    if (!isBlank(row.is_returnable) && !isFlag(row.is_returnable)) errors.push("is_returnable must be 0 or 1");
+    if (!isBlank(row.shipping_class) && !["standard", "bulky", "fragile"].includes(String(row.shipping_class).toLowerCase())) errors.push("shipping_class must be standard, bulky, or fragile");
+
+    ["return_window_days", "delivery_sla_min_days", "delivery_sla_max_days"].forEach((field) => {
+      if (!isBlank(row[field]) && (!Number.isInteger(Number(row[field])) || Number(row[field]) < 0)) errors.push(`${field} must be a non-negative whole number`);
+    });
+    if (!isBlank(row.delivery_sla_min_days) && !isBlank(row.delivery_sla_max_days) && Number(row.delivery_sla_max_days) < Number(row.delivery_sla_min_days)) errors.push("delivery_sla_max_days cannot be less than delivery_sla_min_days");
+
+    Object.entries(attributeMap).forEach(([key, attribute]) => {
+      const value = row[key];
+      if (attribute.required && isBlank(value)) errors.push(`${key} is required`);
+      if (isBlank(value)) return;
+      const values = String(value).split(",").map((item) => item.trim()).filter(Boolean);
+      if (attribute.options.length) values.forEach((item) => { if (!attribute.options.includes(item)) errors.push(`Invalid value "${item}" for ${key}`); });
+      if (attribute.inputType === "number" && values.some((item) => !Number.isFinite(Number(item)))) errors.push(`${key} must be a number`);
+    });
+
+    Object.keys(row).forEach((key) => {
+      if (!BULK_BASE_FIELDS.has(key) && !attributeMap[key]) errors.push(`Unknown column: ${key}`);
+    });
+
+    if (errors.length) invalidRows.push({ rowNumber: index + 4, errors: [...new Set(errors)], data: row });
+    else validRows.push(row);
+  });
+  return { validRows, invalidRows };
+}
 
 class ProductController {
   // create Product
@@ -221,7 +316,32 @@ class ProductController {
   // validate Bulk upload
   async bulkValidate(req, res) {
     try {
-      const { categoryId, subcategoryId, rows } = req.body;
+      let { categoryId, subcategoryId, rows } = req.body;
+
+      if (req.file) {
+        const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+        const dataSheetName = workbook.SheetNames.find((name) => name !== "_meta");
+        const dataSheet = dataSheetName ? workbook.Sheets[dataSheetName] : null;
+        const metaSheet = workbook.Sheets._meta;
+        if (!dataSheet || !metaSheet) {
+          return res.status(400).json({ success: false, message: "Template metadata is missing. Download a fresh product template and try again." });
+        }
+
+        const metadataRows = XLSX.utils.sheet_to_json(metaSheet, { header: 1, defval: "" });
+        const metadata = Object.fromEntries(metadataRows.slice(1).map((row) => [String(row[0]).trim(), row[1]]));
+        categoryId = metadata.categoryId;
+        subcategoryId = metadata.subcategoryId;
+
+        const raw = XLSX.utils.sheet_to_json(dataSheet, { header: 1, defval: "", raw: false });
+        const headerRowIndex = raw.findIndex((row) => row.some((cell) => String(cell).trim() === "productName"));
+        if (headerRowIndex < 0) return res.status(400).json({ success: false, message: "The productName header is missing from the template." });
+        const columns = raw[headerRowIndex].map((cell, index) => ({ key: String(cell).trim(), index })).filter((column) => column.key);
+        rows = raw.slice(headerRowIndex + 3).map((sheetRow) => {
+          const row = {};
+          columns.forEach(({ key, index }) => { row[key] = typeof sheetRow[index] === "string" ? sheetRow[index].trim() : sheetRow[index]; });
+          return row;
+        }).filter((row) => Object.values(row).some((value) => value !== "" && value != null));
+      }
 
       if (!categoryId || !subcategoryId || !rows?.length) {
         return res.status(400).json({
@@ -229,6 +349,11 @@ class ProductController {
           message: "Invalid payload",
         });
       }
+
+      if (!Array.isArray(rows) || rows.length > 500) {
+        return res.status(400).json({ success: false, message: "Upload between 1 and 500 product rows" });
+      }
+      const context = await getBulkUploadContext(db, categoryId, subcategoryId);
 
       // 1. Fetch attributes (reuse your query)
       const [attributes] = await db.execute(
@@ -267,13 +392,16 @@ class ProductController {
       // 2. Validate each row
       rows.forEach((row, index) => {
         const errors = [];
+        if (row.hsnSacCode !== undefined && row.hsnSacCode !== null && row.hsnSacCode !== "") {
+          row.hsnSacCode = String(row.hsnSacCode).replace(/[\s,]/g, "").replace(/\.0+$/, "");
+        }
 
         //  BASE FIELD VALIDATION
-        if (!row.productName?.trim()) {
+        if (!String(row.productName ?? "").trim()) {
           errors.push("productName is required");
         }
 
-        if (!row.brandName?.trim()) {
+        if (!String(row.brandName ?? "").trim()) {
           errors.push("brandName is required");
         }
 
@@ -281,8 +409,18 @@ class ProductController {
           errors.push("gstSlab must be between 0–100");
         }
 
-        if (row.hsnSacCode && !/^\d{6,8}$/.test(row.hsnSacCode)) {
+        if (row.hsnSacCode && !/^\d{6,8}$/.test(String(row.hsnSacCode).trim())) {
           errors.push("hsnSacCode must be 6–8 digits");
+        }
+
+        if (row.is_discount_eligible !== "" && row.is_discount_eligible != null && !["0", "1", 0, 1, false, true, "false", "true"].includes(row.is_discount_eligible)) {
+          errors.push("is_discount_eligible must be 0 or 1");
+        }
+        if (row.is_returnable !== "" && row.is_returnable != null && !["0", "1", 0, 1, false, true, "false", "true"].includes(row.is_returnable)) {
+          errors.push("is_returnable must be 0 or 1");
+        }
+        if (row.shipping_class && !["standard", "bulky", "fragile"].includes(String(row.shipping_class).toLowerCase())) {
+          errors.push("Invalid shipping_class");
         }
 
         //  ATTRIBUTE VALIDATION
@@ -300,7 +438,7 @@ class ProductController {
 
           // SELECT / MULTISELECT
           if (attr.options.length > 0) {
-            const values = value.split(",").map((v) => v.trim());
+            const values = String(value).split(",").map((v) => v.trim());
 
             values.forEach((v) => {
               if (!attr.options.includes(v)) {
@@ -339,33 +477,13 @@ class ProductController {
             errors.push(`Unknown attribute: ${key}`);
           }
 
-          if (
-            row.is_discount_eligible &&
-            !["0", "1", 0, 1].includes(row.is_discount_eligible)
-          ) {
-            errors.push("is_discount_eligible must be 0 or 1");
-          }
-
-          if (
-            row.is_returnable &&
-            !["0", "1", 0, 1].includes(row.is_returnable)
-          ) {
-            errors.push("is_returnable must be 0 or 1");
-          }
-
-          if (
-            row.shipping_class &&
-            !["standard", "bulky", "fragile"].includes(row.shipping_class)
-          ) {
-            errors.push("Invalid shipping_class");
-          }
         });
 
         //  FINAL RESULT
         if (errors.length > 0) {
           invalidRows.push({
-            rowNumber: index + 1,
-            errors,
+            rowNumber: index + 4,
+            errors: [...new Set(errors)],
             data: row,
           });
         } else {
@@ -373,18 +491,23 @@ class ProductController {
         }
       });
 
+      // Use the exact same validator as the final upload endpoint so a row
+      // cannot pass this step and then be rejected by a different rule set.
+      const checked = validateBulkRows(rows, context.attributeMap);
       return res.json({
         success: true,
-        validCount: validRows.length,
-        invalidCount: invalidRows.length,
-        validRows,
-        invalidRows,
+        categoryId: Number(categoryId),
+        subcategoryId: Number(subcategoryId),
+        validCount: checked.validRows.length,
+        invalidCount: checked.invalidRows.length,
+        validRows: checked.validRows,
+        invalidRows: checked.invalidRows,
       });
     } catch (err) {
       console.error(err);
-      return res.status(500).json({
+      return res.status(err.statusCode || 500).json({
         success: false,
-        message: "Validation failed",
+        message: err.statusCode ? err.message : "Validation failed",
       });
     }
   }
@@ -397,10 +520,26 @@ class ProductController {
       const { categoryId, subcategoryId, rows } = req.body;
       const vendorId = req.user?.vendor_id;
 
-      if (!rows?.length) {
+      if (!vendorId) {
+        return res.status(403).json({ success: false, message: "Vendor profile is not linked to this account" });
+      }
+
+      if (!categoryId || !subcategoryId || !Array.isArray(rows) || !rows.length || rows.length > 500) {
         return res.status(400).json({
           success: false,
-          message: "No rows to process",
+          message: "A category, subcategory, and 1 to 500 rows are required",
+        });
+      }
+
+      const context = await getBulkUploadContext(connection, categoryId, subcategoryId);
+      const checked = validateBulkRows(rows, context.attributeMap);
+      if (checked.invalidRows.length) {
+        return res.status(422).json({
+          success: false,
+          message: "Some rows are invalid. Review the errors and validate the file again.",
+          validCount: checked.validRows.length,
+          invalidCount: checked.invalidRows.length,
+          invalidRows: checked.invalidRows,
         });
       }
 
@@ -439,7 +578,7 @@ class ProductController {
         try {
           if (!row.productName || !row.brandName) {
             results.push({
-              row: i + 1,
+              row: i + 4,
               status: "failed",
               error: "productName and brandName are required",
             });
@@ -448,20 +587,21 @@ class ProductController {
 
           //  BASE PRODUCT DATA
           const productData = {
-            productName: row.productName,
-            brandName: row.brandName,
-            manufacturer: row.manufacturer || null,
-            description: row.description || "",
-            shortDescription: row.shortDescription || "",
-            brandDescription: row.brandDescription || "",
+            productName: String(row.productName).trim(),
+            brandName: String(row.brandName).trim(),
+            manufacturer: row.manufacturer ? String(row.manufacturer).trim() : null,
+            description: row.description ? String(row.description).trim() : "",
+            shortDescription: row.shortDescription ? String(row.shortDescription).trim() : "",
+            brandDescription: row.brandDescription ? String(row.brandDescription).trim() : "",
             gstSlab: Number(row.gstSlab) || 0,
-            hsnSacCode: row.hsnSacCode || null,
+            hsnSacCode: row.hsnSacCode ? String(row.hsnSacCode).trim() : null,
             is_discount_eligible: toBool(row.is_discount_eligible),
             is_returnable: toBool(row.is_returnable),
+            is_replaceable: true,
             return_window_days: Number(row.return_window_days) || 0,
             delivery_sla_min_days: Number(row.delivery_sla_min_days) || 0,
             delivery_sla_max_days: Number(row.delivery_sla_max_days) || 0,
-            shipping_class: row.shipping_class || null,
+            shipping_class: row.shipping_class ? String(row.shipping_class).trim().toLowerCase() : "standard",
           };
 
           await connection.beginTransaction();
@@ -514,7 +654,7 @@ class ProductController {
           await connection.commit();
 
           results.push({
-            row: i + 1,
+            row: i + 4,
             status: "success",
             productId,
           });
@@ -523,7 +663,7 @@ class ProductController {
           console.error(`Row ${i + 1} failed`, err);
 
           results.push({
-            row: i + 1,
+            row: i + 4,
             status: "failed",
             error: err.message,
           });
@@ -533,13 +673,16 @@ class ProductController {
       const successCount = results.filter((r) => r.status === "success").length;
       const failedCount = results.length - successCount;
 
-      return res.json({
-        success: true,
-        message: `${successCount} uploaded, ${failedCount} failed`,
+      const responseStatus = successCount === 0 ? 422 : failedCount > 0 ? 207 : 200;
+      return res.status(responseStatus).json({
+        success: successCount > 0,
+        message: failedCount
+          ? `${successCount} uploaded, ${failedCount} failed${results.find((row) => row.status === "failed")?.error ? `: ${results.find((row) => row.status === "failed").error}` : ""}`
+          : `${successCount} product${successCount === 1 ? "" : "s"} uploaded successfully`,
         results,
       });
     } catch (err) {
-      return res.status(500).json({
+      return res.status(err.statusCode || 500).json({
         success: false,
         message: err.message,
       });
@@ -745,6 +888,9 @@ class ProductController {
       const sortBy = req.query.sortBy || "created_at";
       const sortOrder =
         req.query.sortOrder?.toUpperCase() === "ASC" ? "ASC" : "DESC";
+      const vendorId = req.query.vendorId || "";
+      const brand = req.query.brand || "";
+      const productType = req.query.productType === "flea_market" ? "flea_market" : "catalog";
 
       const { products, totalItems, stats } =
         await ProductModel.getAllProductDetails({
@@ -755,6 +901,9 @@ class ProductController {
           limit,
           offset,
           role,
+          vendorId,
+          brand,
+          productType,
         });
 
       const normalizedProducts = products.map((p) => ({
@@ -810,12 +959,29 @@ class ProductController {
   // Get Product Report
   async getProductReport(req, res) {
     try {
-      const { vendorId, fromDate, toDate } = req.query;
+      const { fromDate, toDate, brand = "", status = "" } = req.query;
+      const vendorId = req.user.role === "vendor" ? req.user.vendor_id : req.query.vendorId;
+
+      if (req.user.role === "vendor" && !vendorId) {
+        return res.status(400).json({ success: false, message: "Vendor account is not linked" });
+      }
+      if ((fromDate && !toDate) || (!fromDate && toDate)) {
+        return res.status(400).json({ success: false, message: "Select both From and To dates" });
+      }
+      if (fromDate && toDate && fromDate > toDate) {
+        return res.status(400).json({ success: false, message: "From date cannot be after To date" });
+      }
+      const allowedStatuses = ["", "pending", "sent_for_approval", "approved", "rejected", "resubmission"];
+      if (!allowedStatuses.includes(status)) {
+        return res.status(400).json({ success: false, message: "Invalid product status" });
+      }
 
       const data = await ProductModel.getReportData({
         vendorId,
         fromDate,
         toDate,
+        brand: String(brand).trim(),
+        status,
       });
 
       const workbook = new ExcelJS.Workbook();
@@ -826,9 +992,16 @@ class ProductController {
         { header: "Product Name", key: "product_name", width: 25 },
         { header: "Vendor", key: "vendor_name", width: 25 },
         { header: "Brand", key: "brand_name", width: 20 },
+        { header: "Category", key: "category_name", width: 22 },
+        { header: "Subcategory", key: "subcategory_name", width: 22 },
         { header: "Status", key: "status", width: 15 },
         { header: "Created At", key: "created_at", width: 20 },
       ];
+
+      worksheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+      worksheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF852BAF" } };
+      worksheet.views = [{ state: "frozen", ySplit: 1 }];
+      worksheet.autoFilter = { from: "A1", to: "H1" };
 
       data.forEach((item) => {
         worksheet.addRow({
@@ -844,7 +1017,7 @@ class ProductController {
 
       res.setHeader(
         "Content-Disposition",
-        "attachment; filename=product_report.xlsx",
+        `attachment; filename=vendor_product_report_${new Date().toISOString().slice(0, 10)}.xlsx`,
       );
 
       await workbook.xlsx.write(res);
@@ -852,6 +1025,73 @@ class ProductController {
     } catch (err) {
       console.error("Download report error:", err);
       res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  async getDeliveryFeeEstimate(req, res) {
+    try {
+      const productId = Number(req.params.productId);
+      const destination = String(process.env.PRODUCT_DELIVERY_ESTIMATE_PINCODE || "").trim();
+
+      if (!Number.isInteger(productId) || productId <= 0) {
+        return res.status(400).json({ success: false, message: "Invalid product ID" });
+      }
+      if (!/^\d{6}$/.test(destination)) {
+        return res.status(500).json({ success: false, message: "Delivery estimate pincode is not configured" });
+      }
+
+      const [[shipment]] = await db.execute(
+        `SELECT p.product_id, p.vendor_id, pv.variant_id, pv.sale_price,
+                pv.weight, pv.length, pv.breadth, pv.height, va.pincode AS origin
+         FROM eproducts p
+         INNER JOIN product_variants pv ON pv.product_id = p.product_id
+         LEFT JOIN vendor_addresses va ON va.vendor_id = p.vendor_id AND va.type = 'shipping'
+         WHERE p.product_id = ? AND p.is_deleted = 0
+         ORDER BY pv.is_visible DESC, pv.variant_id ASC
+         LIMIT 1`,
+        [productId],
+      );
+
+      if (!shipment) {
+        return res.status(404).json({ success: false, message: "Product or variant not found" });
+      }
+      if (!shipment.origin) {
+        return res.status(422).json({ success: false, message: "Vendor shipping pincode is unavailable" });
+      }
+
+      const serviceResponse = await xpressService.checkServiceability({
+        origin: String(shipment.origin),
+        destination,
+        payment_type: "prepaid",
+        order_amount: Number(shipment.sale_price || 0).toString(),
+        weight: Math.round(Number(shipment.weight || 0) * 1000).toString(),
+        length: Math.round(Number(shipment.length || 0)).toString(),
+        breadth: Math.round(Number(shipment.breadth || 0)).toString(),
+        height: Math.round(Number(shipment.height || 0)).toString(),
+      });
+
+      const courierOptions = Array.isArray(serviceResponse?.data) ? serviceResponse.data : [];
+      const courier = courierOptions
+        .filter((option) => Number(option.total_charges) > 0)
+        .sort((a, b) => Number(a.total_charges) - Number(b.total_charges))[0];
+
+      if (!serviceResponse?.status || !courier) {
+        return res.status(422).json({ success: false, message: "Delivery is not serviceable for the configured pincode" });
+      }
+
+      return res.json({
+        success: true,
+        estimate: {
+          deliveryFee: Number(courier.total_charges),
+          destinationPincode: destination,
+          originPincode: String(shipment.origin),
+          variantId: shipment.variant_id,
+          courierName: courier.name || null,
+        },
+      });
+    } catch (error) {
+      console.error("DELIVERY FEE ESTIMATE ERROR:", error);
+      return res.status(502).json({ success: false, message: "Unable to calculate delivery estimate" });
     }
   }
 
@@ -899,6 +1139,7 @@ class ProductController {
 
       const search = req.query.search || "";
       const status = req.query.status || "";
+      const brand = req.query.brand || "";
       const sortBy = req.query.sortBy || "created_at";
       const sortOrder =
         req.query.sortOrder?.toUpperCase() === "ASC" ? "ASC" : "DESC";
@@ -907,6 +1148,7 @@ class ProductController {
         await ProductModel.getProductsByVendor(vendorId, {
           search,
           status,
+          brand,
           sortBy,
           sortOrder,
           limit,

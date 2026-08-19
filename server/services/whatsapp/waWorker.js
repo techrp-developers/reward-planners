@@ -6,6 +6,10 @@ const { sendTemplateMessage } = require("./interaktService");
 
 const MAX_RETRY = Number(process.env.WA_MAX_RETRY || 3);
 const RETRY_DELAY_MINUTES = Number(process.env.WA_RETRY_DELAY_MINUTES || 2);
+const SEND_INTERVAL_MS = Math.max(
+  500,
+  Number(process.env.WA_SEND_INTERVAL_MS || 1200),
+);
 
 function safeJsonParse(value, fallback) {
   if (value == null) return fallback;
@@ -40,6 +44,25 @@ function normalizeLanguageCode(code) {
   if (!code) return "en";
   if (code.toLowerCase() === "en_US") return "en";
   return code;
+}
+
+function isPermanentFailure(error) {
+  const status = error?.response?.status;
+  return (
+    error?.code === "INTERAKT_PHONE_INVALID" ||
+    (status >= 400 && status < 500 && status !== 408 && status !== 429)
+  );
+}
+
+function getRetryDelayMinutes(error, retryCount) {
+  if (error?.response?.status !== 429) {
+    return RETRY_DELAY_MINUTES;
+  }
+
+  return Math.max(
+    RETRY_DELAY_MINUTES,
+    Math.ceil(RETRY_DELAY_MINUTES * 2 ** Math.max(0, retryCount - 1)),
+  );
 }
 
 
@@ -153,7 +176,7 @@ async function runOnce() {
 
     const retryCount = (curRows[0]?.retry_count ?? 0) + 1;
 
-    if (retryCount >= MAX_RETRY) {
+    if (isPermanentFailure(e) || retryCount >= MAX_RETRY) {
       await pool.query(
         `
         UPDATE wa_queue
@@ -166,6 +189,8 @@ async function runOnce() {
         [retryCount, msg, job.id]
       );
     } else {
+      const retryDelayMinutes = getRetryDelayMinutes(e, retryCount);
+
       await pool.query(
         `
         UPDATE wa_queue
@@ -176,7 +201,7 @@ async function runOnce() {
             locked_at=NULL
         WHERE id=?
         `,
-        [retryCount, msg, RETRY_DELAY_MINUTES, job.id]
+        [retryCount, msg, retryDelayMinutes, job.id]
       );
     }
   }
@@ -187,7 +212,7 @@ async function runOnce() {
 async function start() {
   while (true) {
     const did = await runOnce();
-    await new Promise((r) => setTimeout(r, did ? 300 : 1500));
+    await new Promise((r) => setTimeout(r, did ? SEND_INTERVAL_MS : 1500));
   }
 }
 

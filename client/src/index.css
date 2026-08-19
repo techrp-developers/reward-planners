@@ -37,12 +37,12 @@
 
 /* ── Row stagger ── */
 .row-animate {
-  animation: rowEntrance 0.35s ease both;
+  animation: rowEntrance 0.35s ease;
 }
 
 /* ── Stats / section card scale-in ── */
 .stats-card-enter {
-  animation: scaleIn 0.32s ease both;
+  animation: scaleIn 0.32s ease;
 }
 
 /* ── Sidebar active link glow ── */
@@ -80,9 +80,112 @@
   border-radius: 10px;
 }
 
-/* ── Page-level fade-slide entrance ── */
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(28px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* Shared premium navigation treatment across every role portal. */
+.premium-role-sidebar {
+  isolation: isolate;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 14% 3%, rgba(133, 43, 175, 0.11), transparent 27%),
+    radial-gradient(circle at 92% 92%, rgba(252, 63, 120, 0.09), transparent 28%),
+    linear-gradient(180deg, #fff 0%, #fdfaff 58%, #fff8fb 100%) !important;
+  border-right: 1px solid rgba(133, 43, 175, 0.12) !important;
+  box-shadow: 8px 0 42px rgba(67, 28, 87, 0.09) !important;
+}
+
+.premium-role-sidebar::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: -1;
+  height: 5px;
+  background: linear-gradient(90deg, #852baf, #b02a9f 48%, #fc3f78);
+}
+
+.premium-role-sidebar > div:first-child {
+  position: relative;
+  padding-top: 1.75rem !important;
+  padding-bottom: 1.35rem !important;
+}
+
+.premium-role-sidebar > div:first-child::after {
+  content: "";
+  position: absolute;
+  right: 1.25rem;
+  bottom: 0;
+  left: 1.25rem;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(133, 43, 175, 0.22), rgba(252, 63, 120, 0.14), transparent);
+}
+
+.premium-role-sidebar > div:first-child h1 {
+  letter-spacing: -0.025em;
+}
+
+.premium-role-sidebar a,
+.premium-role-sidebar button {
+  outline: none;
+}
+
+.premium-role-sidebar a:focus-visible,
+.premium-role-sidebar button:focus-visible {
+  box-shadow: 0 0 0 3px rgba(133, 43, 175, 0.18);
+}
+
+.premium-role-sidebar a[class*="rounded-xl"],
+.premium-role-sidebar button[class*="rounded-xl"] {
+  position: relative;
+  min-height: 2.75rem;
+  border: 1px solid transparent;
+  will-change: transform;
+}
+
+.premium-role-sidebar a[class*="rounded-xl"]:not(.text-white):hover,
+.premium-role-sidebar button[class*="rounded-xl"]:not(.text-white):hover {
+  transform: translateX(3px);
+  border-color: rgba(133, 43, 175, 0.1);
+  background: rgba(255, 255, 255, 0.82) !important;
+  box-shadow: 0 7px 20px rgba(67, 28, 87, 0.07);
+}
+
+.premium-role-sidebar .text-white[class*="from-[#852BAF]"] {
+  box-shadow: 0 8px 22px rgba(133, 43, 175, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+}
+
+.premium-role-sidebar [class*="overflow-y-auto"] {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(133, 43, 175, 0.24) transparent;
+}
+
+.premium-role-sidebar [class*="overflow-y-auto"]::-webkit-scrollbar { width: 4px; }
+.premium-role-sidebar [class*="overflow-y-auto"]::-webkit-scrollbar-track { background: transparent; }
+.premium-role-sidebar [class*="overflow-y-auto"]::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(133, 43, 175, 0.3), rgba(252, 63, 120, 0.24));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .premium-role-sidebar,
+  .premium-role-sidebar * {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── Page-level fade-slide entrance ──
+   No `both` fill-mode: retaining the end keyframe's transform forever turns
+   this wrapper into a containing block for `position: fixed` descendants
+   (any non-`none` transform does, per spec — even translateY(0)), which
+   hijacks every `fixed inset-0` modal rendered inside a routed page and
+   centers it against the wrapper's full scroll height instead of the
+   viewport. Dropping `both` lets the transform revert to none once the
+   0.4s animation finishes. */
 .page-enter {
-  animation: fadeSlideUp 0.4s ease both;
+  animation: fadeSlideUp 0.4s ease;
 }
 
 /* ── Toggle switch smooth transition ── */
@@ -196,4 +299,65 @@
 .premium-form input:hover,
 .premium-form textarea:hover {
   background-color: #f9fafb;
+}
+
+/* ============================================================
+   VENDOR PORTAL — SHARED PREMIUM SHELL
+   These rules give every vendor route a consistent finish, including
+   shared product and account screens rendered inside VendorLayout.
+============================================================ */
+:is(.vendor-portal, .role-portal) main h1,
+:is(.vendor-portal, .role-portal) main h2 {
+  letter-spacing: -0.025em;
+}
+
+:is(.vendor-portal, .role-portal) main table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+:is(.vendor-portal, .role-portal) main thead {
+  background: linear-gradient(180deg, #faf9fc 0%, #f6f3fa 100%);
+}
+
+:is(.vendor-portal, .role-portal) main th {
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 750;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+:is(.vendor-portal, .role-portal) main tbody tr {
+  transition: background-color 0.18s ease, transform 0.18s ease;
+}
+
+:is(.vendor-portal, .role-portal) main tbody tr:hover {
+  background-color: rgba(248, 245, 252, 0.85);
+}
+
+:is(.vendor-portal, .role-portal) main input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+:is(.vendor-portal, .role-portal) main select,
+:is(.vendor-portal, .role-portal) main textarea {
+  border-color: #e2e8f0;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+:is(.vendor-portal, .role-portal) main input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus,
+:is(.vendor-portal, .role-portal) main select:focus,
+:is(.vendor-portal, .role-portal) main textarea:focus {
+  border-color: rgba(133, 43, 175, 0.55);
+  box-shadow: 0 0 0 4px rgba(133, 43, 175, 0.1);
+}
+
+:is(.vendor-portal, .role-portal) main ::selection {
+  background: rgba(133, 43, 175, 0.18);
+  color: #351244;
+}
+
+@media (max-width: 767px) {
+  :is(.vendor-portal, .role-portal) main .overflow-x-auto {
+    border-radius: 1rem;
+  }
 }

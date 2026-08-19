@@ -2,9 +2,10 @@ const db = require("../../../../config/database");
 
 // helper function
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
-function getPublicUrl(path) {
+function getPublicUrl(path, updatedAt) {
   if (!path) return null;
-  return `${CDN_BASE_URL}/${path}`;
+  const version = updatedAt ? `?v=${encodeURIComponent(updatedAt)}` : "";
+  return `${CDN_BASE_URL}/${path}${version}`;
 }
 
 class ServiceBannerModel {
@@ -33,11 +34,12 @@ class ServiceBannerModel {
   async getActiveBanners() {
     const [rows] = await db.execute(
       `
-    SELECT 
+    SELECT
       id,
       title,
       subtitle,
       image_url,
+      updated_at,
       redirect_type,
       redirect_id,
       redirect_url
@@ -52,7 +54,7 @@ class ServiceBannerModel {
       id: b.id,
       title: b.title,
       subtitle: b.subtitle,
-      image_url: getPublicUrl(b.image_url),
+      image_url: getPublicUrl(b.image_url, b.updated_at),
 
       redirect: {
         type: b.redirect_type,

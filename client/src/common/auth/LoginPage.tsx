@@ -1,314 +1,79 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { AlertCircle, ArrowRight, Building2, CheckCircle2, Eye, EyeOff, LockKeyhole, Mail } from "lucide-react";
 import { useAuth } from "./useAuth";
-import logoImage from "../assets/logo.svg";
-import { User, Lock, Eye, EyeOff, Briefcase } from "lucide-react";
+import AuthShell from "./AuthShell";
 
-type Role =
-  | "vendor"
-  | "vendor_manager"
-  | "admin"
-  | "warehouse_manager"
-  | "hr"
-  | "service_manager"
-  | "service_partner"
-  | "flea_market_manager";
-
-interface LoginForm {
-  email: string;
-  password: string;
-  role: Role;
-}
-
-type LocationState = {
-  message?: string;
-};
-
-/* ================= COMPONENT ================= */
+type LocationState = { message?: string };
 
 export default function LoginPage() {
   const { login, loading, error: authError } = useAuth();
-
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState<string>("");
+  const [error, setError] = useState("");
+  const [formData, setFormData] = useState({ email: "", password: "" });
+  const state = useLocation().state as LocationState | null;
 
-  const [formData, setFormData] = useState<LoginForm>({
-    email: "",
-    password: "",
-    role: "vendor",
-  });
-
-  const location = useLocation();
-  const state = location.state as LocationState | null;
-  const successMessage = state?.message;
-
-  /* ================= HANDLERS ================= */
-
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
-  ) => {
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     setError("");
-
-    const { name, value } = e.target;
-
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-
     try {
-      await login(
-        formData.email.trim(),
-        formData.password,
-        formData.role,
-      );
+      await login(formData.email.trim(), formData.password);
     } catch (err) {
       setError("Login failed. Please check your credentials.");
       console.error(err);
     }
   };
 
-
+  const inputWrap = "group flex h-13 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 px-4 transition focus-within:border-purple-400 focus-within:bg-white focus-within:ring-4 focus-within:ring-purple-100";
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-tr from-[#38bdf8] via-[#a855f7] to-[#ec4899] font-sans px-4">
-      <div className="grid w-full max-w-5xl grid-cols-1 overflow-hidden bg-white shadow-2xl rounded-3xl md:grid-cols-2">
-        <div className="relative hidden bg-white md:block">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_circle_at_15%_20%,rgba(56,189,248,0.12),transparent_55%),radial-gradient(900px_circle_at_85%_30%,rgba(168,85,247,0.10),transparent_55%),radial-gradient(900px_circle_at_50%_110%,rgba(236,72,153,0.08),transparent_55%)]" />
-          <div className="pointer-events-none absolute inset-0 opacity-[0.08] bg-[radial-gradient(#000_1px,transparent_1px)] [background-size:18px_18px]" />
+    <AuthShell eyebrow="Welcome back" title="Sign in to your account" description="Access your personalized workspace based on your assigned role.">
+      {state?.message && (
+        <div className="mb-5 flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> {state.message}
+        </div>
+      )}
+      {(error || authError) && (
+        <div role="alert" className="mb-5 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> {error || authError}
+        </div>
+      )}
 
-          <div className="relative flex items-center justify-center w-full h-full p-10">
-            <img
-              src={logoImage}
-              alt="Login Illustration"
-              className="w-full max-w-md drop-shadow-2xl select-none mt-[-4em]"
-              draggable={false}
-            />
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <div>
+          <label htmlFor="email" className="mb-2 block text-sm font-semibold text-slate-700">Work email</label>
+          <div className={inputWrap}>
+            <Mail className="h-5 w-5 text-slate-400 transition group-focus-within:text-purple-600" />
+            <input id="email" name="email" type="email" required autoComplete="email" placeholder="you@company.com" value={formData.email} onChange={(e) => setFormData((p) => ({ ...p, email: e.target.value.trimStart() }))} className="h-full min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400" />
           </div>
-
-          <div className="absolute bottom-8 left-8 right-8 text-slate-900">
-            <p className="text-2xl font-extrabold leading-tight">
-              Welcome back{" "}
-            </p>
-            <p className="mt-2 text-[16px] font-medium text-gray-600 leading-relaxed">
-              Sign in and continue to your dashboard.
-            </p>
-          </div>
-
-          <div className="pointer-events-none absolute top-0 right-0 h-full w-[2px] bg-gradient-to-b from-transparent via-slate-200 to-transparent" />
-          <div className="pointer-events-none absolute top-0 right-[-10px] h-full w-[22px] bg-gradient-to-l from-[#852BAF]/10 via-[#FC3F78]/5 to-transparent blur-xl" />
         </div>
 
-        <div className="relative w-full px-10 py-5 bg-white">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_circle_at_50%_0%,rgba(133,43,175,0.05),transparent_45%)]" />
-
-          {/* Header */}
-          <h2 className="relative text-3xl font-extrabold text-center text-gray-900">
-            Hello!
-          </h2>
-
-          <p className="mt-1 mb-8 text-xl text-center text-gray-500">
-            Sign in to your Account
-          </p>
-
-          {successMessage && (
-            <div className="p-3 mb-4 text-green-700 border border-green-200 bg-green-50 rounded-xl">
-              {successMessage}
-            </div>
-          )}
-
-          {(error || authError) && (
-            <div className="relative p-3 mb-4 text-sm text-red-700 border border-red-200 shadow-sm rounded-xl bg-red-50">
-              {error || authError}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="relative space-y-8">
-            {/* Email/Username Field */}
-            <div className="space-y-6">
-              {/* Email Field */}
-              <div className="relative">
-                <label className="text-sm font-semibold tracking-wide text-slate-700">
-                  Email
-                </label>
-
-                <div
-                  className="mt-2 flex items-center gap-3 w-full px-4 py-2.5 rounded-xl bg-white
-                 border border-slate-200 shadow-sm
-                 transition-all duration-300
-                 focus-within:border-transparent
-                 focus-within:ring-4 focus-within:ring-[#852BAF]/15
-                 focus-within:shadow-lg focus-within:shadow-[#852BAF]/10"
-                >
-                  <User className="w-5 h-5 text-gray-600" />
-
-                  <input
-                    name="email"
-                    type="email"
-                    required
-                    className="w-full text-gray-800 bg-transparent outline-none placeholder:text-gray-400"
-                    placeholder="name@company.com"
-                    value={formData.email}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        email: e.target.value.trimStart(),
-                      }))
-                    }
-                    autoComplete="email"
-                  />
-                </div>
-              </div>
-
-              {/* Login As / Role Field */}
-              <div className="relative">
-                <label className="text-sm font-semibold tracking-wide text-slate-700">
-                  Login As
-                </label>
-
-                <div
-                  className="mt-2 flex items-center gap-3 w-full px-4 py-2.5 rounded-xl bg-white
-                 border border-slate-200 shadow-sm
-                 transition-all duration-300
-                 focus-within:border-transparent
-                 focus-within:ring-4 focus-within:ring-[#852BAF]/15
-                 focus-within:shadow-lg focus-within:shadow-[#852BAF]/10"
-                >
-                  <Briefcase className="w-5 h-5 text-gray-600" />
-
-                  <select
-                    name="role"
-                    value={formData.role}
-                    onChange={handleChange}
-                    className="w-full text-gray-800 bg-transparent outline-none cursor-pointer"
-                  >
-                    <option value="vendor">Vendor</option>
-                    <option value="vendor_manager">Vendor Manager</option>
-                    <option value="admin">Admin</option>
-                    <option value="warehouse_manager">Warehouse Manager</option>
-                    <option value="hr">HR</option>
-                    <option value="service_manager">Service Manager</option>
-                    <option value="service_partner">Service Partner</option>
-                    <option value="flea_market_manager">Flea Market Manager</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Password Field */}
-              <div className="relative">
-                <label className="text-sm font-semibold tracking-wide text-slate-700">
-                  Password
-                </label>
-
-                <div
-                  className="mt-2 flex items-center gap-3 w-full px-4 py-2.5 rounded-xl bg-white
-                 border border-slate-200 shadow-sm
-                 transition-all duration-300
-                 focus-within:border-transparent
-                 focus-within:ring-4 focus-within:ring-[#852BAF]/15
-                 focus-within:shadow-lg focus-within:shadow-[#852BAF]/10"
-                >
-                  <Lock className="w-5 h-5 text-gray-600" />
-
-                  <input
-                    name="password"
-                    type={showPassword ? "text" : "password"}
-                    required
-                    className="w-full text-gray-800 bg-transparent outline-none placeholder:text-gray-400"
-                    placeholder="********"
-                    value={formData.password}
-                    onChange={handleChange}
-                    autoComplete="current-password"
-                  />
-
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="text-gray-400 cursor-pointer hover:text-gray-600 focus:outline-none"
-                  >
-                    {showPassword ? (
-                      <EyeOff className="w-5 h-5" />
-                    ) : (
-                      <Eye className="w-5 h-5" />
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end">
-              {/*  Social icons (kept for later use) */}
-              {/*
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          className="w-9 h-9 flex items-center justify-center rounded-full bg-[#3b5998] text-white hover:opacity-80 transition-opacity"
-        >
-          <Facebook size={16} fill="currentColor" />
-        </button>
-        <button
-          type="button"
-          className="w-9 h-9 flex items-center justify-center rounded-full bg-[#1da1f2] text-white hover:opacity-80 transition-opacity"
-        >
-          <Twitter size={16} fill="currentColor" />
-        </button>
-        <button
-          type="button"
-          className="w-9 h-9 flex items-center justify-center rounded-full bg-[#ea4335] text-white hover:opacity-80 transition-opacity"
-        >
-          <Chrome size={16} />
-        </button>
-      </div>
-      */}
-
-              <Link
-                to="/forgot-password"
-                className="text-md text-purple-600 hover:text-[#FC3F78] transition-colors"
-              >
-                Forgot password?
-              </Link>
-            </div>
-
-            {/* Login Button */}
-            <button
-              type="submit"
-              disabled={loading || !formData.email || !formData.password}
-              className="w-full mt-6 text-white font-bold py-3.5 rounded-full text-xl
-               bg-gradient-to-r from-[#852BAF] to-[#FC3F78]
-               shadow-lg shadow-[#852BAF]/25 transition-all duration-300 cursor-pointer
-               hover:bg-gradient-to-r hover:from-[#FC3F78] hover:to-[#852BAF]
-               hover:shadow-xl active:scale-95
-               disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <span className="w-4 h-4 border-2 border-white rounded-full animate-spin border-t-transparent" />
-                  Logging in...
-                </span>
-              ) : (
-                "Login"
-              )}
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <label htmlFor="password" className="text-sm font-semibold text-slate-700">Password</label>
+            <Link to="/forgot-password" className="text-xs font-semibold text-purple-700 transition hover:text-pink-600">Forgot password?</Link>
+          </div>
+          <div className={inputWrap}>
+            <LockKeyhole className="h-5 w-5 text-slate-400 transition group-focus-within:text-purple-600" />
+            <input id="password" name="password" type={showPassword ? "text" : "password"} required autoComplete="current-password" placeholder="Enter your password" value={formData.password} onChange={(e) => setFormData((p) => ({ ...p, password: e.target.value }))} className="h-full min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400" />
+            <button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "Hide password" : "Show password"} className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-200 hover:text-slate-700">
+              {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
             </button>
-          </form>
-
-          <div className="relative mt-5 text-center">
-            <p className="mt-5 text-center text-gray-700 text-md">
-              Don&apos;t have an account?{" "}
-              <Link
-                to="/register"
-                className="font-semibold text-purple-600 hover:text-[#FC3F78] transition-all hover:underline"
-              >
-                Create Account
-              </Link>
-            </p>
           </div>
         </div>
-      </div>
-    </div>
+
+        <button type="submit" disabled={loading || !formData.email || !formData.password} className="group flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-[#1d102b] px-5 text-sm font-bold text-white shadow-[0_12px_28px_rgba(29,16,43,0.22)] transition hover:-translate-y-0.5 hover:bg-[#852baf] hover:shadow-[0_16px_32px_rgba(133,43,175,0.28)] active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-55">
+          {loading ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Signing in...</> : <>Sign in <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" /></>}
+        </button>
+      </form>
+
+      <p className="mt-6 text-center text-sm text-slate-500">New here? <Link to="/register" className="font-bold text-purple-700 hover:text-pink-600">Create an account</Link></p>
+
+      <Link to="/client-onboarding" className="mt-7 flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3.5 transition hover:border-purple-200 hover:bg-purple-50/50">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-purple-100 text-purple-700"><Building2 className="h-5 w-5" /></span>
+        <span className="min-w-0 flex-1"><span className="block text-sm font-bold text-slate-800">Register an organization</span><span className="block text-xs text-slate-500">Set up a new organization workspace</span></span>
+        <ArrowRight className="h-4 w-4 text-slate-400" />
+      </Link>
+    </AuthShell>
   );
 }

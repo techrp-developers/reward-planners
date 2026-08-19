@@ -11,7 +11,7 @@ const upload = require("../../../../middleware/mediaUpload/serviceCategoryUpload
 router.post(
   "/create-variant",
   authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
+  authorizeRoles("vendor_manager", "service_manager", "admin"),
   upload.single("service_variant_image"),
   ServiceVariantController.addVariant,
 );
@@ -20,7 +20,7 @@ router.post(
 router.put(
   "/update-variant/:id",
   authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
+  authorizeRoles("vendor_manager", "service_manager", "admin"),
   upload.single("service_variant_image"),
   ServiceVariantController.updateVariant,
 );
@@ -32,7 +32,7 @@ router.get("/find/:serviceId", ServiceVariantController.getVariantsByService);
 router.delete(
   "/remove/:id",
   authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
+  authorizeRoles("vendor_manager", "service_manager", "admin"),
   ServiceVariantController.deleteVariant,
 );
 
@@ -46,7 +46,7 @@ router.get(
 router.post(
   "/variant-section",
   authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
+  authorizeRoles("vendor_manager", "service_manager", "admin"),
   ServiceVariantController.addVariantSection,
 );
 
@@ -54,7 +54,7 @@ router.post(
 router.delete(
   "/variant-section/:variantId",
   authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
+  authorizeRoles("vendor_manager", "service_manager", "admin"),
   ServiceVariantController.deleteVariantSection,
 );
 

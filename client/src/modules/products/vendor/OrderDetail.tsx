@@ -1,284 +1,123 @@
-import React, { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import React, { useCallback, useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import {
+  FiArrowLeft, FiBox, FiCalendar, FiCheckCircle, FiClock, FiCopy,
+  FiMail, FiMapPin, FiPackage, FiPhone, FiShoppingBag, FiTruck, FiUser,
+} from "react-icons/fi";
 import { api } from "../../../common/api/api";
+import OrderStatusTimeline, { type ShipmentProgress } from "../components/OrderStatusTimeline";
 
-const statusStyles: Record<string, { bg: string; text: string }> = {
-  pending:   { bg: "bg-amber-100",   text: "text-amber-800" },
-  paid:      { bg: "bg-blue-100",    text: "text-blue-800" },
-  shipped:   { bg: "bg-indigo-100",  text: "text-indigo-700" },
-  delivered: { bg: "bg-emerald-100", text: "text-emerald-700" },
-  cancelled: { bg: "bg-red-100",     text: "text-red-700" },
+const statusStyles: Record<string, { badge: string; icon: React.ElementType }> = {
+  pending: { badge: "border-amber-200 bg-amber-50 text-amber-700", icon: FiClock },
+  paid: { badge: "border-blue-200 bg-blue-50 text-blue-700", icon: FiCheckCircle },
+  shipped: { badge: "border-indigo-200 bg-indigo-50 text-indigo-700", icon: FiTruck },
+  delivered: { badge: "border-emerald-200 bg-emerald-50 text-emerald-700", icon: FiCheckCircle },
+  cancelled: { badge: "border-red-200 bg-red-50 text-red-700", icon: FiBox },
 };
-const getStatusStyle = (s: string) =>
-  statusStyles[s.toLowerCase()] ?? { bg: "bg-gray-100", text: "text-gray-700" };
 
-interface Order {
-  vendor_order_id: number;
-  vendor_total: number;
-  shipping_status: string;
-  created_at: string;
-  order_id: number;
-  order_ref: string;
-  awb_number?: string;
-  courier_name?: string;
-}
+interface Order { vendor_order_id: number; vendor_total: number; shipping_status: string; created_at: string; order_id: number; order_ref: string; awb_number?: string; courier_name?: string; }
+interface Customer { user_id: number; name: string; email: string; phone: string; }
+interface Address { type: string; name: string; phone: string; line1: string; line2: string; city: string; state: string; country: string; zipcode: string; landmark?: string; }
+interface OrderItem { order_item_id: number; product_id: number; variant_id: number; product_name: string; brand_name: string; image: string | null; attributes: Record<string, string>; quantity: number; price: number; item_total: number; }
+interface Summary { item_total: number; vendor_total: number; }
+interface VendorOrderDetailsResponse { success: boolean; order: Order; customer: Customer; address: Address; items: OrderItem[]; summary: Summary; shipments: ShipmentProgress[]; }
 
-interface Customer {
-  user_id: number;
-  name: string;
-  email: string;
-  phone: string;
-}
-
-interface Address {
-  type: string;
-  name: string;
-  phone: string;
-  line1: string;
-  line2: string;
-  city: string;
-  state: string;
-  country: string;
-  zipcode: string;
-  landmark?: string;
-}
-
-interface OrderItem {
-  order_item_id: number;
-  product_id: number;
-  variant_id: number;
-  product_name: string;
-  brand_name: string;
-  image: string | null;
-  attributes: Record<string, string>;
-  quantity: number;
-  price: number;
-  item_total: number;
-}
-
-interface Summary {
-  item_total: number;
-  vendor_total: number;
-}
-
-interface VendorOrderDetailsResponse {
-  success: boolean;
-  order: Order;
-  customer: Customer;
-  address: Address;
-  items: OrderItem[];
-  summary: Summary;
-}
+const money = (amount: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(amount);
+const dateTime = (value: string) => new Date(value).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
 const OrderDetail: React.FC = () => {
   const { orderId } = useParams();
   const navigate = useNavigate();
-
   const [data, setData] = useState<VendorOrderDetailsResponse | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
-  const fetchOrderDetails = async () => {
+  const fetchOrderDetails = useCallback(async () => {
+    if (!orderId) return;
     try {
       setLoading(true);
       setError(null);
-
-      const res = await api.get<VendorOrderDetailsResponse>(
-        `/order/order-view/${orderId}`
-      );
-
-      if (!res.data.success) {
-        throw new Error("Failed to load order");
-      }
-
-      setData(res.data);
-
-    } catch (err) {
-      console.error("Failed to fetch vendor order details", err);
-      setError("Unable to load order details.");
+      const response = await api.get<VendorOrderDetailsResponse>(`/order/order-view/${orderId}`);
+      if (!response.data.success) throw new Error("Failed to load order");
+      setData(response.data);
+    } catch (requestError) {
+      console.error("Failed to fetch vendor order details", requestError);
+      setError("We couldn't load this order. Please try again.");
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    if (orderId) fetchOrderDetails();
   }, [orderId]);
 
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-    }).format(amount);
+  useEffect(() => { void fetchOrderDetails(); }, [fetchOrderDetails]);
 
-  const formatDate = (date: string) =>
-    new Date(date).toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
+  if (loading) return (
+    <div className="flex min-h-[420px] items-center justify-center rounded-3xl border border-purple-100 bg-white">
+      <div className="text-center"><div className="mx-auto h-11 w-11 animate-spin rounded-full border-4 border-purple-100 border-t-[#852BAF]" /><p className="mt-4 text-sm font-semibold text-gray-500">Preparing order details...</p></div>
+    </div>
+  );
 
-  if (loading) return <div style={{ padding: 20 }}>Loading order...</div>;
-  if (error) return <div style={{ padding: 20, color: "red" }}>{error}</div>;
-  if (!data) return null;
+  if (error || !data) return (
+    <div className="rounded-3xl border border-red-100 bg-white p-10 text-center shadow-sm">
+      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-red-600"><FiBox size={21} /></div>
+      <h2 className="mt-4 text-lg font-extrabold text-gray-900">Order unavailable</h2><p className="mt-1 text-sm text-gray-500">{error}</p>
+      <button onClick={() => navigate("/vendor/orders/summary")} className="mt-5 rounded-xl bg-[#852BAF] px-4 py-2.5 text-sm font-bold text-white">Return to orders</button>
+    </div>
+  );
 
-  const { order, customer, address, items, summary } = data;
+  const { order, customer, address, items, summary, shipments } = data;
+  const status = statusStyles[order.shipping_status.toLowerCase()] ?? { badge: "border-gray-200 bg-gray-50 text-gray-700", icon: FiPackage };
+  const StatusIcon = status.icon;
+  const addressLine = [address.line1, address.line2, address.city, address.state, address.country, address.zipcode].filter(Boolean).join(", ");
+
+  const copyReference = async () => {
+    await navigator.clipboard.writeText(order.order_ref);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  };
 
   return (
-    <div className="max-w-5xl mx-auto">
-
-      {/* PAGE HEADER */}
-      <div
-        className="flex items-center justify-between mb-6 p-5 rounded-2xl"
-        style={{
-          background: "linear-gradient(135deg, rgba(133,43,175,0.06) 0%, rgba(252,63,120,0.04) 100%)",
-          border: "1px solid rgba(133,43,175,0.1)",
-        }}
-      >
-        <div>
-          <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">
-            Order <span className="gradient-text-brand">#{order.order_ref}</span>
-          </h2>
-          <p className="text-xs text-gray-500 font-medium mt-0.5">Order details and shipping information</p>
-        </div>
-        <button
-          className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl text-white cursor-pointer transition-all active:scale-95"
-          style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)", boxShadow: "0 4px 14px rgba(133,43,175,0.28)" }}
-          onClick={() => navigate(-1)}
-        >
-          ← Back
-        </button>
-      </div>
-
-      {/* ORDER INFO */}
-      <div className="bg-white rounded-2xl p-6 shadow-sm mb-4 vendor-section-card" style={{ border: "1px solid rgba(133,43,175,0.08)" }}>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-
+    <div className="mx-auto max-w-6xl space-y-5">
+      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#25103d] via-[#64248c] to-[#b72f72] p-6 text-white shadow-[0_20px_55px_rgba(83,31,111,0.24)] sm:p-8">
+        <div className="absolute -right-12 -top-20 h-56 w-56 rounded-full bg-white/10 blur-2xl" />
+        <div className="relative flex flex-col justify-between gap-6 sm:flex-row sm:items-center">
           <div>
-            <span className="text-xs text-slate-500">Shipment Status</span>
-            <p className={`mt-1 inline-block px-3 py-1.5 rounded-full text-xs font-semibold capitalize ${getStatusStyle(order.shipping_status).bg} ${getStatusStyle(order.shipping_status).text}`}>
-              {order.shipping_status}
-            </p>
+            <button onClick={() => navigate("/vendor/orders/summary")} className="mb-5 inline-flex items-center gap-2 text-xs font-bold text-purple-100 transition hover:text-white"><FiArrowLeft /> Back to all orders</button>
+            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-purple-200">Order details</p>
+            <div className="mt-2 flex flex-wrap items-center gap-3"><h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">#{order.order_ref}</h1><button onClick={() => void copyReference()} aria-label="Copy order reference" className="rounded-lg border border-white/15 bg-white/10 p-2 text-purple-100 hover:bg-white/20"><FiCopy size={14} /></button><span className="text-xs font-semibold text-purple-100">{copied ? "Copied" : "Copy reference"}</span></div>
+            <p className="mt-2 flex items-center gap-2 text-sm text-purple-100/80"><FiCalendar /> Placed {dateTime(order.created_at)}</p>
           </div>
-
-          <div>
-            <span className="text-xs text-slate-500">Date</span>
-            <p className="mt-1 font-medium">
-              {formatDate(order.created_at)}
-            </p>
-          </div>
-
-          <div>
-            <span className="text-xs text-slate-500">Vendor Total</span>
-            <p className="mt-1 text-lg font-bold text-[#2563eb]">
-              {formatCurrency(order.vendor_total)}
-            </p>
-          </div>
-
-        </div>
-
-        {order.awb_number && (
-          <div className="mt-4 text-sm text-slate-600">
-            Courier: {order.courier_name} | AWB: {order.awb_number}
-          </div>
-        )}
-      </div>
-
-      {/* CUSTOMER */}
-      <div className="bg-white rounded-2xl p-6 shadow-sm mb-4 vendor-section-card" style={{ border: "1px solid rgba(133,43,175,0.08)" }}>
-        <h3 className="text-lg font-semibold mb-4">Customer Details</h3>
-
-        <div className="grid md:grid-cols-3 gap-6">
-          <div>
-            <span className="text-xs text-slate-500">Name</span>
-            <p className="font-medium">{customer.name}</p>
-          </div>
-
-          <div>
-            <span className="text-xs text-slate-500">Email</span>
-            <p>{customer.email}</p>
-          </div>
-
-          <div>
-            <span className="text-xs text-slate-500">Phone</span>
-            <p>{customer.phone}</p>
+          <div className="rounded-2xl border border-white/15 bg-white/10 p-5 backdrop-blur-sm sm:min-w-56">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-purple-200">Vendor total</p><p className="mt-1 text-3xl font-extrabold">{money(order.vendor_total)}</p>
+            <span className={`mt-3 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold capitalize ${status.badge}`}><StatusIcon />{order.shipping_status}</span>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* ADDRESS */}
-      <div className="bg-white rounded-2xl p-6 shadow-sm mb-4 vendor-section-card" style={{ border: "1px solid rgba(133,43,175,0.08)" }}>
-        <h3 className="text-lg font-semibold mb-3">Shipping Address</h3>
+      <OrderStatusTimeline shipments={shipments || []} />
 
-        <p className="font-medium">{address.name}</p>
-        <p>{address.phone}</p>
-        <p>{address.line1}, {address.line2}</p>
-
-        <p>
-          {address.city}, {address.state}, {address.country} - {address.zipcode}
-        </p>
-
-        {address.landmark && (
-          <p className="text-sm text-slate-500 mt-2">
-            Landmark: {address.landmark}
-          </p>
-        )}
-      </div>
-
-      {/* ITEMS */}
-      <div className="bg-white rounded-2xl p-6 shadow-sm vendor-section-card" style={{ border: "1px solid rgba(133,43,175,0.08)" }}>
-
-        <h3 className="text-lg font-semibold mb-4">Order Items</h3>
-
-        <div className="overflow-x-auto border rounded-xl">
-          <table className="w-full text-sm">
-
-            <thead>
-              <tr style={{ background: "linear-gradient(135deg, rgba(133,43,175,0.06) 0%, rgba(252,63,120,0.03) 100%)" }}>
-                {["Product", "Brand", "Attributes", "Qty", "Price", "Total"].map((h) => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500">{h}</th>
-                ))}
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-gray-50">
-              {items.map((item, index) => (
-                <tr key={item.order_item_id} className="row-animate hover:bg-purple-50/20 transition-colors" style={{ animationDelay: `${index * 35}ms` }}>
-                  <td className="px-4 py-3 font-semibold text-gray-900">{item.product_name}</td>
-                  <td className="px-4 py-3 text-gray-600">{item.brand_name}</td>
-                  <td className="px-4 py-3">
-                    {Object.entries(item.attributes).map(([k, v]) => (
-                      <span key={k} className="inline-block mr-1 mb-1 px-2 py-0.5 bg-purple-50 text-purple-700 border border-purple-100 rounded-full text-xs font-medium">
-                        {k}: {v}
-                      </span>
-                    ))}
-                  </td>
-                  <td className="px-4 py-3 text-gray-700">{item.quantity}</td>
-                  <td className="px-4 py-3 text-gray-700">{formatCurrency(item.price)}</td>
-                  <td className="px-4 py-3 font-bold text-[#852BAF]">{formatCurrency(item.item_total)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* SUMMARY */}
-        <div className="mt-6 border-t pt-4 space-y-2 text-sm">
-
-          <div className="flex justify-between">
-            <span>Items Total:</span>
-            <span>{formatCurrency(summary.item_total)}</span>
+      <div className="grid gap-5 lg:grid-cols-[1.55fr_1fr]">
+        <section className="overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-[0_10px_35px_rgba(52,22,68,0.07)]">
+          <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5"><div><p className="text-[11px] font-bold uppercase tracking-widest text-[#852BAF]">Order contents</p><h2 className="mt-1 text-lg font-extrabold text-gray-900">{items.length} product{items.length === 1 ? "" : "s"}</h2></div><div className="rounded-2xl bg-purple-50 p-3 text-[#852BAF]"><FiShoppingBag size={20} /></div></div>
+          <div className="divide-y divide-gray-100 px-6">
+            {items.map((item) => (
+              <article key={item.order_item_id} className="flex flex-col gap-4 py-5 sm:flex-row sm:items-center">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-gray-50 to-purple-50">
+                  {item.image ? <img src={item.image} alt="" className="h-full w-full object-cover" /> : <FiPackage className="text-purple-300" size={23} />}
+                </div>
+                <div className="min-w-0 flex-1"><p className="font-extrabold text-gray-900">{item.product_name}</p><p className="mt-0.5 text-xs font-semibold text-gray-400">{item.brand_name}</p><div className="mt-2 flex flex-wrap gap-1.5">{Object.entries(item.attributes || {}).map(([key, value]) => <span key={key} className="rounded-lg border border-purple-100 bg-purple-50 px-2 py-1 text-[10px] font-bold text-purple-700">{key}: {value}</span>)}</div></div>
+                <div className="grid grid-cols-3 gap-5 text-right sm:block sm:min-w-28"><div><p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Qty</p><p className="font-bold text-gray-800">{item.quantity}</p></div><div className="sm:mt-2"><p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Price</p><p className="text-sm font-semibold text-gray-600">{money(item.price)}</p></div><div className="sm:mt-2"><p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Total</p><p className="font-extrabold text-[#852BAF]">{money(item.item_total)}</p></div></div>
+              </article>
+            ))}
           </div>
+          <div className="m-5 rounded-2xl bg-gradient-to-r from-purple-50 to-pink-50 p-5"><div className="flex justify-between text-sm font-semibold text-gray-500"><span>Items subtotal</span><span>{money(summary.item_total)}</span></div><div className="my-3 h-px bg-purple-100" /><div className="flex items-end justify-between"><span className="font-extrabold text-gray-900">Your order total</span><span className="text-2xl font-extrabold text-[#852BAF]">{money(summary.vendor_total)}</span></div></div>
+        </section>
 
-          <div className="flex justify-between text-lg font-bold">
-            <span>Vendor Total:</span>
-            <span className="text-[#2563eb]">
-              {formatCurrency(summary.vendor_total)}
-            </span>
-          </div>
-
-        </div>
-
+        <aside className="space-y-5">
+          <section className="rounded-3xl border border-gray-100 bg-white p-6 shadow-[0_10px_35px_rgba(52,22,68,0.07)]"><div className="mb-5 flex items-center gap-3"><div className="rounded-xl bg-purple-50 p-2.5 text-[#852BAF]"><FiUser /></div><h2 className="font-extrabold text-gray-900">Customer</h2></div><p className="font-extrabold text-gray-900">{customer.name}</p><a href={`mailto:${customer.email}`} className="mt-3 flex items-center gap-3 text-sm text-gray-500 hover:text-[#852BAF]"><FiMail className="shrink-0" />{customer.email}</a><a href={`tel:${customer.phone}`} className="mt-3 flex items-center gap-3 text-sm text-gray-500 hover:text-[#852BAF]"><FiPhone className="shrink-0" />{customer.phone}</a></section>
+          <section className="rounded-3xl border border-gray-100 bg-white p-6 shadow-[0_10px_35px_rgba(52,22,68,0.07)]"><div className="mb-5 flex items-center gap-3"><div className="rounded-xl bg-pink-50 p-2.5 text-[#FC3F78]"><FiMapPin /></div><div><h2 className="font-extrabold text-gray-900">Shipping address</h2><p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{address.type || "Delivery"}</p></div></div><p className="font-bold text-gray-800">{address.name}</p><p className="mt-2 text-sm leading-6 text-gray-500">{addressLine}</p>{address.landmark && <p className="mt-2 rounded-xl bg-gray-50 px-3 py-2 text-xs text-gray-500">Near {address.landmark}</p>}<p className="mt-3 flex items-center gap-2 text-sm font-semibold text-gray-600"><FiPhone />{address.phone}</p></section>
+          <section className="rounded-3xl border border-gray-100 bg-white p-6 shadow-[0_10px_35px_rgba(52,22,68,0.07)]"><div className="mb-4 flex items-center gap-3"><div className="rounded-xl bg-indigo-50 p-2.5 text-indigo-600"><FiTruck /></div><h2 className="font-extrabold text-gray-900">Shipment</h2></div>{order.awb_number ? <><p className="text-xs font-bold uppercase tracking-widest text-gray-400">{order.courier_name || "Courier"}</p><p className="mt-2 rounded-xl bg-indigo-50 px-3 py-2.5 font-mono text-sm font-bold text-indigo-700">AWB {order.awb_number}</p></> : <p className="text-sm leading-6 text-gray-500">Tracking details will appear here once this order is shipped.</p>}</section>
+        </aside>
       </div>
     </div>
   );

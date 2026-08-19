@@ -9,11 +9,35 @@ const razorpay = require("../middlewares/razorpay");
 const db = require("../../../../config/database");
 const crypto = require("crypto");
 const sharp = require("sharp");
+const InvoiceService = require("../../../../services/Invoice/service-invoice");
 const {
   finalizePaidServiceOrder,
-  generateInvoiceOnce,
+  generateAndEmailInvoice,
 } = require("../utils/paymentFinalizer");
+const {
+  deriveServicePaymentStatus,
+} = require("../utils/paymentState");
+
+const SERVICE_CANCELLATION_EVENT_LABELS = {
+  cancellation_requested: "Cancellation Requested",
+  cancellation_approved: "Cancellation Approved",
+  cancellation_rejected: "Cancellation Rejected",
+  refund_initiated: "Refund Initiated",
+  refund_completed: "Refund Completed",
+  refund_failed: "Refund Failed",
+};
+
+function getServiceCancellationEventLabel(event) {
+  return SERVICE_CANCELLATION_EVENT_LABELS[event] || event;
+}
 const { notifyUser } = require("../../../common/utils/notification");
+const { creditCompletedServiceReward } = require("../utils/serviceRewards");
+const { releaseServiceCoins } = require("../../../../services/rewards/serviceWalletService");
+const { runNonBlocking } = require("../../../../utils/nonBlocking");
+const {
+  notifyWhatsAppAdmins,
+  notifyNewServiceOrder,
+} = require("../../../../services/whatsapp/adminNotificationService");
 
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
 function getPublicUrl(path) {
@@ -109,7 +133,7 @@ class ServiceOrderController {
       await connection.beginTransaction();
 
       const [orders] = await connection.execute(
-        `SELECT id, price, status, payment_status
+        `SELECT id, price, reward_coins_used, status, payment_status
          FROM service_orders
          WHERE parent_order_id = ?
            AND user_id = ?
@@ -139,7 +163,8 @@ class ServiceOrderController {
       }
 
       const totalAmount = orders.reduce(
-        (sum, order) => sum + Number(order.price || 0),
+        (sum, order) =>
+          sum + Math.max(0, Number(order.price || 0) - Number(order.reward_coins_used || 0)),
         0,
       );
 
@@ -273,7 +298,12 @@ class ServiceOrderController {
         .update(body.toString())
         .digest("hex");
 
-      if (expectedSignature !== razorpay_signature) {
+      const expectedBuffer = Buffer.from(expectedSignature, "hex");
+      const receivedBuffer = Buffer.from(razorpay_signature, "hex");
+      if (
+        expectedBuffer.length !== receivedBuffer.length ||
+        !crypto.timingSafeEqual(expectedBuffer, receivedBuffer)
+      ) {
         return res.status(400).json({
           success: false,
           message: "Payment verification failed",
@@ -341,7 +371,16 @@ class ServiceOrderController {
       // COMMIT
       await connection.commit();
 
-      // await InvoiceService.generateInvoice(parent_order_id);
+      if (!alreadyPaid) {
+        runNonBlocking(
+          () => generateAndEmailInvoice(parent_order_id),
+          "service payment invoice email",
+        );
+        runNonBlocking(
+          () => notifyNewServiceOrder(parent_order_id),
+          "admin service order WhatsApp",
+        );
+      }
 
       res.json({
         success: true,
@@ -369,12 +408,6 @@ class ServiceOrderController {
         );
       }
 
-      generateInvoiceOnce(parent_order_id).catch((err) => {
-        console.error(
-          `[verifyPayment] Invoice generation failed for parent_order_id=${parent_order_id}:`,
-          err.message,
-        );
-      });
     } catch (err) {
       // ROLLBACK
       if (connection) {
@@ -391,6 +424,47 @@ class ServiceOrderController {
       if (connection) {
         connection.release();
       }
+    }
+  }
+
+  async paymentStatus(req, res) {
+    res.set("Cache-Control", "no-store");
+    const userId = req.user?.user_id;
+    const parentOrderId = String(req.params.parentOrderId || "").trim();
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized user" });
+    }
+    if (!parentOrderId) {
+      return res.status(400).json({ success: false, message: "parentOrderId required" });
+    }
+
+    try {
+      const [orders] = await db.execute(
+        `SELECT id, status, payment_status
+         FROM service_orders
+         WHERE parent_order_id = ? AND user_id = ?`,
+        [parentOrderId, userId],
+      );
+
+      if (!orders.length) {
+        return res.status(404).json({ success: false, message: "Order not found" });
+      }
+
+      const paymentStatus = deriveServicePaymentStatus(orders);
+
+      return res.json({
+        success: true,
+        payment_status: paymentStatus,
+        parent_order_id: parentOrderId,
+        order_id: orders[0].id,
+      });
+    } catch (error) {
+      console.error("Service payment status error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Unable to fetch payment status",
+      });
     }
   }
 
@@ -500,22 +574,59 @@ class ServiceOrderController {
 
         // cancellation
         const [[cancellation]] = await db.execute(
-          `SELECT * FROM service_order_cancellations
-         WHERE service_order_id = ?`,
+          `SELECT soc.*, ocr.reason_text AS reason
+           FROM service_order_cancellations soc
+           LEFT JOIN order_cancellation_reasons ocr
+             ON ocr.reason_id = soc.reason_id
+           WHERE soc.service_order_id = ?`,
           [item.id],
         );
 
+        const [cancellationTimeline] = cancellation
+          ? await db.execute(
+              `SELECT event, created_at
+               FROM service_order_cancellation_timeline
+               WHERE service_order_id = ?
+               ORDER BY created_at ASC`,
+              [item.id],
+            )
+          : [[]];
+
         // refund
-        const [[refund]] = await db.execute(
-          `SELECT * FROM service_order_refunds
-         WHERE service_order_id = ?`,
+        const [refunds] = await db.execute(
+          `SELECT refund_amount, refund_method, status
+           FROM service_order_refunds
+           WHERE service_order_id = ?`,
           [item.id],
+        );
+
+        const refund = refunds.reduce(
+          (summary, entry) => {
+            const amount = Number(entry.refund_amount || 0);
+            summary.total += amount;
+            if (entry.refund_method === "original") {
+              summary.money_refund += amount;
+            } else if (entry.refund_method === "wallet") {
+              summary.coin_refund += amount;
+            }
+            if (entry.status === "failed") summary.status = "failed";
+            else if (entry.status === "pending" && summary.status !== "failed") {
+              summary.status = "pending";
+            }
+            return summary;
+          },
+          {
+            total: 0,
+            money_refund: 0,
+            coin_refund: 0,
+            status: refunds.length ? "completed" : null,
+          },
         );
 
         // can cancel
         const canCancel = [
-          "pending_payment",
           "documents_pending",
+          "documents_uploaded",
           "in_progress",
         ].includes(item.status);
 
@@ -523,7 +634,7 @@ class ServiceOrderController {
         let timeline = [];
 
         // cancelled flow
-        if (item.status === "cancelled") {
+        if (item.status === "cancelled" && cancellation) {
           timeline = [
             {
               status: "Cancellation Requested",
@@ -544,11 +655,18 @@ class ServiceOrderController {
               completed: cancellation?.refund_status === "completed",
             },
           ];
+        } else if (item.status === "cancelled") {
+          timeline = [
+            {
+              status: "Order Cancelled",
+              completed: true,
+            },
+          ];
         } else {
           timeline = [
             {
               status: "Order Confirmed",
-              completed: true,
+              completed: item.payment_status === "paid",
             },
             {
               status: "Documents Submitted",
@@ -584,19 +702,32 @@ class ServiceOrderController {
 
           cancellation: cancellation
             ? {
-                can_cancel: canCancel,
+                can_cancel: false,
                 status: cancellation.status,
                 reason: cancellation.reason,
                 refund_status: cancellation.refund_status,
+                timeline: cancellationTimeline.map((entry) => ({
+                  event: entry.event,
+                  label: getServiceCancellationEventLabel(entry.event),
+                  date: entry.created_at,
+                })),
               }
             : {
                 can_cancel: canCancel,
               },
 
-          refund: refund
+          refund: refunds.length
             ? {
-                amount: Number(refund.refund_amount),
-                method: refund.refund_method,
+                amount: refund.total,
+                method:
+                  refund.money_refund > 0 && refund.coin_refund > 0
+                    ? "split"
+                    : refund.money_refund > 0
+                      ? "original"
+                      : "wallet",
+                total: refund.total,
+                money_refund: refund.money_refund,
+                coin_refund: refund.coin_refund,
                 status: refund.status,
               }
             : null,
@@ -652,7 +783,9 @@ class ServiceOrderController {
       const parentTimeline = [
         {
           status: "Order Confirmed",
-          completed: true,
+          completed:
+            allItems.length > 0 &&
+            allItems.every((item) => item.payment_status === "paid"),
         },
         {
           status: "Services In Progress",
@@ -683,11 +816,21 @@ class ServiceOrderController {
           address: order.address,
 
           total_amount: order.total_amount,
+          subtotal: order.subtotal,
+          reward_discount: order.reward_discount,
+          reward_coins_used: order.reward_coins_used,
+          reward_coins_earned: order.reward_coins_earned,
+          rewards: order.rewards,
 
           summary: {
             total_services: allItems.length,
             completed_services: completedServices,
             total_bundles: processedBundles.length,
+            subtotal: order.subtotal,
+            reward_discount: order.reward_discount,
+            total: order.total_amount,
+            reward_coins_used: order.reward_coins_used,
+            reward_coins_earned: order.reward_coins_earned,
           },
 
           timeline: parentTimeline,
@@ -698,6 +841,7 @@ class ServiceOrderController {
         },
       });
     } catch (err) {
+      console.error("[getOrderDetails] ERROR:", err);
       res.status(500).json({
         success: false,
         message: err.message,
@@ -720,6 +864,31 @@ class ServiceOrderController {
 
       const { parentId } = req.params;
 
+      const [[ownedOrder]] = await db.execute(
+        `SELECT so.id, so.payment_status
+         FROM service_orders so
+         WHERE so.parent_order_id = ?
+           AND so.user_id = ?
+         LIMIT 1`,
+        [parentId, userId],
+      );
+
+      if (!ownedOrder) {
+        return res.status(404).json({
+          success: false,
+          message: "Order not found",
+        });
+      }
+
+      if (ownedOrder.payment_status !== "paid") {
+        return res.status(400).json({
+          success: false,
+          message: "Invoice is available after payment",
+        });
+      }
+
+      await InvoiceService.generateInvoice(parentId);
+
       const [[invoice]] = await db.execute(
         `SELECT si.*
          FROM service_invoices si
@@ -741,13 +910,28 @@ class ServiceOrderController {
         });
       }
 
-      res.json({
-        success: true,
-        data: {
-          ...invoice,
-          url: `/uploads/service-invoices/${invoice.invoice_url}`,
-        },
+      const invoicePath = path.join(
+        __dirname,
+        "../../../../uploads/service-invoices",
+        invoice.invoice_url,
+      );
+
+      if (!fs.existsSync(invoicePath)) {
+        return res.status(404).json({
+          success: false,
+          message: "Invoice file not found",
+        });
+      }
+
+      const pdf = fs.readFileSync(invoicePath);
+
+      res.set({
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="${invoice.invoice_number}.pdf"`,
+        "Content-Length": pdf.length,
       });
+
+      return res.end(pdf);
     } catch (error) {
       console.error(error);
       res.status(500).json({
@@ -997,6 +1181,19 @@ class ServiceOrderController {
       const { id } = req.params;
       const { status } = req.body;
 
+      // Vendor managers control fulfilment only. Payment and document states are
+      // system/customer-managed and must not be writable through this action.
+      const vendorManagerStatuses = ["in_progress", "completed", "cancelled"];
+      if (
+        req.user?.role === "vendor_manager" &&
+        !vendorManagerStatuses.includes(status)
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "Vendor managers can only mark a service in progress, completed, or cancelled",
+        });
+      }
+
       // validate status
       if (!ALLOWED_STATUSES.includes(status)) {
         return res.status(400).json({
@@ -1029,7 +1226,54 @@ class ServiceOrderController {
         });
       }
 
+      const [[pendingCancellation]] = await db.execute(
+        `SELECT id FROM service_order_cancellations
+         WHERE service_order_id = ? AND status = 'requested'
+         LIMIT 1`,
+        [id],
+      );
+
+      if (pendingCancellation && status !== order.status) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "This service has a pending cancellation request. Approve or reject it before changing the service status.",
+        });
+      }
+
       await ServiceOrderModel.updateStatus(id, status);
+
+      if (status === "completed" && order.status !== "completed") {
+        await creditCompletedServiceReward(db, id);
+      }
+
+      if (status === "cancelled" && order.status === "pending_payment") {
+        const [[remaining]] = await db.execute(
+          `SELECT COUNT(*) AS count FROM service_orders
+           WHERE parent_order_id = ? AND status <> 'cancelled'`,
+          [order.parent_order_id],
+        );
+        if (Number(remaining.count) === 0) {
+          const walletConn = await db.getConnection();
+          try {
+            await walletConn.beginTransaction();
+            const released = await releaseServiceCoins(walletConn, order.parent_order_id);
+            if (released) {
+              await walletConn.execute(
+                `UPDATE service_orders SET reward_coins_used = 0
+                 WHERE parent_order_id = ?`,
+                [order.parent_order_id],
+              );
+            }
+            await walletConn.commit();
+          } catch (error) {
+            await walletConn.rollback();
+            throw error;
+          } finally {
+            walletConn.release();
+          }
+        }
+      }
 
       notifyUser(
         {
@@ -1106,13 +1350,16 @@ class ServiceOrderController {
       const [[order]] = await db.execute(
         `
       SELECT
-        id,
-        status
+        so.id,
+        so.status,
+        c.name AS customer_name,
+        c.company_id
 
-      FROM service_orders
+      FROM service_orders so
+      JOIN customer c ON c.user_id = so.user_id
 
-      WHERE id = ?
-      AND user_id = ?
+      WHERE so.id = ?
+      AND so.user_id = ?
       `,
         [service_order_id, userId],
       );
@@ -1130,7 +1377,7 @@ class ServiceOrderController {
 
       const [[issue]] = await db.execute(
         `
-      SELECT issue_id
+      SELECT issue_id, issue_text
 
       FROM service_order_issue_type
 
@@ -1238,6 +1485,18 @@ class ServiceOrderController {
           metadata: { service_order_id, issue_id },
         },
         "service support notification",
+      );
+
+      runNonBlocking(
+        () =>
+          notifyWhatsAppAdmins("admin_help_request_created", {
+            company_id: order.company_id ?? null,
+            customer_name: order.customer_name || "Customer",
+            request_id: requestId,
+            order_id: service_order_id,
+            issue_type: issue.issue_text,
+          }),
+        "admin help request WhatsApp",
       );
     } catch (err) {
       // cleanup temp files
@@ -1455,6 +1714,7 @@ class ServiceOrderController {
 
       WHERE id = ?
       AND user_id = ?
+      FOR UPDATE
       `,
         [service_order_id, userId],
       );
@@ -1473,8 +1733,6 @@ class ServiceOrderController {
       // =====================================
 
       const allowedStatuses = [
-        "pending_payment",
-        "payment_done",
         "documents_pending",
         "documents_uploaded",
         "in_progress",
@@ -1486,6 +1744,28 @@ class ServiceOrderController {
         return res.status(400).json({
           success: false,
           message: "Cancellation not allowed at this stage",
+        });
+      }
+
+      if (order.payment_status !== "paid") {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Only paid service orders can use the cancellation request flow",
+        });
+      }
+
+      const [[reason]] = await connection.execute(
+        `SELECT reason_id FROM order_cancellation_reasons
+         WHERE reason_id = ? AND is_active = 1`,
+        [reason_id],
+      );
+
+      if (!reason) {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Invalid cancellation reason",
         });
       }
 
@@ -1655,8 +1935,12 @@ class ServiceOrderController {
     try {
       const { parentOrderId } = req.params;
 
-      const order =
-        await ServiceOrderModel.getOrderByParentIdAdmin(parentOrderId);
+      const [order, documents] = await Promise.all([
+        ServiceOrderModel.getOrderByParentIdAdmin(parentOrderId),
+        ServiceOrderDocumentModel.getUploadedDocsByParentOrderAdmin(
+          parentOrderId,
+        ),
+      ]);
 
       if (!order) {
         return res.status(404).json({
@@ -1667,7 +1951,10 @@ class ServiceOrderController {
 
       return res.json({
         success: true,
-        data: order,
+        data: {
+          ...order,
+          documents,
+        },
       });
     } catch (error) {
       return res.status(500).json({

@@ -2,6 +2,7 @@ const ekoService = require("../services/eko_service");
 const TransactionModel = require("../models/transactionModel");
 const BillFetchModel = require("../models/billFetchModel");
 const db = require("../../../../config/database");
+const { mapFinalStatus } = require("../utils/finalStatus");
 
 /**
  * @typedef {Object} FrontendFetchBillPayload
@@ -391,6 +392,19 @@ const isProviderValidationError = (providerResponse) => {
   );
 };
 
+const getProviderFailureReason = (providerResponse) => {
+  const reason = pickFirstValue(
+    [providerResponse?.data, providerResponse],
+    ["reason", "error", "message"],
+  );
+
+  if (!hasValue(reason)) {
+    return "The biller did not return bill details";
+  }
+
+  return typeof reason === "string" ? reason : JSON.stringify(reason);
+};
+
 const hasProviderBillData = (providerResponse) => {
   if (!providerResponse || typeof providerResponse !== "object") {
     return false;
@@ -477,12 +491,10 @@ class BillController {
       res.json(data);
     } catch (e) {
       console.error("EKO ERROR:", e.response?.data || e.message);
-      if (e.response?.status === 500) {
-        return res.status(503).json({
-          success: false,
-          message: "Service temporarily unavailable. Please try again.",
-        });
-      }
+      return res.status(e.response?.status || 502).json({
+        success: false,
+        message: "Service temporarily unavailable. Please try again.",
+      });
     }
   }
 
@@ -503,10 +515,10 @@ class BillController {
     try {
       const { category_id, search } = req.query;
 
-      if (!category_id) {
+      if (!category_id && !search) {
         return res.status(400).json({
           success: false,
-          message: "category_id is required",
+          message: "category_id or search is required",
         });
       }
 
@@ -523,6 +535,208 @@ class BillController {
         success: false,
         message: "Failed to fetch grouped operators",
         error: error.message,
+      });
+    }
+  }
+
+  // Search operators across ALL categories
+  async searchOperators(req, res) {
+    try {
+      const q = String(req.query.q || req.query.search || "").trim();
+
+      if (q.length < 2) {
+        return res.json({ success: true, data: [] });
+      }
+
+      const data = await ekoService.searchOperators(q);
+
+      return res.json({
+        success: true,
+        data,
+      });
+    } catch (error) {
+      console.error("[BBPS][operators-search] error", error.message);
+
+      return res.status(500).json({
+        success: false,
+        message: "Failed to search operators",
+      });
+    }
+  }
+
+  async saveSearchHistory(req, res) {
+    try {
+      const userId = req.user?.user_id;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      const keyword = (req.body.keyword || "").trim();
+
+      if (!keyword) {
+        return res.json({
+          success: true,
+        });
+      }
+
+      await db.execute(
+        `INSERT INTO bbps_search_history
+       (user_id, keyword)
+       VALUES (?, ?)
+       ON DUPLICATE KEY UPDATE
+       created_at = CURRENT_TIMESTAMP`,
+        [userId, keyword],
+      );
+
+      return res.json({
+        success: true,
+      });
+    } catch (error) {
+      console.error("Save BBPS search history error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  }
+
+  async getSearchHistory(req, res) {
+    try {
+      const userId = req.user?.user_id;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      const [rows] = await db.execute(
+        `SELECT keyword
+       FROM bbps_search_history
+       WHERE user_id = ?
+       ORDER BY created_at DESC
+       LIMIT 10`,
+        [userId],
+      );
+
+      return res.json({
+        success: true,
+        history: rows.map((row) => row.keyword),
+      });
+    } catch (error) {
+      console.error("Get BBPS search history error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  }
+
+  async clearSearchHistory(req, res) {
+    try {
+      const userId = req.user?.user_id;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      await db.execute(
+        `DELETE FROM bbps_search_history
+       WHERE user_id = ?`,
+        [userId],
+      );
+
+      return res.json({
+        success: true,
+        message: "Search history cleared",
+      });
+    } catch (error) {
+      console.error("Clear BBPS search history error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  }
+
+  // Order history for the logged-in user
+  async getOrderHistory(req, res) {
+    try {
+      const userId = req.user?.user_id;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+      const limit = Math.min(
+        Math.max(parseInt(req.query.limit, 10) || 10, 1),
+        50,
+      );
+      const status = req.query.status || null;
+      const search = req.query.search?.trim() || null;
+      const fromDate = req.query.from_date || null;
+      const toDate = req.query.to_date || null;
+      const timeFilter = req.query.time_filter || null;
+
+      const result = await TransactionModel.getUserOrders({
+        userId,
+        status,
+        search,
+        fromDate,
+        toDate,
+        timeFilter,
+        page,
+        limit,
+      });
+
+      let operatorMap = {};
+
+      try {
+        const operatorsData = await ekoService.getOperators();
+        (operatorsData?.data || []).forEach((op) => {
+          operatorMap[op.operator_id] = op.name;
+        });
+      } catch (error) {
+        console.error(
+          "[BBPS][order-history] operator lookup failed",
+          error.message,
+        );
+      }
+
+      const orders = result.orders.map((order) => ({
+        ...order,
+        operator_name: operatorMap[order.operator_id] || null,
+        final_status: mapFinalStatus(order.bbps_status, order.refund_status),
+      }));
+
+      return res.json({
+        success: true,
+        orders,
+        total: result.total,
+        totalPages: result.totalPages,
+        currentPage: result.currentPage,
+      });
+    } catch (error) {
+      console.error("[BBPS][order-history] error", error.message);
+
+      return res.status(500).json({
+        success: false,
+        message: "Failed to fetch order history",
       });
     }
   }
@@ -720,6 +934,10 @@ class BillController {
         client_ref_id: data?.client_ref_id,
         success: data?.success,
         message: data?.message,
+        reason: data?.data?.reason,
+        status: data?.status,
+        response_type_id: data?.response_type_id,
+        response_status_id: data?.response_status_id,
       });
 
       if (/no key for response/i.test(String(data?.message || ""))) {
@@ -743,11 +961,18 @@ class BillController {
       }
 
       if (!hasProviderBillData(data)) {
-        return res.status(502).json({
+        const providerReason = getProviderFailureReason(data);
+
+        return res.status(422).json({
           success: false,
-          message:
-            "Provider response did not contain bill data. Please verify operator required fields and EKO mapping.",
-          data,
+          message: data?.message || "Unable to fetch bill",
+          data: {
+            reason: providerReason,
+            client_ref_id: data?.client_ref_id,
+            status: data?.status,
+            response_type_id: data?.response_type_id,
+            response_status_id: data?.response_status_id,
+          },
         });
       }
 
@@ -850,24 +1075,16 @@ class BillController {
       );
 
       const rpOrder = rpOrderRows[0] || null;
+      const [[refund]] = await db.execute(
+        `SELECT status, razorpay_refund_id, retry_count, last_error
+         FROM bbps_refunds WHERE transaction_id = ?`,
+        [transaction_id],
+      );
 
       // =========================
       // 3. MAP STATUS FOR FRONTEND
       // =========================
-      let finalStatus = "PENDING";
-
-      if (txn.bbps_status === "PAID") {
-        finalStatus = "SUCCESS";
-      } else if (
-        txn.bbps_status === "FAILED_FINAL" ||
-        txn.bbps_status === "PAYMENT_FAILED"
-      ) {
-        finalStatus = "FAILED";
-      } else if (txn.bbps_status === "FAILED_RETRY") {
-        finalStatus = "RETRYING";
-      } else if (txn.bbps_status === "INIT") {
-        finalStatus = "PENDING";
-      }
+      const finalStatus = mapFinalStatus(txn.bbps_status, refund?.status);
 
       // =========================
       // 4. RESPONSE
@@ -891,6 +1108,16 @@ class BillController {
             ? {
                 order_id: rpOrder.razorpay_order_id,
                 payment_id: rpOrder.razorpay_payment_id,
+              }
+            : null,
+
+          refund: refund
+            ? {
+                status: refund.status,
+                refund_id: refund.razorpay_refund_id,
+                retry_count: refund.retry_count,
+                error:
+                  refund.status === "manual_review" ? refund.last_error : null,
               }
             : null,
 

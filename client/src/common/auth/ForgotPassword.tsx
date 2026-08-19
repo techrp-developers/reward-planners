@@ -1,8 +1,17 @@
-import { LoaderCircle, Mail, ArrowLeft } from "lucide-react";
-import { useState } from "react";
-import type { ChangeEvent, FormEvent } from "react";
-import { api } from "../api/api";
+import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
+import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, LoaderCircle, Mail, ShieldCheck } from "lucide-react";
+import { api } from "../api/api";
+import AuthShell from "./AuthShell";
+
+const getErrorMessage = (error: unknown, fallback = "Something went wrong") => {
+  if (typeof error === "object" && error !== null) {
+    const requestError = error as { response?: { data?: { message?: string } } };
+    if (requestError.response?.data?.message) return requestError.response.data.message;
+  }
+  if (error instanceof Error) return error.message;
+  return typeof error === "string" ? error : fallback;
+};
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
@@ -10,144 +19,85 @@ export default function ForgotPassword() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  const getErrorMessage = (err: unknown, fallback = "Something went wrong") => {
-    if (!err) return fallback;
-    if (err instanceof Error) return err.message;
-    if (typeof err === "string") return err;
-    if (typeof err === "object" && err !== null) {
-      const maybe = err as { response?: { data?: { message?: string } } };
-      return maybe.response?.data?.message ?? fallback;
-    }
-    return fallback;
-  };
-
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     setError("");
-
-    if (!email.trim()) {
-      setError("Please enter a valid email.");
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      setError("Enter the email address associated with your account.");
       return;
     }
 
     try {
       setLoading(true);
-      await api.post("/auth/forgot-password", { email: email.trim() });
+      await api.post("/auth/forgot-password", { email: normalizedEmail });
       setSuccess(true);
-    } catch (err: unknown) {
-      setError(getErrorMessage(err, "Failed to send reset email"));
+    } catch (requestError: unknown) {
+      setError(getErrorMessage(requestError, "We couldn't send the reset email. Please try again."));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen overflow-hidden flex items-center justify-center bg-gradient-to-tr from-[#38bdf8] via-[#a855f7] to-[#ec4899] px-4">
-      {/* premium glass ring */}
-      <div className="w-full max-w-md">
-        <div className="relative rounded-3xl p-[1px] bg-gradient-to-r from-white/40 via-white/10 to-white/40 shadow-2xl">
-          <div className="relative rounded-3xl bg-white/95 backdrop-blur-xl px-7 py-7 shadow-xl overflow-hidden">
-            {/* soft premium blobs */}
-            <div className="pointer-events-none absolute -top-24 -right-24 h-56 w-56 rounded-full bg-[#38bdf8]/20 blur-2xl" />
-            <div className="pointer-events-none absolute -bottom-28 -left-28 h-64 w-64 rounded-full bg-[#ec4899]/15 blur-2xl" />
-            <div className="pointer-events-none absolute inset-0 opacity-[0.06] bg-[radial-gradient(#000_1px,transparent_1px)] [background-size:18px_18px]" />
-
-            {/* header */}
+    <AuthShell
+      eyebrow="Account recovery"
+      title={success ? "Check your inbox" : "Reset your password"}
+      description={success ? "We've processed your password reset request securely." : "Enter your work email and we'll send you a secure, time-limited reset link."}
+      compact
+    >
+      {success ? (
+        <div className="space-y-6">
+          <div className="relative overflow-hidden rounded-3xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-6 shadow-[0_12px_35px_rgba(16,185,129,0.1)]">
+            <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-emerald-200/30 blur-2xl" />
             <div className="relative">
-              <div className="flex items-center justify-between">
-                <Link
-                  to="/login"
-                  className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-900 transition"
-                >
-                  <ArrowLeft size={16} />
-                  Back
-                </Link>
-                <div className="h-9 w-9 rounded-2xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] shadow-md shadow-[#852BAF]/20 flex items-center justify-center">
-                  <Mail className="text-white" size={18} />
-                </div>
+              <div className="grid h-13 w-13 place-items-center rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-500/20">
+                <CheckCircle2 className="h-6 w-6" />
               </div>
-
-              <h2 className="mt-4 text-2xl font-extrabold text-slate-900">
-                Forgot Password?
-              </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Enter your email and we'll send you a reset link.
+              <h2 className="mt-5 text-lg font-extrabold text-slate-900">Reset link requested</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                If an account exists for <span className="font-bold text-slate-800">{email.trim()}</span>, a reset link will arrive shortly. It remains valid for 5 minutes.
               </p>
+              <div className="mt-5 flex items-start gap-3 rounded-2xl border border-emerald-100 bg-white/80 px-4 py-3 text-xs leading-5 text-emerald-800">
+                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                Check your spam folder if you don't see it, and never share the reset link with anyone.
+              </div>
             </div>
-
-            {/* content */}
-            <div className="relative mt-6">
-              {success ? (
-                <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-green-700 text-sm">
-                  Reset email sent. Please check your inbox.
-                </div>
-              ) : (
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div>
-                    <label className="block text-[11px] font-bold tracking-widest text-slate-600 uppercase">
-                      Email Address
-                    </label>
-
-                    <div className="relative group mt-2">
-                      {/* glow */}
-                      <div
-                        className="pointer-events-none absolute -inset-0.5 rounded-2xl opacity-0 blur-lg transition duration-300
-                                   bg-gradient-to-r from-[#852BAF]/25 to-[#FC3F78]/25
-                                   group-focus-within:opacity-100"
-                      />
-                      <Mail className="absolute left-4 top-3.5 text-slate-400 pointer-events-none" size={18} />
-
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                          setEmail(e.target.value)
-                        }
-                        className="relative w-full pl-11 pr-4 py-3 rounded-2xl bg-white/90 text-slate-900 placeholder:text-slate-400
-                                   border border-slate-200 shadow-sm outline-none transition-all duration-300
-                                   focus:border-transparent focus:ring-4 focus:ring-[#852BAF]/15 focus:shadow-lg focus:shadow-[#852BAF]/10"
-                        placeholder="Enter your email"
-                        autoComplete="email"
-                      />
-                    </div>
-
-                    {error && (
-                      <p className="mt-2 text-sm text-red-600">{error}</p>
-                    )}
-                  </div>
-
-                  <button
-                    disabled={loading}
-                    className="w-full text-white font-bold py-3.5 rounded-full text-base
-                               bg-gradient-to-r from-[#852BAF] to-[#FC3F78]
-                               shadow-lg shadow-[#852BAF]/25 transition-all duration-300 cursor-pointer
-                               hover:bg-gradient-to-r hover:from-[#FC3F78] hover:to-[#852BAF]
-                               hover:shadow-xl active:scale-95
-                               disabled:opacity-60 disabled:cursor-not-allowed
-                               inline-flex items-center justify-center"
-                  >
-                    {loading ? (
-                      <LoaderCircle className="animate-spin" />
-                    ) : (
-                      "Reset Password"
-                    )}
-                  </button>
-                </form>
-              )}
-            </div>
-
-            <p className="relative mt-5 text-center text-sm text-slate-600">
-              Remembered your password?{" "}
-              <Link
-                to="/login"
-                className="font-bold text-[#852BAF] hover:text-[#FC3F78] transition-all hover:underline"
-              >
-                Back to Login
-              </Link>
-            </p>
           </div>
+
+          <button type="button" onClick={() => { setSuccess(false); setError(""); }} className="w-full rounded-2xl border border-slate-200 bg-white px-5 py-3.5 text-sm font-bold text-slate-700 transition hover:border-purple-300 hover:bg-purple-50 hover:text-purple-700">
+            Try another email
+          </button>
+          <Link to="/login" className="flex items-center justify-center gap-2 text-sm font-bold text-[#852BAF] transition hover:text-[#FC3F78]"><ArrowLeft size={15} /> Return to sign in</Link>
         </div>
-      </div>
-    </div>
+      ) : (
+        <>
+          {error && (
+            <div role="alert" className="mb-5 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> {error}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <label htmlFor="recovery-email" className="mb-2 block text-sm font-semibold text-slate-700">Work email</label>
+              <div className="group flex h-13 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 px-4 transition focus-within:border-purple-400 focus-within:bg-white focus-within:ring-4 focus-within:ring-purple-100">
+                <Mail className="h-5 w-5 shrink-0 text-slate-400 transition group-focus-within:text-purple-600" />
+                <input id="recovery-email" type="email" required autoFocus autoComplete="email" value={email} onChange={(event) => { setEmail(event.target.value); setError(""); }} placeholder="you@company.com" className="h-full min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400" />
+              </div>
+              <p className="mt-2 text-xs leading-5 text-slate-400">Use the same email address you use to sign in to the portal.</p>
+            </div>
+
+            <button type="submit" disabled={loading || !email.trim()} className="group flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-[#1d102b] px-5 text-sm font-bold text-white shadow-[0_12px_28px_rgba(29,16,43,0.22)] transition hover:-translate-y-0.5 hover:bg-[#852baf] hover:shadow-[0_16px_32px_rgba(133,43,175,0.28)] active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-55">
+              {loading ? <><LoaderCircle className="h-4 w-4 animate-spin" /> Sending secure link...</> : <>Send reset link <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" /></>}
+            </button>
+          </form>
+
+          <div className="mt-7 border-t border-slate-100 pt-6 text-center">
+            <Link to="/login" className="inline-flex items-center gap-2 text-sm font-bold text-slate-600 transition hover:text-[#852BAF]"><ArrowLeft size={15} /> Back to sign in</Link>
+          </div>
+        </>
+      )}
+    </AuthShell>
   );
 }

@@ -99,7 +99,6 @@ export default function WarehouseDashboard() {
     .slice(0, 10);
 
   const totalUnitsInStock = stockItems.reduce((acc, curr) => acc + curr.quantity, 0);
-  const stockInToday = movements.filter((m) => m.type === "in" && m.date === "2026-07-12").reduce((acc, m) => acc + m.quantity, 0);
   const pendingMovements = movements.filter((m) => m.status === "pending").length;
 
   /* ================= STATS ================= */

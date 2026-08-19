@@ -7,12 +7,27 @@ const path = require("path");
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./config/swagger");
 
+// Initialize Quiz Game DB Tables
+// const setupQuizDB = require("./config/setupQuizDB");
+// const setupTodoReminderDB = require("./config/setupTodoReminderDB");
+// setupQuizDB();
+// setupTodoReminderDB();
+
 require("dotenv").config();
 require("./services/ExpressBees/cron/shipmentCron");
 require("./services/Bbps/retryCron");
+require("./services/Bbps/refundCron");
 require("./services/Razorpay/retryCron");
 require("./services/Maintenance/maintenanceCron");
 require("./services/Razorpay/orderExpiryCron");
+require("./services/Todo/todoReminderCron");
+require("./services/Todo/birthdayReminderCron");
+// require("./services/Todo/checkoutAbandonmentCron");
+require("./services/Ecommerce/cartRecoveryCron");
+// require("./services/Todo/serviceCartRecoveryCron");
+// require("./services/Bbps/billDueReminderCron");
+require("./services/Todo/fitnessGoalHookCron");
+
 
 // dashboard Route
 const dashboardRoute = require("./routes/indexRoute");
@@ -36,6 +51,11 @@ const fleaMarketRoute = require("./flea-market/routes/indexRoute");
 
 const app = express();
 
+const trustProxyHops = Number(process.env.TRUST_PROXY_HOPS);
+if (Number.isInteger(trustProxyHops) && trustProxyHops > 0) {
+  app.set("trust proxy", trustProxyHops);
+}
+
 // Middleware
 app.use(
   helmet({
@@ -51,19 +71,41 @@ const allowedOrigins = (process.env.CLIENT_URL || "http://localhost:5173")
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+function isAllowedOrigin(origin) {
+  if (allowedOrigins.includes(origin)) return true;
+
+  if (process.env.NODE_ENV !== "production") {
+    try {
+      const { hostname } = new URL(origin);
+      return hostname === "localhost" || hostname === "127.0.0.1";
+    } catch {
+      return false;
+    }
+  }
+
+  return false;
+}
+
 app.use(
   cors({
     origin(origin, callback) {
       // Allow non-browser requests (curl/Postman/server-to-server) that send no Origin header.
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin || isAllowedOrigin(origin)) {
         callback(null, true);
       } else {
         callback(new Error(`CORS blocked for origin: ${origin}`));
       }
     },
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Location-Id",
+      "X-Session-Token",
+      "Idempotency-Key",
+      "X-CSRF-Token",
+    ],
   }),
 );
 
@@ -135,7 +177,21 @@ app.use("/v1", gamesRoute);
 app.use("/mps", mpsRoute);
 
 // Flea Market Routes
-app.use("/api/flea-market", fleaMarketRoute);
+app.use(
+  "/",
+  (req, res, next) => {
+    // API responses (especially deployment-time 404s) must never be cached by
+    // Cloudflare, otherwise a newly deployed route can keep appearing missing.
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    res.setHeader("CDN-Cache-Control", "no-store");
+    res.setHeader("Cloudflare-CDN-Cache-Control", "no-store");
+    res.setHeader("Surrogate-Control", "no-store");
+    next();
+  },
+  fleaMarketRoute,
+);
 
 // 404 Handler
 app.use((req, res) => {
@@ -164,7 +220,7 @@ app.listen(PORT, () => {
   console.log("Reward Planners Backend Started!");
   console.log(`🔗 Server URL: http://localhost:${PORT}`);
   console.log(`Swagger docs at http://localhost:${PORT}/api-docs`);
-  console.log(`Flea Market API ready at http://localhost:${PORT}/api/flea-market`);
+  console.log(`Flea Market API ready at http://localhost:${PORT}`);
   console.log("CORS allowed origins (parsed):", allowedOrigins);
   console.log("=================================\n");
 

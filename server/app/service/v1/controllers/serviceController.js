@@ -1,4 +1,12 @@
 const db = require("../../../../config/database");
+
+const normalizeFeedbackChoice = (value, map) => {
+  if (value === undefined || value === null || value === "") return null;
+  return map[value] || value;
+};
+
+const isAllowedFeedbackChoice = (value, allowed) =>
+  value === null || allowed.includes(value);
 const fs = require("fs");
 const path = require("path");
 const ServiceModel = require("../models/serviceModel");
@@ -7,6 +15,7 @@ const ServiceVariantModel = require("../models/serviceVariantModel");
 const ServiceDocumentModel = require("../models/serviceDocumentModel");
 const ServiceFormModel = require("../models/serviceFormModel");
 const ServiceSectionModel = require("../models/serviceSectionModel");
+const { calculateServiceRewards } = require("../utils/serviceRewards");
 const { UPLOAD_BASE } = require("../../../../config/path");
 const sharp = require("sharp");
 const { uploadToR2 } = require("../../../../utils/r2upload");
@@ -461,6 +470,7 @@ class ServiceController {
       const variants = await ServiceVariantModel.getVariantsByService(id);
 
       for (let v of variants) {
+        v.rewards = calculateServiceRewards(v.price, v);
         const sections = await ServiceVariantModel.getSectionsByVariant(v.id);
 
         const formatted = formatVariantSections(sections);
@@ -659,6 +669,52 @@ class ServiceController {
         });
       }
 
+      const normalizedCompletionTime = normalizeFeedbackChoice(
+        completion_time,
+        {
+          faster: "fast",
+          faster_than_expected: "fast",
+          before_time: "fast",
+          early: "fast",
+        },
+      );
+
+      const normalizedConfidence = normalizeFeedbackChoice(confidence, {
+        yes: "high",
+        yes_completely: "high",
+        mostly: "medium",
+        not_really: "low",
+        no: "low",
+      });
+
+      const normalizedReuseIntent = normalizeFeedbackChoice(reuse_intent, {
+        yes: "definitely",
+        no: "unlikely",
+      });
+
+      if (
+        !isAllowedFeedbackChoice(normalizedCompletionTime, [
+          "fast",
+          "on_time",
+          "delayed",
+        ]) ||
+        !isAllowedFeedbackChoice(normalizedConfidence, [
+          "high",
+          "medium",
+          "low",
+        ]) ||
+        !isAllowedFeedbackChoice(normalizedReuseIntent, [
+          "definitely",
+          "maybe",
+          "unlikely",
+        ])
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid feedback option selected",
+        });
+      }
+
       connection = await db.getConnection();
 
       await connection.beginTransaction();
@@ -763,9 +819,9 @@ class ServiceController {
           ease_rating,
           expert_rating,
 
-          completion_time,
-          confidence,
-          reuse_intent,
+          normalizedCompletionTime,
+          normalizedConfidence,
+          normalizedReuseIntent,
 
           comment || null,
         ],

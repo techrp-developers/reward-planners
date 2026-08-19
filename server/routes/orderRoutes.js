@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 const orderController = require("../controllers/orderController");
+const ecommerceOrderController = require("../app/ecommerce/v1/controllers/orderController");
 
 // Get all orders
 router.get(
@@ -34,6 +35,14 @@ router.get(
   authenticateToken,
   authorizeRoles("vendor"),
   orderController.viewVendorOrderDetails,
+);
+
+// vendor order stats (total orders excl. cancelled + total revenue)
+router.get(
+  "/order-stats",
+  authenticateToken,
+  authorizeRoles("vendor"),
+  orderController.getOrderStats,
 );
 
 // ===================================Admin order cancellation========================================
@@ -69,20 +78,80 @@ router.post(
   orderController.rejectCancellation,
 );
 
+// admin order cancellation requests
+router.get(
+  "/item-cancellation-requests",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  orderController.getItemCancellationRequests,
+);
+
+// admin item cancellation details
+router.get(
+  "/item-cancellation-request/:orderItemId",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  orderController.getItemCancellationDetails,
+);
+
+// approve item cancellation request by admin
+router.post(
+  "/approve-item-cancellation/:orderItemId",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  orderController.approveItemCancellation,
+);
+
+// reject item cancellation request by admin
+router.post(
+  "/reject-item-cancellation/:orderItemId",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  orderController.rejectItemCancellation,
+);
+
 // ================================================Service======================================================
+router.get(
+  "/service-cancellation-requests",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "service_manager", "admin"),
+  orderController.getServiceCancellationRequests,
+);
+
+router.get(
+  "/service-cancellation-request/:serviceOrderId",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "service_manager", "admin"),
+  orderController.getServiceCancellationDetails,
+);
+
 // approve cancellation request
 router.post(
   "/approve-service-cancellation/:serviceOrderId",
   authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
+  authorizeRoles("vendor_manager", "service_manager", "admin"),
   orderController.approveServiceCancellation,
+);
+
+router.get(
+  "/invoice/:orderId",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  ecommerceOrderController.getInvoiceForManager,
+);
+
+router.post(
+  "/cancel-service/:serviceOrderId",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "service_manager", "admin"),
+  orderController.cancelServiceAsManager,
 );
 
 // reject service cancellation
 router.post(
   "/reject-service-cancellation/:serviceOrderId",
   authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
+  authorizeRoles("vendor_manager", "service_manager", "admin"),
   orderController.rejectServiceCancellation,
 );
 

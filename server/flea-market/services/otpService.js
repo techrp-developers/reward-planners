@@ -5,7 +5,8 @@ const customerModel = require("../models/customerModel");
 const otpModel = require("../models/otpModel");
 const sessionModel = require("../models/sessionModel");
 const scheduleModel = require("../models/scheduleModel");
-const notificationService = require("./notificationService");
+const { enqueueWhatsApp } = require("../../services/whatsapp/waEnqueueService");
+const { sendOtpMail } = require("../../services/mailBuilder/sendOtp");
 const { generateNumericOtp, generateOtpSessionId, generateSessionToken } = require("../utils/ids");
 const { createError } = require("../utils/appError");
 const {
@@ -20,6 +21,12 @@ const BCRYPT_ROUNDS = 10;
 
 function isWithinCooldown(lastSentAt) {
   return Date.now() - new Date(lastSentAt).getTime() < OTP_RESEND_COOLDOWN_SECONDS * 1000;
+}
+
+function isWhatsAppChannel(channel) {
+  // Keep accepting "sms" so older app builds continue to work while the UI/API
+  // move to the accurate channel name.
+  return channel === "whatsapp" || channel === "sms";
 }
 
 // There's no session yet at this point in the flow, so company_id can't come from a trusted
@@ -78,35 +85,61 @@ class OtpService {
   }
 
   async sendOtp({ userId, channel, locationId }) {
-    const { customer } = await loadContext(userId, locationId);
-    const otp = generateNumericOtp();
+    const { customer, location } = await loadContext(userId, locationId);
+    const otp = generateNumericOtp(4);
     const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60_000);
 
-    if (channel === "sms") {
-      if (!customer.phone) {
-        throw createError(400, "Customer has no phone number on file");
-      }
+    if (!customer.phone && !customer.email) {
+      throw createError(400, "Customer has no phone number or email on file");
+    }
 
+    if (customer.phone) {
       const latest = await otpModel.findLatestWhatsapp(customer.phone, OTP_PURPOSE_CHECKIN);
       if (latest && isWithinCooldown(latest.last_sent_at)) {
         throw createError(429, "Please wait before requesting another OTP");
       }
+    }
 
-      const otpHash = await bcrypt.hash(otp, BCRYPT_ROUNDS);
-      await otpModel.upsertWhatsapp({ phone: customer.phone, purpose: OTP_PURPOSE_CHECKIN, otpHash, expiresAt });
-      await notificationService.sendSms(customer.phone, `Your Flea Market check-in OTP is ${otp}`);
-    } else {
-      if (!customer.email) {
-        throw createError(400, "Customer has no email on file");
-      }
-
+    if (customer.email) {
       const latest = await otpModel.findLatestEmail(customer.email);
       if (latest && isWithinCooldown(latest.created_at)) {
         throw createError(429, "Please wait before requesting another OTP");
       }
+    }
 
+    if (customer.phone) {
+      const otpHash = await bcrypt.hash(otp, BCRYPT_ROUNDS);
+      await otpModel.upsertWhatsapp({ phone: customer.phone, purpose: OTP_PURPOSE_CHECKIN, otpHash, expiresAt });
+    }
+
+    if (customer.email) {
       await otpModel.insertEmail({ email: customer.email, otp, expiry: expiresAt });
-      await notificationService.sendEmail(customer.email, "Your Flea Market OTP", `Your OTP is ${otp}`);
+    }
+
+    if (customer.phone) {
+      const whatsappResult = await enqueueWhatsApp({
+        eventName: "onbord_verify",
+        ctx: {
+          phone: customer.phone,
+          company_id: location.company_id,
+          customer_name: customer.name || "User",
+          otp,
+        },
+      });
+
+      if (!whatsappResult.ok) {
+        console.error("[flea-market][otp] WhatsApp OTP was not queued:", whatsappResult);
+        throw createError(503, "Unable to send OTP via WhatsApp right now. Please try again later");
+      }
+    }
+
+    if (customer.email) {
+      try {
+        await sendOtpMail({ email: customer.email, name: customer.name || "User", otp });
+      } catch (error) {
+        console.error("[flea-market][otp] Email OTP failed:", error);
+        throw createError(503, "Unable to send OTP via email right now. Please try again later");
+      }
     }
 
     return { otpSessionId: generateOtpSessionId(), expiresIn: OTP_TTL_MINUTES * 60 };
@@ -115,7 +148,7 @@ class OtpService {
   async verifyOtp({ userId, otp, channel, locationId }) {
     const { customer, location } = await loadContext(userId, locationId);
 
-    if (channel === "sms") {
+    if (isWhatsAppChannel(channel)) {
       if (!customer.phone) throw createError(400, "Customer has no phone on file");
 
       const row = await otpModel.findLatestWhatsapp(customer.phone, OTP_PURPOSE_CHECKIN);

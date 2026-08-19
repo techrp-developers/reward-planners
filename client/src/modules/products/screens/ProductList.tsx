@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
-import * as XLSX from "xlsx";
 import {
   FaCheckCircle,
   FaTimesCircle,
@@ -21,11 +20,12 @@ import {
   FaUpload,
   // FaFileImport,
 } from "react-icons/fa";
-import { FiPackage } from "react-icons/fi";
+import { FiCalendar, FiDownload, FiPackage, FiX } from "react-icons/fi";
 import Swal from "sweetalert2";
 import { Link } from "react-router-dom";
 import { routes } from "../../../routes";
 import { api } from "../../../common/api/api";
+import { AxiosError } from "axios";
 
 // const API_BASEIMAGE_URL = "https://rewardplanners.com/api/crm";
 const R2_BASE_URL = "https://cdn.rewardplanners.com";
@@ -122,7 +122,68 @@ interface BulkUploadModalProps {
   setCategoryId: (val: string) => void;
   subcategoryId: string;
   setSubcategoryId: (val: string) => void;
-  onFileUpload: (file: File) => void;
+  onFileUpload: (file: File) => Promise<boolean>;
+  validating: boolean;
+}
+
+interface BulkInvalidRow {
+  rowNumber: number;
+  errors: string[];
+  data: Record<string, unknown>;
+}
+
+interface BulkValidationResult {
+  success: boolean;
+  validCount: number;
+  invalidCount: number;
+  validRows: Record<string, unknown>[];
+  invalidRows: BulkInvalidRow[];
+  categoryId: number;
+  subcategoryId: number;
+}
+
+const apiErrorMessage = (error: unknown, fallback: string) =>
+  error instanceof AxiosError
+    ? String(error.response?.data?.message || fallback)
+    : error instanceof Error ? error.message : fallback;
+
+function BulkValidationReport({ result, uploading, onUpload }: { result: BulkValidationResult; uploading: boolean; onUpload: () => void }) {
+  const total = result.validCount + result.invalidCount;
+  const passRate = total ? Math.round((result.validCount / total) * 100) : 0;
+
+  return (
+    <section className="mt-7 overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_18px_55px_rgba(43,25,62,0.09)]">
+      <header className="flex flex-col gap-4 border-b border-slate-100 bg-linear-to-r from-[#faf8fc] via-white to-purple-50/50 px-6 py-6 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-4">
+          <span className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl ${result.invalidCount ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>
+            {result.invalidCount ? <FaTimesCircle size={20} /> : <FaCheckCircle size={20} />}
+          </span>
+          <div><p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-purple-600">Import health check</p><h3 className="mt-1 text-xl font-extrabold tracking-tight text-slate-950">{result.invalidCount ? "Some rows need attention" : "Your file is ready"}</h3><p className="mt-1 text-sm text-slate-500">{total} spreadsheet row{total === 1 ? "" : "s"} checked by the server</p></div>
+        </div>
+        <span className={`w-fit rounded-full px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-wider ${result.invalidCount ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{result.invalidCount ? "Correction needed" : "Validation passed"}</span>
+      </header>
+
+      <div className="p-6">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Checked</p><p className="mt-2 text-3xl font-black text-slate-900">{total}</p></div>
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-emerald-600">Ready</p><p className="mt-2 text-3xl font-black text-emerald-700">{result.validCount}</p></div>
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-red-500">Issues</p><p className="mt-2 text-3xl font-black text-red-600">{result.invalidCount}</p></div>
+        </div>
+        <div className="mt-5 flex items-center gap-3"><div className="h-2 flex-1 overflow-hidden rounded-full bg-red-100"><div className="h-full rounded-full bg-linear-to-r from-emerald-500 to-emerald-400" style={{ width: `${passRate}%` }} /></div><span className="text-xs font-extrabold text-slate-600">{passRate}% valid</span></div>
+
+        {result.invalidRows.length > 0 && (
+          <div className="mt-6 overflow-hidden rounded-2xl border border-red-200">
+            <div className="flex items-center justify-between bg-red-50 px-5 py-4"><div><p className="text-sm font-extrabold text-red-900">Rows to correct</p><p className="mt-0.5 text-xs text-red-600">Update these cells in Excel, then upload the file again.</p></div><span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-red-700 shadow-sm">{result.invalidCount}</span></div>
+            <div className="max-h-80 divide-y divide-red-100 overflow-y-auto">
+              {result.invalidRows.map((row) => <article key={row.rowNumber} className="px-5 py-4"><div className="flex items-center justify-between"><p className="text-sm font-extrabold text-slate-800">Spreadsheet row {row.rowNumber}</p><span className="text-[11px] font-bold text-red-500">{row.errors.length} issue{row.errors.length === 1 ? "" : "s"}</span></div><div className="mt-3 grid gap-2 sm:grid-cols-2">{row.errors.map((error) => <div key={error} className="flex gap-2 rounded-xl bg-red-50 px-3 py-2.5 text-xs font-medium text-red-700"><FaTimesCircle className="mt-0.5 shrink-0" />{error}</div>)}</div></article>)}
+            </div>
+          </div>
+        )}
+
+        {result.validCount > 0 && <div className="mt-6 flex flex-col gap-4 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-extrabold text-emerald-900">{result.validCount} product{result.validCount === 1 ? "" : "s"} ready to create</p><p className="mt-1 text-xs text-emerald-700">Only rows that passed every check will be uploaded.</p></div><button onClick={onUpload} disabled={uploading} className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-emerald-600/20 transition hover:-translate-y-0.5 hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60">{uploading ? "Creating products..." : `Upload ${result.validCount} product${result.validCount === 1 ? "" : "s"}`}</button></div>}
+      </div>
+    </section>
+  );
 }
 
 const StatsCard = ({
@@ -349,7 +410,7 @@ const ActionModal = ({
       className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
        style={{ background: "rgba(2, 6, 23, 0.45)" }}
     >
-      <div className="w-full max-w-md p-6">
+      <div className="w-full max-w-md p-6 bg-white shadow-xl rounded-2xl">
         <div className="flex items-center mb-4">
           <div
             className={`w-10 h-10 rounded-full flex items-center justify-center mr-3 ${config.iconBg}`}
@@ -415,6 +476,7 @@ const BulkUploadModal = ({
   subcategoryId,
   setSubcategoryId,
   onFileUpload,
+  validating,
 }: BulkUploadModalProps) => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
@@ -516,17 +578,18 @@ const BulkUploadModal = ({
   ================================= */
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm bg-black/40">
-      <div className="w-full max-w-xl p-6 bg-white shadow-xl rounded-2xl">
+      <div className="w-full max-w-2xl overflow-hidden rounded-3xl border border-white/70 bg-white p-7 shadow-[0_28px_80px_rgba(39,20,58,0.24)]">
         {/* HEADER */}
         <div className="mb-5">
-          <h2 className="text-xl font-semibold text-gray-900">
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-purple-100 px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest text-purple-700"><FaUpload /> Product importer</div>
+          <h2 className="text-2xl font-extrabold tracking-tight text-slate-950">
             Bulk Upload Products
           </h2>
           <p className="text-sm text-gray-500">
-            Download template, fill it, and upload here
+            Upload a completed template. Category details are detected automatically.
           </p>
 
-          <div className="p-3 mt-3 text-sm text-yellow-800 border border-yellow-200 rounded-lg bg-yellow-50">
+          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
             <p className="mb-1 font-semibold">⚠️ Instructions:</p>
             <ul className="pl-5 space-y-1 list-disc">
               <li>Do not modify first 3 rows</li>
@@ -537,8 +600,14 @@ const BulkUploadModal = ({
           </div>
         </div>
 
+        <div className="mb-3 rounded-xl border border-purple-100 bg-purple-50/60 p-3 text-xs text-purple-800">
+          Already have a completed template? Upload it directly below. You do not need to select the category again.
+        </div>
+
         {/* CATEGORY + TEMPLATE */}
-        <div className="grid grid-cols-1 gap-3 mb-5 md:grid-cols-3">
+        <details className="group mb-5 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+        <summary className="cursor-pointer list-none text-sm font-bold text-slate-700">Need to download a new template? <span className="font-normal text-slate-500">Choose its category here</span></summary>
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
           <select
             value={categoryId}
             onChange={(e) => {
@@ -577,30 +646,36 @@ const BulkUploadModal = ({
             {templateLoading ? "Downloading..." : "Download"}
           </button>
         </div>
+        </details>
 
         {/* FILE UPLOAD */}
-        <div className="p-6 mb-5 text-center border-2 border-gray-300 border-dashed rounded-lg">
+        <div className={`mb-5 rounded-2xl border-2 border-dashed p-7 text-center transition ${file ? "border-purple-400 bg-purple-50/60" : "border-slate-300 bg-slate-50 hover:border-purple-300"}`}>
           <input
             type="file"
-            disabled={!categoryId || !subcategoryId}
-            accept=".xlsx,.csv"
+            accept=".xlsx,.xls"
+            onClick={(event) => {
+              event.currentTarget.value = "";
+            }}
             onChange={(e) => {
               const f = e.target.files?.[0];
               if (!f) return;
-
+              if (!/\.(xlsx|xls)$/i.test(f.name) || f.size > 5 * 1024 * 1024) {
+                setFile(null);
+                void Swal.fire("Invalid file", "Choose an Excel product template up to 5 MB.", "error");
+                return;
+              }
               setFile(f);
-              onFileUpload(f);
             }}
           />
 
           {file && (
-            <p className="mt-2 text-sm font-medium text-gray-700">
+            <p className="mt-3 text-sm font-bold text-purple-800">
               {file.name}
             </p>
           )}
 
           <p className="mt-2 text-xs text-gray-500">
-            Supported formats: Excel (.xlsx) or CSV
+            Excel product template (.xlsx or .xls), up to 5 MB
           </p>
         </div>
 
@@ -612,6 +687,15 @@ const BulkUploadModal = ({
             className="px-4 py-2 text-gray-700 border rounded-lg cursor-pointer hover:bg-gray-50"
           >
             Cancel
+          </button>
+          <button
+            onClick={async () => {
+              if (file && (await onFileUpload(file))) onClose();
+            }}
+            disabled={!file || validating}
+            className="flex items-center gap-2 rounded-xl bg-[#852BAF] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#6f2393] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {validating ? <><FaSpinner className="animate-spin" /> Validating...</> : "Validate file"}
           </button>
         </div>
       </div>
@@ -630,14 +714,20 @@ export default function ProductManagerList() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [brandInput, setBrandInput] = useState("");
+  const [brandFilter, setBrandFilter] = useState("");
   const [sortBy, setSortBy] = useState<string>("created_at");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [reportDownloading, setReportDownloading] = useState(false);
+  const [reportFilters, setReportFilters] = useState({ brand: "", status: "", fromDate: "", toDate: "" });
   // const [rows, setRows] = useState<any[]>([]);
-  const [validationResult, setValidationResult] = useState<any>(null);
+  const [validationResult, setValidationResult] = useState<BulkValidationResult | null>(null);
   const [categoryId, setCategoryId] = useState("");
   const [subcategoryId, setSubcategoryId] = useState("");
   const [validating, setValidating] = useState(false);
+  const [bulkUploading, setBulkUploading] = useState(false);
 
   const [pagination, setPagination] = useState({
     currentPage: 1,
@@ -656,6 +746,7 @@ export default function ProductManagerList() {
   });
 
   const debounceRef = useRef<number | null>(null);
+  const brandDebounceRef = useRef<number | null>(null);
 
   // Modal state
   const [modalState, setModalState] = useState<{
@@ -671,40 +762,34 @@ export default function ProductManagerList() {
   // =========================
   // BULK UPLOAD
   // ===============================
-  const validateBulk = async (rowsData: any[]) => {
-    if (!rowsData.length) return;
-
-    if (!categoryId || !subcategoryId) {
-      Swal.fire("Error", "Select category & subcategory first", "error");
-      return;
-    }
-
+  const validateBulk = async (file: File) => {
     try {
       setValidating(true);
 
-      const res = await api.post("/product/validate-bulk-upload", {
-        categoryId,
-        subcategoryId,
-        rows: rowsData,
-      });
-
+      const payload = new FormData();
+      payload.append("file", file);
+      const res = await api.post<BulkValidationResult>("/product/validate-bulk-upload", payload);
       const data = res.data;
 
       setValidationResult(data);
+      setCategoryId(String(data.categoryId));
+      setSubcategoryId(String(data.subcategoryId));
 
       Swal.fire({
         icon: "success",
         title: "File Processed",
         text: `${data.validCount} valid rows ready to upload`,
       });
-    } catch (err: any) {
+      return true;
+    } catch (err: unknown) {
       console.error(err);
 
       Swal.fire(
         "Error",
-        err?.response?.data?.message || "Validation failed",
+        apiErrorMessage(err, "Validation failed"),
         "error",
       );
+      return false;
     } finally {
       setValidating(false);
     }
@@ -717,6 +802,7 @@ export default function ProductManagerList() {
         return;
       }
 
+      setBulkUploading(true);
       const res = await api.post("/product/bulk-upload", {
         categoryId,
         subcategoryId,
@@ -733,14 +819,17 @@ export default function ProductManagerList() {
 
       // Reset state
       setValidationResult(null);
-    } catch (err: any) {
+      setBulkModalOpen(false);
+    } catch (err: unknown) {
       console.error(err);
 
       Swal.fire(
         "Error",
-        err?.response?.data?.message || "Upload failed",
+        apiErrorMessage(err, "Upload failed"),
         "error",
       );
+    } finally {
+      setBulkUploading(false);
     }
   };
   /* ================================
@@ -760,6 +849,7 @@ export default function ProductManagerList() {
           limit: pagination.itemsPerPage,
           status: statusFilter !== "all" ? statusFilter : undefined,
           search: searchQuery ? searchQuery : undefined,
+          brand: brandFilter ? brandFilter : undefined,
           sortBy,
           sortOrder,
         };
@@ -809,6 +899,7 @@ export default function ProductManagerList() {
       pagination.itemsPerPage,
       statusFilter,
       searchQuery,
+      brandFilter,
       sortBy,
       sortOrder,
     ],
@@ -844,7 +935,7 @@ export default function ProductManagerList() {
 
     debounceRef.current = window.setTimeout(() => {
       setPagination((p) => ({ ...p, currentPage: 1 }));
-      fetchProducts();
+      setSearchQuery(searchInput.trim());
     }, 450);
 
     return () => {
@@ -852,7 +943,24 @@ export default function ProductManagerList() {
         clearTimeout(debounceRef.current);
       }
     };
-  }, [searchQuery]);
+  }, [searchInput]);
+
+  useEffect(() => {
+    if (brandDebounceRef.current) {
+      clearTimeout(brandDebounceRef.current);
+    }
+
+    brandDebounceRef.current = window.setTimeout(() => {
+      setPagination((p) => ({ ...p, currentPage: 1 }));
+      setBrandFilter(brandInput.trim());
+    }, 450);
+
+    return () => {
+      if (brandDebounceRef.current) {
+        clearTimeout(brandDebounceRef.current);
+      }
+    };
+  }, [brandInput]);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -909,11 +1017,10 @@ export default function ProductManagerList() {
           showConfirmButton: false,
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error performing action:", error);
-      alert(error.message || "Error performing action");
+      alert(apiErrorMessage(error, "Error performing action"));
       throw error;
-    } finally {
     }
   };
 
@@ -963,16 +1070,49 @@ export default function ProductManagerList() {
     });
   };
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setPagination((prev) => ({ ...prev, currentPage: 1 }));
-    setSearchQuery(searchInput.trim());
-  };
-
   const handleClearSearch = () => {
     setSearchInput("");
     setSearchQuery("");
     setPagination((p) => ({ ...p, currentPage: 1 }));
+  };
+
+  const handleDownloadReport = async () => {
+    if ((reportFilters.fromDate && !reportFilters.toDate) || (!reportFilters.fromDate && reportFilters.toDate)) {
+      await Swal.fire("Date range incomplete", "Select both From and To dates.", "warning");
+      return;
+    }
+    if (reportFilters.fromDate && reportFilters.toDate && reportFilters.fromDate > reportFilters.toDate) {
+      await Swal.fire("Invalid period", "From date cannot be after To date.", "warning");
+      return;
+    }
+
+    try {
+      setReportDownloading(true);
+      const response = await api.get("/product/download-product-report", {
+        params: {
+          brand: reportFilters.brand.trim() || undefined,
+          status: reportFilters.status || undefined,
+          fromDate: reportFilters.fromDate || undefined,
+          toDate: reportFilters.toDate || undefined,
+        },
+        responseType: "blob",
+      });
+      const downloadUrl = URL.createObjectURL(response.data);
+      const anchor = document.createElement("a");
+      anchor.href = downloadUrl;
+      anchor.download = `vendor_product_report_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(downloadUrl);
+      setReportModalOpen(false);
+      await Swal.fire({ icon: "success", title: "Report downloaded", text: "Your filtered Excel report is ready.", timer: 1800, showConfirmButton: false });
+    } catch (requestError) {
+      console.error("Product report download failed", requestError);
+      await Swal.fire("Download failed", "Unable to generate the product report. Please try again.", "error");
+    } finally {
+      setReportDownloading(false);
+    }
   };
 
   const handlePageChange = (page: number) => {
@@ -981,78 +1121,13 @@ export default function ProductManagerList() {
     }
   };
 
-  const handleFileUpload = (file: File) => {
-    const reader = new FileReader();
-
-    if (!categoryId || !subcategoryId) {
-      Swal.fire("Error", "Select category & subcategory first", "error");
-      return;
+  const handleFileUpload = async (file: File): Promise<boolean> => {
+    if (file.size > 5 * 1024 * 1024 || !/\.(xlsx|xls)$/i.test(file.name)) {
+      Swal.fire("Invalid file", "Upload an Excel product template up to 5 MB.", "error");
+      return false;
     }
-
-    reader.onload = () => {
-      if (!reader.result) return;
-
-      const data = new Uint8Array(reader.result as ArrayBuffer);
-      const workbook = XLSX.read(data, { type: "array" });
-
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-
-      // const json = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-
-      // const cleanedRows = json.slice(2);
-      const raw = XLSX.utils.sheet_to_json(sheet, {
-        header: 1,
-        defval: "",
-      }) as any[][];
-
-      // find header row (first row with actual column names)
-      // const headerRowIndex = raw.findIndex((row) =>
-      //   row.some((cell) => cell && cell.toString().trim() !== ""),
-      // );
-      const headerRowIndex = raw.findIndex((row) =>
-        row.includes("productName"),
-      );
-
-      // extract headers
-      const headers = raw[headerRowIndex] as string[];
-
-      // extract data rows after headers
-      const dataRows = raw.slice(headerRowIndex + 3);
-
-      // convert to objects
-      // const cleanedRows = dataRows.map((row) => {
-      //   const obj: any = {};
-      //   headers.forEach((key: string, i: number) => {
-      //     // obj[key] = row[i];
-      //   });
-      //   return obj;
-      // });
-
-      const cleanedRows = dataRows
-        .map((row) => {
-          const obj: any = {};
-          headers.forEach((key: string, i: number) => {
-            obj[key] = typeof row[i] === "string" ? row[i].trim() : row[i];
-          });
-          return obj;
-        })
-        .filter((row) => Object.values(row).some((val) => val !== ""));
-
-      const hasInvalid = cleanedRows.some(
-        (row) => !row.productName || !row.brandName,
-      );
-
-      if (hasInvalid) {
-        Swal.fire("Error", "Some rows missing required fields", "error");
-        return;
-      }
-
-      setValidationResult(null);
-      // setRows(cleanedRows);
-      validateBulk(cleanedRows);
-    };
-
-    reader.readAsArrayBuffer(file);
+    setValidationResult(null);
+    return validateBulk(file);
   };
 
   /* ================================
@@ -1065,6 +1140,8 @@ export default function ProductManagerList() {
       </div>
     );
   }
+
+  const invalidBulkRows = validationResult?.invalidRows ?? [];
 
   return (
     <div className="min-h-screen">
@@ -1088,7 +1165,30 @@ export default function ProductManagerList() {
         subcategoryId={subcategoryId}
         setSubcategoryId={setSubcategoryId}
         onFileUpload={handleFileUpload}
+        validating={validating}
       />
+
+      {reportModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget && !reportDownloading) setReportModalOpen(false); }}>
+          <div role="dialog" aria-modal="true" aria-labelledby="product-report-title" className="w-full max-w-xl overflow-hidden rounded-3xl border border-white/70 bg-white shadow-[0_28px_90px_rgba(39,20,58,0.3)]">
+            <div className="relative overflow-hidden bg-gradient-to-br from-[#25103d] via-[#64248c] to-[#b72f72] px-6 py-6 text-white">
+              <div className="absolute -right-10 -top-16 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
+              <div className="relative flex items-start justify-between gap-4"><div className="flex items-center gap-4"><div className="grid h-12 w-12 place-items-center rounded-2xl border border-white/15 bg-white/10"><FiDownload size={21} /></div><div><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-purple-200">Product analytics</p><h2 id="product-report-title" className="mt-1 text-xl font-extrabold">Download product report</h2><p className="mt-1 text-xs text-purple-100/75">Export only the products that match your selection.</p></div></div><button type="button" disabled={reportDownloading} onClick={() => setReportModalOpen(false)} className="grid h-9 w-9 place-items-center rounded-xl border border-white/15 bg-white/10 transition hover:bg-white/20" aria-label="Close"><FiX /></button></div>
+            </div>
+
+            <div className="space-y-5 p-6">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div><label htmlFor="report-brand" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Brand</label><input id="report-brand" value={reportFilters.brand} onChange={(event) => setReportFilters((previous) => ({ ...previous, brand: event.target.value }))} placeholder="All brands" className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-purple-400 focus:bg-white focus:ring-4 focus:ring-purple-100" /></div>
+                <div><label htmlFor="report-status" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Product status</label><select id="report-status" value={reportFilters.status} onChange={(event) => setReportFilters((previous) => ({ ...previous, status: event.target.value }))} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-purple-400 focus:bg-white focus:ring-4 focus:ring-purple-100"><option value="">All statuses</option><option value="pending">Pending</option><option value="sent_for_approval">Sent for approval</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="resubmission">Resubmission</option></select></div>
+              </div>
+
+              <div className="rounded-2xl border border-purple-100 bg-purple-50/50 p-4"><div className="mb-3 flex items-center gap-2"><FiCalendar className="text-[#852BAF]" /><div><p className="text-sm font-extrabold text-slate-800">Custom period</p><p className="text-xs text-slate-500">Leave both empty to include all dates.</p></div></div><div className="grid gap-3 sm:grid-cols-2"><div><label htmlFor="report-from" className="mb-1.5 block text-xs font-semibold text-slate-500">From date</label><input id="report-from" type="date" value={reportFilters.fromDate} max={reportFilters.toDate || undefined} onChange={(event) => setReportFilters((previous) => ({ ...previous, fromDate: event.target.value }))} className="w-full rounded-xl border border-purple-100 bg-white px-3 py-2.5 text-sm outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100" /></div><div><label htmlFor="report-to" className="mb-1.5 block text-xs font-semibold text-slate-500">To date</label><input id="report-to" type="date" value={reportFilters.toDate} min={reportFilters.fromDate || undefined} onChange={(event) => setReportFilters((previous) => ({ ...previous, toDate: event.target.value }))} className="w-full rounded-xl border border-purple-100 bg-white px-3 py-2.5 text-sm outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100" /></div></div></div>
+
+              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between"><button type="button" disabled={reportDownloading} onClick={() => setReportFilters({ brand: "", status: "", fromDate: "", toDate: "" })} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-500 transition hover:bg-slate-50">Clear filters</button><button type="button" disabled={reportDownloading} onClick={() => void handleDownloadReport()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-purple-500/20 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60">{reportDownloading ? <><FaSpinner className="animate-spin" /> Generating...</> : <><FiDownload /> Download Excel</>}</button></div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div
         className="bg-white rounded-3xl overflow-hidden"
@@ -1131,6 +1231,16 @@ export default function ProductManagerList() {
               </div>
               <div className="text-xs text-gray-400">Auto-refresh · 30s</div>
             </div>
+
+            <button
+              onClick={() => {
+                setReportFilters((previous) => ({ ...previous, brand: brandFilter, status: statusFilter === "all" ? "" : statusFilter }));
+                setReportModalOpen(true);
+              }}
+              className="flex items-center gap-2 rounded-xl border border-purple-200 bg-white px-4 py-2.5 text-sm font-bold text-[#852BAF] shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#852BAF] hover:bg-purple-50 hover:shadow-md"
+            >
+              <FiDownload /> Report
+            </button>
 
             <button
               onClick={() => setBulkModalOpen(true)}
@@ -1210,14 +1320,14 @@ export default function ProductManagerList() {
           className="flex flex-col gap-3 mb-6 md:flex-row p-4 rounded-2xl"
           style={{ background: "rgba(133,43,175,0.03)", border: "1px solid rgba(133,43,175,0.08)" }}
         >
-          <form onSubmit={handleSearchSubmit} className="flex-1">
+          <div className="w-80">
             <div className="relative">
               <input
                 type="text"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="Search by product name..."
-                className="w-full py-2.5 pl-10 pr-[90px] text-sm font-medium border rounded-xl outline-none transition-all duration-200 focus:ring-2 focus:ring-[#852BAF]/30 focus:border-[#852BAF] bg-white"
+                className="w-full py-2.5 pl-10 pr-16 text-sm font-medium border rounded-xl outline-none transition-all duration-200 focus:ring-2 focus:ring-[#852BAF]/30 focus:border-[#852BAF] bg-white"
                 style={{ borderColor: "rgba(133,43,175,0.2)" }}
               />
               <FaSearch className="absolute left-3 top-3 text-[#852BAF]/40 pointer-events-none text-sm" />
@@ -1226,23 +1336,27 @@ export default function ProductManagerList() {
                 <button
                   type="button"
                   onClick={handleClearSearch}
-                  className="absolute right-[72px] top-1.5 px-2 py-1 text-gray-500 rounded-lg text-xs font-semibold bg-gray-100 hover:bg-gray-200 cursor-pointer transition-colors"
+                  className="absolute right-1.5 top-1.5 px-2 py-1.5 text-gray-500 rounded-lg text-xs font-semibold bg-gray-100 hover:bg-gray-200 cursor-pointer transition-colors"
                 >
                   ✕ Clear
                 </button>
               )}
-
-              <button
-                type="submit"
-                className="absolute right-1.5 top-1.5 px-3 py-1.5 text-white rounded-lg text-xs font-bold cursor-pointer transition-all duration-200 active:scale-95 hover:opacity-90"
-                style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }}
-              >
-                Search
-              </button>
             </div>
-          </form>
+          </div>
 
           <div className="flex gap-3">
+            <div className="relative">
+              <input
+                type="text"
+                value={brandInput}
+                onChange={(e) => setBrandInput(e.target.value)}
+                placeholder="Filter by brand..."
+                className="w-80 py-2.5 pl-9 pr-3 text-sm font-medium border rounded-xl outline-none transition-all duration-200 focus:ring-2 focus:ring-[#852BAF]/30 focus:border-[#852BAF] bg-white"
+                style={{ borderColor: "rgba(133,43,175,0.2)" }}
+              />
+              <FaSearch className="absolute left-3 top-3 text-[#852BAF]/40 pointer-events-none text-sm" />
+            </div>
+
             <div className="relative">
               <select
                 value={statusFilter}
@@ -1309,6 +1423,7 @@ export default function ProductManagerList() {
                   "Rejection Reason",
                   "Visibility",
                   "Searchable",
+                  "Created",
                   "Action",
                 ].map((head) => (
                   <th
@@ -1437,6 +1552,19 @@ export default function ProductManagerList() {
                     </div>
                   </td>
 
+                  {/* CREATED */}
+                  <td className="px-4 py-3.5">
+                    <span className="text-xs font-medium text-gray-500 whitespace-nowrap">
+                      {product.created_at
+                        ? new Date(product.created_at).toLocaleDateString("en-IN", {
+                            day: "numeric",
+                            month: "long",
+                            year: "numeric",
+                          })
+                        : "—"}
+                    </span>
+                  </td>
+
                   {/* ACTIONS */}
                   <td className="px-4 py-3.5">
                     <div className="flex items-center gap-1">
@@ -1498,27 +1626,29 @@ export default function ProductManagerList() {
 
         {/*  VALIDATING LOADER */}
         {validating && (
-          <div className="flex items-center gap-2 mt-4 text-sm font-semibold text-[#852BAF]">
-            <FaSpinner className="animate-spin" />
-            Validating file...
+          <div className="mt-6 flex items-center gap-4 rounded-2xl border border-purple-200 bg-purple-50/70 p-5 text-sm font-semibold text-purple-800">
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-white shadow-sm"><FaSpinner className="animate-spin" /></span>
+            <div><p className="font-extrabold">Checking your product file</p><p className="mt-0.5 text-xs font-normal text-purple-600">Validating categories, attributes and product information...</p></div>
           </div>
         )}
 
+        {validationResult && <BulkValidationReport result={validationResult} uploading={bulkUploading} onUpload={handleConfirmUpload} />}
+
         {/*  VALIDATION SUMMARY */}
-        {validationResult && (
+        {validationResult && validationResult.validCount < 0 && (
           <div
-            className="mt-5 p-5 rounded-2xl"
-            style={{ background: "rgba(133,43,175,0.03)", border: "1px solid rgba(133,43,175,0.1)" }}
+            className="mt-6 overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_16px_45px_rgba(30,18,45,0.08)]"
           >
-            <h3 className="mb-4 text-sm font-extrabold text-gray-800 uppercase tracking-widest">
+            <h3 className="mb-1 text-lg font-extrabold tracking-tight text-slate-900">
               Bulk Validation Result
             </h3>
 
-            <div className="flex gap-4 mb-4">
-              <div className="px-4 py-2 rounded-xl bg-emerald-50 border border-emerald-100 text-xs font-bold text-emerald-700">
+            <p className="mb-5 text-sm text-slate-500">Review the verification report before creating your products.</p>
+            <div className="mb-5 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-bold text-emerald-700 shadow-sm">
                 ✓ {validationResult.validCount} Valid Rows
               </div>
-              <div className="px-4 py-2 rounded-xl bg-red-50 border border-red-100 text-xs font-bold text-red-600">
+              <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-600 shadow-sm">
                 ✕ {validationResult.invalidCount} Invalid Rows
               </div>
             </div>
@@ -1526,29 +1656,30 @@ export default function ProductManagerList() {
             {validationResult.validCount > 0 && (
               <button
                 onClick={handleConfirmUpload}
-                className="px-5 py-2.5 text-sm text-white font-bold rounded-xl cursor-pointer transition-all hover:opacity-90 active:scale-95"
+                disabled={bulkUploading}
+                className="rounded-xl px-5 py-3 text-sm font-bold text-white transition-all hover:-translate-y-0.5 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
                 style={{ background: "linear-gradient(135deg, #059669 0%, #10b981 100%)", boxShadow: "0 4px 14px rgba(5,150,105,0.3)" }}
               >
-                Upload Valid Rows
+                {bulkUploading ? "Uploading..." : "Upload Valid Rows"}
               </button>
             )}
           </div>
         )}
 
         {/*  INVALID ROW DETAILS */}
-        {validationResult?.invalidRows?.length > 0 && (
-          <div className="mt-6 bg-white border border-red-200 shadow-sm rounded-2xl">
+        {invalidBulkRows.length > Number.MAX_SAFE_INTEGER && validationResult && (
+          <div className="mt-5 overflow-hidden rounded-3xl border border-red-200 bg-white shadow-[0_14px_40px_rgba(220,38,38,0.08)]">
             {/* HEADER */}
-            <div className="flex items-center justify-between px-5 py-4 border-b bg-red-50 rounded-t-2xl">
-              <h3 className="flex items-center gap-2 text-sm font-semibold text-red-700">
+            <div className="flex items-center justify-between border-b border-red-100 bg-red-50/80 px-6 py-4">
+              <h3 className="flex items-center gap-2 text-sm font-extrabold text-red-800">
                 ❌ Invalid Rows ({validationResult.invalidCount})
               </h3>
             </div>
 
             {/* LIST */}
             <div className="overflow-y-auto divide-y max-h-72">
-              {validationResult.invalidRows.map((row: any, i: number) => (
-                <div key={i} className="px-5 py-3 transition hover:bg-red-50">
+              {invalidBulkRows.map((row, i: number) => (
+                <div key={i} className="px-6 py-5 transition hover:bg-red-50/40">
                   {/* ROW HEADER */}
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-semibold text-gray-800">
@@ -1562,9 +1693,9 @@ export default function ProductManagerList() {
                   </div>
 
                   {/* ERRORS */}
-                  <ul className="mt-2 space-y-1 text-sm text-red-600">
+                  <ul className="mt-3 grid gap-2 text-sm text-red-700 sm:grid-cols-2">
                     {row.errors.map((err: string, j: number) => (
-                      <li key={j} className="flex items-start gap-2">
+                      <li key={j} className="flex items-start gap-2 rounded-xl bg-red-50 px-3 py-2">
                         <span className="text-red-400">•</span>
                         <span>{err}</span>
                       </li>

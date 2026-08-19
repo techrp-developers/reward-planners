@@ -26,15 +26,15 @@ const locationHeaderCheck = header("x-location-id")
 const validateSendOtp = [
   locationHeaderCheck,
   body("userId").isInt({ min: 1 }).withMessage("Valid userId required"),
-  body("channel").isIn(["sms", "email"]).withMessage("channel must be sms or email"),
+  body("channel").isIn(["whatsapp", "sms", "email"]).withMessage("channel must be whatsapp or email"),
   validate,
 ];
 
 const validateVerifyOtp = [
   locationHeaderCheck,
   body("userId").isInt({ min: 1 }).withMessage("Valid userId required"),
-  body("otp").isString().isLength({ min: 4, max: 10 }).withMessage("Valid otp required"),
-  body("channel").isIn(["sms", "email"]).withMessage("channel must be sms or email"),
+  body("otp").isString().matches(/^\d{4}$/).withMessage("OTP must be exactly 4 digits"),
+  body("channel").isIn(["whatsapp", "sms", "email"]).withMessage("channel must be whatsapp or email"),
   validate,
 ];
 
@@ -47,8 +47,8 @@ const validateSelectCustomer = [
 const validateReverify = [
   locationHeaderCheck,
   body("userId").isInt({ min: 1 }).withMessage("Valid userId required"),
-  body("channel").optional().isIn(["sms", "email"]).withMessage("channel must be sms or email"),
-  body("otp").optional().isString().isLength({ min: 4, max: 10 }).withMessage("Valid otp required"),
+  body("channel").optional().isIn(["whatsapp", "sms", "email"]).withMessage("channel must be whatsapp or email"),
+  body("otp").optional().isString().matches(/^\d{4}$/).withMessage("OTP must be exactly 4 digits"),
   validate,
 ];
 

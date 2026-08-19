@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node app.js",
     "dev": "nodemon app.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "migrate:flea-market-invoices": "node scripts/migrate-invoices-add-flea-market-schedule.js",
+    "migrate:flea-market-stock": "node scripts/migrate-allocations-to-vendor-stock.js",
+    "test": "node --test app/bbps/v1/tests/paymentSafety.test.js app/ecommerce/v1/tests/lifecycleSafety.test.js app/ecommerce/v1/tests/orderProgress.test.js app/ecommerce/v1/tests/itemCancellationPolicy.test.js app/ecommerce/v1/tests/courierBookingPolicy.test.js app/ecommerce/v1/tests/deliveryFeePolicy.test.js app/ecommerce/v1/tests/bookingGracePolicy.test.js services/whatsapp/tests/phone.test.js"
   },
   "keywords": [
     "rewards",
@@ -31,6 +33,7 @@
     "express-rate-limit": "^8.5.2",
     "express-validator": "^7.3.2",
     "ffmpeg-static": "^5.3.0",
+    "firebase-admin": "^14.2.0",
     "fluent-ffmpeg": "^2.1.3",
     "helmet": "^7.1.0",
     "html-pdf-node": "^1.0.8",

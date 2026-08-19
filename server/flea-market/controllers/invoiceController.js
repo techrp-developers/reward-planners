@@ -1,4 +1,6 @@
 const checkoutModel = require("../models/checkoutModel");
+const { generateInvoicePdf } = require("../services/invoicePdfService");
+const { sendMail } = require("../../services/mailService");
 
 // Matches the getPublicUrl helper duplicated across the rest of the codebase
 // (e.g. controllers/companyController.js) — company_logo is stored as an R2
@@ -60,6 +62,47 @@ class InvoiceController {
     } catch (error) {
       console.error("[flea-market][invoice] error:", error);
       return res.status(500).json({ success: false, message: "Failed to fetch invoice" });
+    }
+  }
+
+  async downloadPdf(req, res) {
+    try {
+      const invoiceId = Number(req.params.invoiceId);
+      const invoice = await checkoutModel.findInvoiceById(invoiceId);
+      if (!Number.isInteger(invoiceId) || !invoice || invoice.user_id !== req.fleaMarketSession.userId) {
+        return res.status(404).json({ success: false, message: "Invoice not found" });
+      }
+      const pdf = await generateInvoicePdf(invoice, await checkoutModel.findInvoiceItems(invoiceId));
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${invoice.invoice_number}.pdf"`);
+      return res.send(pdf);
+    } catch (error) {
+      console.error("[flea-market][invoice-pdf] error:", error);
+      return res.status(500).json({ success: false, message: "Failed to generate invoice PDF" });
+    }
+  }
+
+  async emailInvoice(req, res) {
+    try {
+      const invoiceId = Number(req.params.invoiceId);
+      const invoice = await checkoutModel.findInvoiceById(invoiceId);
+      if (!Number.isInteger(invoiceId) || !invoice || invoice.user_id !== req.fleaMarketSession.userId) {
+        return res.status(404).json({ success: false, message: "Invoice not found" });
+      }
+      if (!invoice.customer_email) {
+        return res.status(400).json({ success: false, message: "Customer has no email address on file" });
+      }
+      const pdf = await generateInvoicePdf(invoice, await checkoutModel.findInvoiceItems(invoiceId));
+      await sendMail({
+        to: invoice.customer_email,
+        subject: `Your Flea Market Invoice ${invoice.invoice_number}`,
+        html: `<p>Hello ${invoice.customer_name || "Customer"},</p><p>Your invoice is attached.</p><p>Thank you,<br>Reward Planners</p>`,
+        attachments: [{ filename: `${invoice.invoice_number}.pdf`, content: pdf, contentType: "application/pdf" }],
+      });
+      return res.json({ success: true, message: `Invoice sent to ${invoice.customer_email}` });
+    } catch (error) {
+      console.error("[flea-market][invoice-email] error:", error);
+      return res.status(500).json({ success: false, message: "Failed to email invoice" });
     }
   }
 

@@ -2,13 +2,7 @@ const db = require("../../../config/database");
 const bcrypt = require("bcryptjs");
 const fs = require("fs");
 const path = require("path");
-
-// helper function
-const CDN_BASE_URL = "https://cdn.rewardplanners.com";
-function getPublicUrl(path) {
-  if (!path) return null;
-  return `${CDN_BASE_URL}/${path}`;
-}
+const { getPublicUrl } = require("../../../utils/publicUrl");
 
 class authModel {
   /* ======================================================
@@ -41,6 +35,14 @@ class authModel {
         name,
         email,
         phone,
+<<<<<<< HEAD
+=======
+        company_user_id,
+        (SELECT company_id
+           FROM company_users
+          WHERE id = customer.company_user_id
+          LIMIT 1) AS company_id,
+>>>>>>> 4cfa1e749c7dad89747af3835a6f272bb9c30801
         password,
         status,
         is_verified,
@@ -57,10 +59,51 @@ class authModel {
     return rows[0];
   }
 
+  async findByEmailOrPhone({ email, phone }) {
+    const conditions = [];
+    const params = [];
+
+    if (email) {
+      conditions.push("LOWER(TRIM(email)) = ?");
+      params.push(email);
+    }
+
+    if (phone) {
+      conditions.push("phone = ?");
+      params.push(phone);
+    }
+
+    if (!conditions.length) return null;
+
+    const [rows] = await db.execute(
+      `SELECT 
+        user_id,
+        name,
+        email,
+        phone,
+        company_user_id,
+        password,
+        status,
+        is_verified,
+        device_id,
+        device_name
+     FROM customer
+     WHERE ${conditions.join(" OR ")}
+     LIMIT 1`,
+      params,
+    );
+
+    return rows[0];
+  }
+
   async findByCompanyUserId(company_user_id) {
     const [rows] = await db.execute(
+<<<<<<< HEAD
       `SELECT user_id, name, email, phone, status, company_user_id,
         terms_accepted, fitness_onboarding_done
+=======
+      `SELECT user_id, name, email, company_user_id, status, is_verified
+>>>>>>> 4cfa1e749c7dad89747af3835a6f272bb9c30801
      FROM customer
      WHERE company_user_id = ?`,
       [company_user_id],
@@ -68,6 +111,7 @@ class authModel {
     return rows[0];
   }
 
+<<<<<<< HEAD
   /* ======================================================
      PHONE + OTP LOGIN
   ====================================================== */
@@ -97,15 +141,26 @@ class authModel {
   async findEmployeeByPhone(phone) {
     const [rows] = await db.execute(
       `SELECT
+=======
+  async findEmployeeById(employeeId) {
+    const [rows] = await db.execute(
+      `SELECT 
+>>>>>>> 4cfa1e749c7dad89747af3835a6f272bb9c30801
         id,
         company_id,
         name,
         email,
         contact AS phone
      FROM company_users
+<<<<<<< HEAD
      WHERE contact = ? AND status = 1
      LIMIT 1`,
       [phone],
+=======
+     WHERE id = ? AND status = 1
+     LIMIT 1`,
+      [employeeId],
+>>>>>>> 4cfa1e749c7dad89747af3835a6f272bb9c30801
     );
 
     return rows[0];
@@ -165,14 +220,32 @@ class authModel {
     return rows[0];
   }
 
+  async findEmployeeByPhone(phone) {
+    const [rows] = await db.execute(
+      `SELECT
+        id,
+        company_id,
+        name,
+        email,
+        contact AS phone
+     FROM company_users
+     WHERE TRIM(contact) = ? AND status = 1
+     LIMIT 1`,
+      [phone],
+    );
+
+    return rows[0];
+  }
+
   async storeActivationOTP(email, otp) {
     const expiry = new Date(Date.now() + 10 * 60 * 1000);
+    const hashedOtp = await bcrypt.hash(otp.toString(), 10);
 
     await db.execute(
       `INSERT INTO email_otps
      (email, otp, expiry)
      VALUES (?, ?, ?)`,
-      [email.toLowerCase(), otp, expiry],
+      [email.toLowerCase(), hashedOtp, expiry],
     );
   }
 
@@ -207,16 +280,22 @@ class authModel {
 
   async verifyOTP(email, otp) {
     const [rows] = await db.execute(
-      `SELECT id, attempt_count
+      `SELECT id, otp, attempt_count
      FROM email_otps
      WHERE email = ?
-     AND otp = ?
      AND expiry > NOW()
+     ORDER BY id DESC
      LIMIT 1`,
-      [email, otp],
+      [email],
     );
 
-    return rows[0];
+    const otpRecord = rows[0];
+    if (!otpRecord) return null;
+
+    const isMatch = await bcrypt.compare(otp.toString(), otpRecord.otp);
+    if (!isMatch) return null;
+
+    return { id: otpRecord.id, attempt_count: otpRecord.attempt_count };
   }
 
   async incrementOtpAttempts(email) {
@@ -373,7 +452,7 @@ class authModel {
         company_id,
         company_user_id,
         name,
-        email.toLowerCase(),
+        email ? email.toLowerCase() : null,
         normalizedPhone,
         password,
       ],
@@ -382,6 +461,7 @@ class authModel {
     return result.insertId;
   }
 
+<<<<<<< HEAD
   // First-time phone signup: no password, terms_accepted/fitness_onboarding_done
   // start at 0 so the app shows onboarding exactly once.
   async createCustomerFromEmployee(employee, conn) {
@@ -400,6 +480,50 @@ class authModel {
     );
 
     return result.insertId;
+=======
+  async findOrCreateCustomerForEmployee(employee, password, conn) {
+    const [existingRows] = await conn.execute(
+      `SELECT user_id, name, email, phone, company_user_id, status, is_verified
+       FROM customer
+       WHERE company_user_id = ?
+       LIMIT 1
+       FOR UPDATE`,
+      [employee.id],
+    );
+
+    if (existingRows[0]) {
+      await conn.execute(
+        `UPDATE customer
+         SET is_verified = 1
+         WHERE user_id = ?`,
+        [existingRows[0].user_id],
+      );
+      return { ...existingRows[0], is_verified: 1, created: false };
+    }
+
+    const userId = await this.createCustomer(
+      {
+        company_id: employee.company_id,
+        company_user_id: employee.id,
+        name: employee.name,
+        email: employee.email,
+        phone: employee.phone,
+        password,
+      },
+      conn,
+    );
+
+    return {
+      user_id: userId,
+      name: employee.name,
+      email: employee.email,
+      phone: employee.phone,
+      company_user_id: employee.id,
+      status: 1,
+      is_verified: 1,
+      created: true,
+    };
+>>>>>>> 4cfa1e749c7dad89747af3835a6f272bb9c30801
   }
 
   async getUserPassword(conn, userId) {
@@ -492,12 +616,13 @@ class authModel {
   //   );
   // }
 
-  async updateFcmToken(userId, fcmToken) {
+  async updateFcmToken(userId, fcmToken, devicePlatform = null) {
     await db.execute(
       `UPDATE customer
-     SET fcm_token = ?
+     SET fcm_token = ?,
+         device_platform = COALESCE(?, device_platform)
      WHERE user_id = ?`,
-      [fcmToken, userId],
+      [fcmToken, devicePlatform, userId],
     );
   }
 
@@ -512,14 +637,16 @@ class authModel {
       cu.phone,
       cu.user_image,
       cu.created_at,
+      cu.updated_at,
 
       cw.balance AS reward_points,
 
       comp.company_name,
       comp.company_logo,
+      comp.updated_at AS company_updated_at,
 
       cu_emp.date_of_joining,
-      cu.company_id,
+      cu_emp.company_id,
       cu_emp.role,
       cu_emp.dob,
       cu_emp.department,
@@ -540,11 +667,11 @@ class authModel {
     LEFT JOIN customer_wallet cw
     ON cu.user_id = cw.user_id
 
-    LEFT JOIN companies comp
-    ON cu.company_id = comp.company_id
-
     LEFT JOIN company_users cu_emp
     ON cu.company_user_id = cu_emp.id
+
+    LEFT JOIN companies comp
+    ON cu_emp.company_id = comp.company_id
 
     LEFT JOIN customer_addresses ca
       ON cu.user_id = ca.user_id
@@ -572,14 +699,14 @@ class authModel {
       name: user.name,
       email: user.email,
       phone: user.phone,
-      userImage: user.user_image ? getPublicUrl(user.user_image) : null,
+      userImage: getPublicUrl(user.user_image, user.updated_at),
       created_at: user.created_at,
       rewardPoints: user.reward_points ?? 0,
 
-      company: user.company_name
+      company: user.company_id
         ? {
             name: user.company_name,
-            logo: user.company_logo ? getPublicUrl(user.company_logo) : null,
+            logo: getPublicUrl(user.company_logo, user.company_updated_at),
           }
         : null,
 
@@ -620,7 +747,8 @@ class authModel {
       cu_emp.department,
       cu_emp.role,
       cu_emp.dob,
-      c.user_image
+      c.user_image,
+      c.updated_at AS user_image_updated_at
     FROM customer c_logged
 
     INNER JOIN company_users cu_logged
@@ -648,7 +776,7 @@ class authModel {
       department: emp.department,
       role: emp.role,
       dob: emp.dob,
-      image: emp.user_image ? getPublicUrl(emp.user_image) : null,
+      image: getPublicUrl(emp.user_image, emp.user_image_updated_at),
     }));
   }
 

@@ -13,13 +13,12 @@ export interface User {
     | "flea_market_manager";
   phone?: string;
 }
-
 export interface AuthContextType {
   user: User | null;
   loading: boolean;
   initializing: boolean;
   error: string | null;
-  login: (email: string, password: string, role: User["role"]) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   register: (
     name: string,
     email: string,
@@ -29,6 +28,6 @@ export interface AuthContextType {
   ) => Promise<void>;
   verifyOtp: (email: string, otp: string) => Promise<void>;
   resendOtp: (email: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
+  updateUser: (partial: Partial<User>) => void;
 }
-      
