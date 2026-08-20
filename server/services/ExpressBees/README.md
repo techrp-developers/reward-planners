@@ -21,3 +21,16 @@ overlap within the scheduler process.
 
 Do not commit credentials. Configure them through the deployment platform's
 secret manager or protected environment variables.
+
+## WhatsApp shipment events
+
+The tracking lifecycle enqueues these WhatsApp rule events:
+
+- `order_in_transit`
+- `order_place_arriving` (out for delivery)
+- `order_place_delivered`
+- `cancel_order`
+
+Each event must have an active `wa_rules` entry linked to an active,
+Interakt-approved `wa_templates` entry. The templates receive customer name as
+`{{1}}` and order reference as `{{2}}`.

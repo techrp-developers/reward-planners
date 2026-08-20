@@ -6,6 +6,12 @@ const { sendOpsAlert } = require("../services/alertService");
 const EcommerceRefundService = require("../services/Razorpay/ecommerceRefundService");
 const ItemCancellationModel = require("../models/itemCancellationModel");
 const { notifyUser } = require("../app/common/utils/notification");
+const {
+  sendEcommerceOrderStatusMail,
+} = require("../services/mailBuilder/ecommerceOrderStatus");
+const {
+  enqueueEcommerceOrderStatusWhatsApp,
+} = require("../services/whatsapp/ecommerceOrderStatusWhatsApp");
 const Razorpay = require("razorpay");
 
 const razorpay = new Razorpay({
@@ -339,6 +345,19 @@ class OrderController {
           }).catch(() => {});
         }
       }
+
+      sendEcommerceOrderStatusMail({
+        orderId,
+        status: "cancelled",
+      }).catch((mailError) =>
+        console.error("Order cancellation mail failed:", mailError),
+      );
+      enqueueEcommerceOrderStatusWhatsApp({
+        orderId,
+        status: "cancelled",
+      }).catch((whatsAppError) =>
+        console.error("Order cancellation WhatsApp failed:", whatsAppError),
+      );
 
       return res.json({
         success: true,

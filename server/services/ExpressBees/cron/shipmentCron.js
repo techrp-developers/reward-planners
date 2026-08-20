@@ -15,6 +15,12 @@ const {
   vendorStatusForShipment,
 } = require("../../../app/ecommerce/v1/utils/lifecyclePolicy");
 const {
+  sendEcommerceOrderStatusMail,
+} = require("../../mailBuilder/ecommerceOrderStatus");
+const {
+  enqueueEcommerceOrderStatusWhatsApp,
+} = require("../../whatsapp/ecommerceOrderStatusWhatsApp");
+const {
   isXpressRtoDelivered,
   mapXpressStatusCode,
 } = require("../xpressbees_policy");
@@ -220,6 +226,9 @@ async function syncOrderStatus(orderId) {
       action_url: `/orders/order-details/${orderId}`,
       screen: "OrderDetails",
     }, "order shipped notification");
+    sendEcommerceOrderStatusMail({ orderId, status: "shipped" }).catch(
+      (err) => console.error("Order shipped mail failed:", err),
+    );
   }
 
   if (finalStatus === "delivered" && result.affectedRows > 0) {
@@ -235,6 +244,14 @@ async function syncOrderStatus(orderId) {
       action_url: `/orders/order-details/${orderId}`,
       screen: "OrderDetails",
     }, "order delivered notification");
+
+    sendEcommerceOrderStatusMail({ orderId, status: "delivered" }).catch(
+      (err) => console.error("Order delivered mail failed:", err),
+    );
+    enqueueEcommerceOrderStatusWhatsApp({
+      orderId,
+      status: "delivered",
+    }).catch((err) => console.error("Order delivered WhatsApp failed:", err));
 
     creditDeliveredOrderRewards(orderId).catch((err) =>
       console.error("Delivered-order reward credit failed:", err),
@@ -423,6 +440,17 @@ async function updateShipmentTracking(shipment) {
         screen: "OrderDetails",
         priority: "high",
       }, "order out-for-delivery notification");
+      sendEcommerceOrderStatusMail({
+        orderId: shipment.order_id,
+        status: "out_for_delivery",
+        awb: shipment.awb_number,
+      }).catch((err) => console.error("Out-for-delivery mail failed:", err));
+      enqueueEcommerceOrderStatusWhatsApp({
+        orderId: shipment.order_id,
+        status: "out_for_delivery",
+      }).catch((err) =>
+        console.error("Out-for-delivery WhatsApp failed:", err),
+      );
     }
 
     // =====================
@@ -475,7 +503,7 @@ async function updateShipmentTracking(shipment) {
         [shipment.id],
       );
 
-      if (!existing.length) {
+        if (!existing.length) {
         await db.query(
           `
           UPDATE order_shipments
@@ -496,7 +524,7 @@ async function updateShipmentTracking(shipment) {
           [shipment.id, rawStatus, rawStatus],
         );
 
-        if (userId) {
+          if (userId) {
           notifyUser({
             userId,
             module: "ecommerce",
@@ -509,7 +537,12 @@ async function updateShipmentTracking(shipment) {
             reference_id: shipment.order_id,
             action_url: `/orders/order-details/${shipment.order_id}`,
             priority: "high",
-          }, "NDR notification");
+            }, "NDR notification");
+            sendEcommerceOrderStatusMail({
+              orderId: shipment.order_id,
+              status: "ndr",
+              awb: shipment.awb_number,
+            }).catch((err) => console.error("NDR mail failed:", err));
         }
       }
     }
@@ -631,6 +664,11 @@ async function updateShipmentTracking(shipment) {
               reference_id: shipment.order_id,
               action_url: `/orders/order-details/${shipment.order_id}`,
             }, "RTO notification");
+            sendEcommerceOrderStatusMail({
+              orderId: shipment.order_id,
+              status: "rto",
+              awb: shipment.awb_number,
+            }).catch((err) => console.error("RTO mail failed:", err));
           }
         } else {
           await conn.rollback();
