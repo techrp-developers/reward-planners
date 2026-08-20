@@ -45,6 +45,14 @@ router.post(
   (req, res) => authController.register(req, res, "flea_market_manager"),
 );
 
+router.post(
+  "/rm/register",
+  authLimiter,
+  authenticateToken,
+  authorizeRoles("admin"),
+  (req, res) => authController.register(req, res, "rm"),
+);
+
 /* ============================================================
     OTP
    ============================================================ */
@@ -82,6 +90,10 @@ router.post("/warehouse_manager/login", authLimiter, (req, res) =>
 
 router.post("/flea_market_manager/login", authLimiter, (req, res) =>
   authController.login(req, res, "flea_market_manager"),
+);
+
+router.post("/rm/login", authLimiter, (req, res) =>
+  authController.login(req, res, "rm"),
 );
 
 router.post("/admin/login", authLimiter, (req, res) =>

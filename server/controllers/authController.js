@@ -1,6 +1,6 @@
 const bcrypt = require("bcryptjs");
 const db = require("../config/database");
-const { issueSession, rotateSession, revokeSession, revokeUserSessions, isCsrfValid, clearSessionCookies } = require("../utils/authSession");
+const { issueSession, rotateSession, revokeSession, revokeUserSessions, clearSessionCookies } = require("../utils/authSession");
 const { generateOTP, hashOTP } = require("../utils/otpGenerate");
 const { sendOtpEmail, sendPasswordResetEmail } = require("../config/mail");
 const { sendRegistrationSuccessMail } = require("../services/mailBuilder/authNotification");
@@ -505,6 +505,12 @@ const authController = {
      ============================================================ */
   getProfile: async (req, res) => {
     try {
+      // Authentication state must never be restored from a browser/proxy cache,
+      // otherwise switching roles can rehydrate the previous account.
+      res.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
+      res.set("Pragma", "no-cache");
+      res.set("Expires", "0");
+
       const [rows] = await db.execute(
         "SELECT user_id, name, email, role, phone FROM eusers WHERE user_id = ?",
         [req.user.user_id],
@@ -600,7 +606,8 @@ const authController = {
   },
 
   logout: async (req, res) => {
-    if (!isCsrfValid(req)) return res.status(403).json({ success: false, code: "CSRF_INVALID", message: "Invalid security token" });
+    // Logout is deliberately idempotent. Even an expired session or stale CSRF
+    // cookie must be clearable so it cannot interfere with the next login.
     try { await revokeSession(req, res); }
     catch (error) { console.error("Logout session cleanup error:", error); clearSessionCookies(res); }
     return res.json({ success: true, message: "Logout successful" });

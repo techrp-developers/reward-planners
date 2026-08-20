@@ -1,370 +1,3 @@
-<<<<<<< HEAD
-const AuthModel = require("../models/authModel");
-const db = require("../../../config/database");
-const fs = require("fs");
-const path = require("path");
-const AddressModel = require("../models/addressModel");
-const WalletModel = require("../../common/models/walletModel");
-const FitnessService = require("../../step-counter/v1/service/fitnessService");
-const jwt = require("jsonwebtoken");
-const {
-  accountCreationSuccessMail,
-} = require("../../../services/mailBuilder/accountCreation");
-const {
-  rewardCreditMail,
-} = require("../../../services/mailBuilder/firstTimeReward");
-const { sendOtpMail } = require("../../../services/mailBuilder/sendOtp");
-const {
-  enqueueWhatsApp,
-} = require("../../../services/whatsapp/waEnqueueService");
-const { notifyUser } = require("../utils/notification");
-const { uploadToR2 } = require("../../../utils/r2upload");
-const { deleteFromR2 } = require("../../../utils/r2delete");
-const { sendOtpSms } = require("../../../utils/smsGateway");
-
-const ACCESS_EXPIRES = "15m";
-const REFRESH_EXPIRES_DAYS = 7;
-
-function generateOTP() {
-  return Math.floor(1000 + Math.random() * 9000).toString();
-}
-
-function normalizeEmail(email) {
-  return typeof email === "string" ? email.trim().toLowerCase() : "";
-}
-
-function normalizePhone(phone) {
-  return typeof phone === "string" ? phone.trim() : "";
-}
-
-// `@` is a reliable enough signal — phone numbers never contain it. Full email
-// validation happens after type detection, inside the email-specific branch.
-function detectIdentifierType(identifier) {
-  const trimmed = typeof identifier === "string" ? identifier.trim() : "";
-  if (!trimmed) return null;
-  return trimmed.includes("@") ? "email" : "phone";
-}
-
-// helper function
-const CDN_BASE_URL = "https://cdn.rewardplanners.com";
-function getPublicUrl(path) {
-  if (!path) return null;
-  return `${CDN_BASE_URL}/${path}`;
-}
-
-const thoughts = [
-  "Small progress is still progress.",
-  "Consistency beats intensity.",
-  "Your future is shaped by today's habits.",
-  "Every step counts.",
-  "Focus on progress, not perfection.",
-  "Discipline creates freedom.",
-  "What you do daily matters most.",
-  "Energy grows with action.",
-  "Success is built one day at a time.",
-  "Healthy habits compound over time.",
-  "Start where you are.",
-  "Done is better than perfect.",
-  "Keep showing up.",
-  "Growth begins outside your comfort zone.",
-  "Patience is part of the process.",
-  "Your mindset shapes your reality.",
-  "Small wins lead to big results.",
-  "Believe in gradual improvement.",
-  "Action creates momentum.",
-  "You are stronger than your excuses.",
-  "Progress thrives on consistency.",
-  "Make today count.",
-  "Success follows persistence.",
-  "Good habits build great lives.",
-  "Every day is a fresh start.",
-  "Keep moving forward.",
-  "Challenges create strength.",
-  "Your effort is never wasted.",
-  "Stay committed to your goals.",
-  "One positive choice at a time.",
-  "The best investment is in yourself.",
-  "Results come from repetition.",
-  "Learning never stops.",
-  "Growth takes time.",
-  "Be better than yesterday.",
-  "Focus on what you can control.",
-  "Motivation starts action; discipline keeps it going.",
-  "Your habits define your future.",
-  "Dream big, act small.",
-  "Stay consistent even when it's hard.",
-  "Progress is progress, no matter the pace.",
-  "Take the next right step.",
-  "Success begins with self-belief.",
-  "Every effort adds up.",
-  "Keep your promises to yourself.",
-  "The journey matters as much as the destination.",
-  "Confidence grows through action.",
-  "Persistence beats talent when talent quits.",
-  "Your potential is limitless.",
-  "Today is another opportunity to improve.",
-];
-
-class AuthController {
-  /* ======================================================
-     UNIFIED IDENTIFIER LOGIN (email or phone, OTP only —
-     password auth has been removed entirely)
-  ====================================================== */
-  async checkIdentifier(req, res) {
-    const { identifier } = req.body;
-    const type = detectIdentifierType(identifier);
-    console.log("[checkIdentifier] identifier:", identifier, "type:", type);
-    try {
-      if (!type) {
-        return res.status(400).json({
-          success: false,
-          message: "Mobile number or email is required",
-        });
-      }
-
-      const employee =
-        type === "phone"
-          ? await AuthModel.findEmployeeByPhone(normalizePhone(identifier))
-          : await AuthModel.findEmployeeByEmail(normalizeEmail(identifier));
-      console.log("[checkIdentifier] employee found:", !!employee);
-
-      if (!employee) {
-        return res.status(404).json({
-          success: false,
-          message:
-            "This mobile number or email is not registered. Please contact your HR department.",
-        });
-      }
-
-      return res.json({ success: true, registered: true, type });
-    } catch (err) {
-      console.error("[checkIdentifier] ERROR:", err);
-      return res.status(500).json({ success: false, message: "Server error" });
-    }
-  }
-
-  async sendOtp(req, res) {
-    const { identifier } = req.body;
-    const type = detectIdentifierType(identifier);
-    console.log("[sendOtp] identifier:", identifier, "type:", type);
-    try {
-      if (!type) {
-        return res.status(400).json({
-          success: false,
-          message: "Mobile number or email is required",
-        });
-      }
-
-      if (type === "phone") {
-        const phone = normalizePhone(identifier);
-        const employee = await AuthModel.findEmployeeByPhone(phone);
-        console.log("[sendOtp] employee found:", !!employee);
-        if (!employee) {
-          return res.status(404).json({
-            success: false,
-            message:
-              "This mobile number is not registered. Please contact your HR department.",
-          });
-        }
-
-        const otp = generateOTP();
-        // do NOT log the OTP value itself in shared/shipped logs
-        console.log("[sendOtp] generated OTP for", phone);
-        // Matches the fixed BhashSMS message template, which states "valid for 15 minutes".
-        const expiry = new Date(Date.now() + 15 * 60 * 1000);
-        await AuthModel.savePhoneOTP(phone, otp, expiry);
-        console.log("[sendOtp] OTP saved to DB, expiry:", expiry);
-
-        console.log("[sendOtp] calling sendOtpSms...");
-        const smsResult = await sendOtpSms(phone, otp);
-        console.log("[sendOtp] sendOtpSms returned:", smsResult);
-      } else {
-        const email = normalizeEmail(identifier);
-        const employee = await AuthModel.findEmployeeByEmail(email);
-        console.log("[sendOtp] employee found:", !!employee);
-        if (!employee) {
-          return res.status(404).json({
-            success: false,
-            message:
-              "This email is not registered. Please contact your HR department.",
-          });
-        }
-
-        const otp = generateOTP();
-        console.log("[sendOtp] generated OTP for", email);
-        const expiry = new Date(Date.now() + 10 * 60 * 1000);
-        await AuthModel.saveEmailLoginOTP(email, otp, expiry);
-        await sendOtpMail({ email, name: employee.name, otp });
-        console.log("[sendOtp] OTP email sent to", email);
-      }
-
-      return res.json({ success: true, message: "OTP sent" });
-    } catch (err) {
-      console.error("[sendOtp] ERROR:", err);
-      return res
-        .status(500)
-        .json({ success: false, message: "Failed to send OTP" });
-    }
-  }
-
-  async verifyOtp(req, res) {
-    const conn = await db.getConnection();
-    const { identifier, otp } = req.body;
-    const type = detectIdentifierType(identifier);
-    console.log("[verifyOtp] identifier:", identifier, "type:", type);
-    try {
-      if (!type || !otp) {
-        return res.status(400).json({
-          success: false,
-          message: "Identifier and OTP are required",
-        });
-      }
-
-      const normalizedIdentifier =
-        type === "phone"
-          ? normalizePhone(identifier)
-          : normalizeEmail(identifier);
-
-      const otpRow =
-        type === "phone"
-          ? await AuthModel.getLatestPhoneOTP(normalizedIdentifier)
-          : await AuthModel.getLatestEmailLoginOTP(normalizedIdentifier);
-      console.log(
-        "[verifyOtp] OTP row found:",
-        !!otpRow,
-        otpRow ? `attempt_count=${otpRow.attempt_count}` : "",
-      );
-
-      if (!otpRow) {
-        return res.status(401).json({
-          success: false,
-          message: "No OTP found, please request again",
-        });
-      }
-
-      if (otpRow.attempt_count >= 5) {
-        return res.status(429).json({
-          success: false,
-          message: "Too many attempts, request a new OTP",
-        });
-      }
-
-      const expired = new Date(otpRow.expiry) < new Date();
-      console.log("[verifyOtp] expired:", expired);
-      if (expired) {
-        return res.status(401).json({ success: false, message: "OTP expired" });
-      }
-
-      const otpMatched = otpRow.otp === otp;
-      console.log("[verifyOtp] OTP matched:", otpMatched);
-      if (!otpMatched) {
-        if (type === "phone") {
-          await AuthModel.incrementPhoneOtpAttempt(otpRow.id);
-        } else {
-          await AuthModel.incrementEmailLoginOtpAttempt(otpRow.id);
-        }
-        return res.status(401).json({ success: false, message: "Invalid OTP" });
-      }
-
-      if (type === "phone") {
-        await AuthModel.markPhoneOtpVerified(otpRow.id);
-      } else {
-        await AuthModel.markEmailLoginOtpVerified(otpRow.id);
-      }
-
-      // Duplicate-prevention: check by identifier first, then by company_user_id
-      // (covers the case where an employee's phone/email changed but they already
-      // have a customer row), before creating a new customer.
-      let user =
-        type === "phone"
-          ? await AuthModel.findByPhone(normalizedIdentifier)
-          : await AuthModel.findByEmail(normalizedIdentifier);
-      console.log("[verifyOtp] existing customer found:", !!user);
-
-      let isNewCustomer = false;
-      let employeeForNotifications = null;
-
-      if (!user) {
-        const employee =
-          type === "phone"
-            ? await AuthModel.findEmployeeByPhone(normalizedIdentifier)
-            : await AuthModel.findEmployeeByEmail(normalizedIdentifier);
-
-        if (!employee) {
-          return res
-            .status(404)
-            .json({ success: false, message: "Employee record not found" });
-        }
-        employeeForNotifications = employee;
-
-        const existingByEmployee = await AuthModel.findByCompanyUserId(
-          employee.id,
-        );
-        console.log(
-          "[verifyOtp] existing customer by company_user_id:",
-          !!existingByEmployee,
-        );
-
-        if (existingByEmployee) {
-          if (existingByEmployee.phone) {
-            user = await AuthModel.findByPhone(existingByEmployee.phone);
-          } else if (existingByEmployee.email) {
-            user = await AuthModel.findByEmail(existingByEmployee.email);
-          }
-        } else {
-          console.log(
-            "[verifyOtp] creating new customer for",
-            normalizedIdentifier,
-          );
-          await conn.beginTransaction();
-          await AuthModel.createCustomerFromEmployee(employee, conn);
-          await conn.commit();
-          user =
-            type === "phone"
-              ? await AuthModel.findByPhone(normalizedIdentifier)
-              : await AuthModel.findByEmail(normalizedIdentifier);
-          console.log("[verifyOtp] new customer created:", user?.user_id);
-          isNewCustomer = true;
-        }
-      }
-
-      if (!user) {
-        return res
-          .status(404)
-          .json({ success: false, message: "Account not found" });
-      }
-
-      const accessToken = jwt.sign(
-        { user_id: user.user_id },
-        process.env.ACCESS_TOKEN_SECRET,
-        { expiresIn: ACCESS_EXPIRES },
-      );
-
-      const refreshToken = jwt.sign(
-        { user_id: user.user_id },
-        process.env.REFRESH_TOKEN_SECRET,
-        { expiresIn: `${REFRESH_EXPIRES_DAYS}d` },
-      );
-
-      await AuthModel.updateRefreshToken(user.user_id, refreshToken);
-      await AuthModel.updateLoginMeta(user.user_id, req.ip);
-      console.log("[verifyOtp] login success for user_id:", user.user_id);
-
-      if (isNewCustomer) {
-        notifyUser(
-          {
-            userId: user.user_id,
-            module: "common",
-            type: "account_activated",
-            title: "Account activated",
-            message: "Your RewardPlanners account is ready to use.",
-            icon: "user-check",
-            reference_type: "account",
-            reference_id: user.user_id,
-            action_url: "/profile",
-          },
-          "account activation notification",
-=======
   const AuthModel = require("../models/authModel");
   const db = require("../../../config/database");
   const fs = require("fs");
@@ -385,6 +18,12 @@ class AuthController {
   const {
     rewardCreditMail,
   } = require("../../../services/mailBuilder/firstTimeReward");
+  const {
+    accountDeletionMail,
+  } = require("../../../services/mailBuilder/accountDeletion");
+  const {
+    sendDeviceChangeApprovalMail,
+  } = require("../../../services/mailBuilder/deviceChangeApproval");
   const { sendOtpMail } = require("../../../services/mailBuilder/sendOtp");
   const {
     enqueueWhatsApp,
@@ -503,6 +142,93 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
           );
         });
     });
+  }
+
+  /* ======================================================
+    DEVICE CHANGE VERIFICATION
+    A device_id the app hasn't sent before on this account is held until the
+    user approves it by email — see allowDeviceChange/denyDeviceChange below.
+  ====================================================== */
+  const DEVICE_CHANGE_TOKEN_TTL_MS = 30 * 60 * 1000;
+
+  function hashDeviceToken(token) {
+    return crypto.createHash("sha256").update(token).digest("hex");
+  }
+
+  function readDeviceFields(body = {}) {
+    return {
+      deviceId: body.device_id || body.deviceId || null,
+      deviceName: body.device_name || body.deviceName || null,
+    };
+  }
+
+  // Returns { ok: true } when the login can proceed (known device, first
+  // device ever seen for the account, or the app didn't send a device id at
+  // all yet). Returns { ok: false, message } when a new device was detected
+  // and the caller must stop the login — an approval email has already been
+  // sent (or one is already pending) at that point.
+  async function verifyDeviceOrChallenge({ userId, knownDeviceId, deviceId, deviceName, email, name, req }) {
+    if (!deviceId) return { ok: true };
+
+    if (!knownDeviceId) {
+      await AuthModel.bootstrapDevice(userId, deviceId, deviceName);
+      return { ok: true };
+    }
+
+    if (knownDeviceId === deviceId) return { ok: true };
+
+    const existing = await AuthModel.findPendingDeviceChangeRequest(userId, deviceId);
+    if (!existing) {
+      const rawToken = crypto.randomBytes(32).toString("hex");
+      await AuthModel.createDeviceChangeRequest({
+        userId,
+        tokenHash: hashDeviceToken(rawToken),
+        deviceId,
+        deviceName,
+        ipAddress: req.ip,
+        userAgent: req.get("user-agent"),
+        expiresAt: new Date(Date.now() + DEVICE_CHANGE_TOKEN_TTL_MS),
+      });
+
+      if (email) {
+        sendDeviceChangeApprovalMail({
+          email,
+          name,
+          deviceName: deviceName || "Unknown device",
+          ipAddress: req.ip || "Unknown",
+          userAgent: req.get("user-agent") || "Unknown",
+          token: rawToken,
+        }).catch((error) => console.error("Device change approval email failed:", error));
+      }
+    }
+
+    return {
+      ok: false,
+      message: "We don't recognize this device. Check your email to approve it, then sign in again.",
+    };
+  }
+
+  // Small standalone HTML page for the allow/deny links opened from the
+  // approval email — these are hit directly in a browser, not by the app.
+  function renderDeviceDecisionPage(res, { heading, message, tone = "success" }) {
+    const color = tone === "success" ? "#16a34a" : tone === "error" ? "#dc2626" : "#852BAF";
+    res.set("Content-Type", "text/html");
+    return res.send(`<!DOCTYPE html>
+<html>
+  <head><meta charset="UTF-8" /><title>${heading}</title></head>
+  <body style="margin:0;padding:0;background:#f4f6f8;font-family:Arial,sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="padding:60px 0;">
+      <tr><td align="center">
+        <table width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:14px;border:1px solid #e5e7eb;padding:40px;text-align:center;">
+          <tr><td>
+            <h2 style="margin:0 0 12px;color:${color};">${heading}</h2>
+            <p style="margin:0;color:#374151;font-size:15px;line-height:1.6;">${message}</p>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>`);
   }
 
   const thoughts = [
@@ -694,11 +420,43 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
 
         const existingCustomer = await AuthModel.findByCompanyUserId(employee.id);
         if (existingCustomer && Number(existingCustomer.status) !== 1) {
-          return res.status(403).json({
-            success: false,
-            message: "Account inactive",
-          });
+          // A verified OTP is already proof of ownership, so a soft-deleted
+          // account still inside its 30-day grace period can be reactivated
+          // here rather than blocked.
+          const reactivated = await AuthModel.reactivateIfWithinGracePeriod(
+            existingCustomer.user_id,
+            existingCustomer.deleted_at,
+          );
+
+          if (!reactivated) {
+            return res.status(403).json({
+              success: false,
+              message: "Account inactive",
+            });
+          }
         }
+
+        const { deviceId, deviceName } = readDeviceFields(req.body);
+        // TEMP: device approval disabled until the approve/deny routes are
+        // deployed to production — re-enable once that's live.
+        // if (existingCustomer) {
+        //   const deviceCheck = await verifyDeviceOrChallenge({
+        //     userId: existingCustomer.user_id,
+        //     knownDeviceId: existingCustomer.device_id,
+        //     deviceId,
+        //     deviceName,
+        //     email: existingCustomer.email,
+        //     name: existingCustomer.name,
+        //     req,
+        //   });
+        //   if (!deviceCheck.ok) {
+        //     return res.status(403).json({
+        //       success: false,
+        //       code: "DEVICE_APPROVAL_REQUIRED",
+        //       message: deviceCheck.message,
+        //     });
+        //   }
+        // }
 
         // Keep the legacy password column populated with an unusable random value.
         // Password login is not required for OTP-created accounts.
@@ -709,44 +467,19 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
           employee,
           unusablePassword,
           conn,
->>>>>>> 4cfa1e749c7dad89747af3835a6f272bb9c30801
         );
         await AuthModel.deleteOTP(identity.otpKey, conn);
         await conn.commit();
 
-<<<<<<< HEAD
-        setImmediate(() => {
-          accountCreationSuccessMail({
-            name: employeeForNotifications.name,
-            email: employeeForNotifications.email,
-          }).catch((err) => {
-            console.error("Email send failed:", err);
-          });
-        });
-
-        if (employeeForNotifications.phone) {
-          setImmediate(() => {
-            enqueueWhatsApp({
-              eventName: "create_account_notification",
-              ctx: {
-                phone: employeeForNotifications.phone,
-                company_id: employeeForNotifications.company_id ?? null,
-                customer_name: employeeForNotifications.name || "User",
-              },
-            }).catch((err) => {
-              console.error("WhatsApp enqueue failed:", err);
-            });
-          });
+        // A brand-new account has nothing to compare a device against yet —
+        // trust the device this account was created on.
+        if (user.created && deviceId) {
+          await AuthModel.bootstrapDevice(user.user_id, deviceId, deviceName);
         }
 
-        const firstLoginBonus = await WalletModel.createWalletOnFirstLogin(
-          user.user_id,
-        );
-=======
         const tokens = await issueCustomerSession(user.user_id, req, res);
         await AuthModel.updateLoginMeta(user.user_id, req.ip);
         const firstLoginBonus = await WalletModel.createWalletOnFirstLogin(user.user_id);
->>>>>>> 4cfa1e749c7dad89747af3835a6f272bb9c30801
 
         if (firstLoginBonus) {
           notifyUser(
@@ -755,635 +488,17 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
               module: "wallet",
               type: "first_login_reward",
               title: "Coins credited",
-<<<<<<< HEAD
-              message: "You received 3000 reward coins for your first login.",
-=======
               message: `You received ${FIRST_LOGIN_REWARD_COINS} reward coins for your first login.`,
->>>>>>> 4cfa1e749c7dad89747af3835a6f272bb9c30801
               icon: "wallet",
               reference_type: "wallet",
               reference_id: user.user_id,
               action_url: "/wallet",
-<<<<<<< HEAD
-              metadata: { coins: 3000 },
-=======
               metadata: { coins: FIRST_LOGIN_REWARD_COINS },
->>>>>>> 4cfa1e749c7dad89747af3835a6f272bb9c30801
             },
             "first login reward notification",
           );
 
           setImmediate(() => {
-<<<<<<< HEAD
-            rewardCreditMail({
-              email: user.email,
-              name: user.name,
-              coins: 3000,
-            }).catch((err) => {
-              console.error("First login reward email failed:", err);
-            });
-
-            if (employeeForNotifications.phone) {
-              enqueueWhatsApp({
-                eventName: "wallet_credit_first_login",
-                ctx: {
-                  phone: employeeForNotifications.phone,
-                  company_id: employeeForNotifications.company_id,
-                  customer_name: employeeForNotifications.name || "User",
-                  coins: 3000,
-                },
-              }).catch((err) => {
-                console.error("First login reward WhatsApp failed:", err);
-              });
-            }
-          });
-        }
-      }
-
-      return res.json({
-        success: true,
-        accessToken,
-        refreshToken,
-        user: {
-          id: user.user_id,
-          name: user.name,
-          phone: user.phone,
-          email: user.email,
-          terms_accepted: user.terms_accepted,
-          fitness_onboarding_done: user.fitness_onboarding_done,
-        },
-      });
-    } catch (err) {
-      try {
-        await conn.rollback();
-      } catch {}
-      console.error("[verifyOtp] ERROR:", err);
-      return res.status(500).json({ success: false, message: "Server error" });
-    } finally {
-      conn.release();
-    }
-  }
-
-  async refreshToken(req, res) {
-    try {
-      const { refreshToken } = req.body;
-      if (!refreshToken) {
-        return res.status(400).json({ success: false });
-      }
-
-      jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
-
-      const user = await AuthModel.findByRefreshToken(refreshToken);
-      console.log("[refreshToken] token recognized:", !!user);
-      if (!user) return res.status(403).json({ success: false });
-
-      if (Number(user.status) !== 1) {
-        console.log("[refreshToken] rejected — account inactive");
-        return res.status(403).json({ success: false });
-      }
-
-      const newAccessToken = jwt.sign(
-        { user_id: user.user_id },
-        process.env.ACCESS_TOKEN_SECRET,
-        { expiresIn: ACCESS_EXPIRES },
-      );
-
-      return res.json({ success: true, accessToken: newAccessToken });
-    } catch (err) {
-      console.error("[refreshToken] ERROR:", err.message);
-      return res.status(401).json({ success: false });
-    }
-  }
-
-  async logout(req, res) {
-    try {
-      const userId = req.user?.user_id;
-      console.log("[logout] user_id:", userId);
-      if (!userId) {
-        return res
-          .status(401)
-          .json({ success: false, message: "Unauthorized user" });
-      }
-
-      await AuthModel.clearRefreshToken(userId);
-      await AuthModel.clearFcmToken(userId);
-
-      return res.json({ success: true, message: "Logged out" });
-    } catch (err) {
-      console.error("[logout] ERROR:", err);
-      return res.status(500).json({ success: false });
-    }
-  }
-
-  /* ======================================================
-     UPDATE FCM TOKEN
-  ====================================================== */
-  async updateFcmToken(req, res) {
-    try {
-      const userId = req.user?.user_id;
-      const { fcm_token } = req.body;
-
-      if (!fcm_token) {
-        return res.status(400).json({
-          success: false,
-          message: "FCM token required",
-        });
-      }
-
-      await AuthModel.updateFcmToken(userId, fcm_token);
-
-      return res.json({
-        success: true,
-        message: "FCM token updated",
-      });
-    } catch (err) {
-      return res.status(500).json({
-        success: false,
-      });
-    }
-  }
-
-  /*====================================Address============================================*/
-
-  // Get all countries
-  async getCountries(req, res) {
-    try {
-      const countries = await AddressModel.getAllCountries();
-
-      return res.json({
-        success: true,
-        data: countries,
-      });
-    } catch (error) {
-      console.error("Get Countries Error:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Failed to fetch countries",
-      });
-    }
-  }
-
-  // Get all states
-  async getStates(req, res) {
-    try {
-      const states = await AddressModel.getAllStates();
-
-      return res.json({
-        success: true,
-        data: states,
-      });
-    } catch (error) {
-      console.error("Get States Error:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Failed to fetch states",
-      });
-    }
-  }
-
-  // Get states by country ID
-  async getStatesByCountry(req, res) {
-    try {
-      const { country_id } = req.params;
-
-      if (!country_id) {
-        return res.status(400).json({
-          success: false,
-          message: "Country ID is required",
-        });
-      }
-
-      const states = await AddressModel.getStatesByCountry(country_id);
-
-      return res.json({
-        success: true,
-        data: states,
-      });
-    } catch (error) {
-      console.error("Get States Error:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Failed to fetch states",
-      });
-    }
-  }
-
-  // Add address
-  async addAddress(req, res) {
-    const conn = await db.getConnection();
-    try {
-      const userId = req.user?.user_id;
-
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: "Unauthorized user",
-        });
-      }
-
-      const { address1, city, zipcode, is_default, ...rest } = req.body;
-
-      // Required fields validation
-      if (!address1 || !city || !zipcode) {
-        return res.status(400).json({
-          success: false,
-          message: "Required address fields missing",
-        });
-      }
-
-      //  Check if user already has any address
-      await conn.beginTransaction();
-
-      const hasAddress = await AddressModel.hasAnyAddress(userId, conn);
-
-      let finalIsDefault = 0;
-
-      //  If first address make it default
-      if (!hasAddress) {
-        finalIsDefault = 1;
-      }
-      // If not first and user explicitly sets default
-      else if (Number(is_default) === 1) {
-        finalIsDefault = 1;
-
-        // Clear existing default first
-        await AddressModel.clearDefault(userId, conn);
-      }
-
-      const addressId = await AddressModel.addAddress(
-        {
-          user_id: userId,
-          address1,
-          city,
-          zipcode,
-          is_default: finalIsDefault,
-          ...rest,
-        },
-        conn,
-      );
-
-      await conn.commit();
-
-      notifyUser(
-        {
-          userId,
-          module: "common",
-          type: "address_added",
-          title: "Address added",
-          message: "A new address was added to your account.",
-          icon: "map-pin",
-          reference_type: "address",
-          reference_id: addressId,
-          action_url: "/profile/addresses",
-        },
-        "address added notification",
-      );
-
-      return res.status(201).json({
-        success: true,
-        message: "Address added successfully",
-        address_id: addressId,
-      });
-    } catch (error) {
-      await conn.rollback();
-      console.error("Add Address Error:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Internal server error",
-      });
-    } finally {
-      conn.release();
-    }
-  }
-
-  // Update address
-  async updateAddress(req, res) {
-    const conn = await db.getConnection();
-    try {
-      const userId = req.user?.user_id;
-
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: "Unauthorized user",
-        });
-      }
-
-      const { address_id } = req.params;
-      const data = req.body;
-
-      await conn.beginTransaction();
-
-      // 1 Check specific address ownership
-      const address = await AddressModel.getAddressById(
-        address_id,
-        userId,
-        conn,
-      );
-
-      if (!address) {
-        await conn.rollback();
-        return res.status(404).json({
-          success: false,
-          message: "Address not found",
-        });
-      }
-
-      // Normalize undefined → keep original value
-      const fields = [
-        "address_type",
-        "is_default",
-        "address1",
-        "address2",
-        "city",
-        "zipcode",
-        "state_id",
-        "landmark",
-        "contact_name",
-        "contact_phone",
-        "latitude",
-        "longitude",
-      ];
-
-      const normalizedData = {};
-      for (const field of fields) {
-        normalizedData[field] =
-          data[field] !== undefined ? data[field] : address[field];
-      }
-
-      // -------------------------------
-      // DEFAULT ADDRESS LOGIC
-      // -------------------------------
-
-      // If user tries to REMOVE default from THIS address
-      if (Number(normalizedData.is_default) === 0 && address.is_default === 1) {
-        const defaultCount = await AddressModel.countDefault(userId, conn);
-
-        if (defaultCount === 1) {
-          await conn.rollback();
-          return res.status(400).json({
-            success: false,
-            message: "At least one address must be default",
-          });
-        }
-      }
-
-      // If user sets THIS address as default
-      if (Number(normalizedData.is_default) === 1) {
-        await AddressModel.clearDefault(userId, conn);
-      }
-
-      const updated = await AddressModel.updateAddress(
-        address_id,
-        userId,
-        normalizedData,
-        conn,
-      );
-
-      if (!updated) {
-        await conn.rollback();
-        return res.status(404).json({
-          success: false,
-          message: "Address not found",
-        });
-      }
-
-      await conn.commit();
-
-      notifyUser(
-        {
-          userId,
-          module: "common",
-          type: "address_updated",
-          title: "Address updated",
-          message: "Your address was updated successfully.",
-          icon: "map-pin",
-          reference_type: "address",
-          reference_id: address_id,
-          action_url: "/profile/addresses",
-        },
-        "address updated notification",
-      );
-
-      return res.json({
-        success: true,
-        message: "Address updated successfully",
-      });
-    } catch (error) {
-      await conn.rollback();
-      console.error("Update Address Error:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Failed to update address",
-      });
-    } finally {
-      conn.release();
-    }
-  }
-
-  // Delete address
-  async deleteAddress(req, res) {
-    try {
-      const userId = req.user?.user_id;
-      // const userId = 1;
-
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: "Unauthorized user",
-        });
-      }
-
-      const { address_id } = req.params;
-
-      const deleted = await AddressModel.deleteAddress(address_id, userId);
-
-      if (!deleted) {
-        return res.status(404).json({
-          success: false,
-          message: "Address not found",
-        });
-      }
-
-      notifyUser(
-        {
-          userId,
-          module: "common",
-          type: "address_deleted",
-          title: "Address deleted",
-          message: "An address was removed from your account.",
-          icon: "map-pin",
-          reference_type: "address",
-          reference_id: address_id,
-          action_url: "/profile/addresses",
-        },
-        "address deleted notification",
-      );
-
-      return res.json({
-        success: true,
-        message: "Address deleted successfully",
-      });
-    } catch (error) {
-      console.error("Delete Address Error:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Failed to delete address",
-      });
-    }
-  }
-
-  // Fetch all addresses of the user
-  async getMyAddresses(req, res) {
-    try {
-      const userId = req.user?.user_id;
-      // const userId = 1;
-
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: "Unauthorized user",
-        });
-      }
-
-      const addresses = await AddressModel.getAddressesByUser(userId);
-
-      return res.json({
-        success: true,
-        data: addresses,
-      });
-    } catch (error) {
-      console.error("Fetch Addresses Error:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Failed to fetch addresses",
-      });
-    }
-  }
-
-  // Fetch address by ID
-  async getAddressById(req, res) {
-    try {
-      const userId = req.user?.user_id;
-      // const userId = 1;
-
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: "Unauthorized user",
-        });
-      }
-
-      const { address_id } = req.params;
-
-      const address = await AddressModel.getAddressById(address_id, userId);
-
-      if (!address) {
-        return res.status(404).json({
-          success: false,
-          message: "Address not found",
-        });
-      }
-
-      return res.json({
-        success: true,
-        data: address,
-      });
-    } catch (error) {
-      console.error("Get Address Error:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Failed to fetch address",
-      });
-    }
-  }
-
-  // Get user Info
-  async getUserInfo(req, res) {
-    try {
-      const userId = req.user?.user_id;
-
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: "Unauthorized user",
-        });
-      }
-
-      const randomThought =
-        thoughts[Math.floor(Math.random() * thoughts.length)];
-
-      const [userInfo, todaySummary, birthdayEmployees] = await Promise.all([
-        AuthModel.getUserInfo(userId),
-        FitnessService.getTodaySummary(userId),
-        AuthModel.getTodayBirthdayEmployees(userId),
-      ]);
-
-      if (!userInfo) {
-        return res.status(404).json({
-          success: false,
-          message: "User not found",
-        });
-      }
-
-      return res.json({
-        success: true,
-        data: {
-          ...userInfo,
-          steps: {
-            steps: todaySummary?.steps || 0,
-            goal_steps: todaySummary?.goal_steps || 0,
-            progress_percent: todaySummary?.progress_percent || 0,
-          },
-          thought: randomThought,
-          birthday_employees: birthdayEmployees || [],
-        },
-      });
-    } catch (error) {
-      console.error("Get User Info Error:", error);
-
-      return res.status(500).json({
-        success: false,
-        message: "Failed to fetch user info",
-      });
-    }
-  }
-
-  // Update profile
-  async updateProfile(req, res) {
-    const connection = await db.getConnection();
-
-    try {
-      await connection.beginTransaction();
-
-      const userId = req.user?.user_id;
-
-      if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: "Unauthorized user",
-        });
-      }
-
-      const existingUser = await AuthModel.getProfile(connection, userId);
-
-      if (!existingUser) {
-        await connection.rollback();
-        return res.status(404).json({
-          success: false,
-          message: "User not found",
-        });
-      }
-
-      let imagePath = existingUser.user_image;
-
-      if (req.file) {
-        if (!req.file.mimetype.startsWith("image/")) {
-          await connection.rollback();
-          return res.status(400).json({
-            success: false,
-            message: "Invalid image file",
-=======
             if (employee.email) {
               rewardCreditMail({
                 email: employee.email,
@@ -1403,7 +518,6 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
                 },
               }).catch((error) => console.error("First login reward WhatsApp failed:", error));
             }
->>>>>>> 4cfa1e749c7dad89747af3835a6f272bb9c30801
           });
         }
 
@@ -1644,10 +758,25 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
         });
         if (!user) return res.status(401).json({ success: false });
 
-        if (Number(user.status) !== 1)
-          return res
-            .status(403)
-            .json({ success: false, message: "Account inactive" });
+        // Verify credentials before acting on account status: reactivating a
+        // soft-deleted account must require proof of ownership, not just a
+        // known email/phone.
+        const match = await bcrypt.compare(password, user.password);
+        if (!match) return res.status(401).json({ success: false });
+
+        if (Number(user.status) !== 1) {
+          const reactivated = await AuthModel.reactivateIfWithinGracePeriod(
+            user.user_id,
+            user.deleted_at,
+          );
+
+          if (!reactivated)
+            return res
+              .status(403)
+              .json({ success: false, message: "Account inactive" });
+
+          user.status = 1;
+        }
 
         if (!user.is_verified)
           return res
@@ -1664,9 +793,6 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
             message: "Employee not found",
           });
         }
-
-        const match = await bcrypt.compare(password, user.password);
-        if (!match) return res.status(401).json({ success: false });
         // const tokenVersion = Number(user.token_version || 0);
         const { accessToken, refreshToken } = await issueCustomerSession(
           user.user_id,
@@ -2695,9 +1821,36 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
 
         await AuthModel.deleteCustomerAccount(userId);
 
+        const gracePeriodDays = 30;
+        const deletionRequestedAt = new Date();
+        const permanentDeletionAt = new Date(deletionRequestedAt);
+        permanentDeletionAt.setUTCDate(
+          permanentDeletionAt.getUTCDate() + gracePeriodDays,
+        );
+
+        if (req.user?.email) {
+          // Keep the 30 in sync with reactivateIfWithinGracePeriod() in
+          // authModel.js and GRACE_PERIOD_DAYS in accountPurgeCron.js.
+          const restoreDeadline = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+            .toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" });
+
+          setImmediate(() => {
+            accountDeletionMail({
+              name: req.user.name,
+              email: req.user.email,
+              restoreDeadline,
+            }).catch((error) => console.error("Account deletion email failed:", error));
+          });
+        }
+
         return res.json({
           success: true,
-          message: "Account deleted successfully",
+          message: "Account deletion scheduled successfully",
+          data: {
+            gracePeriodDays,
+            deletionRequestedAt: deletionRequestedAt.toISOString(),
+            permanentDeletionAt: permanentDeletionAt.toISOString(),
+          },
         });
       } catch (error) {
         console.error("Delete Account Error:", error);
@@ -2706,6 +1859,81 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
           success: false,
           message: "Something went wrong",
         });
+      }
+    }
+
+    /* ======================================================
+      DEVICE CHANGE — approve/deny links from the email
+    ====================================================== */
+
+    async allowDeviceChange(req, res) {
+      try {
+        const rawToken = req.query.token;
+        if (!rawToken) {
+          return renderDeviceDecisionPage(res, { heading: "Invalid link", message: "This approval link is missing its token.", tone: "error" });
+        }
+
+        const request = await AuthModel.findDeviceChangeRequestByTokenHash(hashDeviceToken(String(rawToken)));
+        if (!request) {
+          return renderDeviceDecisionPage(res, { heading: "Link not found", message: "This approval link is invalid or has already been used.", tone: "error" });
+        }
+
+        if (request.status !== "pending") {
+          return renderDeviceDecisionPage(res, { heading: "Already handled", message: `This device request was already ${request.status}.`, tone: "info" });
+        }
+
+        if (new Date(request.expires_at) <= new Date()) {
+          await AuthModel.decideDeviceChangeRequest(request.id, "expired");
+          return renderDeviceDecisionPage(res, { heading: "Link expired", message: "This approval link has expired. Please sign in again to get a new one.", tone: "error" });
+        }
+
+        await AuthModel.approveDevice(request.user_id, request.new_device_id, request.new_device_name);
+        await AuthModel.decideDeviceChangeRequest(request.id, "allowed");
+
+        return renderDeviceDecisionPage(res, {
+          heading: "Device approved",
+          message: "This device is now approved. You can go back to the app and sign in.",
+          tone: "success",
+        });
+      } catch (error) {
+        console.error("Allow device change error:", error);
+        return renderDeviceDecisionPage(res, { heading: "Something went wrong", message: "Please try again.", tone: "error" });
+      }
+    }
+
+    async denyDeviceChange(req, res) {
+      try {
+        const rawToken = req.query.token;
+        if (!rawToken) {
+          return renderDeviceDecisionPage(res, { heading: "Invalid link", message: "This approval link is missing its token.", tone: "error" });
+        }
+
+        const request = await AuthModel.findDeviceChangeRequestByTokenHash(hashDeviceToken(String(rawToken)));
+        if (!request) {
+          return renderDeviceDecisionPage(res, { heading: "Link not found", message: "This approval link is invalid or has already been used.", tone: "error" });
+        }
+
+        if (request.status !== "pending") {
+          return renderDeviceDecisionPage(res, { heading: "Already handled", message: `This device request was already ${request.status}.`, tone: "info" });
+        }
+
+        await AuthModel.decideDeviceChangeRequest(request.id, "denied");
+
+        // A deny on an unrecognized device can mean someone else has the
+        // password — sign every active session out as a safety measure.
+        await db.execute(
+          `UPDATE customer_auth_sessions SET revoked_at = COALESCE(revoked_at, NOW()) WHERE user_id = ?`,
+          [request.user_id],
+        );
+
+        return renderDeviceDecisionPage(res, {
+          heading: "Device denied",
+          message: "That device has been blocked. If this wasn't you, we recommend changing your password.",
+          tone: "error",
+        });
+      } catch (error) {
+        console.error("Deny device change error:", error);
+        return renderDeviceDecisionPage(res, { heading: "Something went wrong", message: "Please try again.", tone: "error" });
       }
     }
   }

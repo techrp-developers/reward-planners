@@ -12,11 +12,9 @@ router.post("/verify-otp", authLimiter, authController.verifyOtp);
 router.post("/refresh-token", authLimiter, authController.refreshToken);
 router.post("/logout", auth, authController.logout);
 
-<<<<<<< HEAD
 // Fcm token
 router.post("/update-fcm-token", auth, authController.updateFcmToken);
 
-=======
 // Passwordless login: request a code for a preloaded employee.
 router.post("/request-otp", authLimiter, authController.activateAccount);
 
@@ -75,8 +73,6 @@ router.post("/reset-password", authLimiter, authController.resetPassword);
 // change password
 router.put("/change-password", auth, authController.changePassword);
 
->>>>>>> 4cfa1e749c7dad89747af3835a6f272bb9c30801
-/*=============================================Address================================================*/
 // Fetch all the countries
 // router.get("/countries", authController.getCountries);
 
