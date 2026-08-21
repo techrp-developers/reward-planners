@@ -1,9 +1,24 @@
 const express = require("express");
+const multer = require("multer");
 const router = express.Router();
 const db = require("../config/database");
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 const managerController = require("../controllers/managerController");
 const CategoryAttributeController = require("../controllers/categoryAttributeController");
+const employeeController = require("../controllers/employeeController");
+
+const employeeFileUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, callback) => {
+    const allowed =
+      file.mimetype === "text/csv" ||
+      file.mimetype === "application/vnd.ms-excel" ||
+      file.mimetype === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+      /\.(csv|xls|xlsx)$/i.test(file.originalname);
+    callback(allowed ? null : new Error("Only CSV or Excel files are allowed"), allowed);
+  },
+});
 
 router.get(
   "/employee-directory/companies",
@@ -31,6 +46,14 @@ router.post(
   authenticateToken,
   authorizeRoles("admin", "rm"),
   managerController.createCompanyEmployee.bind(managerController),
+);
+
+router.post(
+  "/employee-directory/employees/import",
+  authenticateToken,
+  authorizeRoles("admin", "rm"),
+  employeeFileUpload.single("file"),
+  employeeController.bulkUpload.bind(employeeController),
 );
 
 // Manager Stats API
