@@ -11,6 +11,7 @@ type OtpState = { sessionId: string; otp: string; sent: boolean; verified: boole
 const emptyOtpState = (): OtpState => ({ sessionId: "", otp: "", sent: false, verified: false, verificationToken: "", loading: false, message: "", error: "" });
 // Temporary local-testing switch. Set to true to restore WhatsApp verification.
 const ENABLE_WHATSAPP_VERIFICATION = false;
+const REQUIRE_ZOHO_SIGNING = String(import.meta.env.VITE_REQUIRE_ZOHO_SIGNING ?? "true").toLowerCase() !== "false";
 
 const steps = [
   { title: "Company", icon: MdBusiness },
@@ -197,7 +198,7 @@ export default function ClientOnboarding() {
     setFieldErrors((current) => ({ ...current, ...errors }));
     if (required.some((field) => !String(data[field.name] ?? "").trim()) || Object.keys(errors).length) return "Review the highlighted fields before continuing.";
     if (step === 2 && (!otpVerification.email.verified || (ENABLE_WHATSAPP_VERIFICATION && !otpVerification.whatsapp.verified))) return "Verify the representative's email before continuing.";
-    if (step === 3 && !agreementSigned) return "Sign the client agreement through Zoho Sign before continuing.";
+    if (step === 3 && REQUIRE_ZOHO_SIGNING && !agreementSigned) return "Sign the client agreement through Zoho Sign before continuing.";
     if (step === 3 && ![data.terms, data.privacy, data.dataConsent, data.communicationConsent].every(Boolean)) return "Accept all mandatory legal agreements.";
     return "";
   };
@@ -459,7 +460,7 @@ export default function ClientOnboarding() {
       <div>
         <section className={`mb-6 overflow-hidden rounded-2xl border ${agreementSigned ? darkMode ? "border-emerald-500/40 bg-emerald-500/10" : "border-emerald-200 bg-emerald-50/60" : darkMode ? "border-purple-500/30 bg-purple-500/10" : "border-purple-200 bg-gradient-to-r from-purple-50 via-white to-indigo-50"}`}>
           <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-            <div className="flex items-start gap-4"><span className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-2xl ${agreementSigned ? "bg-emerald-600 text-white" : darkMode ? "bg-purple-500/20 text-purple-300" : "bg-white text-purple-700 shadow-sm"}`}>{agreementSigned ? <MdCheckCircle /> : <MdDraw />}</span><div><div className="flex flex-wrap items-center gap-2"><h3 className="text-lg font-semibold">Client service agreement</h3>{agreementSigned && <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${darkMode ? "bg-emerald-500/15 text-emerald-300" : "bg-emerald-100 text-emerald-700"}`}>Signed</span>}</div><p className={`mt-1.5 max-w-2xl text-sm leading-6 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>{agreementSigned ? "Zoho Sign has confirmed your completed signature." : "Review and digitally sign the client agreement securely through Zoho Sign. You will return to this page automatically after signing."}</p></div></div>
+            <div className="flex items-start gap-4"><span className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-2xl ${agreementSigned ? "bg-emerald-600 text-white" : darkMode ? "bg-purple-500/20 text-purple-300" : "bg-white text-purple-700 shadow-sm"}`}>{agreementSigned ? <MdCheckCircle /> : <MdDraw />}</span><div><div className="flex flex-wrap items-center gap-2"><h3 className="text-lg font-semibold">Client service agreement</h3>{agreementSigned ? <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${darkMode ? "bg-emerald-500/15 text-emerald-300" : "bg-emerald-100 text-emerald-700"}`}>Signed</span> : !REQUIRE_ZOHO_SIGNING && <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${darkMode ? "bg-amber-500/15 text-amber-300" : "bg-amber-100 text-amber-700"}`}>Temporarily optional</span>}</div><p className={`mt-1.5 max-w-2xl text-sm leading-6 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>{agreementSigned ? "Zoho Sign has confirmed your completed signature." : REQUIRE_ZOHO_SIGNING ? "Review and digitally sign the client agreement securely through Zoho Sign. You will return to this page automatically after signing." : "Zoho Sign integration is being finalized. You may continue onboarding without signing for now."}</p></div></div>
             <button type="button" onClick={() => void startAgreementSigning()} disabled={agreementLoading || agreementSigned} className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold transition ${agreementSigned ? "cursor-default bg-emerald-600 text-white" : "bg-gradient-to-r from-[#7457d7] to-[#9a63df] text-white shadow-[0_10px_24px_rgba(116,87,215,0.2)] hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-70"}`}>{agreementLoading ? <><MdAutorenew className="animate-spin text-lg" /> Checking...</> : agreementSigned ? <><MdCheckCircle className="text-lg" /> Agreement signed</> : <><MdDraw className="text-lg" /> Review and sign</>}</button>
           </div>
           {agreementMessage && <p className={`border-t px-5 py-3 text-sm font-medium sm:px-6 ${agreementSigned ? darkMode ? "border-emerald-500/20 text-emerald-300" : "border-emerald-200 text-emerald-700" : darkMode ? "border-purple-500/20 text-purple-300" : "border-purple-100 text-purple-700"}`}>{agreementMessage}</p>}
@@ -508,7 +509,7 @@ export default function ClientOnboarding() {
 
   const descriptions = ["Tell us about your organization.", "Add the registered business address.", "Add and verify the authorized company representative.", "Review and accept the required agreements.", "Create the primary HR administrator.", "Your organization is ready for the next step."];
   const representativeVerificationComplete = otpVerification.email.verified && (!ENABLE_WHATSAPP_VERIFICATION || otpVerification.whatsapp.verified);
-  const legalStepComplete = agreementSigned && [data.terms, data.privacy, data.dataConsent, data.communicationConsent].every(Boolean);
+  const legalStepComplete = (!REQUIRE_ZOHO_SIGNING || agreementSigned) && [data.terms, data.privacy, data.dataConsent, data.communicationConsent].every(Boolean);
   const interactionStyles = `.rp-client-onboarding button:not(:disabled),.rp-client-onboarding a,.rp-client-onboarding select:not(:disabled),.rp-client-onboarding label:has(input[type="checkbox"]){cursor:pointer}.rp-client-onboarding button:disabled,.rp-client-onboarding select:disabled{cursor:not-allowed}.rp-client-onboarding button:focus-visible,.rp-client-onboarding a:focus-visible,.rp-client-onboarding input:focus-visible,.rp-client-onboarding select:focus-visible{outline:2px solid #a855f7;outline-offset:3px}@keyframes rp-step-enter{0%{opacity:0;transform:translateY(14px) scale(.992)}100%{opacity:1;transform:translateY(0) scale(1)}}.rp-step-panel{transform-origin:top center;animation:rp-step-enter .42s cubic-bezier(.22,1,.36,1) both}@media(prefers-reduced-motion:reduce){.rp-step-panel{animation:none}}`;
   if (showIntroduction) {
     const benefits = [

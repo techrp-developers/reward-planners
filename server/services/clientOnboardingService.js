@@ -33,7 +33,7 @@ function validate(data) {
   return null;
 }
 
-async function createClientOnboarding(rawData, { zohoRequestId }) {
+async function createClientOnboarding(rawData, { zohoRequestId = null }) {
   const data = normalize(rawData);
   const validationError = validate(data);
   if (validationError) throw Object.assign(new Error(validationError), { status: 400 });
@@ -93,10 +93,10 @@ async function createClientOnboarding(rawData, { zohoRequestId }) {
         representative_name, representative_designation, representative_email, representative_phone,
         representative_pan, aadhaar_last4, identity_consent, terms_accepted, privacy_accepted,
         data_consent, communication_consent, zoho_request_id, signed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, 1, 1, ?, NOW())`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, 1, 1, ?, ?)`,
       [companyId, data.legalName || null, data.companyType, data.industry, data.employeeCount, data.website || null, data.pan || null, data.gst || null,
         data.address1, data.address2 || null, data.country, data.state, data.city, data.pincode, data.officeSame ? 1 : 0,
-        data.repName, data.designation, data.repEmail, data.repPhone, data.repPan || null, data.aadhaarLast4 || null, data.identityConsent ? 1 : 0, String(zohoRequestId)],
+        data.repName, data.designation, data.repEmail, data.repPhone, data.repPan || null, data.aadhaarLast4 || null, data.identityConsent ? 1 : 0, zohoRequestId ? String(zohoRequestId) : null, zohoRequestId ? new Date() : null],
     );
 
     await connection.commit();

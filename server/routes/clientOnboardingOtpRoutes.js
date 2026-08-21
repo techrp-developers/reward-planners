@@ -14,6 +14,7 @@ const OTP_TTL_MS = 10 * 60 * 1000;
 const VERIFICATION_PROOF_TTL_MS = 60 * 60 * 1000;
 const RESEND_COOLDOWN_MS = 30 * 1000;
 const MAX_ATTEMPTS = 5;
+const REQUIRE_ZOHO_SIGNING = String(process.env.REQUIRE_ZOHO_SIGNING ?? "true").toLowerCase() !== "false";
 
 const normalizeEmail = (value) => String(value || "").trim().toLowerCase();
 const otpHash = (sessionId, otp) => crypto.createHash("sha256").update(`${sessionId}:${otp}`).digest();
@@ -125,9 +126,13 @@ router.post("/submit", authLimiter, async (req, res) => {
   }
 
   try {
-    const signing = await verifySigningSession(req.body?.signingState);
-    if (!signing.signed) return res.status(400).json({ success: false, message: "Complete the Zoho Sign agreement before submitting onboarding." });
-    const result = await createClientOnboarding(req.body?.onboarding, { zohoRequestId: signing.requestId });
+    let zohoRequestId = null;
+    if (REQUIRE_ZOHO_SIGNING) {
+      const signing = await verifySigningSession(req.body?.signingState);
+      if (!signing.signed) return res.status(400).json({ success: false, message: "Complete the Zoho Sign agreement before submitting onboarding." });
+      zohoRequestId = signing.requestId;
+    }
+    const result = await createClientOnboarding(req.body?.onboarding, { zohoRequestId });
     verificationProofs.delete(emailProofToken);
     try {
       await sendAdminOnboardedEmail({
