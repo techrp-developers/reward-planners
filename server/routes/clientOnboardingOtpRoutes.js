@@ -5,10 +5,13 @@ const { sendOtpEmail, sendAdminOnboardedEmail } = require("../config/mail");
 const { enqueueWhatsApp } = require("../services/whatsapp/waEnqueueService");
 const { normalizeIndianMobile } = require("../services/whatsapp/phone");
 const { createSigningSession, verifySigningSession } = require("../services/zohoSignService");
+const { createClientOnboarding } = require("../services/clientOnboardingService");
 
 const router = express.Router();
 const sessions = new Map();
+const verificationProofs = new Map();
 const OTP_TTL_MS = 10 * 60 * 1000;
+const VERIFICATION_PROOF_TTL_MS = 60 * 60 * 1000;
 const RESEND_COOLDOWN_MS = 30 * 1000;
 const MAX_ATTEMPTS = 5;
 
@@ -67,7 +70,9 @@ router.post("/verify", authLimiter, (req, res) => {
     return res.status(400).json({ success: false, message: "Incorrect OTP.", attemptsRemaining: MAX_ATTEMPTS - session.attempts });
   }
   sessions.delete(sessionId);
-  return res.json({ success: true, message: `${session.channel === "email" ? "Email" : "WhatsApp"} verified successfully.` });
+  const verificationToken = crypto.randomUUID();
+  verificationProofs.set(verificationToken, { channel: session.channel, destination: session.destination, expiresAt: Date.now() + VERIFICATION_PROOF_TTL_MS });
+  return res.json({ success: true, message: `${session.channel === "email" ? "Email" : "WhatsApp"} verified successfully.`, data: { verificationToken, expiresInSeconds: VERIFICATION_PROOF_TTL_MS / 1000 } });
 });
 
 router.post("/notify-admin", authLimiter, async (req, res) => {
@@ -110,9 +115,40 @@ router.post("/sign/status", authLimiter, async (req, res) => {
   }
 });
 
+router.post("/submit", authLimiter, async (req, res) => {
+  const emailProofToken = String(req.body?.emailVerificationToken || "");
+  const proof = verificationProofs.get(emailProofToken);
+  const representativeEmail = normalizeEmail(req.body?.onboarding?.repEmail);
+  if (!proof || proof.channel !== "email" || proof.destination !== representativeEmail || Date.now() > proof.expiresAt) {
+    if (proof && Date.now() > proof.expiresAt) verificationProofs.delete(emailProofToken);
+    return res.status(400).json({ success: false, message: "Representative email verification expired. Verify the email again." });
+  }
+
+  try {
+    const signing = await verifySigningSession(req.body?.signingState);
+    if (!signing.signed) return res.status(400).json({ success: false, message: "Complete the Zoho Sign agreement before submitting onboarding." });
+    const result = await createClientOnboarding(req.body?.onboarding, { zohoRequestId: signing.requestId });
+    verificationProofs.delete(emailProofToken);
+    try {
+      await sendAdminOnboardedEmail({
+        email: normalizeEmail(req.body?.onboarding?.adminEmail),
+        adminName: String(req.body?.onboarding?.adminName || "").trim(),
+        companyName: String(req.body?.onboarding?.companyName || "").trim(),
+      });
+    } catch (mailError) {
+      console.error("[CLIENT_ONBOARDING] Welcome email failed after successful onboarding:", mailError);
+    }
+    return res.status(201).json({ success: true, message: "Organization onboarded successfully.", data: result });
+  } catch (error) {
+    console.error("[CLIENT_ONBOARDING] Submission failed:", error);
+    return res.status(error.status || 500).json({ success: false, message: error.status ? error.message : "Unable to complete onboarding right now." });
+  }
+});
+
 setInterval(() => {
   const now = Date.now();
   for (const [id, session] of sessions) if (now > session.expiresAt) sessions.delete(id);
+  for (const [token, proof] of verificationProofs) if (now > proof.expiresAt) verificationProofs.delete(token);
 }, OTP_TTL_MS).unref();
 
 module.exports = router;
