@@ -217,6 +217,12 @@ export default function ClientOnboarding() {
         });
         setAdminWelcomeSent(true);
       } catch (requestError) {
+        const responseError = requestError as { response?: { data?: { code?: string } } };
+        if (responseError.response?.data?.code === "EMAIL_VERIFICATION_REQUIRED") {
+          setOtpVerification((current) => ({ ...current, email: emptyOtpState() }));
+          setStep(2);
+          setHighestStep((current) => Math.min(current, 2));
+        }
         setError(otpErrorMessage(requestError));
         setSendingAdminWelcome(false);
         return;
@@ -246,6 +252,7 @@ export default function ClientOnboarding() {
   };
 
   const sendRepresentativeOtp = async (channel: OtpChannel) => {
+    setError("");
     const destination = String(channel === "email" ? data.repEmail : data.repPhone).trim();
     const fieldName = channel === "email" ? "repEmail" : "repPhone";
     const validationMessage = validateField(fieldName, destination);
@@ -263,6 +270,7 @@ export default function ClientOnboarding() {
   };
 
   const verifyRepresentativeOtp = async (channel: OtpChannel) => {
+    setError("");
     const channelState = otpVerification[channel];
     if (!/^\d{6}$/.test(channelState.otp)) {
       setOtpVerification((current) => ({ ...current, [channel]: { ...current[channel], error: "Enter the 6-digit OTP." } }));
@@ -271,7 +279,10 @@ export default function ClientOnboarding() {
     setOtpVerification((current) => ({ ...current, [channel]: { ...current[channel], loading: true, error: "", message: "" } }));
     try {
       const response = await api.post("/client-onboarding/otp/verify", { sessionId: channelState.sessionId, otp: channelState.otp });
-      setOtpVerification((current) => ({ ...current, [channel]: { ...current[channel], loading: false, verified: true, verificationToken: response.data?.data?.verificationToken || "", message: response.data?.message || "Verified successfully." } }));
+      const verificationToken = String(response.data?.data?.verificationToken || "");
+      if (!verificationToken) throw new Error("Verification succeeded but no verification proof was returned. Please request a new OTP.");
+      setOtpVerification((current) => ({ ...current, [channel]: { ...current[channel], loading: false, verified: true, verificationToken, error: "", message: response.data?.message || "Verified successfully." } }));
+      setError("");
     } catch (requestError) {
       setOtpVerification((current) => ({ ...current, [channel]: { ...current[channel], loading: false, error: otpErrorMessage(requestError) } }));
     }

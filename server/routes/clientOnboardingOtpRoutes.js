@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const express = require("express");
+const jwt = require("jsonwebtoken");
 const { authLimiter } = require("../app/common/middlewares/rateLimiter");
 const { sendOtpEmail, sendAdminOnboardedEmail } = require("../config/mail");
 const { enqueueWhatsApp } = require("../services/whatsapp/waEnqueueService");
@@ -9,15 +10,29 @@ const { createClientOnboarding } = require("../services/clientOnboardingService"
 
 const router = express.Router();
 const sessions = new Map();
-const verificationProofs = new Map();
 const OTP_TTL_MS = 10 * 60 * 1000;
-const VERIFICATION_PROOF_TTL_MS = 60 * 60 * 1000;
+const VERIFICATION_PROOF_TTL_SECONDS = 24 * 60 * 60;
 const RESEND_COOLDOWN_MS = 30 * 1000;
 const MAX_ATTEMPTS = 5;
 const REQUIRE_ZOHO_SIGNING = String(process.env.REQUIRE_ZOHO_SIGNING ?? "true").toLowerCase() !== "false";
 
 const normalizeEmail = (value) => String(value || "").trim().toLowerCase();
 const otpHash = (sessionId, otp) => crypto.createHash("sha256").update(`${sessionId}:${otp}`).digest();
+const verificationSecret = () => process.env.CLIENT_ONBOARDING_PROOF_SECRET || process.env.JWT_SECRET;
+
+function createVerificationProof(session) {
+  const secret = verificationSecret();
+  if (!secret) throw new Error("Client onboarding verification secret is not configured");
+  return jwt.sign({ type: "client_onboarding_verification", channel: session.channel, destination: session.destination }, secret, { algorithm: "HS256", expiresIn: VERIFICATION_PROOF_TTL_SECONDS });
+}
+
+function readVerificationProof(token) {
+  const secret = verificationSecret();
+  if (!secret) throw new Error("Client onboarding verification secret is not configured");
+  const proof = jwt.verify(token, secret, { algorithms: ["HS256"] });
+  if (proof?.type !== "client_onboarding_verification") throw new Error("Invalid verification proof");
+  return proof;
+}
 
 function destinationFor(channel, destination) {
   if (channel === "email") {
@@ -71,9 +86,8 @@ router.post("/verify", authLimiter, (req, res) => {
     return res.status(400).json({ success: false, message: "Incorrect OTP.", attemptsRemaining: MAX_ATTEMPTS - session.attempts });
   }
   sessions.delete(sessionId);
-  const verificationToken = crypto.randomUUID();
-  verificationProofs.set(verificationToken, { channel: session.channel, destination: session.destination, expiresAt: Date.now() + VERIFICATION_PROOF_TTL_MS });
-  return res.json({ success: true, message: `${session.channel === "email" ? "Email" : "WhatsApp"} verified successfully.`, data: { verificationToken, expiresInSeconds: VERIFICATION_PROOF_TTL_MS / 1000 } });
+  const verificationToken = createVerificationProof(session);
+  return res.json({ success: true, message: `${session.channel === "email" ? "Email" : "WhatsApp"} verified successfully.`, data: { verificationToken, expiresInSeconds: VERIFICATION_PROOF_TTL_SECONDS } });
 });
 
 router.post("/notify-admin", authLimiter, async (req, res) => {
@@ -118,11 +132,12 @@ router.post("/sign/status", authLimiter, async (req, res) => {
 
 router.post("/submit", authLimiter, async (req, res) => {
   const emailProofToken = String(req.body?.emailVerificationToken || "");
-  const proof = verificationProofs.get(emailProofToken);
   const representativeEmail = normalizeEmail(req.body?.onboarding?.repEmail);
-  if (!proof || proof.channel !== "email" || proof.destination !== representativeEmail || Date.now() > proof.expiresAt) {
-    if (proof && Date.now() > proof.expiresAt) verificationProofs.delete(emailProofToken);
-    return res.status(400).json({ success: false, message: "Representative email verification expired. Verify the email again." });
+  try {
+    const proof = readVerificationProof(emailProofToken);
+    if (proof.channel !== "email" || proof.destination !== representativeEmail) throw new Error("Verification proof does not match representative");
+  } catch {
+    return res.status(400).json({ success: false, code: "EMAIL_VERIFICATION_REQUIRED", message: "Representative email verification expired. Verify the email again." });
   }
 
   try {
@@ -133,7 +148,6 @@ router.post("/submit", authLimiter, async (req, res) => {
       zohoRequestId = signing.requestId;
     }
     const result = await createClientOnboarding(req.body?.onboarding, { zohoRequestId });
-    verificationProofs.delete(emailProofToken);
     try {
       await sendAdminOnboardedEmail({
         email: normalizeEmail(req.body?.onboarding?.adminEmail),
@@ -153,7 +167,6 @@ router.post("/submit", authLimiter, async (req, res) => {
 setInterval(() => {
   const now = Date.now();
   for (const [id, session] of sessions) if (now > session.expiresAt) sessions.delete(id);
-  for (const [token, proof] of verificationProofs) if (now > proof.expiresAt) verificationProofs.delete(token);
 }, OTP_TTL_MS).unref();
 
 module.exports = router;
