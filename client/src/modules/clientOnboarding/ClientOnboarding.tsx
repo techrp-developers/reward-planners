@@ -9,6 +9,8 @@ type OtpChannel = "email" | "whatsapp";
 type OtpState = { sessionId: string; otp: string; sent: boolean; verified: boolean; loading: boolean; message: string; error: string };
 
 const emptyOtpState = (): OtpState => ({ sessionId: "", otp: "", sent: false, verified: false, loading: false, message: "", error: "" });
+// Temporary local-testing switch. Set to true to restore WhatsApp verification.
+const ENABLE_WHATSAPP_VERIFICATION = false;
 
 const steps = [
   { title: "Company", icon: MdBusiness },
@@ -181,7 +183,7 @@ export default function ClientOnboarding() {
     const errors = Object.fromEntries(currentFields.map((field) => [field.name, validateField(field.name, data[field.name] ?? "")]).filter(([, value]) => value));
     setFieldErrors((current) => ({ ...current, ...errors }));
     if (required.some((field) => !String(data[field.name] ?? "").trim()) || Object.keys(errors).length) return "Review the highlighted fields before continuing.";
-    if (step === 2 && (!otpVerification.email.verified || !otpVerification.whatsapp.verified)) return "Verify both the representative's email and WhatsApp number before continuing.";
+    if (step === 2 && (!otpVerification.email.verified || (ENABLE_WHATSAPP_VERIFICATION && !otpVerification.whatsapp.verified))) return "Verify the representative's email before continuing.";
     if (step === 3 && !agreementSigned) return "Sign the client agreement through Zoho Sign before continuing.";
     if (step === 3 && ![data.terms, data.privacy, data.dataConsent, data.communicationConsent].every(Boolean)) return "Accept all mandatory legal agreements.";
     return "";
@@ -226,7 +228,7 @@ export default function ClientOnboarding() {
 
   const otpErrorMessage = (requestError: unknown) => {
     const responseError = requestError as { response?: { data?: { message?: string } } };
-    return responseError.response?.data?.message || "Something went wrong. Please try again.";
+    return responseError.response?.data?.message || (requestError instanceof Error ? requestError.message : "Something went wrong. Please try again.");
   };
 
   const sendRepresentativeOtp = async (channel: OtpChannel) => {
@@ -264,6 +266,8 @@ export default function ClientOnboarding() {
   const startAgreementSigning = async () => {
     setAgreementLoading(true);
     setAgreementMessage("");
+    const isLocalHttp = window.location.protocol === "http:" && ["localhost", "127.0.0.1"].includes(window.location.hostname);
+    const signingWindow = isLocalHttp ? window.open("about:blank", "_blank") : null;
     try {
       const response = await api.post("/client-onboarding/otp/sign/start", {
         recipientName: data.repName,
@@ -272,9 +276,29 @@ export default function ClientOnboarding() {
         returnUrl: `${window.location.origin}${window.location.pathname}`,
       });
       const signUrl = response.data?.data?.signUrl;
+      const signingState = response.data?.data?.state;
       if (!signUrl) throw new Error("Zoho Sign did not return a signing URL.");
+      if (isLocalHttp) {
+        if (!signingWindow) throw new Error("Allow pop-ups for localhost to open Zoho Sign.");
+        signingWindow.location.href = signUrl;
+        setAgreementMessage("Zoho Sign opened in a new tab. Complete signing there; this page will confirm it automatically.");
+
+        for (let attempt = 0; attempt < 200; attempt += 1) {
+          await new Promise((resolve) => window.setTimeout(resolve, 3000));
+          const statusResponse = await api.post("/client-onboarding/otp/sign/status", { state: signingState });
+          if (statusResponse.data?.data?.signed) {
+            setAgreementSigned(true);
+            setAgreementMessage("Agreement signed and confirmed by Zoho Sign.");
+            signingWindow.close();
+            setAgreementLoading(false);
+            return;
+          }
+        }
+        throw new Error("Signing confirmation timed out. Please start the agreement again.");
+      }
       window.location.assign(signUrl);
     } catch (requestError) {
+      signingWindow?.close();
       setAgreementMessage(otpErrorMessage(requestError));
       setAgreementLoading(false);
     }
@@ -354,7 +378,7 @@ export default function ClientOnboarding() {
         <section className="mt-3 grid gap-4 sm:col-span-2 lg:grid-cols-2">
           {([
             { channel: "email", title: "Verify email address", destination: String(data.repEmail || ""), Icon: MdEmail, hint: "We will send a 6-digit code to the representative's email." },
-            { channel: "whatsapp", title: "Verify WhatsApp number", destination: `+91 ${String(data.repPhone || "")}`, Icon: MdWhatsapp, hint: "We will send a separate 6-digit code through WhatsApp." },
+            ...(ENABLE_WHATSAPP_VERIFICATION ? [{ channel: "whatsapp" as const, title: "Verify WhatsApp number", destination: `+91 ${String(data.repPhone || "")}`, Icon: MdWhatsapp, hint: "We will send a separate 6-digit code through WhatsApp." }] : []),
           ] as const).map(({ channel, title, destination, Icon, hint }) => {
             const channelState = otpVerification[channel];
             return (
@@ -468,7 +492,7 @@ export default function ClientOnboarding() {
   };
 
   const descriptions = ["Tell us about your organization.", "Add the registered business address.", "Add and verify the authorized company representative.", "Review and accept the required agreements.", "Create the primary HR administrator.", "Your organization is ready for the next step."];
-  const representativeVerificationComplete = otpVerification.email.verified && otpVerification.whatsapp.verified;
+  const representativeVerificationComplete = otpVerification.email.verified && (!ENABLE_WHATSAPP_VERIFICATION || otpVerification.whatsapp.verified);
   const legalStepComplete = agreementSigned && [data.terms, data.privacy, data.dataConsent, data.communicationConsent].every(Boolean);
   if (showIntroduction) {
     const benefits = [
@@ -504,7 +528,7 @@ export default function ClientOnboarding() {
           <div className={`mb-8 rounded-2xl border px-5 py-4 ${darkMode ? "border-slate-700 bg-slate-800/35" : "border-slate-100 bg-white shadow-[0_8px_24px_rgba(60,72,88,0.05)]"}`}><div className="flex flex-wrap items-center justify-between gap-3"><div><p className={`text-sm font-medium ${darkMode ? "text-purple-300" : "text-purple-700"}`}>Step {step + 1} of {steps.length}</p><h2 className="mt-1 text-2xl font-semibold tracking-tight">{steps[step].title}</h2><p className={`mt-2 text-base ${darkMode ? "text-slate-400" : "text-slate-500"}`}>{descriptions[step]}</p></div><div className="min-w-44"><div className="flex justify-between text-xs"><span className={darkMode ? "text-slate-400" : "text-slate-500"}>Progress</span><strong>{Math.round((step / (steps.length - 1)) * 100)}%</strong></div><div className={`mt-2 h-1.5 overflow-hidden rounded-full ${darkMode ? "bg-slate-700" : "bg-slate-100"}`}><span className="block h-full rounded-full bg-gradient-to-r from-[#7457d7] to-[#9a63df] transition-all" style={{ width: `${(step / (steps.length - 1)) * 100}%` }} /></div></div></div></div>
           {content()}
           {error && <div className={`mt-5 rounded-xl border px-4 py-3 text-sm ${darkMode ? "border-red-500/40 bg-red-950/30 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>{error}</div>}
-          {step < steps.length - 1 && <footer className={`mt-9 flex items-center justify-between border-t pt-6 ${darkMode ? "border-slate-700" : "border-slate-200"}`}><button type="button" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0 || sendingAdminWelcome} className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition disabled:invisible ${darkMode ? "text-slate-300 hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100"}`}><MdArrowBack className="text-lg" />Previous</button><button type="button" onClick={() => void next()} disabled={(step === 2 && !representativeVerificationComplete) || (step === 3 && !legalStepComplete) || sendingAdminWelcome} title={step === 2 && !representativeVerificationComplete ? "Verify both email and WhatsApp to continue" : step === 3 && !legalStepComplete ? "Sign the agreement and accept all required terms to continue" : undefined} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#7457d7] to-[#9a63df] px-7 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(116,87,215,0.22)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none disabled:hover:translate-y-0">{sendingAdminWelcome ? <><MdAutorenew className="animate-spin text-lg" /> Sending welcome email...</> : step === 2 && !representativeVerificationComplete ? "Complete both verifications" : step === 3 && !legalStepComplete ? "Complete legal requirements" : step === 4 ? "Complete onboarding" : "Continue"}{!sendingAdminWelcome && <MdArrowForward className="text-lg" />}</button></footer>}
+          {step < steps.length - 1 && <footer className={`mt-9 flex items-center justify-between border-t pt-6 ${darkMode ? "border-slate-700" : "border-slate-200"}`}><button type="button" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0 || sendingAdminWelcome} className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition disabled:invisible ${darkMode ? "text-slate-300 hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100"}`}><MdArrowBack className="text-lg" />Previous</button><button type="button" onClick={() => void next()} disabled={(step === 2 && !representativeVerificationComplete) || (step === 3 && !legalStepComplete) || sendingAdminWelcome} title={step === 2 && !representativeVerificationComplete ? "Verify email to continue" : step === 3 && !legalStepComplete ? "Sign the agreement and accept all required terms to continue" : undefined} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#7457d7] to-[#9a63df] px-7 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(116,87,215,0.22)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none disabled:hover:translate-y-0">{sendingAdminWelcome ? <><MdAutorenew className="animate-spin text-lg" /> Sending welcome email...</> : step === 2 && !representativeVerificationComplete ? "Complete email verification" : step === 3 && !legalStepComplete ? "Complete legal requirements" : step === 4 ? "Complete onboarding" : "Continue"}{!sendingAdminWelcome && <MdArrowForward className="text-lg" />}</button></footer>}
         </main>
       </div>
     </div>

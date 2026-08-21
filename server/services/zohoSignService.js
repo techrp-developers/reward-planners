@@ -92,7 +92,9 @@ async function createSigningSession({ recipientName, recipientEmail, companyName
         is_embedded: true,
       }],
       notes: "Reward Planners client onboarding agreement",
-      redirect_pages: redirectPages,
+      // Zoho requires HTTPS redirect URLs. During local HTTP development the
+      // client keeps this page open and polls the request status instead.
+      ...(callback.protocol === "https:" ? { redirect_pages: redirectPages } : {}),
     },
   };
   const createParams = new URLSearchParams({ data: JSON.stringify(payload), is_quicksend: "true" });
@@ -101,7 +103,12 @@ async function createSigningSession({ recipientName, recipientEmail, companyName
   const actionId = created.requests?.actions?.find((action) => action.action_type === "SIGN")?.action_id;
   if (!requestId || !actionId) throw new Error("Zoho did not create a signing request");
 
-  const embedParams = new URLSearchParams({ host: callback.origin });
+  // `host` is required when the signing page is rendered inside an iframe.
+  // This flow uses a top-level redirect, and Zoho rejects an HTTP localhost
+  // value with "Url has invalid scheme". Keep the host restriction for HTTPS
+  // deployments while allowing local top-level signing tests.
+  const embedParams = new URLSearchParams();
+  if (callback.protocol === "https:") embedParams.set("host", callback.origin);
   const embedded = await zohoJson(`${config.signBase}/api/v1/requests/${encodeURIComponent(requestId)}/actions/${encodeURIComponent(actionId)}/embedtoken`, { method: "POST", headers: { ...authorization(token), "Content-Type": "application/x-www-form-urlencoded" }, body: embedParams });
   if (!embedded.sign_url) throw new Error("Zoho did not return a signing URL");
 
