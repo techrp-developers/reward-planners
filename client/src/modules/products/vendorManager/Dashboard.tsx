@@ -15,6 +15,19 @@ interface ManagerStats {
 
 const emptyStats: ManagerStats = { totalVendors: 0, pendingApprovals: 0, sentForApproval: 0, approvedVendors: 0, totalProducts: 0, sentForApprovalProducts: 0, approvedProducts: 0, resubmissionProducts: 0, totalOrders: 0, cancellationRequests: 0, grossOrderValue: 0, categories: 0, subcategories: 0, attributes: 0, documents: 0, totalCampaigns: 0, activeCampaigns: 0, rewardRules: 0, activeRewardRules: 0, charts: [] };
 const money = (value: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value || 0);
+const normalizeCharts = (charts: unknown): MonthlyMetric[] => {
+  if (Array.isArray(charts)) return charts;
+  if (!charts || typeof charts !== "object") return [];
+  const legacy = charts as { monthlyLabels?: unknown[]; monthlyRevenue?: unknown[]; vendorCount?: unknown[]; productCount?: unknown[]; orderCount?: unknown[] };
+  if (!Array.isArray(legacy.monthlyLabels)) return [];
+  return legacy.monthlyLabels.map((month, index) => ({
+    month: String(month ?? ""),
+    vendors: Number(legacy.vendorCount?.[index] ?? 0),
+    products: Number(legacy.productCount?.[index] ?? 0),
+    orders: Number(legacy.orderCount?.[index] ?? 0),
+    orderValue: Number(legacy.monthlyRevenue?.[index] ?? 0),
+  }));
+};
 
 function StatCard({ label, value, detail, icon: Icon, color }: { label: string; value: string | number; detail: string; icon: React.ElementType; color: string }) {
   return <article className="relative overflow-hidden rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"><span className={`absolute -right-8 -top-8 h-24 w-24 rounded-full opacity-10 ${color}`} /><div className="relative flex justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wider text-gray-400">{label}</p><p className="mt-3 text-3xl font-black text-gray-900">{value}</p><p className="mt-1 text-xs text-gray-500">{detail}</p></div><span className={`grid h-11 w-11 place-items-center rounded-xl text-white ${color}`}><Icon size={20} /></span></div></article>;
@@ -24,7 +37,7 @@ export default function ManagerDashboard() {
   const [stats, setStats] = useState(emptyStats);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  useEffect(() => { let active = true; api.get("/manager/stats").then((response) => { if (active && response.data?.success) setStats({ ...emptyStats, ...response.data.data, charts: response.data.data?.charts ?? [] }); }).catch((requestError) => { console.error("Error fetching manager stats:", requestError); if (active) setError("Unable to load dashboard statistics."); }).finally(() => { if (active) setLoading(false); }); return () => { active = false; }; }, []);
+  useEffect(() => { let active = true; api.get("/manager/stats").then((response) => { if (active && response.data?.success) setStats({ ...emptyStats, ...response.data.data, charts: normalizeCharts(response.data.data?.charts) }); }).catch((requestError) => { console.error("Error fetching manager stats:", requestError); if (active) setError("Unable to load dashboard statistics."); }).finally(() => { if (active) setLoading(false); }); return () => { active = false; }; }, []);
 
   const modules = [
     { title: "Vendors", count: stats.totalVendors, detail: `${stats.sentForApproval} awaiting review`, to: routes.manager.vendors, Icon: FiUsers, color: "bg-violet-50 text-violet-700" },
