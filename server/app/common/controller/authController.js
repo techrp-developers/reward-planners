@@ -35,7 +35,7 @@ const { getPublicUrl } = require("../../../utils/publicUrl");
 const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
 
   function generateOTP() {
-    return crypto.randomInt(1000, 10000).toString();
+    return crypto.randomInt(100000, 1000000).toString();
   }
 
   function normalizeEmail(email) {
