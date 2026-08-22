@@ -29,6 +29,11 @@ import { AxiosError } from "axios";
 
 // const API_BASEIMAGE_URL = "https://rewardplanners.com/api/crm";
 const R2_BASE_URL = "https://cdn.rewardplanners.com";
+const VENDOR_PRODUCT_LIST_STATE = "rp-vendor-product-list-state";
+const loadVendorListState = () => {
+  try { return JSON.parse(sessionStorage.getItem(VENDOR_PRODUCT_LIST_STATE) || "{}"); }
+  catch { return {}; }
+};
 
 /* ================================
        TYPES
@@ -766,17 +771,18 @@ const BulkUploadModal = ({
        MAIN COMPONENT
 ================================ */
 export default function ProductManagerList() {
+  const [savedListState] = useState(loadVendorListState);
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [tableLoading, setTableLoading] = useState(false);
-  const [searchInput, setSearchInput] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchInput, setSearchInput] = useState(String(savedListState.searchQuery || ""));
+  const [searchQuery, setSearchQuery] = useState(String(savedListState.searchQuery || ""));
 
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [brandInput, setBrandInput] = useState("");
-  const [brandFilter, setBrandFilter] = useState("");
-  const [sortBy, setSortBy] = useState<string>("created_at");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [statusFilter, setStatusFilter] = useState<string>(String(savedListState.statusFilter || "all"));
+  const [brandInput, setBrandInput] = useState(String(savedListState.brandFilter || ""));
+  const [brandFilter, setBrandFilter] = useState(String(savedListState.brandFilter || ""));
+  const [sortBy, setSortBy] = useState<string>(String(savedListState.sortBy || "created_at"));
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">(savedListState.sortOrder === "asc" ? "asc" : "desc");
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [reportDownloading, setReportDownloading] = useState(false);
@@ -790,11 +796,15 @@ export default function ProductManagerList() {
   const [bulkUploading, setBulkUploading] = useState(false);
 
   const [pagination, setPagination] = useState({
-    currentPage: 1,
+    currentPage: Math.max(1, Number(savedListState.currentPage) || 1),
     totalPages: 1,
     totalItems: 0,
     itemsPerPage: 10,
   });
+
+  useEffect(() => {
+    sessionStorage.setItem(VENDOR_PRODUCT_LIST_STATE, JSON.stringify({ searchQuery, statusFilter, brandFilter, sortBy, sortOrder, currentPage: pagination.currentPage }));
+  }, [searchQuery, statusFilter, brandFilter, sortBy, sortOrder, pagination.currentPage]);
 
   const [stats, setStats] = useState<Stats>({
     total: 0,
@@ -996,8 +1006,11 @@ export default function ProductManagerList() {
     }
 
     debounceRef.current = window.setTimeout(() => {
-      setPagination((p) => ({ ...p, currentPage: 1 }));
-      setSearchQuery(searchInput.trim());
+      const nextSearch = searchInput.trim();
+      if (nextSearch !== searchQuery) {
+        setPagination((p) => ({ ...p, currentPage: 1 }));
+        setSearchQuery(nextSearch);
+      }
     }, 450);
 
     return () => {
@@ -1005,7 +1018,7 @@ export default function ProductManagerList() {
         clearTimeout(debounceRef.current);
       }
     };
-  }, [searchInput]);
+  }, [searchInput, searchQuery]);
 
   useEffect(() => {
     if (brandDebounceRef.current) {
@@ -1013,8 +1026,11 @@ export default function ProductManagerList() {
     }
 
     brandDebounceRef.current = window.setTimeout(() => {
-      setPagination((p) => ({ ...p, currentPage: 1 }));
-      setBrandFilter(brandInput.trim());
+      const nextBrand = brandInput.trim();
+      if (nextBrand !== brandFilter) {
+        setPagination((p) => ({ ...p, currentPage: 1 }));
+        setBrandFilter(nextBrand);
+      }
     }, 450);
 
     return () => {
@@ -1022,7 +1038,7 @@ export default function ProductManagerList() {
         clearTimeout(brandDebounceRef.current);
       }
     };
-  }, [brandInput]);
+  }, [brandInput, brandFilter]);
 
   useEffect(() => {
     const id = setInterval(() => {

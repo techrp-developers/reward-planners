@@ -30,6 +30,11 @@ const productImageUrl = (path: string) =>
   path.startsWith("http://") || path.startsWith("https://")
     ? path
     : `${R2_BASE_URL}/${path.replace(/^\/+/, "")}`;
+const MANAGER_PRODUCT_LIST_STATE = "rp-manager-product-list-state";
+const loadManagerListState = () => {
+  try { return JSON.parse(sessionStorage.getItem(MANAGER_PRODUCT_LIST_STATE) || "{}"); }
+  catch { return {}; }
+};
 
 /* ================================
        TYPES
@@ -194,7 +199,8 @@ const SORT_FIELD_MAP: Record<SortColumn, string> = {
        MAIN COMPONENT
 ================================ */
 export default function ProductManagerList() {
-  const [productTab, setProductTab] = useState<"catalog" | "flea_market">("catalog");
+  const [savedListState] = useState(loadManagerListState);
+  const [productTab, setProductTab] = useState<"catalog" | "flea_market">(savedListState.productTab === "flea_market" ? "flea_market" : "catalog");
   const [products, setProducts] = useState<
     (Omit<ProductItem, "status"> & { status: ProductStatus })[]
   >([]);
@@ -218,19 +224,23 @@ export default function ProductManagerList() {
     resubmission: 0,
   });
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [brandSearch, setBrandSearch] = useState("");
-  const [vendorSearch, setVendorSearch] = useState("");
-  const [sortBy, setSortBy] = useState<SortColumn>("product_id");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [searchQuery, setSearchQuery] = useState(String(savedListState.searchQuery || ""));
+  const [statusFilter, setStatusFilter] = useState<string>(String(savedListState.statusFilter || "all"));
+  const [brandSearch, setBrandSearch] = useState(String(savedListState.brandSearch || ""));
+  const [vendorSearch, setVendorSearch] = useState(String(savedListState.vendorSearch || ""));
+  const [sortBy, setSortBy] = useState<SortColumn>(["product_id", "product_name", "created_at"].includes(savedListState.sortBy) ? savedListState.sortBy : "product_id");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">(savedListState.sortOrder === "asc" ? "asc" : "desc");
 
   const [pagination, setPagination] = useState({
-    currentPage: 1,
+    currentPage: Math.max(1, Number(savedListState.currentPage) || 1),
     totalPages: 1,
     totalItems: 0,
     itemsPerPage: 10,
   });
+
+  useEffect(() => {
+    sessionStorage.setItem(MANAGER_PRODUCT_LIST_STATE, JSON.stringify({ productTab, searchQuery, statusFilter, brandSearch, vendorSearch, sortBy, sortOrder, currentPage: pagination.currentPage }));
+  }, [productTab, searchQuery, statusFilter, brandSearch, vendorSearch, sortBy, sortOrder, pagination.currentPage]);
 
   const okBtnClass =
     "px-6 py-2 rounded-xl font-bold text-white bg-[#852BAF] transition-all duration-300 cursor-pointer " +
