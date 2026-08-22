@@ -33,6 +33,8 @@ interface Customer {
   department: string | null;
   company_role: string | null;
   device_platform: "android" | "ios" | null;
+  device_id: string | null;
+  device_name: string | null;
 }
 
 type Tab = "companies" | "employees";
@@ -405,7 +407,7 @@ export default function EmployeeDirectory() {
                   <td className="px-5 py-4"><p className="font-bold text-gray-900">{customer.name}</p><p className="text-xs text-gray-500">{customer.email || "No email"}</p><p className="text-xs text-gray-400">{customer.phone || "No phone"}</p></td>
                   <td className="px-5 py-4"><p className="font-semibold text-gray-700">{customer.company_name || "Unassigned"}</p><p className="text-xs text-gray-400">Customer #{customer.user_id}</p></td>
                   <td className="px-5 py-4"><p className="text-gray-700">{customer.company_role || "—"}</p><p className="text-xs text-gray-400">{customer.department || "No department"}</p></td>
-                  <td className="px-5 py-4"><PlatformBadge platform={customer.device_platform} /></td>
+                  <td className="px-5 py-4"><PlatformBadge platform={customer.device_platform} />{customer.device_name && <p className="mt-1 max-w-32 truncate text-[11px] text-gray-400" title={customer.device_name}>{customer.device_name}</p>}</td>
                   <td className="px-5 py-4"><div className="flex flex-col items-start gap-1"><Badge active={Number(customer.status) === 1} label={Number(customer.status) === 1 ? "Active" : "Inactive"} /><span className="text-[11px] font-semibold text-gray-400">{Number(customer.is_verified) === 1 ? "Verified" : "Not verified"}</span></div></td>
                   <td className="px-5 py-4 text-xs text-gray-500">{customer.last_login_at ? new Date(customer.last_login_at).toLocaleString() : "Never"}</td>
                 </tr>)}
