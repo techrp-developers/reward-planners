@@ -63,43 +63,66 @@ router.get(
   authorizeRoles("vendor_manager", "admin"),
   async (req, res) => {
     try {
-      const [[vendorStats]] = await db.execute(`
+      const [vendorResult, productResult, orderResult, catalogResult, campaignResult, rewardResult, monthlyResult] = await Promise.all([
+        db.execute(`
         SELECT
-          COUNT(CASE WHEN status != 'pending' THEN 1 END) AS totalVendors,
-          SUM(status='pending') AS pendingApprovals,
-          SUM(status='sent_for_approval') AS sentForApproval,
-          SUM(status='approved') AS approvedVendors,
-          SUM(status='rejected') AS rejectedVendors
-        FROM vendors
-      `);
-
-      const [[productStats]] = await db.execute(`
+          COUNT(*) AS totalVendors,
+          COALESCE(SUM(status='pending'), 0) AS pendingApprovals,
+          COALESCE(SUM(status='sent_for_approval'), 0) AS sentForApproval,
+          COALESCE(SUM(status='approved'), 0) AS approvedVendors,
+          COALESCE(SUM(status='rejected'), 0) AS rejectedVendors
+        FROM vendors`),
+        db.execute(`
         SELECT
           COUNT(*) AS totalProducts,
-
-          SUM(status = 'pending') AS pendingProducts,
-          SUM(status = 'sent_for_approval') AS sentForApprovalProducts,
-          SUM(status = 'resubmission') AS resubmissionProducts,
-          SUM(status = 'approved') AS approvedProducts,
-          SUM(status = 'rejected') AS rejectedProducts
-
+          COALESCE(SUM(status = 'pending'), 0) AS pendingProducts,
+          COALESCE(SUM(status = 'sent_for_approval'), 0) AS sentForApprovalProducts,
+          COALESCE(SUM(status = 'resubmission'), 0) AS resubmissionProducts,
+          COALESCE(SUM(status = 'approved'), 0) AS approvedProducts,
+          COALESCE(SUM(status = 'rejected'), 0) AS rejectedProducts
         FROM eproducts
-        WHERE 
-          is_deleted = 0
-          AND status IN ('sent_for_approval', 'approved', 'rejected', 'resubmission')
-    `);
+        WHERE is_deleted = 0`),
+        db.execute(`SELECT COUNT(*) AS totalOrders,
+          COALESCE(SUM(status = 'cancelled'), 0) AS cancelledOrders,
+          COALESCE(SUM(cancellation_status = 'requested'), 0) AS cancellationRequests,
+          COALESCE(SUM(CASE WHEN status != 'cancelled' THEN total_amount ELSE 0 END), 0) AS grossOrderValue
+        FROM eorders`),
+        db.execute(`SELECT
+          (SELECT COUNT(*) FROM categories) AS categories,
+          (SELECT COUNT(*) FROM sub_categories) AS subcategories,
+          (SELECT COUNT(*) FROM category_attributes WHERE is_active = 1) AS attributes,
+          (SELECT COUNT(*) FROM documents) AS documents`),
+        db.execute(`SELECT COUNT(*) AS totalCampaigns,
+          COALESCE(SUM(status = 'active' AND (start_at IS NULL OR start_at <= NOW()) AND (end_at IS NULL OR end_at >= NOW())), 0) AS activeCampaigns
+        FROM campaigns`),
+        db.execute(`SELECT COUNT(*) AS rewardRules, COALESCE(SUM(is_active = 1), 0) AS activeRewardRules FROM reward_rules`),
+        db.execute(`SELECT month_key, month_label,
+          SUM(vendors) AS vendors, SUM(products) AS products, SUM(orders) AS orders, SUM(order_value) AS orderValue
+        FROM (
+          SELECT DATE_FORMAT(created_at, '%Y-%m') month_key, DATE_FORMAT(created_at, '%b') month_label, COUNT(*) vendors, 0 products, 0 orders, 0 order_value FROM vendors WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 5 MONTH) GROUP BY month_key, month_label
+          UNION ALL
+          SELECT DATE_FORMAT(created_at, '%Y-%m'), DATE_FORMAT(created_at, '%b'), 0, COUNT(*), 0, 0 FROM eproducts WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 5 MONTH) AND is_deleted = 0 GROUP BY DATE_FORMAT(created_at, '%Y-%m'), DATE_FORMAT(created_at, '%b')
+          UNION ALL
+          SELECT DATE_FORMAT(created_at, '%Y-%m'), DATE_FORMAT(created_at, '%b'), 0, 0, COUNT(*), SUM(CASE WHEN status != 'cancelled' THEN total_amount ELSE 0 END) FROM eorders WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 5 MONTH) GROUP BY DATE_FORMAT(created_at, '%Y-%m'), DATE_FORMAT(created_at, '%b')
+        ) monthly GROUP BY month_key, month_label ORDER BY month_key`),
+      ]);
+      const vendorStats = vendorResult[0][0];
+      const productStats = productResult[0][0];
+      const orderStats = orderResult[0][0];
+      const catalogStats = catalogResult[0][0];
+      const campaignStats = campaignResult[0][0];
+      const rewardStats = rewardResult[0][0];
+      const monthly = monthlyResult[0];
       res.json({
         success: true,
         data: {
           ...vendorStats,
           ...productStats,
-          totalRevenue: 0,
-          charts: {
-            monthlyLabels: [],
-            monthlyRevenue: [],
-            vendorCount: [],
-            productCount: [],
-          },
+          ...orderStats,
+          ...catalogStats,
+          ...campaignStats,
+          ...rewardStats,
+          charts: monthly.map((row) => ({ month: row.month_label, vendors: Number(row.vendors), products: Number(row.products), orders: Number(row.orders), orderValue: Number(row.orderValue) })),
         },
       });
     } catch (err) {
