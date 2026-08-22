@@ -25,6 +25,12 @@ import { routes } from "../../../routes";
 import { api } from "../../../common/api/api";
 import { confirmDialog } from "../../../common/utils/confirmDialog";
 
+const R2_BASE_URL = "https://cdn.rewardplanners.com";
+const productImageUrl = (path: string) =>
+  path.startsWith("http://") || path.startsWith("https://")
+    ? path
+    : `${R2_BASE_URL}/${path.replace(/^\/+/, "")}`;
+
 /* ================================
        TYPES
 ================================ */
@@ -779,15 +785,6 @@ export default function ProductManagerList() {
             <thead style={{ background: "linear-gradient(135deg, #fdf8ff 0%, #fff5f8 100%)" }}>
               <tr>
                 <th
-                  onClick={() => handleSort("product_id")}
-                  className="px-4 py-4 text-xs font-bold tracking-wider text-gray-500 uppercase cursor-pointer"
-                >
-                  <div className="flex items-center">
-                    Product ID {getSortIcon("product_id")}
-                  </div>
-                </th>
-
-                <th
                   onClick={() => handleSort("product_name")}
                   className="px-4 py-4 text-xs font-bold tracking-wider text-gray-500 uppercase cursor-pointer"
                 >
@@ -830,40 +827,33 @@ export default function ProductManagerList() {
             <tbody className="bg-white divide-y divide-gray-50">
               {products.map((product) => (
                 <tr key={product.product_id} className="transition-colors hover:bg-purple-50/30">
-                  {/* NEW: Product ID cell */}
                   <td className="px-4 py-4">
                     <Link
                       to={routes.manager.productView.replace(":id", product.product_id.toString())}
-                      className="inline-flex items-center px-2.5 py-1 text-xs font-bold bg-purple-50 text-[#852BAF] border border-purple-200 rounded-lg hover:bg-[#852BAF] hover:text-white transition-all"
+                      className="flex min-w-[210px] max-w-[270px] items-center gap-3 group"
                       title="View"
                     >
-                      PRD-{product.product_id}
+                      {product.main_image ? (
+                        <span className="h-11 w-11 shrink-0 overflow-hidden rounded-xl border border-purple-100 bg-gray-100">
+                          <img src={productImageUrl(product.main_image)} alt={product.product_name} loading="lazy" decoding="async" className="h-full w-full object-cover transition duration-300 group-hover:scale-110" />
+                        </span>
+                      ) : (
+                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-dashed border-purple-200 bg-purple-50 text-[#852BAF]">
+                          <FiBox />
+                        </span>
+                      )}
+                      <span className="min-w-0"><span className="line-clamp-2 text-sm font-semibold leading-snug text-gray-800 transition-colors group-hover:text-[#852BAF]">{product.product_name || "Unnamed Product"}</span><span className="mt-1 inline-flex rounded-md bg-purple-50 px-1.5 py-0.5 text-[10px] font-bold text-[#852BAF]">PRD-{product.product_id}</span></span>
                     </Link>
                   </td>
 
                   <td className="px-4 py-4">
-                    <Link
-                      to={routes.manager.productView.replace(":id", product.product_id.toString())}
-                      className="font-semibold text-gray-800 hover:text-[#852BAF] transition-colors text-sm leading-snug line-clamp-2"
-                      title="View"
-                    >
-                      {product.product_name}
-                    </Link>
-                  </td>
-
-                  <td className="px-4 py-4">
-                    <div className="flex min-w-[150px] items-center gap-2.5">
-                      <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-purple-100 to-pink-100 text-xs font-extrabold uppercase text-[#852BAF] ring-1 ring-purple-200/70">
-                        {(product.vendor_name || "V").trim().charAt(0)}
-                      </div>
-                      <div className="min-w-0">
+                    <div className="min-w-[150px]">
                         <p className="truncate text-sm font-bold text-gray-700" title={product.vendor_name || undefined}>
                           {product.vendor_name || `Vendor #${product.vendor_id}`}
                         </p>
                         <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
                           ID {product.vendor_id}
                         </p>
-                      </div>
                     </div>
                   </td>
 
