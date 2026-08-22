@@ -326,7 +326,7 @@ class SupportController {
   // list every ticket, across all customers
   async getAllTickets(req, res) {
     try {
-      const { status, support_module, search } = req.query;
+      const { status, search } = req.query;
 
       const conditions = [];
       const params = [];
@@ -336,51 +336,66 @@ class SupportController {
         params.push(status);
       }
 
-      if (support_module && support_module !== "all") {
-        conditions.push("st.support_module = ?");
-        params.push(support_module);
-      }
-
       if (search && String(search).trim()) {
         const like = `%${String(search).trim()}%`;
-        conditions.push(
-          "(st.subject LIKE ? OR st.description LIKE ? OR c.name LIKE ? OR c.email LIKE ?)",
-        );
-        params.push(like, like, like, like);
+        conditions.push("(st.subject LIKE ? OR st.description LIKE ?)");
+        params.push(like, like);
       }
 
       const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
       const [tickets] = await db.execute(
-        `SELECT
-          st.ticket_id,
-          st.user_id,
-          c.name AS user_name,
-          c.email AS user_email,
-          c.phone AS user_phone,
-          st.subject,
-          st.description,
-          st.category_id,
-          sc.name AS category_name,
-          st.support_module,
-          st.reference_type,
-          st.reference_id,
-          st.reference_label,
-          st.attachment_url,
-          st.status,
-          st.created_at,
-          st.updated_at
+        `SELECT st.*
         FROM support_tickets st
-        LEFT JOIN support_categories sc ON sc.category_id = st.category_id
-        LEFT JOIN customer c ON c.user_id = st.user_id
         ${whereClause}
         ORDER BY st.ticket_id DESC`,
         params,
       );
 
+      const users = new Map();
+      const categories = new Map();
+      const userIds = [...new Set(tickets.map((ticket) => Number(ticket.user_id)).filter(Number.isInteger))];
+      const categoryIds = [...new Set(tickets.map((ticket) => Number(ticket.category_id)).filter(Number.isInteger))];
+
+      if (userIds.length) {
+        try {
+          const placeholders = userIds.map(() => "?").join(",");
+          const [rows] = await db.execute(
+            `SELECT user_id, name, email, phone FROM customer WHERE user_id IN (${placeholders})`,
+            userIds,
+          );
+          rows.forEach((row) => users.set(Number(row.user_id), row));
+        } catch (enrichmentError) {
+          console.error("Support ticket customer enrichment skipped:", enrichmentError.code);
+        }
+      }
+
+      if (categoryIds.length) {
+        try {
+          const placeholders = categoryIds.map(() => "?").join(",");
+          const [rows] = await db.execute(
+            `SELECT category_id, name FROM support_categories WHERE category_id IN (${placeholders})`,
+            categoryIds,
+          );
+          rows.forEach((row) => categories.set(Number(row.category_id), row.name));
+        } catch (enrichmentError) {
+          console.error("Support ticket category enrichment skipped:", enrichmentError.code);
+        }
+      }
+
       const formatted = tickets.map((ticket) => ({
         ...ticket,
-        attachment_url: getPublicUrl(ticket.attachment_url, ticket.updated_at),
+        user_name: users.get(Number(ticket.user_id))?.name || null,
+        user_email: users.get(Number(ticket.user_id))?.email || null,
+        user_phone: users.get(Number(ticket.user_id))?.phone || null,
+        category_name: categories.get(Number(ticket.category_id)) || null,
+        support_module: ticket.support_module || "general",
+        reference_type: ticket.reference_type || null,
+        reference_id: ticket.reference_id || null,
+        reference_label: ticket.reference_label || null,
+        attachment_url: ticket.attachment_url
+          ? getPublicUrl(ticket.attachment_url, ticket.updated_at)
+          : null,
       }));
 
       return res.status(200).json({
@@ -392,6 +407,7 @@ class SupportController {
       return res.status(500).json({
         success: false,
         message: "Internal server error",
+        code: error.code || "SUPPORT_TICKET_LIST_FAILED",
       });
     }
   }
