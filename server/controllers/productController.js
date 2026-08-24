@@ -9,6 +9,8 @@ const { uploadToR2 } = require("../utils/r2upload");
 const sharp = require("sharp");
 const XLSX = require("xlsx");
 const xpressService = require("../services/ExpressBees/xpressbees_service");
+const { runNonBlocking } = require("../utils/nonBlocking");
+const { notifyProductSubmitted } = require("../services/mailBuilder/productNotificationService");
 
 const BULK_BASE_FIELDS = new Set([
   "productName", "brandName", "manufacturer", "gstSlab", "hsnSacCode",
@@ -1331,6 +1333,10 @@ class ProductController {
          SET status = 'sent_for_approval'
          WHERE product_id = ?`,
         [product.product_id],
+      );
+      runNonBlocking(
+        () => notifyProductSubmitted(product.product_id),
+        "product submission emails",
       );
     }
 

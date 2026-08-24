@@ -7,6 +7,8 @@ const checkoutModel = require("../models/checkoutModel");
 const sessionModel = require("../models/sessionModel");
 const scheduleModel = require("../models/scheduleModel");
 const { createError } = require("../utils/appError");
+const { runNonBlocking } = require("../../utils/nonBlocking");
+const { sendFleaMarketOrderPlacedEmails } = require("../../services/mailBuilder/fleaMarketOrderPlaced");
 
 async function buildResultFromExistingInvoices(invoiceIds, userId) {
   const invoices = [];
@@ -235,6 +237,11 @@ class CheckoutService {
       );
 
       await conn.commit();
+
+      runNonBlocking(
+        () => sendFleaMarketOrderPlacedEmails(invoices.map((invoice) => invoice.invoiceId)),
+        "flea market checkout recipient emails",
+      );
 
       // Best-effort, outside the transaction — a failure here shouldn't undo
       // an otherwise-successful checkout. Only ever flips scheduled -> in_progress.

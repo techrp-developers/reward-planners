@@ -735,4 +735,10 @@ class OrderController {
   }
 }
 
-module.exports = new OrderController();
+const orderController = new OrderController();
+
+// Reused by post-payment email delivery. Keeping invoice rendering in one
+// place ensures downloaded and emailed invoices remain identical.
+orderController.buildInvoiceHTML = buildInvoiceHTML;
+
+module.exports = orderController;

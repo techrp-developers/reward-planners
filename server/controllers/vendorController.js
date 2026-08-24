@@ -8,7 +8,9 @@ const fs = require("fs");
 const path = require("path");
 const {
   notifyVendorStatusChange,
+  notifyVendorOnboardingSubmitted,
 } = require("../services/mailBuilder/vendorNotificationService");
+const { runNonBlocking } = require("../utils/nonBlocking");
 const { uploadToR2 } = require("../utils/r2upload");
 const { getPrivateFileUrl } = require("../utils/r2SignedUrl");
 const sharp = require("sharp");
@@ -125,6 +127,22 @@ class VendorController {
       }
       await connection.commit();
 
+      runNonBlocking(async () => {
+        const [[vendorRecipient]] = await db.query(
+          `SELECT v.*, COALESCE(NULLIF(vc.email, ''), u.email) AS email
+           FROM vendors v
+           JOIN eusers u ON u.user_id = v.user_id
+           LEFT JOIN vendor_contacts vc ON vc.vendor_id = v.vendor_id
+           WHERE v.vendor_id = ? LIMIT 1`,
+          [vndID],
+        );
+        const [[manager]] = await db.query(
+          `SELECT name, email FROM eusers WHERE role = 'vendor_manager' AND email IS NOT NULL
+           ORDER BY is_verified DESC, user_id LIMIT 1`,
+        );
+        if (vendorRecipient) await notifyVendorOnboardingSubmitted(vendorRecipient, manager);
+      }, "vendor onboarding emails");
+
       return res.status(201).json({
         success: true,
         message: "Vendor onboarded successfully",
@@ -229,7 +247,11 @@ class VendorController {
 
       // Fetch Vendor Details
       const [vendorRows] = await db.query(
-        `SELECT * FROM vendors WHERE vendor_id = ?`,
+        `SELECT v.*, COALESCE(NULLIF(vc.email, ''), u.email) AS email
+         FROM vendors v
+         JOIN eusers u ON u.user_id = v.user_id
+         LEFT JOIN vendor_contacts vc ON vc.vendor_id = v.vendor_id
+         WHERE v.vendor_id = ? LIMIT 1`,
         [vendorId],
       );
 
@@ -242,10 +264,10 @@ class VendorController {
 
       const vendor = vendorRows[0];
 
-      // Send Mail
-      // if (status === "approved" || status === "rejected") {
-      //   await notifyVendorStatusChange(vendor, status);
-      // }
+      runNonBlocking(
+        () => notifyVendorStatusChange(vendor, status),
+        `vendor ${status} email`,
+      );
 
       return res.json({
         success: true,

@@ -2,6 +2,8 @@ const ManagerModel = require("../models/managerModel");
 const db = require("../config/database");
 const ExcelJS = require("exceljs");
 const EmployeeModel = require("../models/employeeModel");
+const { runNonBlocking } = require("../utils/nonBlocking");
+const { notifyProductStatusChange } = require("../services/mailBuilder/productNotificationService");
 
 const COMPANY_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -415,6 +417,10 @@ class ManagerController {
          WHERE product_id = ?`,
           [product.product_id],
         );
+        runNonBlocking(
+          () => notifyProductStatusChange(product.product_id, "approved"),
+          "product approved email",
+        );
       }
 
       return res.json({
@@ -462,6 +468,10 @@ class ManagerController {
          WHERE product_id = ?`,
           [reason, product.product_id],
         );
+        runNonBlocking(
+          () => notifyProductStatusChange(product.product_id, "rejected", reason),
+          "product rejected email",
+        );
       }
 
       return res.json({
@@ -508,6 +518,10 @@ class ManagerController {
          SET status = 'resubmission',rejection_reason = ?
          WHERE product_id = ?`,
           [reason, product.product_id],
+        );
+        runNonBlocking(
+          () => notifyProductStatusChange(product.product_id, "resubmission", reason),
+          "product resubmission email",
         );
       }
 
