@@ -2,8 +2,8 @@ const puppeteer = require("puppeteer");
 const fs = require("fs");
 const path = require("path");
 
-const logoSvg = fs.readFileSync(path.join(__dirname, "../../uploads/assets/logo2.svg"), "utf8");
-const logoDataUri = `data:image/svg+xml;base64,${Buffer.from(logoSvg).toString("base64")}`;
+const logoBuffer = fs.readFileSync(path.join(__dirname, "../../uploads/logo 2.png"));
+const logoDataUri = `data:image/png;base64,${logoBuffer.toString("base64")}`;
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({

@@ -2,18 +2,13 @@ const express = require("express");
 const router = express.Router();
 const authController = require("../controller/authController");
 const auth = require("../middlewares/auth");
+const optionalAuth = require("../middlewares/optionalAuth");
 const upload = require("../../../middleware/mediaUpload/serviceCategoryUpload");
 const { authLimiter } = require("../middlewares/rateLimiter");
 
-/*=========================================Unified OTP login==========================================*/
-router.post("/check", authLimiter, authController.checkIdentifier);
-router.post("/send-otp", authLimiter, authController.sendOtp);
-router.post("/verify-otp", authLimiter, authController.verifyOtp);
-router.post("/refresh-token", authLimiter, authController.refreshToken);
-router.post("/logout", auth, authController.logout);
-
-// Fcm token
-router.post("/update-fcm-token", auth, authController.updateFcmToken);
+/*============================================Profile=================================================*/
+// Activate account
+router.post("/activate-account", authLimiter, authController.activateAccount);
 
 // Passwordless login: request a code for a preloaded employee.
 router.post("/request-otp", authLimiter, authController.activateAccount);
@@ -73,6 +68,7 @@ router.post("/reset-password", authLimiter, authController.resetPassword);
 // change password
 router.put("/change-password", auth, authController.changePassword);
 
+/*=============================================Address================================================*/
 // Fetch all the countries
 // router.get("/countries", authController.getCountries);
 
@@ -111,5 +107,11 @@ router.put(
 
 // delete customer record
 router.delete("/delete-customer", auth, authController.deleteCustomer);
+
+/*=========================================Device change verification==================================*/
+// Opened directly in a browser from the approval email — no app auth token.
+router.get("/device-change/allow", authController.allowDeviceChange);
+
+router.get("/device-change/deny", authController.denyDeviceChange);
 
 module.exports = router;
