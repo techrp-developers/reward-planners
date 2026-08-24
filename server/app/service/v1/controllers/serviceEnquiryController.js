@@ -2,6 +2,7 @@ const db = require("../../../../config/database");
 const ServiceEnquiryModel = require("../models/serviceEnquiryModel");
 const {
   sendNewEnquiryEmail,
+  sendEnquiryStatusEmail,
 } = require("../../../../services/mailBuilder/enquiryNotification");
 const { runNonBlocking } = require("../../../../utils/nonBlocking");
 const { notifyUser } = require("../../../common/utils/notification");
@@ -107,6 +108,26 @@ class ServiceEnquiryController {
         },
         "admin service enquiry WhatsApp",
       );
+
+      runNonBlocking(async () => {
+        const [[context]] = await db.query(
+          `SELECT COALESCE(NULLIF(se.email, ''), c.email) AS email,
+                  COALESCE(s.name, sb.name, 'Service Enquiry') AS service_name
+           FROM service_enquiries se
+           JOIN customer c ON c.user_id = se.user_id
+           LEFT JOIN services s ON s.id = se.service_id
+           LEFT JOIN service_bundles sb ON sb.id = se.bundle_id
+           WHERE se.id = ? LIMIT 1`,
+          [result.id],
+        );
+        return sendNewEnquiryEmail({
+          name,
+          email: context?.email || email,
+          contact: mobile,
+          subject: context?.service_name || "Service Enquiry",
+          description: JSON.stringify(safeEnquiryData),
+        });
+      }, "service enquiry recipient emails");
     } catch (err) {
       res.status(500).json({ success: false, message: err.message });
     }
@@ -185,6 +206,11 @@ class ServiceEnquiryController {
           message: "Enquiry not found",
         });
       }
+
+      runNonBlocking(
+        () => sendEnquiryStatusEmail(id, status),
+        `service enquiry ${status} email`,
+      );
 
       return res.json({
         success: true,

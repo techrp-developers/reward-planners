@@ -12,6 +12,7 @@ const {
 const {
   enqueueEcommerceOrderStatusWhatsApp,
 } = require("../services/whatsapp/ecommerceOrderStatusWhatsApp");
+const { sendServiceCancellationDecisionEmail } = require("../services/mailBuilder/serviceOrderNotification");
 const Razorpay = require("razorpay");
 
 const razorpay = new Razorpay({
@@ -744,6 +745,11 @@ class OrderController {
         "service cancellation approved notification",
       );
 
+      sendServiceCancellationDecisionEmail(
+        refundData.service_order_id,
+        "approved",
+      ).catch((error) => console.error("Service cancellation approval email failed:", error));
+
       if (refundData?.payment_id && refundData.amount > 0) {
         ServiceOrderModel.processRefund(refundData).catch((err) => {
           console.error(
@@ -886,6 +892,12 @@ class OrderController {
         },
         "service cancellation rejected notification",
       );
+
+      sendServiceCancellationDecisionEmail(
+        serviceOrderId,
+        "rejected",
+        req.body?.reason || req.body?.rejectionReason || null,
+      ).catch((error) => console.error("Service cancellation rejection email failed:", error));
 
       return res.json({
         success: true,
