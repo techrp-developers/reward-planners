@@ -205,6 +205,9 @@ function buildBodyValues(templateKey, ctx) {
     case "order_place_arriving":
       return [name, orderId];
 
+    case "order_in_transit":
+      return [name, orderId];
+
     case "order_place_delivered":
       return [name, orderId];
 

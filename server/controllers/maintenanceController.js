@@ -27,6 +27,7 @@ class MaintenanceController {
         maintenance_mode,
         drain_mode,
         maintenance_start_at,
+        maintenance_end_at,
       });
 
       return res.status(200).json({

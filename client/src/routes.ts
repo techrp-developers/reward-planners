@@ -33,8 +33,6 @@ export const routes = {
     changePassword: "/manager/change-password",
     profile: "/manager/profile",
     vendors: "/manager/vendors",
-    employees: "/manager/employees",
-    companyEmployees: "/manager/companies/:companyId/employees",
     products: "/manager/products",
     productView: "/manager/product/:id",
     vendorReview: "/manager/vendor-review/:id",
@@ -64,7 +62,6 @@ export const routes = {
       cancellation_detail: "/manager/service-cancellation-detail/:serviceOrderId",
     },
     reports: {
-      usage: "/manager/reports/usage",
       stock: "/manager/reports/stock",
       orders: "/manager/reports/orders",
     },
@@ -156,6 +153,17 @@ export const routes = {
     bookings: "/service/bookings",
     reports: "/service/reports",
     settings: "/service/settings",
+  },
+  rm: {
+    dashboard: "/rm/dashboard",
+    changePassword: "/rm/change-password",
+    profile: "/rm/profile",
+    employees: "/rm/employees",
+    companyEmployees: "/rm/companies/:companyId/employees",
+    supportTickets: "/rm/support-tickets",
+    reports: {
+      usage: "/rm/reports/usage",
+    },
   },
   servicePartner: {
     dashboard: "/service-partner/dashboard",

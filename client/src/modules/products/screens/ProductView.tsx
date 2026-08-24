@@ -447,6 +447,14 @@ export default function ReviewProductPage() {
     );
   }
 
+  const rawCustomAttributes = (productAttributes as Record<string, unknown>).__custom;
+  const customAttributeRows: { label: string; value: string }[] = Array.isArray(rawCustomAttributes)
+    ? rawCustomAttributes.map((row: { label?: unknown; value?: unknown; values?: unknown }) => ({
+        label: String(row.label ?? "Custom attribute"),
+        value: Array.isArray(row.values) ? row.values.map(String).join(", ") : String(row.value ?? "—"),
+      }))
+    : [];
+
   return (
     <div>
       <div className="mx-auto max-w-7xl">
@@ -580,55 +588,98 @@ export default function ReviewProductPage() {
           </section>
 
           {/* ================= PRODUCT ATTRIBUTES ================= */}
-          {attributeSchema.length > 0 && (
-            <section className="p-5 mt-4 border border-gray-100 vendor-section-card bg-gray-50/50 rounded-2xl">
+          {(attributeSchema.length > 0 || customAttributeRows.length > 0) && (
+            <section className="p-5 mt-4 border border-gray-100 vendor-section-card bg-white rounded-2xl shadow-sm">
               <SectionHeader
                 icon={FaBox}
                 title="Product Attributes"
                 description="Applies to all variants"
               />
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {attributeSchema.map((attr) => {
-                  const values = productAttributes[attr.attribute_key] || [];
+              {attributeSchema.length > 0 && (
+                <div>
+                  <p className="mb-3 text-[11px] font-bold tracking-widest text-gray-400 uppercase">
+                    Specifications
+                  </p>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+                    {attributeSchema.map((attr) => {
+                      const values = productAttributes[attr.attribute_key] || [];
+                      const hasValue = values.length > 0;
 
-                  return (
-                    <div
-                      key={attr.attribute_key}
-                      className="p-4 border bg-gray-50 rounded-xl"
-                    >
-                      <p className="mb-1 text-xs font-semibold text-gray-500 uppercase">
-                        {attr.attribute_label}
-                      </p>
+                      return (
+                        <div
+                          key={attr.attribute_key}
+                          className="p-4 transition border border-gray-100 rounded-xl bg-gray-50/70 hover:border-purple-200 hover:bg-purple-50/30"
+                        >
+                          <p className="mb-1.5 text-[10px] font-bold tracking-wider text-gray-400 uppercase">
+                            {attr.attribute_label}
+                          </p>
 
-                      <p className="text-sm font-medium text-gray-900">
-                        {values.length > 0 ? values.join(", ") : "—"}
-                      </p>
-                    </div>
-                  );
-                })}
+                          <p
+                            className={`text-sm font-semibold ${hasValue ? "text-gray-900" : "text-gray-300"}`}
+                          >
+                            {hasValue ? values.join(", ") : "—"}
+                          </p>
+                        </div>
+                      );
+                    })}
 
-                {/* Show legacy attributes if schema changed */}
-                {Object.keys(productAttributes)
-                  .filter(
-                    (key) =>
-                      !attributeSchema.some((a) => a.attribute_key === key),
-                  )
-                  .map((key) => (
-                    <div
-                      key={key}
-                      className="p-4 border bg-yellow-50 rounded-xl"
-                    >
-                      <p className="mb-1 text-xs font-semibold text-gray-500 uppercase">
-                        {key.replace(/_/g, " ")} (Legacy)
-                      </p>
+                    {/* Show legacy attributes if schema changed */}
+                    {Object.keys(productAttributes)
+                      .filter(
+                        (key) =>
+                          key !== "__custom" &&
+                          !attributeSchema.some((a) => a.attribute_key === key),
+                      )
+                      .map((key) => (
+                        <div
+                          key={key}
+                          className="relative p-4 border border-amber-100 rounded-xl bg-amber-50/60"
+                        >
+                          <span className="absolute px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-amber-600 uppercase bg-amber-100 rounded-full top-2.5 right-2.5">
+                            Legacy
+                          </span>
+                          <p className="mb-1.5 text-[10px] font-bold tracking-wider text-gray-400 uppercase pr-14">
+                            {key.replace(/_/g, " ")}
+                          </p>
 
-                      <p className="text-sm font-medium text-gray-900">
-                        {productAttributes[key].join(", ")}
-                      </p>
-                    </div>
-                  ))}
-              </div>
+                          <p className="text-sm font-semibold text-gray-900">
+                            {productAttributes[key].join(", ")}
+                          </p>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Vendor-added custom attributes */}
+              {customAttributeRows.length > 0 && (
+                <div className={attributeSchema.length > 0 ? "mt-6" : ""}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <p className="text-[11px] font-bold tracking-widest text-gray-400 uppercase">
+                      Custom Attributes
+                    </p>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#852BAF]">
+                      <FaTag size={8} /> Vendor added
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+                    {customAttributeRows.map((row, idx) => (
+                      <div
+                        key={idx}
+                        className="p-4 border border-purple-100 rounded-xl bg-gradient-to-br from-purple-50 to-pink-50/60"
+                      >
+                        <p className="mb-1.5 text-[10px] font-bold tracking-wider text-[#852BAF]/80 uppercase">
+                          {row.label}
+                        </p>
+                        <p className="text-sm font-semibold text-gray-900">
+                          {row.value}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </section>
           )}
 

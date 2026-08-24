@@ -7,10 +7,6 @@ const {
   generateInvoicePDF,
 } = require("../../../../services/Invoice/pdf-service");
 const archiver = require("archiver");
-const {
-  enqueueWhatsApp,
-} = require("../../../../services/whatsapp/waEnqueueService");
-const { runNonBlocking } = require("../../../../utils/nonBlocking");
 const { notifyUser } = require("../../../common/utils/notification");
 const { canRequestCancellation } = require("../utils/lifecyclePolicy");
 const ItemCancellationModel = require("../models/itemCancellationModel");
@@ -311,41 +307,6 @@ async function streamOrderInvoices(res, orderId, userId = null) {
   return archive.finalize();
 }
 
-// send whatsapp
-async function sendOrderPlacedWhatsApp(orderId) {
-  const [rows] = await db.query(
-    `SELECT 
-        o.order_id,
-        o.order_ref,
-        o.company_id,
-        o.total_amount,
-        cu.name AS customer_name,
-        cu.phone
-     FROM eorders o
-     JOIN customer cu ON cu.user_id = o.user_id
-     WHERE o.order_id = ?
-     LIMIT 1`,
-    [orderId],
-  );
-
-  if (!rows.length) return;
-
-  const ctx = rows[0];
-
-  if (!ctx.phone) return;
-
-  await enqueueWhatsApp({
-    eventName: "cancel_order",
-    ctx: {
-      phone: ctx.phone,
-      company_id: ctx.company_id ?? null,
-      customer_name: ctx.customer_name || "User",
-      order_id: ctx.order_ref || ctx.order_id,
-      total_amount: ctx.total_amount,
-    },
-  });
-}
-
 class OrderController {
   // Get order history
   async getOrderHistory(req, res) {
@@ -606,11 +567,6 @@ class OrderController {
           action_url: `/orders/order-details/${orderId}`,
         },
         "order cancellation notification",
-      );
-
-      runNonBlocking(
-        () => sendOrderPlacedWhatsApp(orderId),
-        "order cancellation WhatsApp",
       );
 
       return res.json({

@@ -3,6 +3,7 @@ import type { ChangeEvent, FormEvent } from "react";
 import type { ComponentType } from "react";
 import { api } from "../../../common/api/api";
 import QuillEditor from "../components/QuillEditor";
+import CustomAttributeBuilder, { type CustomAttributeRow } from "../components/CustomAttributeBuilder";
 import Swal from "sweetalert2";
 
 type IconComp = ComponentType<any>;
@@ -216,6 +217,9 @@ export default function ProductListingDynamic() {
   const [productAttributes, setProductAttributes] = useState<
     Record<string, string[]>
   >({});
+  const [customAttributes, setCustomAttributes] = useState<
+    CustomAttributeRow[]
+  >([]);
 
   useEffect(() => {
     fetchCategories();
@@ -363,7 +367,7 @@ export default function ProductListingDynamic() {
     setProduct((prev) => ({ ...prev, [name]: value }));
   };
 
-  const CHAR_LIMIT = 150;
+  const CHAR_LIMIT = 170;
 
   const handleShortDescriptionChange = (
     e: React.ChangeEvent<
@@ -397,10 +401,14 @@ export default function ProductListingDynamic() {
     e.preventDefault();
 
     const selectedVariantAttributes = categoryAttributes.filter((attribute) => attribute.is_variant === 1);
-    const combinations = selectedVariantAttributes.reduce((count, attribute) => {
+    let combinations = selectedVariantAttributes.reduce((count, attribute) => {
       const optionCount = new Set((productAttributes[attribute.attribute_key] || []).filter(Boolean)).size;
       return optionCount ? count * optionCount : count;
     }, 1);
+    combinations = customAttributes.filter((attribute) => attribute.is_variant === 1).reduce((count, attribute) => {
+      const optionCount = new Set(attribute.values.map((value) => value.trim()).filter(Boolean)).size;
+      return optionCount ? count * optionCount : count;
+    }, combinations);
     if (combinations > 100) {
       setError(`This selection creates ${combinations} variants. Reduce it to 100 combinations or fewer.`);
       return;
@@ -421,6 +429,14 @@ export default function ProductListingDynamic() {
       setError(
         `Please fill required attributes: ${missingAttrs.map((a) => a.attribute_label).join(", ")}`,
       );
+      return;
+    }
+
+    const invalidCustom = customAttributes.find((attr) =>
+      !attr.label.trim() || (attr.is_required === 1 && !attr.values.some((value) => value.trim())),
+    );
+    if (invalidCustom) {
+      setError(!invalidCustom.label.trim() ? "Every custom attribute needs a label." : `${invalidCustom.label} is required.`);
       return;
     }
 
@@ -515,7 +531,18 @@ export default function ProductListingDynamic() {
       Object.entries(docFiles).forEach(([docId, file]) => {
         if (file) formData.append(docId, file);
       });
-      formData.append("attributes", JSON.stringify(productAttributes));
+      const cleanedCustomAttributes = customAttributes
+        .filter((row) => row.label.trim() && row.values.some((value) => value.trim()))
+        .map((row) => ({
+          key: row.key || `custom_${row.id.replaceAll("-", "")}`,
+          label: row.label.trim(), input_type: row.input_type,
+          is_variant: row.is_variant, is_required: row.is_required,
+          values: [...new Set(row.values.map((value) => value.trim()).filter(Boolean))],
+        }));
+      const attributesPayload: Record<string, unknown> = { ...productAttributes };
+      if (cleanedCustomAttributes.length)
+        attributesPayload.__custom = cleanedCustomAttributes;
+      formData.append("attributes", JSON.stringify(attributesPayload));
 
       const res = await api.post("/product/create-product", formData, {
         headers: { "Content-Type": "multipart/form-data" },
@@ -612,10 +639,14 @@ export default function ProductListingDynamic() {
     )?.name || "Not selected";
 
   const variantAttributes = categoryAttributes.filter((attribute) => attribute.is_variant === 1);
-  const variantCombinationCount = variantAttributes.reduce((count, attribute) => {
+  let variantCombinationCount = variantAttributes.reduce((count, attribute) => {
     const selectedCount = new Set((productAttributes[attribute.attribute_key] || []).filter(Boolean)).size;
     return selectedCount ? count * selectedCount : count;
   }, 1);
+  variantCombinationCount = customAttributes.filter((attribute) => attribute.is_variant === 1).reduce((count, attribute) => {
+    const selectedCount = new Set(attribute.values.map((value) => value.trim()).filter(Boolean)).size;
+    return selectedCount ? count * selectedCount : count;
+  }, variantCombinationCount);
 
   if (loading && categories.length === 0) {
     return (
@@ -1093,6 +1124,9 @@ export default function ProductListingDynamic() {
             </p>
           )}
           {variantAttributes.length > 0 && <div className={`mt-6 rounded-2xl border p-4 ${variantCombinationCount > 100 ? "border-red-200 bg-red-50" : "border-purple-100 bg-purple-50/60"}`}><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-extrabold text-slate-800">Variant matrix preview</p><p className="mt-1 text-xs text-slate-500">Each unique option combination becomes a separately managed SKU.</p></div><span className={`rounded-xl px-4 py-2 text-sm font-black ${variantCombinationCount > 100 ? "bg-red-100 text-red-700" : "bg-white text-[#852BAF] shadow-sm"}`}>{variantCombinationCount} combination{variantCombinationCount === 1 ? "" : "s"}</span></div>{variantCombinationCount > 100 && <p className="mt-3 text-xs font-bold text-red-600">Reduce the selected options to 100 combinations or fewer.</p>}</div>}
+
+          {/* ── CUSTOM ATTRIBUTES ── */}
+          <CustomAttributeBuilder rows={customAttributes} onChange={setCustomAttributes} />
         </section>
 
         {/* ── PRODUCT DESCRIPTION ── */}
@@ -1151,7 +1185,7 @@ export default function ProductListingDynamic() {
                 name="shortDescription"
                 value={product.shortDescription}
                 onChange={handleShortDescriptionChange}
-                placeholder="Short description (max 150 characters)"
+                placeholder="Short description (max 170 characters)"
                 rows={3}
                 className={`${inputCls} resize-none`}
               />

@@ -23,13 +23,22 @@ const storage = multer.diskStorage({
 const allowedTypes = [
   "image/jpeg",
   "image/png",
+  "image/webp",
   "image/jpg",
   "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/plain",
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
 ];
 
 const fileFilter = (req, file, cb) => {
   if (!allowedTypes.includes(file.mimetype)) {
-    return cb(new Error("Only JPG, PNG, PDF allowed"), false);
+    return cb(new Error("Unsupported attachment type"), false);
   }
   cb(null, true);
 };
@@ -38,6 +47,6 @@ module.exports = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB
+    fileSize: 25 * 1024 * 1024,
   },
 });

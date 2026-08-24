@@ -659,7 +659,16 @@ class ProductModel {
         delete filteredProductAttributes[key];
       });
 
+      // Vendor-added attributes that aren't defined in category_attributes at
+      // all — these carry their own label since there's no schema row to
+      // resolve one from, so they're kept separate from product_attributes.
+      const customAttributes = Array.isArray(filteredProductAttributes.__custom)
+        ? filteredProductAttributes.__custom
+        : [];
+      delete filteredProductAttributes.__custom;
+
       product.product_attributes = filteredProductAttributes;
+      product.custom_attributes = customAttributes;
 
       // ================= PRODUCT VARIANTS =================
       const [variants] = await db.execute(

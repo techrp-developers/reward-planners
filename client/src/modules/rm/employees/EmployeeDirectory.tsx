@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { FiBriefcase, FiEdit2, FiEye, FiPlus, FiSearch, FiTrash2, FiUsers, FiX } from "react-icons/fi";
+import { FiBriefcase, FiDownload, FiEdit2, FiEye, FiPlus, FiSearch, FiTrash2, FiUploadCloud, FiUsers, FiX } from "react-icons/fi";
 import { Link } from "react-router-dom";
-import { api } from "../../../../common/api/api";
-import { useDebounce } from "../../../../common/hooks/useDebounce";
-import { confirmDialog } from "../../../../common/utils/confirmDialog";
+import * as XLSX from "xlsx";
+import { api } from "../../../common/api/api";
+import { useDebounce } from "../../../common/hooks/useDebounce";
+import { confirmDialog } from "../../../common/utils/confirmDialog";
 
 interface Company {
   company_id: number;
@@ -32,6 +33,8 @@ interface Customer {
   department: string | null;
   company_role: string | null;
   device_platform: "android" | "ios" | null;
+  device_id: string | null;
+  device_name: string | null;
 }
 
 type Tab = "companies" | "employees";
@@ -53,6 +56,12 @@ interface EmployeeForm {
   date_of_joining: string;
   reporting_manager: string;
   ctc: string;
+}
+
+interface ImportResult {
+  created_count: number;
+  skipped_count: number;
+  skipped: Array<{ row: number; reason: string }>;
 }
 
 const emptyCompanyForm: CompanyForm = {
@@ -114,6 +123,12 @@ export default function EmployeeDirectory() {
   const [employeeForm, setEmployeeForm] = useState<EmployeeForm>(emptyEmployeeForm);
   const [savingEmployee, setSavingEmployee] = useState(false);
   const [employeeFormError, setEmployeeFormError] = useState("");
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importCompanyId, setImportCompanyId] = useState("");
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState("");
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const query = useDebounce(search.trim().toLowerCase(), 250);
 
   async function fetchCompanies() {
@@ -256,6 +271,79 @@ export default function EmployeeDirectory() {
     }
   }
 
+  function openImport() {
+    setImportCompanyId("");
+    setImportFile(null);
+    setImportError("");
+    setImportResult(null);
+    setImportModalOpen(true);
+  }
+
+  function downloadTemplate() {
+    const columns = "name,email,phone,department,role,dob,date_of_joining,address1,address2,reporting_manager,ctc,status\n";
+    const example = "Jane Doe,jane@example.com,9876543210,Sales,Executive,1995-04-20,2026-08-01,,,John Manager,600000,active\n";
+    const url = URL.createObjectURL(new Blob([columns, example], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "employee-import-template.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadExcelTemplate() {
+    const worksheet = XLSX.utils.json_to_sheet([{
+      name: "Jane Doe",
+      email: "jane@example.com",
+      phone: "9876543210",
+      department: "Sales",
+      role: "Executive",
+      dob: "1995-04-20",
+      date_of_joining: "2026-08-01",
+      address1: "",
+      address2: "",
+      reporting_manager: "John Manager",
+      ctc: 600000,
+      status: "active",
+    }]);
+    worksheet["!cols"] = [
+      { wch: 22 }, { wch: 28 }, { wch: 16 }, { wch: 18 }, { wch: 18 }, { wch: 14 },
+      { wch: 18 }, { wch: 24 }, { wch: 24 }, { wch: 22 }, { wch: 14 }, { wch: 12 },
+    ];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Employees");
+    XLSX.writeFile(workbook, "employee-import-template.xlsx");
+  }
+
+  async function importEmployees(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!importCompanyId || !importFile) {
+      setImportError("Select a company and a CSV or Excel file.");
+      return;
+    }
+    setImporting(true);
+    setImportError("");
+    setImportResult(null);
+    try {
+      const payload = new FormData();
+      payload.append("company_id", importCompanyId);
+      payload.append("file", importFile);
+      const response = await api.post("/manager/employee-directory/employees/import", payload);
+      setImportResult(response.data?.data ?? null);
+      const [companyResponse, customerResponse] = await Promise.all([
+        api.get("/manager/employee-directory/companies"),
+        api.get("/manager/employee-directory/customers"),
+      ]);
+      setCompanies(companyResponse.data?.data ?? []);
+      setCustomers(customerResponse.data?.data ?? []);
+    } catch (requestError) {
+      console.error("Unable to import employees:", requestError);
+      const message = (requestError as { response?: { data?: { message?: string } } }).response?.data?.message;
+      setImportError(message || "Unable to import the file. Check its format and try again.");
+    } finally {
+      setImporting(false);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       <section className="flex flex-col gap-4 rounded-2xl border border-purple-100 bg-white/70 p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
@@ -286,7 +374,7 @@ export default function EmployeeDirectory() {
               <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${tab}...`} className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-[#852BAF] focus:bg-white focus:ring-4 focus:ring-purple-100" />
             </label>
             {tab === "companies" && <button onClick={openCreateCompany} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#C64EFE] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:shadow-md"><FiPlus /> Add Company</button>}
-            {tab === "employees" && <button onClick={openCreateEmployee} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#C64EFE] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:shadow-md"><FiPlus /> Add Employee</button>}
+            {tab === "employees" && <><button onClick={openImport} className="inline-flex items-center justify-center gap-2 rounded-xl border border-purple-200 bg-white px-4 py-2.5 text-sm font-bold text-[#852BAF] transition hover:bg-purple-50"><FiUploadCloud /> Import</button><button onClick={openCreateEmployee} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#C64EFE] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:shadow-md"><FiPlus /> Add Employee</button></>}
           </div>
         </div>
 
@@ -304,7 +392,7 @@ export default function EmployeeDirectory() {
                   <td className="px-5 py-4"><p className="text-gray-700">{company.company_email || "—"}</p><p className="text-xs text-gray-400">{company.company_phone || "—"}</p></td>
                   <td className="px-5 py-4 font-semibold text-gray-700">{company.total_employee_count}</td><td className="px-5 py-4 font-semibold text-gray-700">{company.active_employee_count}</td><td className="px-5 py-4"><div className="flex gap-2 whitespace-nowrap"><span className="rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">Android {company.android_user_count}</span><span className="rounded-lg bg-slate-900 px-2.5 py-1 text-xs font-bold text-white">iOS {company.ios_user_count}</span></div></td>
                   <td className="px-5 py-4"><Badge active={Number(company.status) === 1} label={Number(company.status) === 1 ? "Active" : "Inactive"} /></td>
-                  <td className="px-5 py-4 text-right"><div className="inline-flex items-center gap-2"><Link to={`/manager/companies/${company.company_id}/employees`} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-100 px-3 py-2 text-xs font-bold text-blue-600 transition hover:bg-blue-50"><FiEye /> Employees</Link><button onClick={() => openEditCompany(company)} className="inline-flex items-center gap-1.5 rounded-lg border border-purple-100 px-3 py-2 text-xs font-bold text-[#852BAF] transition hover:bg-purple-50"><FiEdit2 /> Edit</button><button onClick={() => void deleteCompany(company)} disabled={deletingCompanyId === company.company_id || Number(company.status) !== 1} className="inline-flex items-center gap-1.5 rounded-lg border border-red-100 px-3 py-2 text-xs font-bold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"><FiTrash2 /> {deletingCompanyId === company.company_id ? "Deleting..." : "Delete"}</button></div></td>
+                  <td className="px-5 py-4 text-right"><div className="inline-flex items-center gap-2"><Link to={`/rm/companies/${company.company_id}/employees`} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-100 px-3 py-2 text-xs font-bold text-blue-600 transition hover:bg-blue-50"><FiEye /> Employees</Link><button onClick={() => openEditCompany(company)} className="inline-flex items-center gap-1.5 rounded-lg border border-purple-100 px-3 py-2 text-xs font-bold text-[#852BAF] transition hover:bg-purple-50"><FiEdit2 /> Edit</button><button onClick={() => void deleteCompany(company)} disabled={deletingCompanyId === company.company_id || Number(company.status) !== 1} className="inline-flex items-center gap-1.5 rounded-lg border border-red-100 px-3 py-2 text-xs font-bold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"><FiTrash2 /> {deletingCompanyId === company.company_id ? "Deleting..." : "Delete"}</button></div></td>
                 </tr>)}
               </tbody>
             </table>
@@ -319,7 +407,7 @@ export default function EmployeeDirectory() {
                   <td className="px-5 py-4"><p className="font-bold text-gray-900">{customer.name}</p><p className="text-xs text-gray-500">{customer.email || "No email"}</p><p className="text-xs text-gray-400">{customer.phone || "No phone"}</p></td>
                   <td className="px-5 py-4"><p className="font-semibold text-gray-700">{customer.company_name || "Unassigned"}</p><p className="text-xs text-gray-400">Customer #{customer.user_id}</p></td>
                   <td className="px-5 py-4"><p className="text-gray-700">{customer.company_role || "—"}</p><p className="text-xs text-gray-400">{customer.department || "No department"}</p></td>
-                  <td className="px-5 py-4"><PlatformBadge platform={customer.device_platform} /></td>
+                  <td className="px-5 py-4"><PlatformBadge platform={customer.device_platform} />{customer.device_name && <p className="mt-1 max-w-32 truncate text-[11px] text-gray-400" title={customer.device_name}>{customer.device_name}</p>}</td>
                   <td className="px-5 py-4"><div className="flex flex-col items-start gap-1"><Badge active={Number(customer.status) === 1} label={Number(customer.status) === 1 ? "Active" : "Inactive"} /><span className="text-[11px] font-semibold text-gray-400">{Number(customer.is_verified) === 1 ? "Verified" : "Not verified"}</span></div></td>
                   <td className="px-5 py-4 text-xs text-gray-500">{customer.last_login_at ? new Date(customer.last_login_at).toLocaleString() : "Never"}</td>
                 </tr>)}
@@ -364,6 +452,23 @@ export default function EmployeeDirectory() {
               <label className="block"><span className="mb-1.5 block text-xs font-bold text-gray-700">CTC</span><input type="number" min="0" step="0.01" value={employeeForm.ctc} onChange={(event) => setEmployeeForm((current) => ({ ...current, ctc: event.target.value }))} className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-[#852BAF] focus:ring-4 focus:ring-purple-100" /></label>
               {employeeFormError && <p className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">{employeeFormError}</p>}
               <div className="flex justify-end gap-3 border-t border-gray-100 pt-4"><button type="button" onClick={() => setEmployeeModalOpen(false)} disabled={savingEmployee} className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-bold text-gray-600 hover:bg-gray-50">Cancel</button><button type="submit" disabled={savingEmployee} className="rounded-xl bg-gradient-to-r from-[#852BAF] to-[#C64EFE] px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">{savingEmployee ? "Adding..." : "Add Employee"}</button></div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {importModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5"><div><h2 className="text-lg font-extrabold text-gray-900">Import Employees</h2><p className="mt-0.5 text-xs text-gray-500">Upload up to 1,000 records from CSV, XLS, or XLSX.</p></div><button onClick={() => setImportModalOpen(false)} disabled={importing} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"><FiX size={20} /></button></div>
+            <form onSubmit={importEmployees} className="space-y-4 p-6">
+              <label className="block"><span className="mb-1.5 block text-xs font-bold text-gray-700">Company *</span><select required value={importCompanyId} onChange={(event) => setImportCompanyId(event.target.value)} className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-[#852BAF] focus:ring-4 focus:ring-purple-100"><option value="">Select a company</option>{companies.map((company) => <option key={company.company_id} value={company.company_id}>{company.company_name}</option>)}</select></label>
+              <label className="block rounded-2xl border-2 border-dashed border-purple-200 bg-purple-50/40 p-6 text-center"><FiUploadCloud className="mx-auto text-3xl text-[#852BAF]" /><span className="mt-2 block text-sm font-bold text-gray-800">Choose employee file</span><span className="mt-1 block text-xs text-gray-500">CSV, XLS, or XLSX · maximum 5 MB</span><input required type="file" accept=".csv,.xls,.xlsx,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { setImportFile(event.target.files?.[0] ?? null); setImportResult(null); }} className="mt-4 block w-full text-xs text-gray-500 file:mr-3 file:rounded-lg file:border-0 file:bg-white file:px-3 file:py-2 file:font-bold file:text-[#852BAF] file:shadow-sm" /></label>
+              <div className="flex flex-wrap gap-3"><button type="button" onClick={downloadTemplate} className="inline-flex items-center gap-2 rounded-lg border border-purple-200 px-3 py-2 text-xs font-bold text-[#852BAF] hover:bg-purple-50"><FiDownload /> Download CSV template</button><button type="button" onClick={downloadExcelTemplate} className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50"><FiDownload /> Download Excel template</button></div>
+              <p className="text-xs leading-5 text-gray-500">Required columns: <b>name</b> and <b>email</b>. Recommended: phone, department, role, dob, date_of_joining, reporting_manager, ctc, and status.</p>
+              {importError && <p className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">{importError}</p>}
+              {importResult && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm"><p className="font-bold text-emerald-800">Imported {importResult.created_count} employee(s). {importResult.skipped_count} skipped.</p>{importResult.skipped.length > 0 && <ul className="mt-2 max-h-28 list-disc overflow-y-auto pl-5 text-xs text-amber-700">{importResult.skipped.map((item) => <li key={`${item.row}-${item.reason}`}>Row {item.row}: {item.reason}</li>)}</ul>}</div>}
+              <div className="flex justify-end gap-3 border-t border-gray-100 pt-4"><button type="button" onClick={() => setImportModalOpen(false)} disabled={importing} className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-bold text-gray-600 hover:bg-gray-50">Close</button><button type="submit" disabled={importing} className="rounded-xl bg-gradient-to-r from-[#852BAF] to-[#C64EFE] px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">{importing ? "Importing..." : "Import Employees"}</button></div>
             </form>
           </div>
         </div>

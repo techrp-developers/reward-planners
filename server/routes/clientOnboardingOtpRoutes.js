@@ -1,19 +1,38 @@
 const crypto = require("crypto");
 const express = require("express");
+const jwt = require("jsonwebtoken");
 const { authLimiter } = require("../app/common/middlewares/rateLimiter");
 const { sendOtpEmail, sendAdminOnboardedEmail } = require("../config/mail");
 const { enqueueWhatsApp } = require("../services/whatsapp/waEnqueueService");
 const { normalizeIndianMobile } = require("../services/whatsapp/phone");
 const { createSigningSession, verifySigningSession } = require("../services/zohoSignService");
+const { createClientOnboarding } = require("../services/clientOnboardingService");
 
 const router = express.Router();
 const sessions = new Map();
 const OTP_TTL_MS = 10 * 60 * 1000;
+const VERIFICATION_PROOF_TTL_SECONDS = 24 * 60 * 60;
 const RESEND_COOLDOWN_MS = 30 * 1000;
 const MAX_ATTEMPTS = 5;
+const REQUIRE_ZOHO_SIGNING = String(process.env.REQUIRE_ZOHO_SIGNING ?? "true").toLowerCase() !== "false";
 
 const normalizeEmail = (value) => String(value || "").trim().toLowerCase();
 const otpHash = (sessionId, otp) => crypto.createHash("sha256").update(`${sessionId}:${otp}`).digest();
+const verificationSecret = () => process.env.CLIENT_ONBOARDING_PROOF_SECRET || process.env.JWT_SECRET;
+
+function createVerificationProof(session) {
+  const secret = verificationSecret();
+  if (!secret) throw new Error("Client onboarding verification secret is not configured");
+  return jwt.sign({ type: "client_onboarding_verification", channel: session.channel, destination: session.destination }, secret, { algorithm: "HS256", expiresIn: VERIFICATION_PROOF_TTL_SECONDS });
+}
+
+function readVerificationProof(token) {
+  const secret = verificationSecret();
+  if (!secret) throw new Error("Client onboarding verification secret is not configured");
+  const proof = jwt.verify(token, secret, { algorithms: ["HS256"] });
+  if (proof?.type !== "client_onboarding_verification") throw new Error("Invalid verification proof");
+  return proof;
+}
 
 function destinationFor(channel, destination) {
   if (channel === "email") {
@@ -67,7 +86,8 @@ router.post("/verify", authLimiter, (req, res) => {
     return res.status(400).json({ success: false, message: "Incorrect OTP.", attemptsRemaining: MAX_ATTEMPTS - session.attempts });
   }
   sessions.delete(sessionId);
-  return res.json({ success: true, message: `${session.channel === "email" ? "Email" : "WhatsApp"} verified successfully.` });
+  const verificationToken = createVerificationProof(session);
+  return res.json({ success: true, message: `${session.channel === "email" ? "Email" : "WhatsApp"} verified successfully.`, data: { verificationToken, expiresInSeconds: VERIFICATION_PROOF_TTL_SECONDS } });
 });
 
 router.post("/notify-admin", authLimiter, async (req, res) => {
@@ -107,6 +127,40 @@ router.post("/sign/status", authLimiter, async (req, res) => {
     return res.json({ success: true, data });
   } catch (error) {
     return res.status(error.status || 502).json({ success: false, message: error.message || "Unable to confirm the Zoho Sign status." });
+  }
+});
+
+router.post("/submit", authLimiter, async (req, res) => {
+  const emailProofToken = String(req.body?.emailVerificationToken || "");
+  const representativeEmail = normalizeEmail(req.body?.onboarding?.repEmail);
+  try {
+    const proof = readVerificationProof(emailProofToken);
+    if (proof.channel !== "email" || proof.destination !== representativeEmail) throw new Error("Verification proof does not match representative");
+  } catch {
+    return res.status(400).json({ success: false, code: "EMAIL_VERIFICATION_REQUIRED", message: "Representative email verification expired. Verify the email again." });
+  }
+
+  try {
+    let zohoRequestId = null;
+    if (REQUIRE_ZOHO_SIGNING) {
+      const signing = await verifySigningSession(req.body?.signingState);
+      if (!signing.signed) return res.status(400).json({ success: false, message: "Complete the Zoho Sign agreement before submitting onboarding." });
+      zohoRequestId = signing.requestId;
+    }
+    const result = await createClientOnboarding(req.body?.onboarding, { zohoRequestId });
+    try {
+      await sendAdminOnboardedEmail({
+        email: normalizeEmail(req.body?.onboarding?.adminEmail),
+        adminName: String(req.body?.onboarding?.adminName || "").trim(),
+        companyName: String(req.body?.onboarding?.companyName || "").trim(),
+      });
+    } catch (mailError) {
+      console.error("[CLIENT_ONBOARDING] Welcome email failed after successful onboarding:", mailError);
+    }
+    return res.status(201).json({ success: true, message: "Organization onboarded successfully.", data: result });
+  } catch (error) {
+    console.error("[CLIENT_ONBOARDING] Submission failed:", error);
+    return res.status(error.status || 500).json({ success: false, message: error.status ? error.message : "Unable to complete onboarding right now." });
   }
 });
 

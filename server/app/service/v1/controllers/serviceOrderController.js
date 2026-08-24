@@ -14,9 +14,7 @@ const {
   finalizePaidServiceOrder,
   generateAndEmailInvoice,
 } = require("../utils/paymentFinalizer");
-const {
-  deriveServicePaymentStatus,
-} = require("../utils/paymentState");
+const { deriveServicePaymentStatus } = require("../utils/paymentState");
 
 const SERVICE_CANCELLATION_EVENT_LABELS = {
   cancellation_requested: "Cancellation Requested",
@@ -32,7 +30,9 @@ function getServiceCancellationEventLabel(event) {
 }
 const { notifyUser } = require("../../../common/utils/notification");
 const { creditCompletedServiceReward } = require("../utils/serviceRewards");
-const { releaseServiceCoins } = require("../../../../services/rewards/serviceWalletService");
+const {
+  releaseServiceCoins,
+} = require("../../../../services/rewards/serviceWalletService");
 const { runNonBlocking } = require("../../../../utils/nonBlocking");
 const {
   notifyWhatsAppAdmins,
@@ -164,7 +164,11 @@ class ServiceOrderController {
 
       const totalAmount = orders.reduce(
         (sum, order) =>
-          sum + Math.max(0, Number(order.price || 0) - Number(order.reward_coins_used || 0)),
+          sum +
+          Math.max(
+            0,
+            Number(order.price || 0) - Number(order.reward_coins_used || 0),
+          ),
         0,
       );
 
@@ -407,7 +411,6 @@ class ServiceOrderController {
           "service order paid notification",
         );
       }
-
     } catch (err) {
       // ROLLBACK
       if (connection) {
@@ -433,10 +436,14 @@ class ServiceOrderController {
     const parentOrderId = String(req.params.parentOrderId || "").trim();
 
     if (!userId) {
-      return res.status(401).json({ success: false, message: "Unauthorized user" });
+      return res
+        .status(401)
+        .json({ success: false, message: "Unauthorized user" });
     }
     if (!parentOrderId) {
-      return res.status(400).json({ success: false, message: "parentOrderId required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "parentOrderId required" });
     }
 
     try {
@@ -448,7 +455,9 @@ class ServiceOrderController {
       );
 
       if (!orders.length) {
-        return res.status(404).json({ success: false, message: "Order not found" });
+        return res
+          .status(404)
+          .json({ success: false, message: "Order not found" });
       }
 
       const paymentStatus = deriveServicePaymentStatus(orders);
@@ -610,7 +619,10 @@ class ServiceOrderController {
               summary.coin_refund += amount;
             }
             if (entry.status === "failed") summary.status = "failed";
-            else if (entry.status === "pending" && summary.status !== "failed") {
+            else if (
+              entry.status === "pending" &&
+              summary.status !== "failed"
+            ) {
               summary.status = "pending";
             }
             return summary;
@@ -964,7 +976,8 @@ class ServiceOrderController {
       SELECT
         id,
         service_id,
-        status
+        status,
+        payment_status
       FROM service_orders
       WHERE parent_order_id = ?
       AND user_id = ?
@@ -976,6 +989,16 @@ class ServiceOrderController {
         return res.status(404).json({
           success: false,
           message: "Order not found",
+        });
+      }
+
+      if (orders.some((order) => order.payment_status !== "paid")) {
+        for (const file of req.files || []) {
+          if (file?.path && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+        }
+        return res.status(403).json({
+          success: false,
+          message: "Complete payment before uploading documents",
         });
       }
 
@@ -1190,7 +1213,8 @@ class ServiceOrderController {
       ) {
         return res.status(403).json({
           success: false,
-          message: "Vendor managers can only mark a service in progress, completed, or cancelled",
+          message:
+            "Vendor managers can only mark a service in progress, completed, or cancelled",
         });
       }
 
@@ -1257,7 +1281,10 @@ class ServiceOrderController {
           const walletConn = await db.getConnection();
           try {
             await walletConn.beginTransaction();
-            const released = await releaseServiceCoins(walletConn, order.parent_order_id);
+            const released = await releaseServiceCoins(
+              walletConn,
+              order.parent_order_id,
+            );
             if (released) {
               await walletConn.execute(
                 `UPDATE service_orders SET reward_coins_used = 0
@@ -1430,7 +1457,8 @@ class ServiceOrderController {
             const key = `public/service-support/${requestId}/${fileName}`;
 
             // upload to R2
-            const fileUrl = await uploadToR2(file.path, key, file.mimetype);
+            const fileBuffer = fs.readFileSync(file.path);
+            const fileUrl = await uploadToR2(fileBuffer, key, file.mimetype);
 
             // save attachment
             await db.execute(
@@ -1751,7 +1779,8 @@ class ServiceOrderController {
         await connection.rollback();
         return res.status(400).json({
           success: false,
-          message: "Only paid service orders can use the cancellation request flow",
+          message:
+            "Only paid service orders can use the cancellation request flow",
         });
       }
 

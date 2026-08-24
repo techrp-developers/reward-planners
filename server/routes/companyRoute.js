@@ -6,7 +6,7 @@ const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 
 const companyWriteGuard = [
   authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
+  authorizeRoles("admin", "rm"),
 ];
 
 router.post(

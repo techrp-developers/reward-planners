@@ -15,7 +15,7 @@ async function checkCartRecovery() {
   try {
     const [abandonedCarts] = await db.query(
       `
-      SELECT DISTINCT ci.user_id, p.product_name, c.fcm_token
+      SELECT DISTINCT ci.user_id, p.product_name
       FROM cart_items ci
       JOIN eproducts p ON ci.product_id = p.product_id
       INNER JOIN customer c ON ci.user_id = c.user_id
@@ -24,8 +24,6 @@ async function checkCartRecovery() {
                                AND n.created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
       WHERE ci.created_at <= DATE_SUB(NOW(), INTERVAL 2 HOUR)
         AND n.notification_id IS NULL
-        AND c.fcm_token IS NOT NULL
-        AND c.fcm_token != ''
       `
     );
 
@@ -52,19 +50,21 @@ async function checkLowStockCarts() {
   try {
     const [lowStockItems] = await db.query(
       `
-      SELECT DISTINCT ci.user_id, p.product_name, v.stock, v.variant_id, c.fcm_token
+      SELECT DISTINCT ci.user_id, p.product_name, v.stock, v.variant_id
       FROM cart_items ci
       JOIN eproducts p ON ci.product_id = p.product_id
       JOIN product_variants v ON ci.variant_id = v.variant_id
       INNER JOIN customer c ON ci.user_id = c.user_id
       LEFT JOIN notifications n ON n.user_id = ci.user_id 
                                AND n.type = 'cart_low_stock'
-                               AND n.reference_id = CAST(v.variant_id AS CHAR)
+                               -- reference_id is text while variant_id is numeric.
+                               -- Compare their binary string forms so databases
+                               -- with mixed legacy utf8mb4 collations behave
+                               -- consistently without changing stored data.
+                               AND CAST(n.reference_id AS BINARY) = CAST(v.variant_id AS BINARY)
                                AND n.created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
       WHERE v.stock <= 3 AND v.stock > 0
         AND n.notification_id IS NULL
-        AND c.fcm_token IS NOT NULL
-        AND c.fcm_token != ''
       `
     );
 
@@ -91,20 +91,18 @@ async function checkPriceDrops() {
   try {
     const [priceDrops] = await db.query(
       `
-      SELECT DISTINCT ci.user_id, p.product_name, v.sale_price, v.variant_id, c.fcm_token
+      SELECT DISTINCT ci.user_id, p.product_name, v.sale_price, v.variant_id
       FROM cart_items ci
       JOIN eproducts p ON ci.product_id = p.product_id
       JOIN product_variants v ON ci.variant_id = v.variant_id
       INNER JOIN customer c ON ci.user_id = c.user_id
       LEFT JOIN notifications n ON n.user_id = ci.user_id 
                                AND n.type = 'cart_price_drop'
-                               AND n.reference_id = CAST(v.variant_id AS CHAR)
+                               AND CAST(n.reference_id AS BINARY) = CAST(v.variant_id AS BINARY)
                                AND n.created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
       WHERE v.updated_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
         AND v.sale_price < v.mrp
         AND n.notification_id IS NULL
-        AND c.fcm_token IS NOT NULL
-        AND c.fcm_token != ''
       `
     );
 

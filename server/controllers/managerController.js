@@ -5,6 +5,24 @@ const EmployeeModel = require("../models/employeeModel");
 
 const COMPANY_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// A device is considered registered only when the app has saved its device ID.
+// Older app versions did not always populate device_platform, so device_name is
+// used as a fallback for platform reporting.
+const REGISTERED_DEVICE_SQL = "NULLIF(TRIM(c.device_id), '') IS NOT NULL";
+const ANDROID_DEVICE_SQL = `(
+  LOWER(COALESCE(c.device_platform, '')) = 'android'
+  OR LOWER(COALESCE(c.device_name, '')) REGEXP 'android|pixel|samsung|galaxy|oneplus|xiaomi|redmi|poco|oppo|vivo|realme|motorola|nothing'
+)`;
+const IOS_DEVICE_SQL = `(
+  LOWER(COALESCE(c.device_platform, '')) IN ('ios', 'iphone', 'ipad')
+  OR LOWER(COALESCE(c.device_name, '')) REGEXP 'iphone|ipad|ipod|ios'
+)`;
+const RESOLVED_DEVICE_PLATFORM_SQL = `CASE
+  WHEN ${REGISTERED_DEVICE_SQL} AND ${IOS_DEVICE_SQL} THEN 'ios'
+  WHEN ${REGISTERED_DEVICE_SQL} AND ${ANDROID_DEVICE_SQL} THEN 'android'
+  ELSE NULL
+END`;
+
 class ManagerController {
   async createCompanyEmployee(req, res) {
     try {
@@ -91,8 +109,8 @@ class ManagerController {
           co.updated_at,
           COUNT(DISTINCT cu.id) AS total_employee_count,
           COUNT(DISTINCT CASE WHEN c.status = 1 THEN c.user_id END) AS active_employee_count,
-          COUNT(DISTINCT CASE WHEN c.status = 1 AND c.device_platform = 'android' THEN c.user_id END) AS android_user_count,
-          COUNT(DISTINCT CASE WHEN c.status = 1 AND c.device_platform = 'ios' THEN c.user_id END) AS ios_user_count
+          COUNT(DISTINCT CASE WHEN c.status = 1 AND ${REGISTERED_DEVICE_SQL} AND ${ANDROID_DEVICE_SQL} AND NOT ${IOS_DEVICE_SQL} THEN c.user_id END) AS android_user_count,
+          COUNT(DISTINCT CASE WHEN c.status = 1 AND ${REGISTERED_DEVICE_SQL} AND ${IOS_DEVICE_SQL} THEN c.user_id END) AS ios_user_count
         FROM companies co
         LEFT JOIN company_users cu ON cu.company_id = co.company_id
         LEFT JOIN customer c ON c.company_id = co.company_id
@@ -138,7 +156,9 @@ class ManagerController {
           c.status,
           c.is_verified,
           c.last_login_at,
-          c.device_platform,
+          c.device_id,
+          c.device_name,
+          ${RESOLVED_DEVICE_PLATFORM_SQL} AS device_platform,
           co.company_name,
           cu.department,
           cu.role AS company_role
@@ -192,7 +212,9 @@ class ManagerController {
            c.status AS customer_status,
            c.is_verified AS customer_is_verified,
            c.last_login_at,
-           c.device_platform
+           c.device_id,
+           c.device_name,
+           ${RESOLVED_DEVICE_PLATFORM_SQL} AS device_platform
          FROM company_users cu
          LEFT JOIN customer c ON c.company_user_id = cu.id
          WHERE cu.company_id = ?

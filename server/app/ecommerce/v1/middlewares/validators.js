@@ -120,8 +120,8 @@ const validateResolveNDR = [
     .isInt({ min: 1 })
     .withMessage("Valid shipmentId required"),
   body("action")
-    .isIn(["retry", "address_update", "cancel", "rto"])
-    .withMessage("action must be one of: retry, address_update, cancel, rto"),
+    .isIn(["retry", "address_update", "cancel"])
+    .withMessage("action must be one of: retry, address_update, cancel"),
   body("new_address_id")
     .if(body("action").equals("address_update"))
     .isInt({ min: 1 })

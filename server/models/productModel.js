@@ -352,6 +352,21 @@ class ProductModel {
       }
     });
 
+    // Vendor-defined attributes are stored with the product itself. Structured
+    // custom attributes marked as variants participate in the same SKU matrix
+    // as manager-configured category attributes, without requiring a DB change.
+    const customAttributes = Array.isArray(allAttributes.__custom)
+      ? allAttributes.__custom
+      : [];
+    customAttributes.forEach((attribute) => {
+      if (Number(attribute?.is_variant) !== 1) return;
+      const key = String(attribute.key || "").trim();
+      const values = Array.isArray(attribute.values)
+        ? [...new Set(normalize(attribute.values))]
+        : [];
+      if (key && values.length) variantAttributes[key] = values;
+    });
+
     // CASE 1: Real variant combinations
     if (Object.keys(variantAttributes).length) {
       const combinations = generateCombinations(variantAttributes);
@@ -666,10 +681,19 @@ class ProductModel {
           ? JSON.parse(data.attributes)
           : data.attributes;
 
-      await connection.execute(
+      const [result] = await connection.execute(
         `UPDATE product_attributes SET attributes = ? WHERE product_id = ?`,
         [JSON.stringify(attributes), productId],
       );
+
+      // The product may have been created with no attributes at all (so no
+      // row exists yet in product_attributes) — fall back to inserting one.
+      if (result.affectedRows === 0) {
+        await connection.execute(
+          `INSERT INTO product_attributes (product_id, attributes) VALUES (?, ?)`,
+          [productId, JSON.stringify(attributes)],
+        );
+      }
     }
 
     // ================== 1.3 VARIANTS ==================

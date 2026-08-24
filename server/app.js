@@ -14,7 +14,9 @@ const swaggerSpec = require("./config/swagger");
 // setupTodoReminderDB();
 
 require("dotenv").config();
-require("./services/ExpressBees/cron/shipmentCron");
+if (String(process.env.RUN_SCHEDULED_JOBS ?? "true").toLowerCase() === "true") {
+  require("./services/ExpressBees/cron/shipmentCron");
+}
 require("./services/Bbps/retryCron");
 require("./services/Bbps/refundCron");
 require("./services/Razorpay/retryCron");
@@ -22,11 +24,13 @@ require("./services/Maintenance/maintenanceCron");
 require("./services/Razorpay/orderExpiryCron");
 require("./services/Todo/todoReminderCron");
 require("./services/Todo/birthdayReminderCron");
-// require("./services/Todo/checkoutAbandonmentCron");
 require("./services/Ecommerce/cartRecoveryCron");
+require("./services/Todo/fitnessGoalHookCron");
+require("./services/Todo/accountPurgeCron");
+// require("./services/Todo/checkoutAbandonmentCron");
 // require("./services/Todo/serviceCartRecoveryCron");
 // require("./services/Bbps/billDueReminderCron");
-require("./services/Todo/fitnessGoalHookCron");
+
 
 
 // dashboard Route
@@ -110,6 +114,20 @@ app.use(
 );
 
 app.use(morgan("dev"));
+
+// Every response produced by this application is dynamic API data. Never let
+// a browser, reverse proxy, or CDN reuse one user's authenticated response for
+// another request. Static frontend assets are served by the web server, not by
+// this Express application.
+app.use((req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("CDN-Cache-Control", "no-store");
+  res.setHeader("Cloudflare-CDN-Cache-Control", "no-store");
+  res.setHeader("Surrogate-Control", "no-store");
+  next();
+});
 
 // webhook use
 app.post(

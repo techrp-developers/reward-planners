@@ -6,7 +6,10 @@ const { ACCESS_COOKIE, parseCookies, isCsrfValid } = require("../utils/authSessi
 exports.authenticateToken = async (req, res, next) => {
   const authHeader = req.headers["authorization"];
   const bearerToken = authHeader && authHeader.split(" ")[1];
-  const cookieToken = parseCookies(req)[ACCESS_COOKIE];
+  const cookies = parseCookies(req);
+  // Prefer the current cookie, but accept the legacy name during a rolling
+  // deployment so every role remains authenticated while all processes update.
+  const cookieToken = cookies[ACCESS_COOKIE] || cookies.rp_access;
   const token = cookieToken || bearerToken;
 
   if (!token) {
@@ -77,15 +80,34 @@ exports.authenticateToken = async (req, res, next) => {
         [user.email],
       );
 
-      if (!companyUser) {
-        return res.status(403).json({
-          success: false,
-          message: "HR account is not linked to an active company employee",
-        });
+      if (companyUser) {
+        companyUserId = companyUser.company_user_id;
+        companyId = companyUser.company_id;
+      } else {
+        // An HR login may be the company's primary administrator and therefore
+        // not also be present in the employee directory. In that case, link it
+        // through the registered email of the active company.
+        const [companies] = await db.execute(
+          `SELECT company_id
+           FROM companies
+           WHERE LOWER(TRIM(company_email)) = LOWER(TRIM(?))
+             AND status = 1
+           ORDER BY company_id DESC
+           LIMIT 2`,
+          [user.email],
+        );
+
+        if (companies.length === 1) {
+          companyId = companies[0].company_id;
+        }
       }
 
-      companyUserId = companyUser.company_user_id;
-      companyId = companyUser.company_id;
+      if (!companyId) {
+        return res.status(403).json({
+          success: false,
+          message: "HR account is not linked to an active company",
+        });
+      }
     }
 
     req.user = {

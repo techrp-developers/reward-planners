@@ -8,7 +8,7 @@ class LogisticsController {
       const { shipmentId } = req.params;
       const { action, new_address_id, notes } = req.body;
 
-      const allowedActions = ["retry", "address_update", "cancel", "rto"];
+      const allowedActions = ["retry", "address_update", "cancel"];
 
       if (!allowedActions.includes(action)) {
         return res.status(400).json({

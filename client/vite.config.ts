@@ -22,11 +22,16 @@ export default defineConfig(({ mode }) => {
       // pointing VITE_DEV_API_PROXY_TARGET at the dev machine's LAN IP too).
       host: true,
       proxy: {
+        "/api/crm": {
+          target: apiProxyTarget,
+          changeOrigin: true,
+          secure: false,
+          rewrite: (path) => path.replace(/^\/api\/crm/, ""),
+        },
         "/api": {
           target: apiProxyTarget,
           changeOrigin: true,
           secure: false,
-          cookieDomainRewrite: "localhost",
         },
       },
     },
