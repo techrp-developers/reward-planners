@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { FiAlertTriangle, FiEye, FiSave, FiUploadCloud } from "react-icons/fi";
 import type { ContentEntry, ContentKind, Zone } from "../types";
 import { COLOR_PRESETS, ZONES } from "../types";
@@ -27,11 +28,12 @@ interface Props {
 export default function ContentForm({ draft, entries, now, onChange, onSaveDraft, onPreview, onPublish, saving }: Props) {
   const status = computeStatus(draft, now);
   const conflicts = findConflicts(draft, entries);
+  const [brokenImageUrl, setBrokenImageUrl] = useState<string | null>(null);
 
   const handleImageUpload = (file: File | undefined) => {
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => onChange({ imageUrl: String(reader.result || "") });
+    reader.onload = () => { setBrokenImageUrl(null); onChange({ imageFile: file, imageUrl: String(reader.result || "") }); };
     reader.readAsDataURL(file);
   };
 
@@ -88,7 +90,11 @@ export default function ContentForm({ draft, entries, now, onChange, onSaveDraft
             <p className={labelClass}>Image</p>
             <div className="mt-2 flex items-center gap-4">
               <span className="grid h-16 w-24 shrink-0 place-items-center overflow-hidden rounded-xl border border-dashed border-slate-300 bg-slate-50 text-slate-300">
-                {draft.imageUrl ? <img src={draft.imageUrl} alt="" className="h-full w-full object-cover" /> : <FiUploadCloud className="text-xl" />}
+                {draft.imageUrl && draft.imageUrl !== brokenImageUrl ? (
+                  <img src={draft.imageUrl} alt="" className="h-full w-full object-cover" onError={() => setBrokenImageUrl(draft.imageUrl)} />
+                ) : (
+                  <FiUploadCloud className="text-xl" />
+                )}
               </span>
               <div className="flex-1">
                 <input type="file" accept="image/*" onChange={(event) => handleImageUpload(event.target.files?.[0])} className="block w-full text-xs text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-purple-50 file:px-3 file:py-2 file:text-xs file:font-bold file:text-[#852BAF]" />

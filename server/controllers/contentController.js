@@ -101,7 +101,7 @@ class ContentController {
 
       body.created_by_name = req.user?.email || null;
 
-      const entry = await ContentZoneModel.createEntry(body);
+      const entry = await ContentZoneModel.createEntry(body, { hasImageFile: !!req.file });
 
       let imageUrl = null;
 
@@ -251,6 +251,23 @@ class ContentController {
   }
 
   //   =========================== Public: what the storefront/app renders ===========================
+
+  async getResolvedNavbar(req, res) {
+    try {
+      const data = await ContentZoneModel.resolveNavbarModules();
+
+      return res.json({
+        success: true,
+        message: "Resolved navbar content fetched successfully",
+        data,
+      });
+    } catch (err) {
+      return res.status(err.statusCode || 500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
 
   async getResolvedZones(req, res) {
     try {

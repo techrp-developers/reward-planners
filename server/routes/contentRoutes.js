@@ -59,6 +59,7 @@ router.delete(
 
 // ================================= PUBLIC (storefront/app) =================================
 
+router.get("/resolved/navbar", contentController.getResolvedNavbar);
 router.get("/resolved/:module", contentController.getResolvedZones);
 
 module.exports = router;

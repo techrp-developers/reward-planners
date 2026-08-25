@@ -1,13 +1,13 @@
 const db = require("../config/database");
 
-const MODULES = ["product", "service", "payment"];
+const MODULES = ["product", "service", "payment", "dineout"];
 const ZONES = ["navbar_background", "promotional_banner", "offers_banner"];
 const CONTENT_TYPES = ["color", "image"];
 
 class ContentZoneModel {
   //   =======================Helper=================================
 
-  validateEntry(data, { isUpdate = false } = {}) {
+  validateEntry(data, { isUpdate = false, hasImageFile = false } = {}) {
     const errors = [];
 
     if (!isUpdate || data.module !== undefined) {
@@ -29,7 +29,7 @@ class ContentZoneModel {
       if (data.content_type === "color" && !data.color_value) {
         errors.push("color_value is required when content_type is 'color'");
       }
-      if (data.content_type === "image" && !isUpdate && !data.image_url) {
+      if (data.content_type === "image" && !isUpdate && !data.image_url && !hasImageFile) {
         errors.push("image_url is required when content_type is 'image'");
       }
     }
@@ -207,6 +207,17 @@ class ContentZoneModel {
     return results;
   }
 
+  /** navbar_background for every mobile-app module, in one call - see resolveActiveEntry for the resolution rules. */
+  async resolveNavbarModules() {
+    const result = {};
+
+    for (const moduleName of MODULES) {
+      result[moduleName] = await this.resolveActiveEntry(moduleName, "navbar_background");
+    }
+
+    return result;
+  }
+
   /** Other published, non-default entries in the same module+zone whose window overlaps. */
   async findConflicts(contentModule, zone, startAt, endAt, excludeId = null) {
     const params = [contentModule, zone, endAt || "9999-12-31 23:59:59", startAt];
@@ -234,8 +245,8 @@ class ContentZoneModel {
 
   //   =================================Writes===================================
 
-  async createEntry(data) {
-    this.validateEntry(data);
+  async createEntry(data, { hasImageFile = false } = {}) {
+    this.validateEntry(data, { hasImageFile });
 
     const startAt = data.is_published && !data.start_at ? new Date() : data.start_at || null;
 

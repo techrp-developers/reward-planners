@@ -1,21 +1,31 @@
 import { useEffect, useState } from "react";
 import { FiList, FiPlus } from "react-icons/fi";
+import type { AxiosError } from "axios";
 import Swal from "sweetalert2";
 import { toast } from "sonner";
-import { useAuth } from "../../../../../common/auth/useAuth";
 import type { ContentEntry } from "../../types";
 import { blankEntry } from "../../types";
-import { computeStatus, findConflicts, seedProductEntries } from "../../store";
+import { buildEntryFormData, createEntry, deactivateEntry, deleteEntry, duplicateEntry, listEntries, updateEntry } from "../../api/contentApi";
+import { fromApiEntry } from "../../store/mappers";
 import ContentForm from "../ContentForm";
 import ContentTable from "../ContentTable";
 import LivePreviewPanel from "../LivePreviewPanel";
 
 type View = "table" | "form";
 
-export default function ContentManagement() {
-  const { user } = useAuth();
+interface ApiErrorBody {
+  message?: string;
+  data?: {
+    conflicts?: { title: string }[];
+  };
+}
 
-  const [entries, setEntries] = useState<ContentEntry[]>(seedProductEntries);
+const asApiError = (err: unknown) => err as AxiosError<ApiErrorBody>;
+const errorMessage = (err: unknown, fallback: string) => asApiError(err).response?.data?.message || fallback;
+
+export default function ContentManagement() {
+  const [entries, setEntries] = useState<ContentEntry[]>([]);
+  const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>("table");
   const [draft, setDraft] = useState<ContentEntry>(() => blankEntry("navbar_background"));
   const [saving, setSaving] = useState(false);
@@ -26,21 +36,23 @@ export default function ContentManagement() {
     return () => clearInterval(interval);
   }, []);
 
-  const authorName = user?.name || user?.email || "Manager";
+  const loadEntries = async () => {
+    setLoading(true);
+    try {
+      const result = await listEntries({ pageSize: 200 });
+      setEntries(result.entries.map(fromApiEntry));
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to load content entries"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { void loadEntries(); }, []);
 
   const startAdd = () => { setDraft(blankEntry("navbar_background")); setView("form"); };
   const startEdit = (entry: ContentEntry) => { setDraft({ ...entry }); setView("form"); };
   const patchDraft = (patch: Partial<ContentEntry>) => setDraft((prev) => ({ ...prev, ...patch }));
-
-  const upsert = (entry: ContentEntry) => {
-    setEntries((prev) => {
-      if (entry.id && prev.some((row) => row.id === entry.id)) {
-        return prev.map((row) => (row.id === entry.id ? entry : row));
-      }
-      const nextId = prev.reduce((max, row) => Math.max(max, row.id), 0) + 1;
-      return [{ ...entry, id: nextId }, ...prev];
-    });
-  };
 
   const validate = (entry: ContentEntry, requireContentValue: boolean) => {
     if (!entry.title.trim()) return "Title / Label is required.";
@@ -59,10 +71,18 @@ export default function ContentManagement() {
     if (error) { await Swal.fire("Can't save", error, "warning"); return; }
 
     setSaving(true);
-    upsert({ ...draft, isPublished: false, createdBy: draft.createdBy || authorName, createdAt: draft.createdAt || new Date().toISOString() });
-    setSaving(false);
-    setView("table");
-    toast.success("Saved as draft");
+    try {
+      const fd = buildEntryFormData(draft, { isPublished: false, imageFile: draft.imageFile });
+      if (draft.id) await updateEntry(draft.id, fd);
+      else await createEntry(fd);
+      await loadEntries();
+      setView("table");
+      toast.success("Saved as draft");
+    } catch (err) {
+      toast.error(errorMessage(err, "Save failed"));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handlePreview = () => {
@@ -73,37 +93,54 @@ export default function ContentManagement() {
     const error = validate(draft, true);
     if (error) { await Swal.fire("Can't publish", error, "warning"); return; }
 
-    const candidate: ContentEntry = {
-      ...draft,
-      isPublished: true,
-      startAt: draft.startAt || new Date().toISOString().slice(0, 16),
-      createdBy: draft.createdBy || authorName,
-      createdAt: draft.createdAt || new Date().toISOString(),
-    };
-
-    const conflicts = findConflicts(candidate, entries);
-    if (conflicts.length > 0) {
-      const result = await Swal.fire({
-        title: "Scheduling conflict detected",
-        html: `This overlaps with <b>${conflicts.map((c) => c.title).join(", ")}</b> in the same zone. The higher priority entry will be shown. Publish anyway?`,
-        icon: "warning",
-        showCancelButton: true,
-        confirmButtonText: "Publish anyway",
-        confirmButtonColor: "#852BAF",
-      });
-      if (!result.isConfirmed) return;
-    }
-
     setSaving(true);
-    upsert(candidate);
-    setSaving(false);
-    setView("table");
-    toast.success(`Published — now ${computeStatus(candidate, now) === "scheduled" ? "scheduled" : "live"}`);
+    try {
+      const fd = buildEntryFormData(draft, { isPublished: true, imageFile: draft.imageFile });
+      if (draft.id) await updateEntry(draft.id, fd);
+      else await createEntry(fd);
+      await loadEntries();
+      setView("table");
+      toast.success("Published");
+    } catch (err: unknown) {
+      const apiError = asApiError(err);
+      if (apiError.response?.status === 409) {
+        const conflicts = apiError.response.data?.data?.conflicts || [];
+        const result = await Swal.fire({
+          title: "Scheduling conflict detected",
+          html: `This overlaps with <b>${conflicts.map((conflict) => conflict.title).join(", ")}</b> in the same zone. The higher priority entry will be shown. Publish anyway?`,
+          icon: "warning",
+          showCancelButton: true,
+          confirmButtonText: "Publish anyway",
+          confirmButtonColor: "#852BAF",
+        });
+        if (result.isConfirmed) {
+          try {
+            const fd = buildEntryFormData(draft, { isPublished: true, forcePublish: true, imageFile: draft.imageFile });
+            if (draft.id) await updateEntry(draft.id, fd);
+            else await createEntry(fd);
+            await loadEntries();
+            setView("table");
+            toast.success("Published");
+          } catch (forceErr) {
+            toast.error(errorMessage(forceErr, "Publish failed"));
+          }
+        }
+      } else {
+        toast.error(errorMessage(err, "Publish failed"));
+      }
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleDuplicate = (entry: ContentEntry) => {
-    upsert({ ...entry, id: 0, isDefault: false, isPublished: false, title: `${entry.title} (Copy)`, createdBy: authorName, createdAt: new Date().toISOString() });
-    toast.success("Duplicated as a new draft");
+  const handleDuplicate = async (entry: ContentEntry) => {
+    try {
+      await duplicateEntry(entry.id);
+      await loadEntries();
+      toast.success("Duplicated as a new draft");
+    } catch (err) {
+      toast.error(errorMessage(err, "Duplicate failed"));
+    }
   };
 
   const handleDelete = async (entry: ContentEntry) => {
@@ -117,13 +154,23 @@ export default function ContentManagement() {
       confirmButtonColor: "#DC2626",
     });
     if (!result.isConfirmed) return;
-    setEntries((prev) => prev.filter((row) => row.id !== entry.id));
-    toast.success("Removed");
+    try {
+      await deleteEntry(entry.id);
+      await loadEntries();
+      toast.success("Removed");
+    } catch (err) {
+      toast.error(errorMessage(err, "Delete failed"));
+    }
   };
 
-  const handleDeactivateNow = (entry: ContentEntry) => {
-    upsert({ ...entry, endAt: new Date().toISOString().slice(0, 16) });
-    toast.success(`"${entry.title}" deactivated — zone reverts to Default`);
+  const handleDeactivateNow = async (entry: ContentEntry) => {
+    try {
+      await deactivateEntry(entry.id);
+      await loadEntries();
+      toast.success(`"${entry.title}" deactivated — zone reverts to Default`);
+    } catch (err) {
+      toast.error(errorMessage(err, "Deactivate failed"));
+    }
   };
 
   return (
@@ -157,10 +204,11 @@ export default function ContentManagement() {
         <ContentTable
           entries={entries}
           now={now}
+          loading={loading}
           onEdit={startEdit}
-          onDuplicate={handleDuplicate}
-          onDelete={handleDelete}
-          onDeactivateNow={handleDeactivateNow}
+          onDuplicate={(entry) => void handleDuplicate(entry)}
+          onDelete={(entry) => void handleDelete(entry)}
+          onDeactivateNow={(entry) => void handleDeactivateNow(entry)}
         />
       ) : (
         <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">

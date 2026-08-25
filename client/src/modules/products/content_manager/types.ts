@@ -20,6 +20,8 @@ export interface ContentEntry {
   isPublished: boolean;
   createdBy: string;
   createdAt: string;
+  /** Pending upload for the current edit session; never sent to display, cleared after successful save. */
+  imageFile?: File | null;
 }
 
 export const ZONES: { key: Zone; label: string }[] = [
@@ -55,5 +57,6 @@ export function blankEntry(zone: Zone): ContentEntry {
     isPublished: false,
     createdBy: "",
     createdAt: "",
+    imageFile: null,
   };
 }

@@ -1,0 +1,348 @@
+{
+  "info": {
+    "name": "Content Management API",
+    "description": "Admin + public endpoints for server/routes/contentRoutes.js. Admin routes require a vendor_manager or admin JWT (authenticateToken + authorizeRoles). Set the {{authToken}} collection variable to a valid access token before running the Admin folder.\n\nRun order for a full round trip: Create Entry (Color) -> List Entries -> Get Entry by ID -> Update Entry (Save Draft) -> Publish Entry -> Publish Entry (Conflict) -> Publish Entry (Force Publish) -> Duplicate Entry -> Deactivate Entry -> Delete Entry. Each write request's test script stores the returned content_id into {{contentId}} / {{duplicateId}} so later requests chain automatically.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000", "type": "string" },
+    { "key": "authToken", "value": "", "type": "string", "description": "Access token for a vendor_manager or admin user (from POST /auth/login response, or the rp_access cookie value)." },
+    { "key": "contentId", "value": "", "type": "string" },
+    { "key": "duplicateId", "value": "", "type": "string" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Create Entry (Color, Draft)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "module", "value": "product", "type": "text" },
+                { "key": "zone", "value": "navbar_background", "type": "text" },
+                { "key": "content_type", "value": "color", "type": "text" },
+                { "key": "color_value", "value": "#852BAF", "type": "text" },
+                { "key": "title", "value": "Test Navbar Draft", "type": "text" },
+                { "key": "cta_text", "value": "", "type": "text" },
+                { "key": "redirect_link", "value": "", "type": "text" },
+                { "key": "start_at", "value": "", "type": "text" },
+                { "key": "end_at", "value": "", "type": "text" },
+                { "key": "priority", "value": "1", "type": "text" },
+                { "key": "is_published", "value": "false", "type": "text" }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/content/entries", "host": ["{{baseUrl}}"], "path": ["content", "entries"] },
+            "description": "content_type=color requires color_value. Leave the image field out entirely for a color entry. Response: 201, data.content_id is saved to {{contentId}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('response has content_id', () => pm.expect(body.data.content_id).to.be.a('number'));",
+                  "if (body.data && body.data.content_id) pm.collectionVariables.set('contentId', body.data.content_id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Entry (Image)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "module", "value": "product", "type": "text" },
+                { "key": "zone", "value": "promotional_banner", "type": "text" },
+                { "key": "content_type", "value": "image", "type": "text" },
+                { "key": "title", "value": "Test Promo Banner", "type": "text" },
+                { "key": "cta_text", "value": "Shop Now", "type": "text" },
+                { "key": "redirect_link", "value": "https://example.com", "type": "text" },
+                { "key": "priority", "value": "2", "type": "text" },
+                { "key": "is_published", "value": "false", "type": "text" },
+                { "key": "image", "type": "file", "src": "" }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/content/entries", "host": ["{{baseUrl}}"], "path": ["content", "entries"] },
+            "description": "Click the 'image' row's Select Files button and pick a local PNG/JPG before sending. field name must be exactly 'image' (matches uploadContentImage.single(\"image\"))."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('image_url is an R2 key, not empty', () => pm.expect(body.data.image_url).to.be.a('string').and.not.empty);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Entries",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/content/entries?module=product&page=1&pageSize=20&sortBy=created_at&sortDir=DESC",
+              "host": ["{{baseUrl}}"],
+              "path": ["content", "entries"],
+              "query": [
+                { "key": "module", "value": "product" },
+                { "key": "page", "value": "1" },
+                { "key": "pageSize", "value": "20" },
+                { "key": "sortBy", "value": "created_at" },
+                { "key": "sortDir", "value": "DESC" },
+                { "key": "zone", "value": "navbar_background", "disabled": true },
+                { "key": "status", "value": "draft", "disabled": true },
+                { "key": "search", "value": "banner", "disabled": true }
+              ]
+            },
+            "description": "sortBy: start_at | end_at | priority | created_at | title. status is derived, not stored, so it's filtered in JS after the query (default|draft|scheduled|active|expired)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('has entries array and pagination', () => {",
+                  "  pm.expect(body.data.entries).to.be.an('array');",
+                  "  pm.expect(body.data).to.have.property('total');",
+                  "  pm.expect(body.data).to.have.property('page');",
+                  "  pm.expect(body.data).to.have.property('pageSize');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Entry by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/content/entries/{{contentId}}", "host": ["{{baseUrl}}"], "path": ["content", "entries", "{{contentId}}"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('content_id matches requested id', () => pm.expect(String(body.data.content_id)).to.eql(pm.collectionVariables.get('contentId')));",
+                  "pm.test('status field is derived', () => pm.expect(body.data.status).to.be.oneOf(['default','draft','scheduled','active','expired']));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Entry (Save Draft)",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "title", "value": "Test Navbar Draft (edited)", "type": "text" },
+                { "key": "color_value", "value": "#25103d", "type": "text" },
+                { "key": "priority", "value": "1", "type": "text" },
+                { "key": "is_published", "value": "false", "type": "text" }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/content/entries/{{contentId}}", "host": ["{{baseUrl}}"], "path": ["content", "entries", "{{contentId}}"] },
+            "description": "Only fields you include are updated (PATCH-like semantics on a PUT route). Omit 'image' entirely to keep the existing image."
+          },
+          "event": [
+            { "listen": "test", "script": { "exec": ["pm.test('status is 200', () => pm.response.to.have.status(200));"], "type": "text/javascript" } }
+          ]
+        },
+        {
+          "name": "Publish Entry",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "start_at", "value": "2026-08-24 10:00:00", "type": "text" },
+                { "key": "end_at", "value": "2026-09-24 10:00:00", "type": "text" },
+                { "key": "is_published", "value": "true", "type": "text" }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/content/entries/{{contentId}}", "host": ["{{baseUrl}}"], "path": ["content", "entries", "{{contentId}}"] },
+            "description": "If this zone/module/time-window overlaps another published, non-default entry, the API returns 409 instead of 200 - see 'Publish Entry (Conflict)'."
+          },
+          "event": [
+            { "listen": "test", "script": { "exec": ["pm.test('status is 200 (or 409 if a conflict exists)', () => pm.expect(pm.response.code).to.be.oneOf([200, 409]));"], "type": "text/javascript" } }
+          ]
+        },
+        {
+          "name": "Publish Entry (Conflict -> 409)",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "start_at", "value": "2026-08-24 10:00:00", "type": "text" },
+                { "key": "end_at", "value": "2026-09-24 10:00:00", "type": "text" },
+                { "key": "is_published", "value": "true", "type": "text" }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/content/entries/{{duplicateId}}", "host": ["{{baseUrl}}"], "path": ["content", "entries", "{{duplicateId}}"] },
+            "description": "Run 'Duplicate Entry' first so {{duplicateId}} exists, then run this with the SAME zone/time-window as the entry just published above - it should come back 409 with data.conflicts."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 409', () => pm.response.to.have.status(409));",
+                  "const body = pm.response.json();",
+                  "pm.test('conflicts array present', () => pm.expect(body.data.conflicts).to.be.an('array').that.is.not.empty);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Publish Entry (Force Publish)",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "start_at", "value": "2026-08-24 10:00:00", "type": "text" },
+                { "key": "end_at", "value": "2026-09-24 10:00:00", "type": "text" },
+                { "key": "is_published", "value": "true", "type": "text" },
+                { "key": "force_publish", "value": "true", "type": "text" }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/content/entries/{{duplicateId}}", "host": ["{{baseUrl}}"], "path": ["content", "entries", "{{duplicateId}}"] },
+            "description": "Same body as the 409 request above, plus force_publish=true - this bypasses the conflict check and returns 200."
+          },
+          "event": [
+            { "listen": "test", "script": { "exec": ["pm.test('status is 200', () => pm.response.to.have.status(200));"], "type": "text/javascript" } }
+          ]
+        },
+        {
+          "name": "Duplicate Entry",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": { "mode": "raw", "raw": "" },
+            "url": { "raw": "{{baseUrl}}/content/entries/{{contentId}}/duplicate", "host": ["{{baseUrl}}"], "path": ["content", "entries", "{{contentId}}", "duplicate"] },
+            "description": "No body needed. Copies the source entry as a new unpublished, non-default draft titled '<original> (Copy)'."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('duplicate is unpublished and not default', () => {",
+                  "  pm.expect(body.data.is_published).to.eql(0);",
+                  "  pm.expect(body.data.is_default).to.eql(0);",
+                  "});",
+                  "if (body.data && body.data.content_id) pm.collectionVariables.set('duplicateId', body.data.content_id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Deactivate Entry Now",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": { "mode": "raw", "raw": "" },
+            "url": { "raw": "{{baseUrl}}/content/entries/{{duplicateId}}/deactivate", "host": ["{{baseUrl}}"], "path": ["content", "entries", "{{duplicateId}}", "deactivate"] },
+            "description": "No body needed. Sets end_at = NOW() so the zone reverts to its Default entry. Fails with 400 if the target entry is_default."
+          },
+          "event": [
+            { "listen": "test", "script": { "exec": ["pm.test('status is 200', () => pm.response.to.have.status(200));"], "type": "text/javascript" } }
+          ]
+        },
+        {
+          "name": "Delete Entry",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/content/entries/{{duplicateId}}", "host": ["{{baseUrl}}"], "path": ["content", "entries", "{{duplicateId}}"] },
+            "description": "Fails with 400 if the target entry is_default. Deletes the row and, if it held an image, removes the R2 object too."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('response echoes the deleted id', () => pm.expect(String(body.data.content_id)).to.eql(pm.collectionVariables.get('duplicateId')));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Public",
+      "item": [
+        {
+          "name": "Get Resolved Zones",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "noauth" },
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/content/resolved/product", "host": ["{{baseUrl}}"], "path": ["content", "resolved", "product"] },
+            "description": "No auth required - this is what the storefront/app calls. Returns { navbar_background, promotional_banner, offers_banner }, each either the highest-priority active entry or the zone's Default."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('all three zones present', () => {",
+                  "  pm.expect(body.data).to.have.property('navbar_background');",
+                  "  pm.expect(body.data).to.have.property('promotional_banner');",
+                  "  pm.expect(body.data).to.have.property('offers_banner');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

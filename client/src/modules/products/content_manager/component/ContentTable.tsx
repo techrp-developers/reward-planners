@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { FaSpinner } from "react-icons/fa";
 import { FiChevronLeft, FiChevronRight, FiCopy, FiEdit2, FiImage, FiLock, FiPause, FiSearch, FiTrash2 } from "react-icons/fi";
 import type { ContentEntry, Status, Zone } from "../types";
 import { STATUS_META, ZONES } from "../types";
@@ -13,6 +14,7 @@ const selectClass = "rounded-xl border border-slate-200 px-3 py-2.5 text-xs font
 interface Props {
   entries: ContentEntry[];
   now: Date;
+  loading?: boolean;
   onEdit: (entry: ContentEntry) => void;
   onDuplicate: (entry: ContentEntry) => void;
   onDelete: (entry: ContentEntry) => void;
@@ -21,7 +23,8 @@ interface Props {
 
 const formatDate = (value: string) => (value ? new Date(value).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—");
 
-export default function ContentTable({ entries, now, onEdit, onDuplicate, onDelete, onDeactivateNow }: Props) {
+export default function ContentTable({ entries, now, loading, onEdit, onDuplicate, onDelete, onDeactivateNow }: Props) {
+  const [brokenImageIds, setBrokenImageIds] = useState<Set<number>>(new Set());
   const [search, setSearch] = useState("");
   const [zoneFilter, setZoneFilter] = useState<Zone | "all">("all");
   const [statusFilter, setStatusFilter] = useState<Status | "all">("all");
@@ -96,7 +99,10 @@ export default function ContentTable({ entries, now, onEdit, onDuplicate, onDele
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {pageRows.map((entry) => {
+            {loading && (
+              <tr><td colSpan={10} className="px-5 py-10 text-center text-sm text-slate-400"><FaSpinner className="mx-auto animate-spin text-lg text-[#852BAF]" /></td></tr>
+            )}
+            {!loading && pageRows.map((entry) => {
               const status = computeStatus(entry, now);
               const zoneLabel = ZONES.find((zone) => zone.key === entry.zone)?.label;
               return (
@@ -105,8 +111,13 @@ export default function ContentTable({ entries, now, onEdit, onDuplicate, onDele
                   <td className="px-5 py-3 text-slate-700">{zoneLabel}</td>
                   <td className="px-5 py-3">
                     <span className="grid h-9 w-9 place-items-center overflow-hidden rounded-lg border border-slate-100 text-[#852BAF]">
-                      {entry.contentType === "image" && entry.imageUrl ? (
-                        <img src={entry.imageUrl} alt="" className="h-full w-full object-cover" />
+                      {entry.contentType === "image" && entry.imageUrl && !brokenImageIds.has(entry.id) ? (
+                        <img
+                          src={entry.imageUrl}
+                          alt=""
+                          className="h-full w-full object-cover"
+                          onError={() => setBrokenImageIds((prev) => new Set(prev).add(entry.id))}
+                        />
                       ) : entry.contentType === "color" ? (
                         <span className="h-full w-full" style={{ background: entry.colorValue }} />
                       ) : (
@@ -137,7 +148,7 @@ export default function ContentTable({ entries, now, onEdit, onDuplicate, onDele
                 </tr>
               );
             })}
-            {pageRows.length === 0 && (
+            {!loading && pageRows.length === 0 && (
               <tr><td colSpan={10} className="px-5 py-10 text-center text-sm text-slate-400">No content entries match your filters.</td></tr>
             )}
           </tbody>
