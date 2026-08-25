@@ -4,13 +4,46 @@ const contentController = require("../controllers/contentController");
 const { uploadContentImage } = require("../middleware/mediaUpload/contentUpload");
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 
+// Keep in sync with MAX_OFFER_IMAGES in controllers/contentController.js.
+const MAX_OFFER_IMAGES = 10;
+
+// navbar_background/promotional_banner send a single "image" field; offers_banner
+// sends one or more files under "images". Both are optional so the same upload
+// step covers a color-content save too (no files at all).
+const uploadEntryFiles = uploadContentImage.fields([
+  { name: "image", maxCount: 1 },
+  { name: "images", maxCount: MAX_OFFER_IMAGES },
+]);
+
+const uploadOfferImages = uploadContentImage.array("images", MAX_OFFER_IMAGES);
+
+// Multer rejects extra files by calling next(err) rather than throwing - without this,
+// exceeding maxCount would fall through to the generic 500 handler instead of a 400.
+const handleUpload = (middleware) => (req, res, next) => {
+  middleware(req, res, (err) => {
+    if (!err) return next();
+
+    if (err.code === "LIMIT_UNEXPECTED_FILE" || err.code === "LIMIT_FILE_COUNT") {
+      return res.status(400).json({
+        success: false,
+        message: `You can upload at most ${MAX_OFFER_IMAGES} images at once`,
+      });
+    }
+
+    return res.status(400).json({
+      success: false,
+      message: err.message || "Invalid file upload",
+    });
+  });
+};
+
 // ================================= ADMIN ROUTES =================================
 
 router.post(
   "/entries",
   authenticateToken,
   authorizeRoles("vendor_manager", "admin"),
-  uploadContentImage.single("image"),
+  handleUpload(uploadEntryFiles),
   contentController.createEntry,
 );
 
@@ -32,7 +65,7 @@ router.put(
   "/entries/:id",
   authenticateToken,
   authorizeRoles("vendor_manager", "admin"),
-  uploadContentImage.single("image"),
+  handleUpload(uploadEntryFiles),
   contentController.updateEntry,
 );
 
@@ -55,6 +88,44 @@ router.delete(
   authenticateToken,
   authorizeRoles("vendor_manager", "admin"),
   contentController.deleteEntry,
+);
+
+// ============================ ADMIN: Offers Banner campaign images ============================
+
+router.post(
+  "/entries/:id/images",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  handleUpload(uploadOfferImages),
+  contentController.addEntryImages,
+);
+
+router.patch(
+  "/entries/:id/images/reorder",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  contentController.reorderEntryImages,
+);
+
+router.delete(
+  "/entries/:id/images/:imageId",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  contentController.deleteEntryImage,
+);
+
+router.patch(
+  "/entries/:id/images/:imageId/deactivate",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  contentController.deactivateEntryImage,
+);
+
+router.patch(
+  "/entries/:id/images/:imageId/activate",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  contentController.activateEntryImage,
 );
 
 // ================================= PUBLIC (storefront/app) =================================

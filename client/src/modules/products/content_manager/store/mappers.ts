@@ -1,20 +1,13 @@
 import type { ApiContentEntry } from "../api/contentApi";
 import type { ContentEntry } from "../types";
 
-const R2_BASE_URL = (import.meta.env.VITE_R2_PUBLIC_BASE || "https://cdn.rewardplanners.com").replace(/\/+$/, "");
-
-const toPublicImageUrl = (key: string | null) => {
-  if (!key) return "";
-  if (/^https?:\/\//i.test(key)) return key;
-  return `${R2_BASE_URL}/${key.replace(/^\/+/, "")}`;
-};
-
+// Backend always returns a complete, ready-to-use URL for image_url (or null) - see contentController.js buildContentImageUrl.
 export const fromApiEntry = (row: ApiContentEntry): ContentEntry => ({
   id: row.content_id,
   zone: row.zone,
   contentType: row.content_type,
   colorValue: row.color_value || "#852BAF",
-  imageUrl: toPublicImageUrl(row.image_url),
+  imageUrl: row.image_url || "",
   title: row.title,
   ctaText: row.cta_text || "",
   redirectLink: row.redirect_link || "",
@@ -26,4 +19,5 @@ export const fromApiEntry = (row: ApiContentEntry): ContentEntry => ({
   createdBy: row.created_by_name || "",
   createdAt: row.created_at,
   imageFile: null,
+  images: row.images?.map((image) => ({ imageId: image.image_id, imageUrl: image.image_url, sortOrder: image.sort_order })),
 });

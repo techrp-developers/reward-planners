@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { FiAlertTriangle, FiEye, FiSave, FiUploadCloud } from "react-icons/fi";
-import type { ContentEntry, ContentKind, Zone } from "../types";
+import type { ContentEntry, ContentKind, ContentZoneImage, Zone } from "../types";
 import { COLOR_PRESETS, ZONES } from "../types";
 import { computeStatus, findConflicts } from "../store";
 import StatusBadge from "./StatusBadge";
+import OfferImagesManager from "./OfferImagesManager";
 
 const RECOMMENDED_DIMENSIONS: Record<Zone, string> = {
   navbar_background: "1920 x 120px, PNG/JPG, under 500KB",
@@ -85,6 +86,18 @@ export default function ContentForm({ draft, entries, now, onChange, onSaveDraft
               ))}
             </div>
           </div>
+        ) : draft.zone === "offers_banner" ? (
+          draft.id ? (
+            <OfferImagesManager
+              contentId={draft.id}
+              images={draft.images ?? []}
+              onChange={(images: ContentZoneImage[]) => onChange({ images })}
+            />
+          ) : (
+            <div className="sm:col-span-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500">
+              Save this campaign as a draft first, then come back to add one or more offer images.
+            </div>
+          )
         ) : (
           <div className="sm:col-span-2">
             <p className={labelClass}>Image</p>

@@ -58,7 +58,12 @@ export default function ContentManagement() {
     if (!entry.title.trim()) return "Title / Label is required.";
     if (requireContentValue) {
       if (entry.contentType === "color" && !entry.colorValue.trim()) return "Pick a color for this zone.";
-      if (entry.contentType === "image" && !entry.imageUrl.trim()) return "Upload an image for this zone.";
+      if (entry.contentType === "image" && entry.zone === "offers_banner" && !(entry.images ?? []).length) {
+        return "Add at least one offer image for this campaign.";
+      }
+      if (entry.contentType === "image" && entry.zone !== "offers_banner" && !entry.imageUrl.trim()) {
+        return "Upload an image for this zone.";
+      }
     }
     if (entry.startAt && entry.endAt && new Date(entry.endAt) <= new Date(entry.startAt)) {
       return "End Date must be after Start Date.";

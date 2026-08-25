@@ -29,7 +29,9 @@ class ContentZoneModel {
       if (data.content_type === "color" && !data.color_value) {
         errors.push("color_value is required when content_type is 'color'");
       }
-      if (data.content_type === "image" && !isUpdate && !data.image_url && !hasImageFile) {
+      // offers_banner images are added afterwards via the per-image endpoints, so a
+      // main image_url/file isn't required up front the way it is for other zones.
+      if (data.content_type === "image" && !isUpdate && data.zone !== "offers_banner" && !data.image_url && !hasImageFile) {
         errors.push("image_url is required when content_type is 'image'");
       }
     }
@@ -414,6 +416,156 @@ class ContentZoneModel {
     );
 
     return { content_id: Number(id) };
+  }
+
+  //   =================================Offers Banner: multi-image campaigns===================================
+
+  /** Active images for a campaign, in display order. Used by the public resolved API and the admin edit view. */
+  async getImagesByContentId(contentId) {
+    const [rows] = await db.query(
+      `
+      SELECT image_id, content_id, image_url, sort_order, is_active
+      FROM content_zone_entry_images
+      WHERE content_id = ?
+        AND is_active = 1
+      ORDER BY sort_order ASC, image_id ASC
+      `,
+      [contentId],
+    );
+
+    return rows;
+  }
+
+  /** Every image row regardless of is_active - only for cleanup paths that must not leave orphaned files. */
+  async getAllImagesByContentId(contentId) {
+    const [rows] = await db.query(
+      `
+      SELECT image_id, content_id, image_url, sort_order, is_active
+      FROM content_zone_entry_images
+      WHERE content_id = ?
+      `,
+      [contentId],
+    );
+
+    return rows;
+  }
+
+  async getImageById(imageId) {
+    const [rows] = await db.query(
+      `
+      SELECT image_id, content_id, image_url, sort_order, is_active
+      FROM content_zone_entry_images
+      WHERE image_id = ?
+      LIMIT 1
+      `,
+      [imageId],
+    );
+
+    if (!rows.length) {
+      const error = new Error("Offer image not found");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    return rows[0];
+  }
+
+  async createEntryImage(contentId, imageUrl, sortOrder) {
+    const [result] = await db.query(
+      `
+      INSERT INTO content_zone_entry_images (content_id, image_url, sort_order)
+      VALUES (?, ?, ?)
+      `,
+      [contentId, imageUrl, sortOrder],
+    );
+
+    return { image_id: result.insertId, content_id: Number(contentId), image_url: imageUrl, sort_order: sortOrder, is_active: 1 };
+  }
+
+  /** images: [{ image_url, sort_order }] - inserted in order so sort_order matches upload order. */
+  async createEntryImages(contentId, images) {
+    const created = [];
+    for (const image of images) {
+      created.push(await this.createEntryImage(contentId, image.image_url, image.sort_order));
+    }
+    return created;
+  }
+
+  async deleteEntryImage(imageId) {
+    await db.query(
+      `
+      DELETE FROM content_zone_entry_images
+      WHERE image_id = ?
+      `,
+      [imageId],
+    );
+  }
+
+  async deactivateEntryImage(imageId) {
+    await db.query(
+      `
+      UPDATE content_zone_entry_images
+      SET is_active = 0
+      WHERE image_id = ?
+      `,
+      [imageId],
+    );
+
+    return this.getImageById(imageId);
+  }
+
+  async activateEntryImage(imageId) {
+    await db.query(
+      `
+      UPDATE content_zone_entry_images
+      SET is_active = 1
+      WHERE image_id = ?
+      `,
+      [imageId],
+    );
+
+    return this.getImageById(imageId);
+  }
+
+  async reorderEntryImages(contentId, images) {
+    const existing = await this.getAllImagesByContentId(contentId);
+    const existingIds = new Set(existing.map((row) => row.image_id));
+
+    const invalid = images.filter((img) => !existingIds.has(Number(img.image_id)));
+    if (invalid.length) {
+      const error = new Error("One or more images do not belong to this content entry");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    for (const { image_id, sort_order } of images) {
+      await db.query(
+        `
+        UPDATE content_zone_entry_images
+        SET sort_order = ?
+        WHERE content_id = ?
+          AND image_id = ?
+        `,
+        [sort_order, contentId, image_id],
+      );
+    }
+
+    return this.getImagesByContentId(contentId);
+  }
+
+  /** Fetches (all, regardless of is_active) then deletes every image row for a campaign - callers use the returned rows to clean up physical/R2 files before or while removing the parent. */
+  async deleteImagesByContentId(contentId) {
+    const images = await this.getAllImagesByContentId(contentId);
+
+    await db.query(
+      `
+      DELETE FROM content_zone_entry_images
+      WHERE content_id = ?
+      `,
+      [contentId],
+    );
+
+    return images;
   }
 }
 

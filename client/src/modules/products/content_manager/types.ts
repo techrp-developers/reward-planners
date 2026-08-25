@@ -2,6 +2,12 @@ export type Zone = "navbar_background" | "promotional_banner" | "offers_banner";
 export type ContentKind = "color" | "image";
 export type Status = "default" | "draft" | "scheduled" | "active" | "expired";
 
+export interface ContentZoneImage {
+  imageId: number | null;
+  imageUrl: string;
+  sortOrder: number;
+}
+
 export interface ContentEntry {
   id: number;
   zone: Zone;
@@ -22,6 +28,8 @@ export interface ContentEntry {
   createdAt: string;
   /** Pending upload for the current edit session; never sent to display, cleared after successful save. */
   imageFile?: File | null;
+  /** Offers Banner only - the campaign's ordered set of images, managed via their own endpoints. */
+  images?: ContentZoneImage[];
 }
 
 export const ZONES: { key: Zone; label: string }[] = [
