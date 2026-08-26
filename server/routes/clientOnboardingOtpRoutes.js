@@ -5,7 +5,7 @@ const { authLimiter } = require("../app/common/middlewares/rateLimiter");
 const { sendOtpEmail, sendAdminOnboardedEmail } = require("../config/mail");
 const { enqueueWhatsApp } = require("../services/whatsapp/waEnqueueService");
 const { normalizeIndianMobile } = require("../services/whatsapp/phone");
-const { createSigningSession, verifySigningSession } = require("../services/zohoSignService");
+const { createSigningSession, verifySigningSession, downloadSigningArtifacts } = require("../services/zohoSignService");
 const { createClientOnboarding } = require("../services/clientOnboardingService");
 
 const router = express.Router();
@@ -141,13 +141,15 @@ router.post("/submit", authLimiter, async (req, res) => {
   }
 
   try {
-    let zohoRequestId = null;
+    let signing = null;
+    let signingArtifacts = [];
     if (REQUIRE_ZOHO_SIGNING) {
-      const signing = await verifySigningSession(req.body?.signingState);
+      signing = await verifySigningSession(req.body?.signingState);
       if (!signing.signed) return res.status(400).json({ success: false, message: "Complete the Zoho Sign agreement before submitting onboarding." });
-      zohoRequestId = signing.requestId;
+      if (signing.consumed) return res.status(409).json({ success: false, message: "This signed agreement has already been used." });
+      signingArtifacts = await downloadSigningArtifacts(signing.requestId);
     }
-    const result = await createClientOnboarding(req.body?.onboarding, { zohoRequestId });
+    const result = await createClientOnboarding(req.body?.onboarding, { signing, signingState: req.body?.signingState, signingArtifacts });
     try {
       await sendAdminOnboardedEmail({
         email: normalizeEmail(req.body?.onboarding?.adminEmail),

@@ -1,5 +1,7 @@
 const bcrypt = require("bcryptjs");
 const db = require("../config/database");
+const { uploadToR2 } = require("../utils/r2upload");
+const { deleteFromR2 } = require("../utils/r2delete");
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const phonePattern = /^[6-9]\d{9}$/;
@@ -33,14 +35,24 @@ function validate(data) {
   return null;
 }
 
-async function createClientOnboarding(rawData, { zohoRequestId = null }) {
+async function createClientOnboarding(rawData, { signing = null, signingState = null, signingArtifacts = [] } = {}) {
   const data = normalize(rawData);
   const validationError = validate(data);
   if (validationError) throw Object.assign(new Error(validationError), { status: 400 });
 
   const connection = await db.getConnection();
+  const uploadedR2Keys = [];
   try {
     await connection.beginTransaction();
+    if (signing?.requestId) {
+      const [[session]] = await connection.execute(
+        `SELECT request_id, consumed_at FROM zoho_signing_sessions WHERE state = ? FOR UPDATE`,
+        [signingState],
+      );
+      if (!session || session.request_id !== String(signing.requestId) || session.consumed_at) {
+        throw Object.assign(new Error("This signing session is invalid or has already been used."), { status: 409 });
+      }
+    }
     const [[state]] = await connection.execute("SELECT state_id FROM states WHERE state_id = ? AND status = 1 LIMIT 1", [data.state]);
     if (!state) throw Object.assign(new Error("Select a valid active state."), { status: 400 });
 
@@ -80,9 +92,10 @@ async function createClientOnboarding(rawData, { zohoRequestId = null }) {
     }
 
     const passwordHash = await bcrypt.hash(data.password, 12);
+    const adminEmailWasVerified = data.adminEmail === data.repEmail;
     const [userResult] = await connection.execute(
-      `INSERT INTO eusers (name, role, email, password, phone, is_verified) VALUES (?, 'hr', ?, ?, ?, 1)`,
-      [data.adminName, data.adminEmail, passwordHash, data.adminEmail === data.repEmail ? data.repPhone : null],
+      `INSERT INTO eusers (name, role, email, password, phone, is_verified) VALUES (?, 'hr', ?, ?, ?, ?)`,
+      [data.adminName, data.adminEmail, passwordHash, adminEmailWasVerified ? data.repPhone : null, adminEmailWasVerified ? 1 : 0],
     );
 
     await connection.execute(`INSERT INTO company_wallet (company_id, balance) VALUES (?, 0)`, [companyId]);
@@ -96,13 +109,33 @@ async function createClientOnboarding(rawData, { zohoRequestId = null }) {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, 1, 1, ?, ?)`,
       [companyId, data.legalName || null, data.companyType, data.industry, data.employeeCount, data.website || null, data.pan || null, data.gst || null,
         data.address1, data.address2 || null, data.country, data.state, data.city, data.pincode, data.officeSame ? 1 : 0,
-        data.repName, data.designation, data.repEmail, data.repPhone, data.repPan || null, data.aadhaarLast4 || null, data.identityConsent ? 1 : 0, zohoRequestId ? String(zohoRequestId) : null, zohoRequestId ? new Date() : null],
+        data.repName, data.designation, data.repEmail, data.repPhone, data.repPan || null, data.aadhaarLast4 || null, data.identityConsent ? 1 : 0, signing?.requestId ? String(signing.requestId) : null, signing?.signedAt || null],
     );
+
+    for (const artifact of signingArtifacts) {
+      const safeFilename = artifact.filename.replace(/[^A-Za-z0-9._-]/g, "_");
+      const r2Path = `private/client-onboarding-agreements/${signing.requestId}/${artifact.kind}-${safeFilename}`;
+      await uploadToR2(artifact.content, r2Path, artifact.mimeType);
+      uploadedR2Keys.push(r2Path);
+      await connection.execute(
+        `INSERT INTO client_onboarding_signed_documents
+          (company_id, zoho_request_id, document_kind, filename, file_path, mime_type, byte_size, sha256)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [companyId, String(signing.requestId), artifact.kind, artifact.filename, r2Path, artifact.mimeType, artifact.content.length, artifact.sha256],
+      );
+    }
+    if (signing?.requestId) {
+      await connection.execute(
+        `UPDATE zoho_signing_sessions SET company_id = ?, consumed_at = CURRENT_TIMESTAMP WHERE state = ?`,
+        [companyId, signingState],
+      );
+    }
 
     await connection.commit();
     return { companyId, companyUserId: adminCompanyUserId, userId: userResult.insertId };
   } catch (error) {
     await connection.rollback();
+    await Promise.allSettled(uploadedR2Keys.map((key) => deleteFromR2(key)));
     if (error.code === "ER_DUP_ENTRY") throw Object.assign(new Error("This company or administrator has already been onboarded."), { status: 409 });
     throw error;
   } finally {
