@@ -57,12 +57,26 @@ async function createClientOnboarding(rawData, { signing = null, signingState = 
     if (!state) throw Object.assign(new Error("Select a valid active state."), { status: 400 });
 
     const [duplicates] = await connection.execute(
-      `SELECT 'company' AS source FROM companies WHERE LOWER(TRIM(company_email)) = ?
-       UNION ALL SELECT 'administrator' FROM eusers WHERE LOWER(TRIM(email)) = ?
-       UNION ALL SELECT 'employee' FROM company_users WHERE LOWER(TRIM(email)) IN (?, ?) LIMIT 1`,
-      [data.officialEmail, data.adminEmail, data.repEmail, data.adminEmail],
+      `SELECT 'company_email' AS source, LOWER(TRIM(company_email)) AS duplicate_email
+         FROM companies WHERE LOWER(TRIM(company_email)) = ?
+       UNION ALL
+       SELECT 'admin_login', LOWER(TRIM(email)) FROM eusers WHERE LOWER(TRIM(email)) = ?
+       UNION ALL
+       SELECT CASE WHEN LOWER(TRIM(email)) = ? THEN 'representative_email' ELSE 'admin_directory_email' END,
+              LOWER(TRIM(email))
+         FROM company_users WHERE LOWER(TRIM(email)) IN (?, ?)`,
+      [data.officialEmail, data.adminEmail, data.repEmail, data.repEmail, data.adminEmail],
     );
-    if (duplicates.length) throw Object.assign(new Error("A company or user with one of these email addresses already exists."), { status: 409 });
+    if (duplicates.length) {
+      const labels = {
+        company_email: "company email",
+        admin_login: "HR administrator email",
+        representative_email: "representative email",
+        admin_directory_email: "HR administrator email",
+      };
+      const conflicts = [...new Set(duplicates.map((item) => labels[item.source] || "email"))];
+      throw Object.assign(new Error(`The ${conflicts.join(" and ")} already ${conflicts.length === 1 ? "exists" : "exist"}. Use a different email or contact an administrator to recover the existing account.`), { status: 409 });
+    }
 
     const [companyResult] = await connection.execute(
       `INSERT INTO companies (company_name, company_email, company_phone, status) VALUES (?, ?, ?, 1)`,
