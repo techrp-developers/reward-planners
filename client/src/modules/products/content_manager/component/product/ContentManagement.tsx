@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { FiList, FiPlus } from "react-icons/fi";
 import type { AxiosError } from "axios";
 import Swal from "sweetalert2";
@@ -6,6 +7,7 @@ import { toast } from "sonner";
 import type { ContentEntry } from "../../types";
 import { blankEntry } from "../../types";
 import { buildEntryFormData, createEntry, deactivateEntry, deleteEntry, duplicateEntry, listEntries, updateEntry } from "../../api/contentApi";
+import { getResolvedModules } from "../../api/ModuleIconApi";
 import { fromApiEntry } from "../../store/mappers";
 import ContentForm from "../ContentForm";
 import ContentTable from "../ContentTable";
@@ -49,6 +51,13 @@ export default function ContentManagement() {
   };
 
   useEffect(() => { void loadEntries(); }, []);
+
+  // What the mobile app's top navbar actually shows - fetched once here and passed down so
+  // the preview never diverges from the real GET /content/resolved/modules response.
+  const { data: moduleIcons = [] } = useQuery({
+    queryKey: ["content", "resolved-modules"],
+    queryFn: getResolvedModules,
+  });
 
   const startAdd = () => { setDraft(blankEntry("navbar_background")); setView("form"); };
   const startEdit = (entry: ContentEntry) => { setDraft({ ...entry }); setView("form"); };
@@ -227,7 +236,7 @@ export default function ContentManagement() {
             onPublish={() => void handlePublish()}
             saving={saving}
           />
-          <LivePreviewPanel entries={entries} draft={draft} now={now} />
+          <LivePreviewPanel entries={entries} draft={draft} now={now} moduleIcons={moduleIcons} />
         </div>
       )}
     </main>

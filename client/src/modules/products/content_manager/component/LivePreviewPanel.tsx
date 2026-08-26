@@ -1,5 +1,7 @@
 import { useState, type CSSProperties } from "react";
+import { FiGrid } from "react-icons/fi";
 import type { ContentEntry, Zone } from "../types";
+import type { ResolvedModuleIcon } from "../api/ModuleIconApi";
 import { resolveZoneEntry } from "../store";
 import PhoneFrame from "./PhoneFrame";
 
@@ -7,6 +9,8 @@ interface Props {
   entries: ContentEntry[];
   draft: ContentEntry;
   now: Date;
+  /** From GET /content/resolved/modules - fetched once at the Content Management level, not per-preview. */
+  moduleIcons?: ResolvedModuleIcon[];
 }
 
 type PreviewMode = "default" | "campaign";
@@ -23,8 +27,11 @@ const zoneStyle = (entry?: ContentEntry): CSSProperties => {
 
 const textShadow = "[text-shadow:0_1px_4px_rgba(0,0,0,0.45)]";
 
-export default function LivePreviewPanel({ entries, draft, now }: Props) {
+export default function LivePreviewPanel({ entries, draft, now, moduleIcons = [] }: Props) {
   const [mode, setMode] = useState<PreviewMode>("campaign");
+  const [previewModule, setPreviewModule] = useState("product");
+
+  const sortedModules = [...moduleIcons].sort((a, b) => a.sort_order - b.sort_order);
 
   const resolve = (zone: Zone): ContentEntry | undefined => {
     if (zone === draft.zone) {
@@ -65,13 +72,35 @@ export default function LivePreviewPanel({ entries, draft, now }: Props) {
       )}
 
       <PhoneFrame>
-        <div className={`flex items-center justify-between px-4 py-4 text-white ${textShadow}`} style={zoneStyle(navbar)}>
+        <div className={`px-4 py-4 text-white ${textShadow}`} style={zoneStyle(navbar)}>
           <span className="text-sm font-black">RP</span>
-          <div className="flex items-center gap-2 text-[10px] font-bold">
-            <span className="rounded-full bg-white/25 px-2.5 py-1">Product</span>
-            <span className="opacity-70">Service</span>
-            <span className="opacity-70">Payment</span>
-          </div>
+
+          {sortedModules.length > 0 && (
+            <div className="mt-3 flex items-center justify-center gap-3">
+              {sortedModules.map((module) => {
+                const isSelected = previewModule === module.module_key;
+                const iconSrc = isSelected ? module.active_icon_url || module.icon_url : module.icon_url;
+
+                return (
+                  <button
+                    key={module.module_key}
+                    type="button"
+                    onClick={() => setPreviewModule(module.module_key)}
+                    className="flex flex-col items-center gap-1"
+                  >
+                    <span className={`grid h-9 w-9 place-items-center overflow-hidden rounded-full transition ${isSelected ? "bg-white" : "bg-white/25"}`}>
+                      {iconSrc ? (
+                        <img src={iconSrc} alt="" className="h-5 w-5 object-contain" />
+                      ) : (
+                        <FiGrid size={14} className={isSelected ? "text-[#852BAF]" : "text-white"} />
+                      )}
+                    </span>
+                    <span className="text-[9px] font-bold">{module.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div className="space-y-5 p-3">

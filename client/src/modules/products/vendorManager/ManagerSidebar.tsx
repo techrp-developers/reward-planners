@@ -107,6 +107,7 @@ export default function ManagerNavbar() {
         { label: "Product", to: routes.manager.content.product },
         { label: "Service", to: routes.manager.content.service },
         { label: "Payment", to: routes.manager.content.payment },
+        { label: "Module Icons", to: routes.manager.content.moduleIcons },
       ],
     },
     {

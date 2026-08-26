@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const contentController = require("../controllers/contentController");
+const moduleIconController = require("../controllers/moduleIconController");
 const { uploadContentImage } = require("../middleware/mediaUpload/contentUpload");
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 
@@ -16,6 +17,12 @@ const uploadEntryFiles = uploadContentImage.fields([
 ]);
 
 const uploadOfferImages = uploadContentImage.array("images", MAX_OFFER_IMAGES);
+
+// Module icon replace/activate icon are both optional single files.
+const uploadModuleIconFiles = uploadContentImage.fields([
+  { name: "icon", maxCount: 1 },
+  { name: "active_icon", maxCount: 1 },
+]);
 
 // Multer rejects extra files by calling next(err) rather than throwing - without this,
 // exceeding maxCount would fall through to the generic 500 handler instead of a 400.
@@ -128,9 +135,44 @@ router.patch(
   contentController.activateEntryImage,
 );
 
+// ============================ ADMIN: Module icons (top navbar) ============================
+
+router.get(
+  "/modules",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  moduleIconController.listModules,
+);
+
+router.post(
+  "/modules",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  handleUpload(uploadModuleIconFiles),
+  moduleIconController.createModule,
+);
+
+router.put(
+  "/modules/:module",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  handleUpload(uploadModuleIconFiles),
+  moduleIconController.updateModuleIcon,
+);
+
+router.delete(
+  "/modules/:module",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  moduleIconController.deleteModule,
+);
+
 // ================================= PUBLIC (storefront/app) =================================
 
 router.get("/resolved/navbar", contentController.getResolvedNavbar);
+// Must be registered before the "/resolved/:module" wildcard below, or a request for
+// "modules" would be captured as module="modules" and hit getResolvedZones instead.
+router.get("/resolved/modules", moduleIconController.getResolvedModules);
 router.get("/resolved/:module", contentController.getResolvedZones);
 
 module.exports = router;

@@ -89,6 +89,7 @@ export const routes = {
       product: "/manager/content/product",
       service: "/manager/content/service",
       payment: "/manager/content/payment",
+      moduleIcons: "/manager/content/module-icons",
     },
   },
   admin: {
