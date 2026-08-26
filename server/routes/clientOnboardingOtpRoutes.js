@@ -1,7 +1,7 @@
 const crypto = require("crypto");
 const express = require("express");
 const jwt = require("jsonwebtoken");
-const { authLimiter } = require("../app/common/middlewares/rateLimiter");
+const { onboardingOtpLimiter, onboardingStatusLimiter, onboardingSubmitLimiter } = require("../app/common/middlewares/rateLimiter");
 const { sendOtpEmail, sendAdminOnboardedEmail } = require("../config/mail");
 const { enqueueWhatsApp } = require("../services/whatsapp/waEnqueueService");
 const { normalizeIndianMobile } = require("../services/whatsapp/phone");
@@ -43,7 +43,7 @@ function destinationFor(channel, destination) {
   return null;
 }
 
-router.post("/send", authLimiter, async (req, res) => {
+router.post("/send", onboardingOtpLimiter, async (req, res) => {
   const channel = String(req.body?.channel || "").toLowerCase();
   const destination = destinationFor(channel, req.body?.destination);
   if (!destination) return res.status(400).json({ success: false, message: `Enter a valid ${channel === "email" ? "email address" : "WhatsApp number"}.` });
@@ -71,7 +71,7 @@ router.post("/send", authLimiter, async (req, res) => {
   }
 });
 
-router.post("/verify", authLimiter, (req, res) => {
+router.post("/verify", onboardingOtpLimiter, (req, res) => {
   const sessionId = String(req.body?.sessionId || "");
   const otp = String(req.body?.otp || "").trim();
   const session = sessions.get(sessionId);
@@ -90,7 +90,7 @@ router.post("/verify", authLimiter, (req, res) => {
   return res.json({ success: true, message: `${session.channel === "email" ? "Email" : "WhatsApp"} verified successfully.`, data: { verificationToken, expiresInSeconds: VERIFICATION_PROOF_TTL_SECONDS } });
 });
 
-router.post("/notify-admin", authLimiter, async (req, res) => {
+router.post("/notify-admin", onboardingSubmitLimiter, async (req, res) => {
   const email = normalizeEmail(req.body?.email);
   const adminName = String(req.body?.adminName || "").trim();
   const companyName = String(req.body?.companyName || "").trim();
@@ -106,7 +106,7 @@ router.post("/notify-admin", authLimiter, async (req, res) => {
   }
 });
 
-router.post("/sign/start", authLimiter, async (req, res) => {
+router.post("/sign/start", onboardingSubmitLimiter, async (req, res) => {
   const recipientName = String(req.body?.recipientName || "").trim();
   const recipientEmail = normalizeEmail(req.body?.recipientEmail);
   const companyName = String(req.body?.companyName || "").trim();
@@ -121,7 +121,7 @@ router.post("/sign/start", authLimiter, async (req, res) => {
   }
 });
 
-router.post("/sign/status", authLimiter, async (req, res) => {
+router.post("/sign/status", onboardingStatusLimiter, async (req, res) => {
   try {
     const data = await verifySigningSession(req.body?.state);
     return res.json({ success: true, data });
@@ -130,7 +130,7 @@ router.post("/sign/status", authLimiter, async (req, res) => {
   }
 });
 
-router.post("/submit", authLimiter, async (req, res) => {
+router.post("/submit", onboardingSubmitLimiter, async (req, res) => {
   const emailProofToken = String(req.body?.emailVerificationToken || "");
   const representativeEmail = normalizeEmail(req.body?.onboarding?.repEmail);
   try {
