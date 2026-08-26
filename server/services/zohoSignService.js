@@ -3,6 +3,9 @@ const db = require("../config/database");
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
+let cachedAccessToken = null;
+let accessTokenExpiresAt = 0;
+let accessTokenRefreshPromise = null;
 
 function configuration() {
   const dc = String(process.env.ZOHO_SIGN_DC || "in").toLowerCase();
@@ -28,7 +31,7 @@ async function zohoJson(url, options = {}) {
   const response = await fetch(url, options);
   const body = await response.json().catch(() => ({}));
   if (!response.ok || body.status === "failure" || (body.code && body.code !== 0)) {
-    const error = new Error(body.message || `Zoho Sign request failed (${response.status})`);
+    const error = new Error(body.message || body.error_description || body.error || `Zoho Sign request failed (${response.status})`);
     error.status = response.status;
     throw error;
   }
@@ -54,15 +57,28 @@ async function zohoFile(url, token) {
 }
 
 async function accessToken(config) {
-  const params = new URLSearchParams({
-    refresh_token: config.refreshToken,
-    client_id: config.clientId,
-    client_secret: config.clientSecret,
-    grant_type: "refresh_token",
-  });
-  const response = await zohoJson(`${config.accountsBase}/oauth/v2/token`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: params });
-  if (!response.access_token) throw new Error("Zoho did not return an access token");
-  return response.access_token;
+  if (cachedAccessToken && Date.now() < accessTokenExpiresAt - 60_000) return cachedAccessToken;
+  if (accessTokenRefreshPromise) return accessTokenRefreshPromise;
+
+  accessTokenRefreshPromise = (async () => {
+    const params = new URLSearchParams({
+      refresh_token: config.refreshToken,
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+      grant_type: "refresh_token",
+    });
+    const response = await zohoJson(`${config.accountsBase}/oauth/v2/token`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: params });
+    if (!response.access_token) throw new Error("Zoho did not return an access token");
+    cachedAccessToken = response.access_token;
+    accessTokenExpiresAt = Date.now() + Math.max(60, Number(response.expires_in || 3600)) * 1000;
+    return cachedAccessToken;
+  })();
+
+  try {
+    return await accessTokenRefreshPromise;
+  } finally {
+    accessTokenRefreshPromise = null;
+  }
 }
 
 function authorization(token) {
