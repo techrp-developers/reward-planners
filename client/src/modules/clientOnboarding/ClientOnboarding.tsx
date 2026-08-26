@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../../common/api/api";
-import { MdAdminPanelSettings, MdAnalytics, MdArrowBack, MdArrowForward, MdAutorenew, MdBusiness, MdCelebration, MdCheck as Check, MdCheckCircle, MdClose, MdDarkMode, MdDraw, MdEmail, MdFactCheck, MdGroups, MdLightMode, MdLocationOn, MdPerson, MdRedeem, MdSecurity, MdVerifiedUser, MdVisibility, MdVisibilityOff, MdWhatsapp } from "react-icons/md";
+import { MdAdminPanelSettings, MdAnalytics, MdArrowBack, MdArrowForward, MdAutorenew, MdBusiness, MdCheck as Check, MdCheckCircle, MdClose, MdDarkMode, MdDraw, MdEmail, MdFactCheck, MdGroups, MdHourglassTop, MdLightMode, MdLocationOn, MdPerson, MdRedeem, MdSecurity, MdVerifiedUser, MdVisibility, MdVisibilityOff, MdWhatsapp } from "react-icons/md";
 
 type FormData = Record<string, string | boolean>;
 type StateOption = { state_id: number; state_name: string };
@@ -330,22 +330,6 @@ export default function ClientOnboarding() {
     }
   };
 
-  const startOver = () => {
-    localStorage.removeItem("rp-client-onboarding");
-    setData(initialData);
-    setStep(0);
-    setHighestStep(0);
-    setError("");
-    setFieldErrors({});
-    setOtpVerification({ email: emptyOtpState(), whatsapp: emptyOtpState() });
-    setAdminWelcomeSent(false);
-    setSendingAdminWelcome(false);
-    setAgreementSigned(false);
-    setAgreementState("");
-    setAgreementLoading(false);
-    setAgreementMessage("");
-  };
-
   const renderFields = () => (
     <div className="grid gap-4 sm:grid-cols-2">
       {(fields[step] || []).map((field) => (
@@ -500,23 +484,24 @@ export default function ClientOnboarding() {
     return (
       <div className="relative min-h-[500px] overflow-hidden py-10 text-center">
         <div className="relative z-10 mx-auto max-w-3xl">
-          <div className={`mx-auto grid h-24 w-24 place-items-center rounded-full border text-5xl ${darkMode ? "border-purple-500/30 bg-purple-500/10 text-purple-300" : "border-purple-100 bg-purple-50 text-purple-700"}`}><MdCelebration /></div>
-          <p className={`mt-7 text-sm font-semibold uppercase tracking-[0.18em] ${darkMode ? "text-purple-300" : "text-purple-700"}`}>Onboarding complete</p>
-          <h2 className={`mt-3 text-4xl font-semibold tracking-tight sm:text-5xl ${darkMode ? "text-white" : "text-slate-900"}`}>Welcome aboard, {String(data.companyName || "your team")}!</h2>
-          <p className={`mx-auto mt-4 max-w-xl text-lg leading-8 ${darkMode ? "text-slate-400" : "text-slate-500"}`}>Your organization profile is ready. You can now continue to Reward Planners and begin setting up your workplace experience.</p>
+          <div className={`mx-auto grid h-20 w-20 place-items-center rounded-full border text-4xl ${darkMode ? "border-amber-500/30 bg-amber-500/10 text-amber-300" : "border-amber-200 bg-amber-50 text-amber-700"}`}><MdHourglassTop /></div>
+          <p className={`mt-7 text-sm font-semibold uppercase tracking-[0.16em] ${darkMode ? "text-amber-300" : "text-amber-700"}`}>Application submitted</p>
+          <h2 className={`mt-3 text-4xl font-semibold tracking-tight sm:text-5xl ${darkMode ? "text-white" : "text-slate-900"}`}>Your organization is under review</h2>
+          <p className={`mx-auto mt-4 max-w-2xl text-lg leading-8 ${darkMode ? "text-slate-400" : "text-slate-500"}`}>We have received the onboarding details for {String(data.companyName || "your organization")}. Review may take up to seven days, and the HR portal will remain unavailable until your account is approved.</p>
           <div className={`mx-auto mt-9 grid max-w-2xl border-y text-left sm:grid-cols-2 ${darkMode ? "divide-slate-700 border-slate-700 sm:divide-x" : "divide-slate-200 border-slate-200 sm:divide-x"}`}>
             <div className="px-5 py-5"><span className={`text-sm ${darkMode ? "text-slate-500" : "text-slate-400"}`}>Organization</span><strong className="mt-1 block text-base">{String(data.companyName)}</strong></div>
             <div className="px-5 py-5"><span className={`text-sm ${darkMode ? "text-slate-500" : "text-slate-400"}`}>Primary administrator</span><strong className="mt-1 block text-base">{String(data.adminEmail)}</strong></div>
-            <div className="px-5 py-5"><span className={`text-sm ${darkMode ? "text-slate-500" : "text-slate-400"}`}>Setup status</span><strong className="mt-1 flex items-center gap-2 text-base text-purple-500"><MdCheckCircle /> Ready to continue</strong></div>
-            <div className="px-5 py-5"><span className={`text-sm ${darkMode ? "text-slate-500" : "text-slate-400"}`}>Next step</span><strong className="mt-1 block text-base">Organization workspace</strong></div>
+            <div className="px-5 py-5"><span className={`text-sm ${darkMode ? "text-slate-500" : "text-slate-400"}`}>Account status</span><strong className={`mt-1 flex items-center gap-2 text-base ${darkMode ? "text-amber-300" : "text-amber-700"}`}><MdHourglassTop /> Pending approval</strong></div>
+            <div className="px-5 py-5"><span className={`text-sm ${darkMode ? "text-slate-500" : "text-slate-400"}`}>What happens next</span><strong className="mt-1 block text-base">Approval notification by email</strong></div>
           </div>
-          <div className="mt-9 flex flex-wrap items-center justify-center gap-4"><button onClick={() => navigate("/login", { state: { message: "Client onboarding completed successfully." } })} className="inline-flex items-center gap-2 rounded-md bg-gradient-to-r from-[#7457d7] to-[#a855d5] px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-purple-900/20">Continue to login <MdArrowForward /></button><button type="button" onClick={startOver} className={`rounded-md border px-6 py-3.5 text-base font-medium ${darkMode ? "border-slate-700 text-slate-300 hover:bg-slate-800" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>Start over</button></div>
+          <p className={`mx-auto mt-7 max-w-xl text-sm leading-6 ${darkMode ? "text-slate-500" : "text-slate-500"}`}>We will send the approval decision to {String(data.adminEmail)}. Please do not submit another onboarding application for the same organization.</p>
+          <div className="mt-7 flex justify-center"><button onClick={() => navigate("/login", { state: { message: "Your HR account is pending approval. Reviews may take up to 7 days." } })} className="inline-flex items-center gap-2 rounded-md bg-purple-700 px-7 py-3 text-base font-semibold text-white shadow-sm transition-colors hover:bg-purple-800">Return to login <MdArrowForward /></button></div>
         </div>
       </div>
     );
   };
 
-  const descriptions = ["Tell us about your organization.", "Add the registered business address.", "Add and verify the authorized company representative.", "Review and accept the required agreements.", "Create the primary HR administrator.", "Your organization is ready for the next step."];
+  const descriptions = ["Tell us about your organization.", "Add the registered business address.", "Add and verify the authorized company representative.", "Review and accept the required agreements.", "Create the primary HR administrator.", "Your application has been submitted for review."];
   const representativeVerificationComplete = otpVerification.email.verified && (!ENABLE_WHATSAPP_VERIFICATION || otpVerification.whatsapp.verified);
   const legalStepComplete = (!REQUIRE_ZOHO_SIGNING || agreementSigned) && [data.terms, data.privacy, data.dataConsent, data.communicationConsent].every(Boolean);
   const interactionStyles = `.rp-client-onboarding button:not(:disabled),.rp-client-onboarding a,.rp-client-onboarding select:not(:disabled),.rp-client-onboarding label:has(input[type="checkbox"]){cursor:pointer}.rp-client-onboarding button:disabled,.rp-client-onboarding select:disabled{cursor:not-allowed}.rp-client-onboarding button:focus-visible,.rp-client-onboarding a:focus-visible,.rp-client-onboarding input:focus-visible,.rp-client-onboarding select:focus-visible{outline:2px solid #7c3aed;outline-offset:3px}@keyframes rp-step-enter{0%{opacity:0;transform:translateY(10px)}100%{opacity:1;transform:translateY(0)}}.rp-step-panel{transform-origin:top center;animation:rp-step-enter .3s cubic-bezier(.22,1,.36,1) both}@media(prefers-reduced-motion:reduce){.rp-step-panel{animation:none}}`;

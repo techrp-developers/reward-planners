@@ -143,13 +143,20 @@ router.post("/submit", onboardingSubmitLimiter, async (req, res) => {
   try {
     let signing = null;
     let signingArtifacts = [];
-    if (REQUIRE_ZOHO_SIGNING) {
-      signing = await verifySigningSession(req.body?.signingState);
-      if (!signing.signed) return res.status(400).json({ success: false, message: "Complete the Zoho Sign agreement before submitting onboarding." });
-      if (signing.consumed) return res.status(409).json({ success: false, message: "This signed agreement has already been used." });
-      signingArtifacts = await downloadSigningArtifacts(signing.requestId);
+    const signingState = String(req.body?.signingState || "").trim();
+    if (signingState) {
+      const verifiedSigning = await verifySigningSession(signingState);
+      if (verifiedSigning.signed) {
+        if (verifiedSigning.consumed) return res.status(409).json({ success: false, message: "This signed agreement has already been used." });
+        signing = verifiedSigning;
+        signingArtifacts = await downloadSigningArtifacts(signing.requestId);
+      } else if (REQUIRE_ZOHO_SIGNING) {
+        return res.status(400).json({ success: false, message: "Complete the Zoho Sign agreement before submitting onboarding." });
+      }
+    } else if (REQUIRE_ZOHO_SIGNING) {
+      return res.status(400).json({ success: false, message: "Complete the Zoho Sign agreement before submitting onboarding." });
     }
-    const result = await createClientOnboarding(req.body?.onboarding, { signing, signingState: req.body?.signingState, signingArtifacts });
+    const result = await createClientOnboarding(req.body?.onboarding, { signing, signingState, signingArtifacts });
     try {
       await sendAdminOnboardedEmail({
         email: normalizeEmail(req.body?.onboarding?.adminEmail),
