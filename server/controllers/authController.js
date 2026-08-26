@@ -424,6 +424,23 @@ const authController = {
         });
       }
 
+      if (user.role === "hr") {
+        const [[approval]] = await db.execute(
+          `SELECT status, review_due_at FROM hr_account_approvals WHERE user_id = ? LIMIT 1`,
+          [user.user_id],
+        );
+        if (approval && approval.status !== "approved") {
+          return res.status(403).json({
+            success: false,
+            code: approval.status === "rejected" ? "HR_APPROVAL_REJECTED" : "HR_APPROVAL_PENDING",
+            message: approval.status === "rejected"
+              ? "Your HR portal access request was not approved. Please contact Reward Planners support."
+              : "Your HR portal is awaiting approval from Reward Planners. Reviews may take up to 7 days.",
+            data: { status: approval.status, reviewDueAt: approval.review_due_at },
+          });
+        }
+      }
+
       if (Number(user.is_verified) !== 1) {
         //  Resend OTP
         const otp = generateOTP();
@@ -676,6 +693,49 @@ const authController = {
         success: false,
         message: "Server error",
       });
+    }
+  },
+
+  listHrApprovals: async (req, res) => {
+    try {
+      const requestedStatus = String(req.query.status || "pending");
+      const status = ["pending", "approved", "rejected"].includes(requestedStatus) ? requestedStatus : "pending";
+      const [rows] = await db.execute(
+        `SELECT a.id, a.user_id, a.company_id, a.status, a.review_due_at, a.reviewed_at, a.review_note,
+                u.name, u.email, c.company_name
+           FROM hr_account_approvals a
+           INNER JOIN eusers u ON u.user_id = a.user_id
+           INNER JOIN companies c ON c.company_id = a.company_id
+          WHERE a.status = ? ORDER BY a.created_at ASC`,
+        [status],
+      );
+      return res.json({ success: true, data: rows });
+    } catch (error) {
+      console.error("List HR approvals error:", error);
+      return res.status(500).json({ success: false, message: "Unable to load HR approval requests." });
+    }
+  },
+
+  reviewHrApproval: async (req, res) => {
+    const status = String(req.body?.status || "").toLowerCase();
+    const note = String(req.body?.note || "").trim().slice(0, 500) || null;
+    const userId = Number(req.params.userId);
+    if (!["approved", "rejected"].includes(status) || !Number.isInteger(userId) || userId <= 0) {
+      return res.status(400).json({ success: false, message: "Provide a valid HR user and approved or rejected status." });
+    }
+    try {
+      const [result] = await db.execute(
+        `UPDATE hr_account_approvals
+            SET status = ?, reviewed_at = CURRENT_TIMESTAMP, reviewed_by = ?, review_note = ?
+          WHERE user_id = ? AND status = 'pending'`,
+        [status, req.user.user_id, note, userId],
+      );
+      if (!result.affectedRows) return res.status(404).json({ success: false, message: "Pending HR approval request not found." });
+      await revokeUserSessions(userId);
+      return res.json({ success: true, message: `HR account ${status} successfully.` });
+    } catch (error) {
+      console.error("Review HR approval error:", error);
+      return res.status(500).json({ success: false, message: "Unable to update the HR approval request." });
     }
   },
 

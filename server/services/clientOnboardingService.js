@@ -98,6 +98,12 @@ async function createClientOnboarding(rawData, { signing = null, signingState = 
       [data.adminName, data.adminEmail, passwordHash, adminEmailWasVerified ? data.repPhone : null, adminEmailWasVerified ? 1 : 0],
     );
 
+    await connection.execute(
+      `INSERT INTO hr_account_approvals (user_id, company_id, status, review_due_at)
+       VALUES (?, ?, 'pending', DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 7 DAY))`,
+      [userResult.insertId, companyId],
+    );
+
     await connection.execute(`INSERT INTO company_wallet (company_id, balance) VALUES (?, 0)`, [companyId]);
     await connection.execute(
       `INSERT INTO client_onboarding_details (
