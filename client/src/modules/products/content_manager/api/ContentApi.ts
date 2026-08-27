@@ -42,6 +42,7 @@ export interface ApiContentEntry {
 }
 
 export interface ListEntriesParams {
+  module?: ContentModule;
   zone?: Zone;
   status?: string;
   search?: string;
@@ -120,11 +121,12 @@ export const buildEntryFormData = (
     isPublished: boolean;
     forcePublish?: boolean;
     imageFile?: File | null;
+    module?: ContentModule;
   },
 ): FormData => {
   const fd = new FormData();
 
-  fd.append("module", MODULE);
+  fd.append("module", opts.module ?? MODULE);
   fd.append("zone", draft.zone);
   fd.append("content_type", draft.contentType);
 

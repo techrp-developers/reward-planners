@@ -1,16 +1,11 @@
-import { useState } from "react";
-import { FiAlertTriangle, FiEye, FiSave, FiUploadCloud } from "react-icons/fi";
+import { FiAlertTriangle, FiEye, FiSave } from "react-icons/fi";
 import type { ContentEntry, ContentKind, ContentZoneImage, Zone } from "../types";
 import { COLOR_PRESETS, ZONES } from "../types";
 import { computeStatus, findConflicts } from "../store";
 import StatusBadge from "./StatusBadge";
 import OfferImagesManager from "./OfferImagesManager";
-
-const RECOMMENDED_DIMENSIONS: Record<Zone, string> = {
-  navbar_background: "1920 x 120px, PNG/JPG, under 500KB",
-  promotional_banner: "1200 x 400px, PNG/JPG, under 800KB",
-  offers_banner: "1200 x 300px, PNG/JPG, under 800KB",
-};
+import ImageDimensionInfo from "./ImageDimensionInfo";
+import AssetSpecPanel from "./AssetSpecPanel";
 
 const inputClass = "mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100";
 const labelClass = "text-xs font-bold text-slate-500";
@@ -29,12 +24,10 @@ interface Props {
 export default function ContentForm({ draft, entries, now, onChange, onSaveDraft, onPreview, onPublish, saving }: Props) {
   const status = computeStatus(draft, now);
   const conflicts = findConflicts(draft, entries);
-  const [brokenImageUrl, setBrokenImageUrl] = useState<string | null>(null);
 
-  const handleImageUpload = (file: File | undefined) => {
-    if (!file) return;
+  const handleImageUpload = (file: File) => {
     const reader = new FileReader();
-    reader.onload = () => { setBrokenImageUrl(null); onChange({ imageFile: file, imageUrl: String(reader.result || "") }); };
+    reader.onload = () => onChange({ imageFile: file, imageUrl: String(reader.result || "") });
     reader.readAsDataURL(file);
   };
 
@@ -101,19 +94,18 @@ export default function ContentForm({ draft, entries, now, onChange, onSaveDraft
         ) : (
           <div className="sm:col-span-2">
             <p className={labelClass}>Image</p>
-            <div className="mt-2 flex items-center gap-4">
-              <span className="grid h-16 w-24 shrink-0 place-items-center overflow-hidden rounded-xl border border-dashed border-slate-300 bg-slate-50 text-slate-300">
-                {draft.imageUrl && draft.imageUrl !== brokenImageUrl ? (
-                  <img src={draft.imageUrl} alt="" className="h-full w-full object-cover" onError={() => setBrokenImageUrl(draft.imageUrl)} />
-                ) : (
-                  <FiUploadCloud className="text-xl" />
-                )}
-              </span>
-              <div className="flex-1">
-                <input type="file" accept="image/*" onChange={(event) => handleImageUpload(event.target.files?.[0])} className="block w-full text-xs text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-purple-50 file:px-3 file:py-2 file:text-xs file:font-bold file:text-[#852BAF]" />
-                <p className="mt-1 text-[11px] text-slate-400">Recommended: {RECOMMENDED_DIMENSIONS[draft.zone]}</p>
-              </div>
-            </div>
+            <ImageDimensionInfo
+              zone={draft.zone}
+              imageUrl={draft.imageUrl}
+              file={draft.imageFile}
+              onSelectFile={handleImageUpload}
+            />
+          </div>
+        )}
+
+        {draft.contentType === "image" && (
+          <div className="sm:col-span-2">
+            <AssetSpecPanel />
           </div>
         )}
 

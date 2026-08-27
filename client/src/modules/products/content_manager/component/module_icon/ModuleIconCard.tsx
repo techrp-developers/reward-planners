@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { confirmDialog } from "../../../../../common/utils/confirmDialog";
 import type { ApiModuleIcon } from "../../api/ModuleIconApi";
 import { deleteModule, updateModuleIcon } from "../../api/ModuleIconApi";
+import ColorPickerField from "./ColorPickerField";
 
 interface Props {
   module: ApiModuleIcon;
@@ -20,6 +21,10 @@ export default function ModuleIconCard({ module, onSaved }: Props) {
   const [activeIconFile, setActiveIconFile] = useState<File | null>(null);
   const [iconPreview, setIconPreview] = useState<string | null>(null);
   const [activeIconPreview, setActiveIconPreview] = useState<string | null>(null);
+  const [normalColor, setNormalColor] = useState<string | null>(module.normal_color);
+  const [activeColor, setActiveColor] = useState<string | null>(module.active_color);
+  const [gradientStart, setGradientStart] = useState<string | null>(module.gradient_start_color);
+  const [gradientEnd, setGradientEnd] = useState<string | null>(module.gradient_end_color);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -30,7 +35,20 @@ export default function ModuleIconCard({ module, onSaved }: Props) {
     setLabel(module.label);
     setSortOrder(module.sort_order);
     setIsActive(!!module.is_active);
-  }, [module.label, module.sort_order, module.is_active, saving]);
+    setNormalColor(module.normal_color);
+    setActiveColor(module.active_color);
+    setGradientStart(module.gradient_start_color);
+    setGradientEnd(module.gradient_end_color);
+  }, [
+    module.label,
+    module.sort_order,
+    module.is_active,
+    module.normal_color,
+    module.active_color,
+    module.gradient_start_color,
+    module.gradient_end_color,
+    saving,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -63,6 +81,10 @@ export default function ModuleIconCard({ module, onSaved }: Props) {
       fd.append("is_active", String(isActive));
       if (iconFile) fd.append("icon", iconFile);
       if (activeIconFile) fd.append("active_icon", activeIconFile);
+      fd.append("normal_color", normalColor || "");
+      fd.append("active_color", activeColor || "");
+      fd.append("gradient_start_color", gradientStart || "");
+      fd.append("gradient_end_color", gradientEnd || "");
 
       await updateModuleIcon(module.module_key, fd);
 
@@ -144,6 +166,25 @@ export default function ModuleIconCard({ module, onSaved }: Props) {
           className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100"
         />
       </label>
+
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <ColorPickerField label="Normal Color" value={normalColor} onChange={setNormalColor} />
+        <ColorPickerField label="Active Color" value={activeColor} onChange={setActiveColor} />
+      </div>
+
+      <div className="mt-4">
+        <p className="text-xs font-bold text-slate-500">Active Gradient (optional, overrides Active Color)</p>
+        <div className="mt-2 grid grid-cols-2 gap-3">
+          <ColorPickerField label="Gradient Start" value={gradientStart} onChange={setGradientStart} />
+          <ColorPickerField label="Gradient End" value={gradientEnd} onChange={setGradientEnd} />
+        </div>
+        {(gradientStart || gradientEnd) && (
+          <div
+            className="mt-3 h-8 w-full rounded-lg border border-slate-200"
+            style={{ background: `linear-gradient(135deg, ${gradientStart || "#e2e8f0"}, ${gradientEnd || "#e2e8f0"})` }}
+          />
+        )}
+      </div>
 
       <div className="mt-4 grid grid-cols-2 gap-3">
         <div>

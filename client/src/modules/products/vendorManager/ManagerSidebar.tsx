@@ -104,9 +104,7 @@ export default function ManagerNavbar() {
       Icon: FiImage,
       type: "dropdown",
       children: [
-        { label: "Product", to: routes.manager.content.product },
-        { label: "Service", to: routes.manager.content.service },
-        { label: "Payment", to: routes.manager.content.payment },
+        { label: "Content Management", to: routes.manager.content.dashboard },
         { label: "Module Icons", to: routes.manager.content.moduleIcons },
       ],
     },

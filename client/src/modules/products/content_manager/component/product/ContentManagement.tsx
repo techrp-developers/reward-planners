@@ -6,6 +6,7 @@ import Swal from "sweetalert2";
 import { toast } from "sonner";
 import type { ContentEntry } from "../../types";
 import { blankEntry } from "../../types";
+import type { ContentModule } from "../../api/contentApi";
 import { buildEntryFormData, createEntry, deactivateEntry, deleteEntry, duplicateEntry, listEntries, updateEntry } from "../../api/contentApi";
 import { getResolvedModules } from "../../api/ModuleIconApi";
 import { fromApiEntry } from "../../store/mappers";
@@ -25,13 +26,24 @@ interface ApiErrorBody {
 const asApiError = (err: unknown) => err as AxiosError<ApiErrorBody>;
 const errorMessage = (err: unknown, fallback: string) => asApiError(err).response?.data?.message || fallback;
 
+const MODULE_LABELS: Record<ContentModule, string> = {
+  product: "Product",
+  service: "Service",
+  payment: "Payment",
+  dineout: "DineOut",
+};
+
+const MODULE_TABS: ContentModule[] = ["product", "service", "payment"];
+
 export default function ContentManagement() {
+  const [module, setModule] = useState<ContentModule>("product");
   const [entries, setEntries] = useState<ContentEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>("table");
   const [draft, setDraft] = useState<ContentEntry>(() => blankEntry("navbar_background"));
   const [saving, setSaving] = useState(false);
   const [now, setNow] = useState(new Date());
+  const moduleLabel = MODULE_LABELS[module];
 
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 30_000);
@@ -41,7 +53,7 @@ export default function ContentManagement() {
   const loadEntries = async () => {
     setLoading(true);
     try {
-      const result = await listEntries({ pageSize: 200 });
+      const result = await listEntries({ pageSize: 200, module });
       setEntries(result.entries.map(fromApiEntry));
     } catch (err) {
       toast.error(errorMessage(err, "Failed to load content entries"));
@@ -50,7 +62,14 @@ export default function ContentManagement() {
     }
   };
 
-  useEffect(() => { void loadEntries(); }, []);
+  useEffect(() => { void loadEntries(); }, [module]);
+
+  const switchModule = (nextModule: ContentModule) => {
+    if (nextModule === module) return;
+    setModule(nextModule);
+    setView("table");
+    setDraft(blankEntry("navbar_background"));
+  };
 
   // What the mobile app's top navbar actually shows - fetched once here and passed down so
   // the preview never diverges from the real GET /content/resolved/modules response.
@@ -86,7 +105,7 @@ export default function ContentManagement() {
 
     setSaving(true);
     try {
-      const fd = buildEntryFormData(draft, { isPublished: false, imageFile: draft.imageFile });
+      const fd = buildEntryFormData(draft, { isPublished: false, imageFile: draft.imageFile, module });
       if (draft.id) await updateEntry(draft.id, fd);
       else await createEntry(fd);
       await loadEntries();
@@ -109,7 +128,7 @@ export default function ContentManagement() {
 
     setSaving(true);
     try {
-      const fd = buildEntryFormData(draft, { isPublished: true, imageFile: draft.imageFile });
+      const fd = buildEntryFormData(draft, { isPublished: true, imageFile: draft.imageFile, module });
       if (draft.id) await updateEntry(draft.id, fd);
       else await createEntry(fd);
       await loadEntries();
@@ -129,7 +148,7 @@ export default function ContentManagement() {
         });
         if (result.isConfirmed) {
           try {
-            const fd = buildEntryFormData(draft, { isPublished: true, forcePublish: true, imageFile: draft.imageFile });
+            const fd = buildEntryFormData(draft, { isPublished: true, forcePublish: true, imageFile: draft.imageFile, module });
             if (draft.id) await updateEntry(draft.id, fd);
             else await createEntry(fd);
             await loadEntries();
@@ -191,25 +210,39 @@ export default function ContentManagement() {
     <main className="space-y-6">
       <header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#25103d] via-[#68258d] to-[#c33076] p-7 text-white shadow-[0_24px_65px_rgba(91,33,124,0.24)]">
         <div className="absolute -right-16 -top-24 h-64 w-64 rounded-full bg-white/10 blur-2xl" />
-        <div className="relative flex flex-wrap items-center justify-between gap-5">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-purple-200">Content management · Product</p>
-            <h1 className="mt-1 text-3xl font-black">Home Screen Content</h1>
-            <p className="mt-2 text-sm text-purple-100/80">Manage the Navbar, Promotional Banner and Offers Banner shown on the Product home screen.</p>
+        <div className="relative space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-5">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-purple-200">Content management · {moduleLabel}</p>
+              <h1 className="mt-1 text-3xl font-black">Home Screen Content</h1>
+              <p className="mt-2 text-sm text-purple-100/80">Manage the Navbar, Promotional Banner and Offers Banner shown on the {moduleLabel} home screen.</p>
+            </div>
+            <div className="flex gap-2 rounded-2xl bg-white/10 p-1.5">
+              <button
+                onClick={() => setView("table")}
+                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition ${view === "table" ? "bg-white text-[#852BAF] shadow" : "text-white/80 hover:bg-white/10"}`}
+              >
+                <FiList /> Content
+              </button>
+              <button
+                onClick={startAdd}
+                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition ${view === "form" ? "bg-white text-[#852BAF] shadow" : "text-white/80 hover:bg-white/10"}`}
+              >
+                <FiPlus /> Create
+              </button>
+            </div>
           </div>
-          <div className="flex gap-2 rounded-2xl bg-white/10 p-1.5">
-            <button
-              onClick={() => setView("table")}
-              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition ${view === "table" ? "bg-white text-[#852BAF] shadow" : "text-white/80 hover:bg-white/10"}`}
-            >
-              <FiList /> Manage Content
-            </button>
-            <button
-              onClick={startAdd}
-              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition ${view === "form" ? "bg-white text-[#852BAF] shadow" : "text-white/80 hover:bg-white/10"}`}
-            >
-              <FiPlus /> Add Content
-            </button>
+
+          <div className="flex gap-2 border-t border-white/10 pt-4">
+            {MODULE_TABS.map((tab) => (
+              <button
+                key={tab}
+                onClick={() => switchModule(tab)}
+                className={`rounded-xl px-4 py-2 text-sm font-bold transition ${module === tab ? "bg-white text-[#852BAF] shadow" : "bg-white/10 text-white/80 hover:bg-white/20"}`}
+              >
+                {MODULE_LABELS[tab]}
+              </button>
+            ))}
           </div>
         </div>
       </header>

@@ -58,7 +58,6 @@ const DocumentManagement = lazy(() => import("./modules/products/vendorManager/d
 const DocumentCategoryManagement = lazy(() => import("./modules/products/vendorManager/document/DocumentCategory.tsx"));
 const SubSubCategoryManagement = lazy(() => import("./modules/products/vendorManager/category/Subsubcategories.tsx"));
 const ContentManagement = lazy(() => import("./modules/products/content_manager/component/product/ContentManagement.tsx"));
-const ContentComingSoon = lazy(() => import("./modules/products/content_manager/component/ComingSoon.tsx"));
 const ModuleIcon = lazy(() => import("./modules/products/content_manager/component/module_icon/ModuleIcon.tsx"));
 const ProductViewPage = lazy(() => import("./modules/products/vendorManager/ProductViewPage.tsx"));
 const Onboarding = lazy(() => import("./modules/products/vendor/Onboarding.tsx"));
@@ -352,9 +351,7 @@ export default function App() {
         />
 
         {/* Content */}
-        <Route path={routes.manager.content.product} element={<ContentManagement />} />
-        <Route path={routes.manager.content.service} element={<ContentComingSoon title="Service" />} />
-        <Route path={routes.manager.content.payment} element={<ContentComingSoon title="Payment" />} />
+        <Route path={routes.manager.content.dashboard} element={<ContentManagement />} />
         <Route path={routes.manager.content.moduleIcons} element={<ModuleIcon />} />
 
         <Route path={routes.manager.flashSales.list} element={<FlashSaleList />} />

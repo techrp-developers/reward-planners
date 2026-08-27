@@ -176,8 +176,12 @@ class ContentZoneModel {
     return rows[0] ? this.attachStatus(rows[0]) : null;
   }
 
-  /** Highest-priority currently-active entry; falls back to the zone's Default if none. */
-  async resolveActiveEntry(contentModule, zone) {
+  /**
+   * Highest-priority currently-active (non-default) entry for a module+zone.
+   * Set allowDefaultFallback to fall back to the zone's Default when nothing is active -
+   * only navbar_background does this; promotional_banner/offers_banner resolve to null instead.
+   */
+  async resolveActiveEntry(contentModule, zone, { allowDefaultFallback = true } = {}) {
     const [rows] = await db.query(
       `
       SELECT *
@@ -187,7 +191,7 @@ class ContentZoneModel {
         AND is_published = 1
         AND is_default = 0
         AND (start_at IS NULL OR start_at <= NOW())
-        AND (end_at IS NULL OR end_at > NOW())
+        AND (end_at IS NULL OR end_at >= NOW())
       ORDER BY priority DESC, created_at DESC
       LIMIT 1
       `,
@@ -196,14 +200,19 @@ class ContentZoneModel {
 
     if (rows.length) return this.attachStatus(rows[0]);
 
-    return this.getDefaultEntry(contentModule, zone);
+    return allowDefaultFallback ? this.getDefaultEntry(contentModule, zone) : null;
   }
 
+  /**
+   * navbar_background falls back to its Default entry so the app always has something to show.
+   * promotional_banner/offers_banner only ever resolve to a live campaign or null - the mobile
+   * app treats null as "nothing to show", so their Default rows are never surfaced here.
+   */
   async resolveAllZones(contentModule) {
     const results = {};
 
     for (const zone of ZONES) {
-      results[zone] = await this.resolveActiveEntry(contentModule, zone);
+      results[zone] = await this.resolveActiveEntry(contentModule, zone, { allowDefaultFallback: zone === "navbar_background" });
     }
 
     return results;

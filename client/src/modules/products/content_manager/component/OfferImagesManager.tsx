@@ -1,9 +1,45 @@
 import { useState } from "react";
 import { FaSpinner } from "react-icons/fa";
-import { FiArrowLeft, FiArrowRight, FiPlus, FiTrash2 } from "react-icons/fi";
+import { FiAlertTriangle, FiArrowLeft, FiArrowRight, FiCheckCircle, FiPlus, FiTrash2 } from "react-icons/fi";
 import { toast } from "sonner";
 import type { ContentZoneImage } from "../types";
 import { addEntryImages, deleteEntryImage, reorderEntryImages } from "../api/contentApi";
+import { aspectRatioLabel, ratioStatus, useImageDimensions, ZONE_IMAGE_SPECS } from "../utils/imageDimensions";
+
+const SPEC = ZONE_IMAGE_SPECS.offers_banner;
+
+function OfferImageThumb({ image, order }: { image: ContentZoneImage; order: number }) {
+  const dims = useImageDimensions(image.imageUrl);
+  const status = dims ? ratioStatus(dims.width / dims.height, SPEC.recommendedRatio) : null;
+
+  return (
+    <>
+      <div
+        className="w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
+        style={{ aspectRatio: dims ? `${dims.width} / ${dims.height}` : `${SPEC.recommendedWidth} / ${SPEC.recommendedHeight}` }}
+      >
+        <img src={image.imageUrl} alt="" className="h-full w-full object-contain" />
+      </div>
+      <div className="px-1 pt-1 text-center text-[10px] leading-tight text-slate-500">
+        {dims ? (
+          <>
+            <p className="font-semibold text-slate-600">{dims.width} × {dims.height}</p>
+            <p className="flex items-center justify-center gap-1">
+              {status === "match" ? (
+                <span className="flex items-center gap-0.5 text-emerald-600"><FiCheckCircle size={10} /> {aspectRatioLabel(dims.width, dims.height)}</span>
+              ) : (
+                <span className="flex items-center gap-0.5 text-amber-600"><FiAlertTriangle size={10} /> Different ratio</span>
+              )}
+            </p>
+          </>
+        ) : (
+          <p>Reading size…</p>
+        )}
+        <p className="text-slate-400">Order {order}</p>
+      </div>
+    </>
+  );
+}
 
 interface Props {
   contentId: number;
@@ -86,9 +122,9 @@ export default function OfferImagesManager({ contentId, images, onChange }: Prop
 
       <div className="mt-3 flex flex-wrap gap-3">
         {sorted.map((image, index) => (
-          <div key={image.imageId ?? image.imageUrl} className="w-32 shrink-0 overflow-hidden rounded-xl border border-slate-200">
-            <img src={image.imageUrl} alt="" className="h-24 w-full object-cover" />
-            <div className="flex items-center justify-between gap-1 bg-white px-1.5 py-1">
+          <div key={image.imageId ?? image.imageUrl} className="w-32 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <OfferImageThumb image={image} order={index + 1} />
+            <div className="flex items-center justify-between gap-1 px-1.5 py-1">
               <button
                 type="button"
                 onClick={() => void handleMove(index, -1)}
@@ -121,7 +157,8 @@ export default function OfferImagesManager({ contentId, images, onChange }: Prop
         ))}
 
         <label
-          className={`grid h-[calc(6rem+30px)] w-32 shrink-0 cursor-pointer place-items-center rounded-xl border border-dashed border-slate-300 bg-slate-50 text-slate-400 hover:border-purple-300 hover:text-[#852BAF] ${uploading ? "pointer-events-none opacity-50" : ""}`}
+          className={`grid w-32 shrink-0 cursor-pointer place-items-center rounded-xl border border-dashed border-slate-300 bg-slate-50 text-slate-400 hover:border-purple-300 hover:text-[#852BAF] ${uploading ? "pointer-events-none opacity-50" : ""}`}
+          style={{ aspectRatio: `${SPEC.recommendedWidth} / ${SPEC.recommendedHeight}` }}
         >
           {uploading ? (
             <FaSpinner className="animate-spin" />

@@ -9,6 +9,13 @@ export interface ApiModuleIcon {
   icon_type: "image" | "svg";
   icon_url: string | null;
   active_icon_url: string | null;
+  /** Hex background color (#RGB/#RRGGBB) behind the icon in its normal state. */
+  normal_color: string | null;
+  /** Hex background color behind the icon in its active state. */
+  active_color: string | null;
+  /** Two-stop gradient as an alternative to active_color - either both are set or both are null. */
+  gradient_start_color: string | null;
+  gradient_end_color: string | null;
   /** Set by developers once the mobile app implements a real screen for this module - the CMS never writes this. */
   route_key: string | null;
   sort_order: number;
@@ -20,6 +27,10 @@ export interface ResolvedModuleIcon {
   label: string;
   icon_url: string | null;
   active_icon_url: string | null;
+  normal_color: string | null;
+  active_color: string | null;
+  gradient_start_color: string | null;
+  gradient_end_color: string | null;
   route_key: string | null;
   sort_order: number;
   is_active: number | boolean;

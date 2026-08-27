@@ -75,6 +75,10 @@ const toResolvedModule = (row) => ({
   label: row.label,
   icon_url: getContentImageUrl(row.icon_url),
   active_icon_url: row.active_icon_url ? getContentImageUrl(row.active_icon_url) : null,
+  normal_color: row.normal_color,
+  active_color: row.active_color,
+  gradient_start_color: row.gradient_start_color,
+  gradient_end_color: row.gradient_end_color,
   route_key: row.route_key,
   sort_order: row.sort_order,
   is_active: row.is_active,
@@ -137,6 +141,9 @@ class ModuleIconController {
       if (req.body.is_active !== undefined) {
         data.is_active = req.body.is_active === "true" || req.body.is_active === true || req.body.is_active === "1";
       }
+      for (const field of ["normal_color", "active_color", "gradient_start_color", "gradient_end_color"]) {
+        if (req.body[field] !== undefined) data[field] = req.body[field] || null;
+      }
 
       // route_key is never accepted from the request - new modules stay non-navigable
       // (icon_url/label still display fine) until a developer implements a real screen.
@@ -182,6 +189,9 @@ class ModuleIconController {
       if (req.body.sort_order !== undefined) data.sort_order = Number(req.body.sort_order) || 0;
       if (req.body.is_active !== undefined) {
         data.is_active = req.body.is_active === "true" || req.body.is_active === true || req.body.is_active === "1";
+      }
+      for (const field of ["normal_color", "active_color", "gradient_start_color", "gradient_end_color"]) {
+        if (req.body[field] !== undefined) data[field] = req.body[field] || null;
       }
 
       data.created_by_name = req.user?.email || existing.created_by_name;

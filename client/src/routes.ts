@@ -86,9 +86,7 @@ export const routes = {
       edit: "/manager/partner-managers/edit/:id",
     },
     content: {
-      product: "/manager/content/product",
-      service: "/manager/content/service",
-      payment: "/manager/content/payment",
+      dashboard: "/manager/content",
       moduleIcons: "/manager/content/module-icons",
     },
   },

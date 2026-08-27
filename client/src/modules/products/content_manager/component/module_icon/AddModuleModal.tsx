@@ -2,6 +2,7 @@ import { useState } from "react";
 import { FiTrash2, FiX } from "react-icons/fi";
 import { toast } from "sonner";
 import { createModule } from "../../api/ModuleIconApi";
+import ColorPickerField from "./ColorPickerField";
 
 interface Props {
   onClose: () => void;
@@ -19,6 +20,10 @@ export default function AddModuleModal({ onClose, onCreated }: Props) {
   const [isActive, setIsActive] = useState(true);
   const [iconFile, setIconFile] = useState<File | null>(null);
   const [activeIconFile, setActiveIconFile] = useState<File | null>(null);
+  const [normalColor, setNormalColor] = useState<string | null>(null);
+  const [activeColor, setActiveColor] = useState<string | null>(null);
+  const [gradientStart, setGradientStart] = useState<string | null>(null);
+  const [gradientEnd, setGradientEnd] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,6 +49,10 @@ export default function AddModuleModal({ onClose, onCreated }: Props) {
       fd.append("is_active", String(isActive));
       if (iconFile) fd.append("icon", iconFile);
       if (activeIconFile) fd.append("active_icon", activeIconFile);
+      fd.append("normal_color", normalColor || "");
+      fd.append("active_color", activeColor || "");
+      fd.append("gradient_start_color", gradientStart || "");
+      fd.append("gradient_end_color", gradientEnd || "");
 
       await createModule(fd);
       toast.success("Module created successfully");
@@ -136,6 +145,25 @@ export default function AddModuleModal({ onClose, onCreated }: Props) {
               </div>
               {activeIconFile && <p className="mt-1 truncate text-[11px] text-slate-400">{activeIconFile.name}</p>}
             </label>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <ColorPickerField label="Normal Color" value={normalColor} onChange={setNormalColor} />
+            <ColorPickerField label="Active Color" value={activeColor} onChange={setActiveColor} />
+          </div>
+
+          <div>
+            <p className={labelClass}>Active Gradient (optional, overrides Active Color)</p>
+            <div className="mt-2 grid grid-cols-2 gap-3">
+              <ColorPickerField label="Gradient Start" value={gradientStart} onChange={setGradientStart} />
+              <ColorPickerField label="Gradient End" value={gradientEnd} onChange={setGradientEnd} />
+            </div>
+            {(gradientStart || gradientEnd) && (
+              <div
+                className="mt-3 h-8 w-full rounded-lg border border-slate-200"
+                style={{ background: `linear-gradient(135deg, ${gradientStart || "#e2e8f0"}, ${gradientEnd || "#e2e8f0"})` }}
+              />
+            )}
           </div>
 
           <div className="flex items-end justify-between gap-4">
