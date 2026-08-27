@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { FiGrid, FiUserCheck, FiBarChart2, FiHelpCircle, FiChevronDown, FiChevronRight, FiLogOut, FiLock, FiUser } from "react-icons/fi";
+import { FiGrid, FiUserCheck, FiBarChart2, FiHelpCircle, FiChevronDown, FiChevronRight, FiLogOut, FiLock, FiUser, FiBriefcase } from "react-icons/fi";
 import { useAuth } from "../../common/auth/useAuth";
 import { routes } from "../../routes";
 import logo from "../../common/assets/logo.svg";
@@ -38,6 +38,12 @@ export default function RmSidebar() {
       label: "Employees",
       to: routes.rm.employees,
       Icon: FiUserCheck,
+      type: "link",
+    },
+    {
+      label: "Client Approvals",
+      to: routes.rm.clientApprovals,
+      Icon: FiBriefcase,
       type: "link",
     },
     {

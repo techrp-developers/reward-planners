@@ -100,9 +100,9 @@ router.post("/admin/login", authLimiter, (req, res) =>
   authController.login(req, res, "admin"),
 );
 
-router.get("/hr/approvals", authenticateToken, authorizeRoles("admin", "vendor_manager"), authController.listHrApprovals);
+router.get("/hr/approvals", authenticateToken, authorizeRoles("admin", "vendor_manager", "rm"), authController.listHrApprovals);
 
-router.patch("/hr/approvals/:userId", authenticateToken, authorizeRoles("admin", "vendor_manager"), authController.reviewHrApproval);
+router.patch("/hr/approvals/:userId", authenticateToken, authorizeRoles("admin", "vendor_manager", "rm"), authController.reviewHrApproval);
 
 /* ============================================================
    LOGIN (ROLE RESOLVED FROM DB — used by the client login form,

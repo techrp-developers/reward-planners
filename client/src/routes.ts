@@ -159,6 +159,7 @@ export const routes = {
     changePassword: "/rm/change-password",
     profile: "/rm/profile",
     employees: "/rm/employees",
+    clientApprovals: "/rm/client-approvals",
     companyEmployees: "/rm/companies/:companyId/employees",
     supportTickets: "/rm/support-tickets",
     reports: {
