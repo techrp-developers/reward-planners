@@ -16,6 +16,7 @@ function configuration() {
     clientSecret: process.env.ZOHO_SIGN_CLIENT_SECRET,
     refreshToken: process.env.ZOHO_SIGN_REFRESH_TOKEN,
     templateId: process.env.ZOHO_SIGN_TEMPLATE_ID,
+    clientRole: String(process.env.ZOHO_SIGN_CLIENT_ROLE || "Client").trim(),
     accountsBase: `https://accounts.zoho.${dc}`,
     signBase: `https://sign.zoho.${dc}`,
   };
@@ -99,8 +100,15 @@ async function createSigningSession({ recipientName, recipientEmail, companyName
   const token = await accessToken(config);
   const templateResponse = await zohoJson(`${config.signBase}/api/v1/templates/${encodeURIComponent(config.templateId)}`, { headers: authorization(token) });
   const template = templateResponse.templates;
-  const templateAction = template?.actions?.find((action) => action.action_type === "SIGN");
-  if (!templateAction?.action_id) throw new Error("The configured Zoho template has no SIGN action");
+  const templateAction = template?.actions?.find((action) =>
+    action.action_type === "SIGN" && String(action.role || "").trim().toLowerCase() === config.clientRole.toLowerCase(),
+  );
+  if (!templateAction?.action_id) {
+    const error = new Error(`The Zoho template must contain a SIGN role named "${config.clientRole}" with the client fields assigned to it.`);
+    error.code = "ZOHO_CLIENT_ROLE_MISSING";
+    error.status = 503;
+    throw error;
+  }
 
   const state = crypto.randomUUID();
   callback.searchParams.set("zoho_state", state);
@@ -135,7 +143,9 @@ async function createSigningSession({ recipientName, recipientEmail, companyName
   const createParams = new URLSearchParams({ data: JSON.stringify(payload), is_quicksend: "true" });
   const created = await zohoJson(`${config.signBase}/api/v1/templates/${encodeURIComponent(config.templateId)}/createdocument`, { method: "POST", headers: { ...authorization(token), "Content-Type": "application/x-www-form-urlencoded" }, body: createParams });
   const requestId = created.requests?.request_id;
-  const actionId = created.requests?.actions?.find((action) => action.action_type === "SIGN")?.action_id;
+  const actionId = created.requests?.actions?.find((action) =>
+    action.action_type === "SIGN" && String(action.recipient_email || "").trim().toLowerCase() === recipientEmail.toLowerCase(),
+  )?.action_id;
   if (!requestId || !actionId) throw new Error("Zoho did not create a signing request");
 
   // `host` is required when the signing page is rendered inside an iframe.
