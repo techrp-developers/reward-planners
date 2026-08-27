@@ -9,8 +9,7 @@ type OtpChannel = "email" | "whatsapp";
 type OtpState = { sessionId: string; otp: string; sent: boolean; verified: boolean; verificationToken: string; loading: boolean; message: string; error: string };
 
 const emptyOtpState = (): OtpState => ({ sessionId: "", otp: "", sent: false, verified: false, verificationToken: "", loading: false, message: "", error: "" });
-// Temporary local-testing switch. Set to true to restore WhatsApp verification.
-const ENABLE_WHATSAPP_VERIFICATION = false;
+const ENABLE_WHATSAPP_VERIFICATION = true;
 const REQUIRE_ZOHO_SIGNING = String(import.meta.env.VITE_REQUIRE_ZOHO_SIGNING ?? "true").toLowerCase() !== "false";
 
 const steps = [
