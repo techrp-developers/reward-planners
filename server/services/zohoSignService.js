@@ -16,7 +16,6 @@ function configuration() {
     clientSecret: process.env.ZOHO_SIGN_CLIENT_SECRET,
     refreshToken: process.env.ZOHO_SIGN_REFRESH_TOKEN,
     templateId: process.env.ZOHO_SIGN_TEMPLATE_ID,
-    clientRole: String(process.env.ZOHO_SIGN_CLIENT_ROLE || "Client").trim(),
     accountsBase: `https://accounts.zoho.${dc}`,
     signBase: `https://sign.zoho.${dc}`,
   };
@@ -100,15 +99,16 @@ async function createSigningSession({ recipientName, recipientEmail, companyName
   const token = await accessToken(config);
   const templateResponse = await zohoJson(`${config.signBase}/api/v1/templates/${encodeURIComponent(config.templateId)}`, { headers: authorization(token) });
   const template = templateResponse.templates;
-  const templateAction = template?.actions?.find((action) =>
-    action.action_type === "SIGN" && String(action.role || "").trim().toLowerCase() === config.clientRole.toLowerCase(),
-  );
-  if (!templateAction?.action_id) {
-    const error = new Error(`The Zoho template must contain a SIGN role named "${config.clientRole}" with the client fields assigned to it.`);
-    error.code = "ZOHO_CLIENT_ROLE_MISSING";
+  if (template?.is_deleted) {
+    const error = new Error("The configured Zoho Sign template has been deleted. Restore it in Zoho Sign or configure an active template ID.");
+    error.code = "ZOHO_TEMPLATE_DELETED";
     error.status = 503;
     throw error;
   }
+  const signingActions = template?.actions?.filter((action) => action.action_type === "SIGN") || [];
+  const templateAction = signingActions.find((action) => String(action.role || "").trim().toLowerCase() === "client")
+    || signingActions[0];
+  if (!templateAction?.action_id) throw new Error("Zoho template does not contain a signer action");
 
   const state = crypto.randomUUID();
   callback.searchParams.set("zoho_state", state);
@@ -143,8 +143,10 @@ async function createSigningSession({ recipientName, recipientEmail, companyName
   const createParams = new URLSearchParams({ data: JSON.stringify(payload), is_quicksend: "true" });
   const created = await zohoJson(`${config.signBase}/api/v1/templates/${encodeURIComponent(config.templateId)}/createdocument`, { method: "POST", headers: { ...authorization(token), "Content-Type": "application/x-www-form-urlencoded" }, body: createParams });
   const requestId = created.requests?.request_id;
+  const normalizedRecipientEmail = String(recipientEmail).trim().toLowerCase();
   const actionId = created.requests?.actions?.find((action) =>
-    action.action_type === "SIGN" && String(action.recipient_email || "").trim().toLowerCase() === recipientEmail.toLowerCase(),
+    action.action_type === "SIGN"
+      && String(action.recipient_email || "").trim().toLowerCase() === normalizedRecipientEmail,
   )?.action_id;
   if (!requestId || !actionId) throw new Error("Zoho did not create a signing request");
 

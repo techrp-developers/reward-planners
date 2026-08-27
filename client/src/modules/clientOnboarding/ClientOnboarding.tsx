@@ -60,6 +60,10 @@ export default function ClientOnboarding() {
   const saved = useMemo(() => {
     try {
       const parsed = JSON.parse(localStorage.getItem("rp-client-onboarding") || "null");
+      if (parsed?.completed) {
+        localStorage.removeItem("rp-client-onboarding");
+        return null;
+      }
       if (parsed?.data) parsed.data = { ...parsed.data, password: "", confirmPassword: "" };
       return parsed;
     } catch { return null; }
@@ -110,8 +114,17 @@ export default function ClientOnboarding() {
       return;
     }
     void api.post("/client-onboarding/otp/sign/status", { state: signingState }).then((response) => {
+      const consumed = Boolean(response.data?.data?.consumed);
       const signed = Boolean(response.data?.data?.signed);
       setAgreementSigned(signed);
+      if (consumed) {
+        localStorage.removeItem("rp-client-onboarding");
+        setAdminWelcomeSent(true);
+        setHighestStep(steps.length - 1);
+        setStep(steps.length - 1);
+        setAgreementMessage("This onboarding application has already been submitted.");
+        return;
+      }
       setAgreementMessage(signed ? "Agreement signed and confirmed by Zoho Sign." : "Zoho has not marked the agreement as signed yet. Please open it again and complete all required fields.");
     }).catch((requestError) => setAgreementMessage((requestError as { response?: { data?: { message?: string } } }).response?.data?.message || "Unable to confirm the signed agreement.")).finally(() => {
       setAgreementLoading(false);
@@ -138,6 +151,10 @@ export default function ClientOnboarding() {
   }, []);
 
   useEffect(() => {
+    if (step === steps.length - 1) {
+      localStorage.removeItem("rp-client-onboarding");
+      return;
+    }
     const { password: _password, confirmPassword: _confirmPassword, ...draftData } = data;
     localStorage.setItem("rp-client-onboarding", JSON.stringify({
       step,
@@ -148,7 +165,7 @@ export default function ClientOnboarding() {
       agreementState,
       agreementSigned,
       savedAt: new Date().toISOString(),
-      completed: step === steps.length - 1,
+      completed: false,
     }));
   }, [step, highestStep, data, otpVerification.email.verificationToken, agreementState, agreementSigned]);
 
@@ -215,6 +232,7 @@ export default function ClientOnboarding() {
           emailVerificationToken: otpVerification.email.verificationToken,
           signingState: agreementState,
         });
+        localStorage.removeItem("rp-client-onboarding");
         setAdminWelcomeSent(true);
       } catch (requestError) {
         const responseError = requestError as { response?: { data?: { code?: string } } };
@@ -456,7 +474,7 @@ export default function ClientOnboarding() {
         <section className={`mb-6 overflow-hidden rounded-lg border ${agreementSigned ? darkMode ? "border-emerald-500/40 bg-emerald-500/10" : "border-emerald-200 bg-emerald-50/60" : darkMode ? "border-slate-700 bg-slate-900/45" : "border-slate-200 bg-slate-50"}`}>
           <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
             <div className="flex items-start gap-4"><span className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-2xl ${agreementSigned ? "bg-emerald-600 text-white" : darkMode ? "bg-slate-800 text-slate-300" : "bg-white text-purple-700 shadow-sm"}`}>{agreementSigned ? <MdCheckCircle /> : <MdDraw />}</span><div><div className="flex flex-wrap items-center gap-2"><h3 className="text-lg font-semibold">Client service agreement</h3>{agreementSigned ? <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${darkMode ? "bg-emerald-500/15 text-emerald-300" : "bg-emerald-100 text-emerald-700"}`}>Signed</span> : !REQUIRE_ZOHO_SIGNING && <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${darkMode ? "bg-amber-500/15 text-amber-300" : "bg-amber-100 text-amber-700"}`}>Temporarily optional</span>}</div><p className={`mt-1.5 max-w-2xl text-sm leading-6 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>{agreementSigned ? "Zoho Sign has confirmed your completed signature." : REQUIRE_ZOHO_SIGNING ? "Review and digitally sign the client agreement securely through Zoho Sign. You will return to this page automatically after signing." : "Zoho Sign integration is being finalized. You may continue onboarding without signing for now."}</p></div></div>
-            <button type="button" onClick={() => void startAgreementSigning()} disabled={agreementLoading || agreementSigned} className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold transition ${agreementSigned ? "cursor-default bg-emerald-600 text-white" : "bg-gradient-to-r from-[#7457d7] to-[#9a63df] text-white shadow-[0_10px_24px_rgba(116,87,215,0.2)] hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-70"}`}>{agreementLoading ? <><MdAutorenew className="animate-spin text-lg" /> Checking...</> : agreementSigned ? <><MdCheckCircle className="text-lg" /> Agreement signed</> : <><MdDraw className="text-lg" /> Review and sign</>}</button>
+            {(REQUIRE_ZOHO_SIGNING || agreementSigned) && <button type="button" onClick={() => void startAgreementSigning()} disabled={agreementLoading || agreementSigned} className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold transition ${agreementSigned ? "cursor-default bg-emerald-600 text-white" : "bg-gradient-to-r from-[#7457d7] to-[#9a63df] text-white shadow-[0_10px_24px_rgba(116,87,215,0.2)] hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-70"}`}>{agreementLoading ? <><MdAutorenew className="animate-spin text-lg" /> Checking...</> : agreementSigned ? <><MdCheckCircle className="text-lg" /> Agreement signed</> : <><MdDraw className="text-lg" /> Review and sign</>}</button>}
           </div>
           {agreementMessage && <p className={`border-t px-5 py-3 text-sm font-medium sm:px-6 ${agreementSigned ? darkMode ? "border-emerald-500/20 text-emerald-300" : "border-emerald-200 text-emerald-700" : darkMode ? "border-slate-700 text-slate-400" : "border-purple-100 text-purple-700"}`}>{agreementMessage}</p>}
         </section>
