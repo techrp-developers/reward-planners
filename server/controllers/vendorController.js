@@ -191,8 +191,12 @@ class VendorController {
       if (data.documents?.length) {
         await Promise.all(
           data.documents.map(async (doc) => {
-            if (doc.file_path) {
-              const storagePath = doc.file_path;
+            const isPrivateR2Object = doc.file_path
+              ?.replace(/^\/+/, "")
+              .startsWith("private/");
+
+            if (isPrivateR2Object) {
+              const storagePath = doc.file_path.replace(/^\/+/, "");
               const signedUrl = await getPrivateFileUrl(storagePath);
               doc.storage_path = storagePath;
               doc.file_path = signedUrl;
@@ -931,8 +935,14 @@ class VendorController {
       //  signed URLs to documents
       if (data.documents && data.documents.length) {
         for (const doc of data.documents) {
-          if (doc.file_path) {
-            doc.url = await getPrivateFileUrl(doc.file_path);
+          const isPrivateR2Object = doc.file_path
+            ?.replace(/^\/+/, "")
+            .startsWith("private/");
+
+          if (isPrivateR2Object) {
+            doc.url = await getPrivateFileUrl(
+              doc.file_path.replace(/^\/+/, ""),
+            );
           }
         }
       }
