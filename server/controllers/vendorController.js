@@ -185,6 +185,23 @@ class VendorController {
         });
       }
 
+      // Vendor documents are stored in the private R2 bucket. Return short-lived
+      // signed URLs instead of making manager/admin clients treat R2 keys as
+      // paths under the server's public /uploads directory.
+      if (data.documents?.length) {
+        await Promise.all(
+          data.documents.map(async (doc) => {
+            if (doc.file_path) {
+              const storagePath = doc.file_path;
+              const signedUrl = await getPrivateFileUrl(storagePath);
+              doc.storage_path = storagePath;
+              doc.file_path = signedUrl;
+              doc.url = signedUrl;
+            }
+          }),
+        );
+      }
+
       return res.json({ success: true, data });
     } catch (err) {
       console.error("GET VENDOR ERROR:", err);

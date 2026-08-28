@@ -177,7 +177,7 @@ const DocumentPreviewCard = ({
     );
   }
 
-  const fileUrl = resolveImageUrl(doc.file_path);
+  const fileUrl = resolveImageUrl(doc.url || doc.file_path);
   const isImage = doc.mime_type?.startsWith("image/");
 
   return (
