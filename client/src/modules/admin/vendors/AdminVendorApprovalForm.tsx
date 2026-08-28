@@ -27,7 +27,10 @@ const resolveImageUrl = (path: string) => {
   if (path.startsWith("http")) return path;
 
   const cleanPath = path.replace(/^\/+/, "");
-  if (cleanPath.startsWith("public/")) {
+  if (
+    cleanPath.startsWith("public/") ||
+    cleanPath.startsWith("private/")
+  ) {
     return `${R2_PUBLIC_BASE_URL}/${cleanPath}`;
   }
 
