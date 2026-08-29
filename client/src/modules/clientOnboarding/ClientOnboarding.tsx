@@ -626,7 +626,7 @@ export default function ClientOnboarding() {
           <main className="w-full pb-10 pt-7 sm:pt-10 lg:pt-12">
             <div className="mx-auto max-w-[820px]">
               <div className="mb-8 flex items-end justify-between gap-5">
-                <div><div className={`mb-3 text-xs font-bold uppercase tracking-[.16em] ${darkMode?"text-violet-300":"text-violet-700"}`}>{steps[step].title}</div><h1 className="rp-display text-[32px] font-semibold leading-tight tracking-[-.04em] sm:text-[40px]">{prompts[step]}</h1><p className={`mt-2.5 max-w-2xl text-sm leading-6 sm:text-[15px] ${darkMode?"text-white/45":"text-black/45"}`}>{descriptions[step]}</p></div>
+                <div><h1 className="rp-display text-[32px] font-semibold leading-tight tracking-[-.04em] sm:text-[40px]">{prompts[step]}</h1><p className={`mt-2.5 max-w-2xl text-sm leading-6 sm:text-[15px] ${darkMode?"text-white/45":"text-black/45"}`}>{descriptions[step]}</p></div>
                 <span className={`hidden shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold sm:block ${darkMode?"bg-violet-400/10 text-violet-200":"bg-violet-50 text-violet-700"}`}>{progress}% complete</span>
               </div>
 
