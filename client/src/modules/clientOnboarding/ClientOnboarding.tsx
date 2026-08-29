@@ -532,9 +532,9 @@ export default function ClientOnboarding() {
   const legalStepComplete = (!REQUIRE_ZOHO_SIGNING || agreementSigned) && [data.terms, data.privacy, data.dataConsent, data.communicationConsent].every(Boolean);
 
   const modernStyles = `
-    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
-    .rp-modern{font-family:'DM Sans','Inter','Segoe UI',sans-serif!important}
-    .rp-modern .rp-display{font-family:'Manrope','DM Sans',sans-serif!important}
+    @import url('https://api.fontshare.com/v2/css?f[]=satoshi@400,500,600,700,800,900&display=swap');
+    .rp-modern{font-family:'Satoshi','Inter','Segoe UI',sans-serif!important}
+    .rp-modern .rp-display{font-family:'Satoshi','Inter','Segoe UI',sans-serif!important}
     .rp-modern button:not(:disabled),.rp-modern a,.rp-modern select:not(:disabled),.rp-modern label:has(input[type="checkbox"]){cursor:pointer}
     .rp-modern button:focus-visible,.rp-modern a:focus-visible,.rp-modern input:focus-visible,.rp-modern select:focus-visible{outline:2px solid #7c3aed;outline-offset:3px}
     @keyframes rp-modern-enter{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
@@ -615,7 +615,7 @@ export default function ClientOnboarding() {
                   const current=index===step; const Icon=item.icon;
                   return <button key={item.title} type="button" disabled={!available} onClick={()=>{setStep(index);setError("");}} className={`group relative flex w-full items-center gap-3 overflow-hidden rounded-xl px-2.5 py-2.5 text-left transition ${current ? (darkMode?"bg-white/[.07] shadow-[inset_0_0_0_1px_rgba(255,255,255,.05)]":"bg-white shadow-[0_8px_22px_rgba(58,34,78,.1)]") : darkMode?"hover:translate-x-0.5 hover:bg-white/[.035]":"hover:translate-x-0.5 hover:bg-white/70"} disabled:translate-x-0 disabled:opacity-35`}>
                     {current&&<span className="absolute bottom-2 left-0 top-2 w-[3px] rounded-r-full bg-gradient-to-b from-violet-500 to-pink-500"/>}<span className={`relative z-10 grid h-8 w-8 shrink-0 place-items-center rounded-xl border text-sm transition group-hover:scale-105 ${current ? (darkMode?"border-fuchsia-400/40 bg-gradient-to-br from-violet-600 to-pink-500 text-white":"border-violet-600 bg-gradient-to-br from-violet-600 to-pink-500 text-white shadow-[0_5px_14px_rgba(124,58,237,.22)]") : completed ? (darkMode?"border-pink-300/20 bg-[#17131d] text-pink-200":"border-pink-200 bg-white text-pink-600") : (darkMode?"border-white/10 bg-[#11131b] text-white/35":"border-black/8 bg-[#f8f7fa] text-black/30")}`}><Icon/></span>
-                    <span className={`min-w-0 flex-1 text-sm font-semibold ${current ? "" : darkMode?"text-white/45":"text-black/45"}`}>{item.title}</span>{current&&<MdArrowForward className={`text-sm ${darkMode?"text-pink-200":"text-violet-600"}`}/>} {completed&&!current&&<span className={`grid h-5 w-5 place-items-center rounded-full ${darkMode?"bg-pink-300/10 text-pink-200":"bg-pink-50 text-pink-600"}`}><Check className="text-xs"/></span>}
+                    <span className={`min-w-0 flex-1 text-sm font-semibold ${current ? (darkMode?"text-white":"text-black") : completed ? (darkMode?"text-white/80":"text-black/75") : darkMode?"text-white/40":"text-black/40"}`}>{item.title}</span>{current&&<MdArrowForward className={`text-sm ${darkMode?"text-pink-200":"text-violet-600"}`}/>} {completed&&!current&&<span className={`grid h-5 w-5 place-items-center rounded-full ${darkMode?"bg-pink-300/10 text-pink-200":"bg-pink-50 text-pink-600"}`}><Check className="text-xs"/></span>}
                   </button>;
                 })}
               </nav>
@@ -626,7 +626,7 @@ export default function ClientOnboarding() {
           <main className="w-full pb-10 pt-7 sm:pt-10 lg:pt-12">
             <div className="mx-auto max-w-[820px]">
               <div className="mb-8 flex items-end justify-between gap-5">
-                <div><div className={`mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[.16em] ${darkMode?"text-violet-300":"text-violet-700"}`}><span className="h-px w-7 bg-current" /> {steps[step].title}</div><h1 className="rp-display text-[32px] font-semibold leading-tight tracking-[-.04em] sm:text-[40px]">{prompts[step]}</h1><p className={`mt-2.5 max-w-2xl text-sm leading-6 sm:text-[15px] ${darkMode?"text-white/45":"text-black/45"}`}>{descriptions[step]}</p></div>
+                <div><div className={`mb-3 text-xs font-bold uppercase tracking-[.16em] ${darkMode?"text-violet-300":"text-violet-700"}`}>{steps[step].title}</div><h1 className="rp-display text-[32px] font-semibold leading-tight tracking-[-.04em] sm:text-[40px]">{prompts[step]}</h1><p className={`mt-2.5 max-w-2xl text-sm leading-6 sm:text-[15px] ${darkMode?"text-white/45":"text-black/45"}`}>{descriptions[step]}</p></div>
                 <span className={`hidden shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold sm:block ${darkMode?"bg-violet-400/10 text-violet-200":"bg-violet-50 text-violet-700"}`}>{progress}% complete</span>
               </div>
 
