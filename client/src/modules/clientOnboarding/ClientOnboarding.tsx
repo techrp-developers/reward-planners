@@ -546,9 +546,10 @@ export default function ClientOnboarding() {
     .rp-modern .rp-active-step{animation:none}
     .rp-modern .rp-field-grid{gap:24px!important}
     .rp-modern .rp-field-grid input,.rp-modern .rp-field-grid select{min-height:52px!important;border-radius:12px!important;border-width:1px!important;box-shadow:none!important}
+    .rp-modern .rp-field-grid select{appearance:none!important;-webkit-appearance:none!important;padding-right:44px!important;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237c7185' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")!important;background-repeat:no-repeat!important;background-position:right 16px center!important;background-size:16px!important}
     .rp-modern .rp-field-grid input:focus,.rp-modern .rp-field-grid select:focus{box-shadow:0 0 0 4px rgba(124,58,237,.08)!important}
-    .rp-modern-light .rp-field-grid input,.rp-modern-light .rp-field-grid select{background:rgba(255,255,255,.92)!important;border-color:rgba(55,35,75,.13)!important;box-shadow:0 1px 2px rgba(35,24,46,.035)!important}
-    .rp-modern-light .rp-field-grid input:hover,.rp-modern-light .rp-field-grid select:hover{border-color:rgba(124,58,237,.28)!important;background:#fff!important}
+    .rp-modern-light .rp-field-grid input,.rp-modern-light .rp-field-grid select{background-color:rgba(255,255,255,.92)!important;border-color:rgba(55,35,75,.13)!important;box-shadow:0 1px 2px rgba(35,24,46,.035)!important}
+    .rp-modern-light .rp-field-grid input:hover,.rp-modern-light .rp-field-grid select:hover{border-color:rgba(124,58,237,.28)!important;background-color:#fff!important}
     .rp-modern-light .rp-field-grid input:focus,.rp-modern-light .rp-field-grid select:focus{border-color:#8b5cf6!important;box-shadow:0 0 0 4px rgba(124,58,237,.09),0 8px 20px rgba(65,38,85,.06)!important}
     .rp-modern .rp-field-grid label>span:first-child{letter-spacing:-.01em}
     .rp-modern .rp-field-error{font-weight:500!important}
