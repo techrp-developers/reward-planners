@@ -770,6 +770,39 @@ const authController = {
       });
     }
   },
+
+  getClientOnboardingOptions: async (req, res) => {
+    try {
+      const [companyTypes, industries] = await Promise.all([
+        db.execute(
+          `SELECT company_type_id, company_type_name
+           FROM client_company_types
+           WHERE status = 1
+           ORDER BY sort_order ASC, company_type_name ASC`,
+        ),
+        db.execute(
+          `SELECT industry_id, industry_name
+           FROM client_industries
+           WHERE status = 1
+           ORDER BY sort_order ASC, industry_name ASC`,
+        ),
+      ]);
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          companyTypes: companyTypes[0],
+          industries: industries[0],
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching client onboarding options:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to fetch company types and industries",
+      });
+    }
+  },
 };
 
 module.exports = authController;

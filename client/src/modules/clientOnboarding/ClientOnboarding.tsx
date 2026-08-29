@@ -6,6 +6,8 @@ import { MdAdminPanelSettings, MdAnalytics, MdArrowBack, MdArrowForward, MdAutor
 
 type FormData = Record<string, string | boolean>;
 type StateOption = { state_id: number; state_name: string };
+type CompanyTypeOption = { company_type_id: number; company_type_name: string };
+type IndustryOption = { industry_id: number; industry_name: string };
 type OtpChannel = "email" | "whatsapp";
 type OtpState = { sessionId: string; otp: string; sent: boolean; verified: boolean; verificationToken: string; loading: boolean; message: string; error: string };
 
@@ -82,6 +84,10 @@ export default function ClientOnboarding() {
   const [states, setStates] = useState<StateOption[]>([]);
   const [statesLoading, setStatesLoading] = useState(true);
   const [statesError, setStatesError] = useState("");
+  const [companyTypes, setCompanyTypes] = useState<CompanyTypeOption[]>([]);
+  const [industries, setIndustries] = useState<IndustryOption[]>([]);
+  const [businessOptionsLoading, setBusinessOptionsLoading] = useState(true);
+  const [businessOptionsError, setBusinessOptionsError] = useState("");
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem("rp-onboarding-theme") === "dark");
   const [showIntroduction, setShowIntroduction] = useState(true);
   const [otpVerification, setOtpVerification] = useState<Record<OtpChannel, OtpState>>({
@@ -130,6 +136,25 @@ export default function ClientOnboarding() {
       setAgreementLoading(false);
       window.history.replaceState({}, "", window.location.pathname);
     });
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const loadBusinessOptions = async () => {
+      try {
+        const response = await api.get("/auth/client-onboarding-options");
+        if (!active) return;
+        const options = response.data?.data;
+        setCompanyTypes(Array.isArray(options?.companyTypes) ? options.companyTypes : []);
+        setIndustries(Array.isArray(options?.industries) ? options.industries : []);
+      } catch {
+        if (active) setBusinessOptionsError("Unable to load this list. Please refresh and try again.");
+      } finally {
+        if (active) setBusinessOptionsLoading(false);
+      }
+    };
+    void loadBusinessOptions();
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
@@ -354,7 +379,30 @@ export default function ClientOnboarding() {
       {(fields[step] || []).map((field) => (
         <label key={field.name} className="rp-field group block">
           <span className={`mb-2 block text-[13px] font-bold ${darkMode ? "text-slate-200" : "text-slate-700"}`}>{field.label}{field.required && <span className="text-pink-500"> *</span>}</span>
-          {field.name === "state" ? (
+          {field.name === "companyType" || field.name === "industry" ? (
+            <>
+              <select
+                value={String(data[field.name] ?? "")}
+                onChange={(event) => update(field.name, event.target.value)}
+                onBlur={() => setFieldErrors((current) => ({ ...current, [field.name]: validateField(field.name, data[field.name] ?? "") }))}
+                disabled={businessOptionsLoading || Boolean(businessOptionsError)}
+                aria-invalid={Boolean(fieldErrors[field.name])}
+                aria-describedby={fieldErrors[field.name] ? `${field.name}-error` : undefined}
+                className={`h-12 w-full rounded-xl border px-4 text-sm font-semibold outline-none transition duration-200 focus:-translate-y-px focus:ring-4 disabled:cursor-not-allowed ${darkMode ? "border-white/10 bg-[#0c111d] text-white focus:border-violet-500 focus:ring-violet-500/10" : "border-slate-200 bg-slate-50/70 text-slate-800 hover:border-slate-300 focus:border-purple-400 focus:bg-white focus:ring-purple-100 disabled:bg-slate-100"} ${fieldErrors[field.name] ? "border-red-400 bg-red-50/40 focus:border-red-400 focus:ring-red-100" : ""}`}
+              >
+                <option value="">{businessOptionsLoading ? "Loading options…" : `Select ${field.name === "companyType" ? "company type" : "industry"}`}</option>
+                {(field.name === "companyType" ? companyTypes : industries).map((option) => (
+                  <option
+                    key={field.name === "companyType" ? (option as CompanyTypeOption).company_type_id : (option as IndustryOption).industry_id}
+                    value={field.name === "companyType" ? (option as CompanyTypeOption).company_type_name : (option as IndustryOption).industry_name}
+                  >
+                    {field.name === "companyType" ? (option as CompanyTypeOption).company_type_name : (option as IndustryOption).industry_name}
+                  </option>
+                ))}
+              </select>
+              {businessOptionsError && <span className="rp-field-error mt-2 flex items-center gap-1.5 text-xs font-semibold text-red-500"><MdErrorOutline className="shrink-0 text-sm" />{businessOptionsError}</span>}
+            </>
+          ) : field.name === "state" ? (
             <>
               <select
                 value={String(data.state ?? "")}

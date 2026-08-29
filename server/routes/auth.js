@@ -134,4 +134,6 @@ router.post("/logout", authController.logout);
 
 router.get("/all-states", authController.getAllStates);
 
+router.get("/client-onboarding-options", authController.getClientOnboardingOptions);
+
 module.exports = router;
