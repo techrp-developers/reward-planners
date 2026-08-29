@@ -350,7 +350,7 @@ export default function ClientOnboarding() {
   };
 
   const renderFields = () => (
-    <div className="rp-field-grid grid gap-x-5 gap-y-5 sm:grid-cols-2">
+    <div className="rp-field-grid grid gap-6 sm:grid-cols-2">
       {(fields[step] || []).map((field) => (
         <label key={field.name} className="rp-field group block">
           <span className={`mb-2 block text-[13px] font-bold ${darkMode ? "text-slate-200" : "text-slate-700"}`}>{field.label}{field.required && <span className="text-pink-500"> *</span>}</span>
@@ -363,7 +363,7 @@ export default function ClientOnboarding() {
                 disabled={statesLoading || Boolean(statesError)}
                 aria-invalid={Boolean(fieldErrors.state)}
                 aria-describedby={fieldErrors.state ? "state-error" : undefined}
-                className={`h-[50px] w-full rounded-xl border px-4 text-sm font-semibold outline-none transition duration-200 focus:-translate-y-px focus:ring-4 disabled:cursor-not-allowed ${darkMode ? "border-white/10 bg-[#0c111d] text-white focus:border-violet-500 focus:ring-violet-500/10" : "border-slate-200 bg-slate-50/70 text-slate-800 hover:border-slate-300 focus:border-purple-400 focus:bg-white focus:ring-purple-100 disabled:bg-slate-100"} ${fieldErrors.state ? "border-red-400 bg-red-50/40 focus:border-red-400 focus:ring-red-100" : ""}`}
+                className={`h-12 w-full rounded-xl border px-4 text-sm font-semibold outline-none transition duration-200 focus:-translate-y-px focus:ring-4 disabled:cursor-not-allowed ${darkMode ? "border-white/10 bg-[#0c111d] text-white focus:border-violet-500 focus:ring-violet-500/10" : "border-slate-200 bg-slate-50/70 text-slate-800 hover:border-slate-300 focus:border-purple-400 focus:bg-white focus:ring-purple-100 disabled:bg-slate-100"} ${fieldErrors.state ? "border-red-400 bg-red-50/40 focus:border-red-400 focus:ring-red-100" : ""}`}
               >
                 <option value="">{statesLoading ? "Loading states…" : "Select state"}</option>
                 {states.map((state) => (
@@ -381,7 +381,7 @@ export default function ClientOnboarding() {
                 onBlur={() => setFieldErrors((current) => ({ ...current, employeeCount: validateField("employeeCount", data.employeeCount) }))}
                 aria-invalid={Boolean(fieldErrors.employeeCount)}
                 aria-describedby={fieldErrors.employeeCount ? "employeeCount-error" : undefined}
-                className={`h-[50px] w-full rounded-xl border px-4 text-sm font-semibold outline-none transition duration-200 focus:-translate-y-px focus:ring-4 ${darkMode ? "border-white/10 bg-[#0c111d] text-white focus:border-violet-500 focus:ring-violet-500/10" : "border-slate-200 bg-slate-50/70 text-slate-800 hover:border-slate-300 focus:border-purple-400 focus:bg-white focus:ring-purple-100"} ${fieldErrors.employeeCount ? "border-red-400 bg-red-50/40 focus:border-red-400 focus:ring-red-100" : ""}`}
+                className={`h-12 w-full rounded-xl border px-4 text-sm font-semibold outline-none transition duration-200 focus:-translate-y-px focus:ring-4 ${darkMode ? "border-white/10 bg-[#0c111d] text-white focus:border-violet-500 focus:ring-violet-500/10" : "border-slate-200 bg-slate-50/70 text-slate-800 hover:border-slate-300 focus:border-purple-400 focus:bg-white focus:ring-purple-100"} ${fieldErrors.employeeCount ? "border-red-400 bg-red-50/40 focus:border-red-400 focus:ring-red-100" : ""}`}
               >
                 <option value="">Select employee range</option>
                 <option value="1-100">1–100 employees</option>
@@ -401,7 +401,7 @@ export default function ClientOnboarding() {
               onBlur={() => setFieldErrors((current) => ({ ...current, [field.name]: validateField(field.name, data[field.name] ?? "") }))}
               aria-invalid={Boolean(fieldErrors[field.name])}
               aria-describedby={fieldErrors[field.name] ? `${field.name}-error` : undefined}
-              className={`h-[50px] w-full rounded-xl border px-4 text-sm font-semibold outline-none transition duration-200 placeholder:font-normal focus:-translate-y-px focus:ring-4 ${field.type === "password" ? "pr-12" : ""} ${field.type === "tel" ? "pl-[4.5rem]" : ""} ${darkMode ? "border-white/10 bg-[#0c111d] text-white placeholder:text-slate-600 focus:border-violet-500 focus:ring-violet-500/10" : "border-slate-200 bg-slate-50/70 text-slate-800 placeholder:text-slate-400 hover:border-slate-300 focus:border-purple-400 focus:bg-white focus:ring-purple-100"} ${fieldErrors[field.name] ? "border-red-400 bg-red-50/40 focus:border-red-400 focus:ring-red-100" : ""}`}
+              className={`h-12 w-full rounded-xl border px-4 text-sm font-semibold outline-none transition duration-200 placeholder:font-normal focus:-translate-y-px focus:ring-4 ${field.type === "password" ? "pr-12" : ""} ${field.type === "tel" ? "pl-[4.5rem]" : ""} ${darkMode ? "border-white/10 bg-[#0c111d] text-white placeholder:text-slate-600 focus:border-violet-500 focus:ring-violet-500/10" : "border-slate-200 bg-slate-50/70 text-slate-800 placeholder:text-slate-400 hover:border-slate-300 focus:border-purple-400 focus:bg-white focus:ring-purple-100"} ${fieldErrors[field.name] ? "border-red-400 bg-red-50/40 focus:border-red-400 focus:ring-red-100" : ""}`}
             />
             {field.type === "password" && <button type="button" onClick={() => setVisiblePasswords((current) => ({ ...current, [field.name]: !current[field.name] }))} className={`absolute right-3 top-2 grid h-9 w-9 place-items-center rounded-md text-xl transition ${darkMode ? "text-slate-400 hover:bg-slate-700 hover:text-white" : "text-slate-500 hover:bg-white hover:text-purple-700"}`} aria-label={visiblePasswords[field.name] ? `Hide ${field.label}` : `Show ${field.label}`} title={visiblePasswords[field.name] ? "Hide password" : "Show password"}>{visiblePasswords[field.name] ? <MdVisibilityOff /> : <MdVisibility />}</button>}
             </div>
@@ -545,7 +545,7 @@ export default function ClientOnboarding() {
     .rp-modern .rp-progress-fill:after{display:none}
     .rp-modern .rp-active-step{animation:none}
     .rp-modern .rp-field-grid{gap:24px!important}
-    .rp-modern .rp-field-grid input,.rp-modern .rp-field-grid select{min-height:52px!important;border-radius:12px!important;border-width:1px!important;box-shadow:none!important}
+    .rp-modern .rp-field-grid input,.rp-modern .rp-field-grid select{min-height:48px!important;border-radius:12px!important;border-width:1px!important;box-shadow:none!important}
     .rp-modern .rp-field-grid select{appearance:none!important;-webkit-appearance:none!important;padding-right:44px!important;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237c7185' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")!important;background-repeat:no-repeat!important;background-position:right 16px center!important;background-size:16px!important}
     .rp-modern .rp-field-grid input:focus,.rp-modern .rp-field-grid select:focus{box-shadow:0 0 0 4px rgba(124,58,237,.08)!important}
     .rp-modern-light .rp-field-grid input,.rp-modern-light .rp-field-grid select{background-color:rgba(255,255,255,.92)!important;border-color:rgba(55,35,75,.13)!important;box-shadow:0 1px 2px rgba(35,24,46,.035)!important}
@@ -626,17 +626,17 @@ export default function ClientOnboarding() {
 
           <main className="w-full pb-10 pt-7 sm:pt-10 lg:pt-12">
             <div className="mx-auto max-w-[820px]">
-              <div className="mb-8">
-                <div><h1 className="rp-display text-[32px] font-semibold leading-tight tracking-[-.04em] sm:text-[40px]">{prompts[step]}</h1><p className={`mt-2.5 max-w-2xl text-sm leading-6 sm:text-[15px] ${darkMode?"text-white/45":"text-black/45"}`}>{descriptions[step]}</p></div>
+              <div className="mb-8 w-full">
+                <h1 className="rp-display text-[32px] font-semibold leading-tight tracking-[-.04em] sm:text-[40px]">{prompts[step]}</h1><p className={`mt-2 max-w-2xl text-sm leading-6 sm:text-[15px] ${darkMode?"text-white/45":"text-black/45"}`}>{descriptions[step]}</p>
               </div>
 
               <section key={step} className="rp-step-panel">
                 <div className={`relative overflow-hidden rounded-[18px] border transition-shadow duration-300 ${darkMode?"border-white/8 bg-[#101219]":"border-white/90 bg-white/95 shadow-[0_22px_65px_rgba(48,29,66,.11)] backdrop-blur-sm hover:shadow-[0_28px_75px_rgba(48,29,66,.14)]"}`}>
-                  <header className={`border-b px-5 pb-4 pt-5 sm:px-8 ${darkMode?"border-white/8":"border-black/6"}`}><h2 className="rp-display text-base font-bold">{steps[step].title}</h2></header>
-                  <div className="p-5 sm:p-8 lg:p-9"><div className={`mb-7 flex items-center gap-3 rounded-xl border px-4 py-3.5 ${darkMode?"border-white/8 bg-white/[.025]":"border-violet-100 bg-gradient-to-r from-violet-50/70 to-pink-50/40"}`}><span className="h-8 w-1 shrink-0 rounded-full bg-gradient-to-b from-violet-600 to-pink-500" /><p className={`text-sm font-semibold leading-6 ${darkMode?"text-white/75":"text-black/70"}`}>{helperCopy[step]}</p></div>{content()}
+                  <header className={`border-b px-4 py-4 sm:px-8 ${darkMode?"border-white/8":"border-black/6"}`}><h2 className="rp-display text-base font-bold">{steps[step].title}</h2></header>
+                  <div className="p-4 sm:p-8"><div className={`mb-8 flex items-center gap-4 rounded-xl border px-4 py-4 ${darkMode?"border-white/8 bg-white/[.025]":"border-violet-100 bg-gradient-to-r from-violet-50/70 to-pink-50/40"}`}><span className="h-8 w-1 shrink-0 rounded-full bg-gradient-to-b from-violet-600 to-pink-500" /><p className={`text-sm font-semibold leading-6 ${darkMode?"text-white/75":"text-black/70"}`}>{helperCopy[step]}</p></div>{content()}
                     {error && <div role="alert" className={`mt-6 flex items-start gap-3 rounded-xl border px-4 py-3.5 text-sm ${darkMode?"border-red-400/20 bg-red-400/5 text-red-300":"border-red-200 bg-red-50 text-red-700"}`}><MdErrorOutline className="mt-0.5 shrink-0"/><span>{error}</span></div>}
                   </div>
-                  {step < steps.length-1 && <footer className={`flex items-center justify-end gap-4 border-t px-5 py-4 sm:px-8 ${darkMode?"border-white/8":"border-black/6"}`}>
+                  {step < steps.length-1 && <footer className={`flex items-center justify-end gap-4 border-t px-4 py-4 sm:px-8 ${darkMode?"border-white/8":"border-black/6"}`}>
                     <button type="button" onClick={()=>void next()} disabled={(step===2&&!representativeVerificationComplete)||(step===3&&!legalStepComplete)||sendingAdminWelcome} title={step===2&&!representativeVerificationComplete?"Verify contact details to continue":step===3&&!legalStepComplete?"Complete legal requirements to continue":undefined} className={`group inline-flex h-11 items-center gap-2 rounded-xl px-5 text-sm font-semibold shadow-[0_8px_18px_rgba(23,19,29,.14)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-35 ${darkMode?"bg-white text-[#17131d] hover:bg-violet-100":"bg-[#17131d] text-white hover:bg-violet-700"}`}>{sendingAdminWelcome?<><MdAutorenew className="animate-spin"/> Sending...</>:step===2&&!representativeVerificationComplete?"Complete verification":step===3&&!legalStepComplete?"Complete requirements":step===4?"Complete onboarding":"Continue"}{!sendingAdminWelcome&&<MdArrowForward className="transition group-hover:translate-x-0.5"/>}</button>
                   </footer>}
                 </div>
