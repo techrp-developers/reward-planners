@@ -600,8 +600,9 @@ export default function ClientOnboarding() {
       <div className="relative mx-auto flex min-h-screen max-w-[1500px] flex-col px-4 sm:px-6 lg:px-8">
         <header className={`flex h-[72px] shrink-0 items-center justify-between border-b ${darkMode ? "border-white/8" : "border-purple-950/[.07]"}`}>
           <Link to="/login" className="flex items-center gap-3"><span className={`grid h-9 w-9 place-items-center rounded-xl ${darkMode ? "bg-white" : "bg-[#17131d]"}`}><img src={logoImage} alt="Reward Planners" className={`h-6 w-6 object-contain ${darkMode ? "" : "brightness-0 invert"}`}/></span><span className="rp-display text-sm font-bold tracking-[-.02em]">Reward Planners</span></Link>
-          <div className="flex items-center gap-2.5"><span className={`mr-1 hidden text-xs sm:block ${darkMode ? "text-white/35" : "text-black/35"}`}>Your progress is saved automatically</span><button type="button" onClick={() => setDarkMode(v=>!v)} className={`inline-flex h-9 items-center gap-2 rounded-xl px-3 text-xs font-semibold transition hover:-translate-y-0.5 ${darkMode ? "bg-amber-300/10 text-amber-300 hover:bg-amber-300/15" : "bg-violet-100 text-violet-700 hover:bg-violet-200"}`} aria-label={darkMode ? "Use light mode" : "Use dark mode"} title={darkMode ? "Switch to light mode" : "Switch to dark mode"}>{darkMode ? <MdLightMode className="text-base"/> : <MdDarkMode className="text-base"/>}<span className="hidden md:inline">{darkMode ? "Light" : "Dark"}</span></button><Link to="/login" className={`grid h-9 w-9 place-items-center rounded-xl text-lg transition ${darkMode ? "text-white/40 hover:bg-white/5 hover:text-white" : "text-black/40 hover:bg-black/5 hover:text-black/70"}`} aria-label="Close onboarding" title="Exit onboarding"><MdClose/></Link></div>
+          <div className="flex items-center gap-2.5"><button type="button" onClick={() => setDarkMode(v=>!v)} className={`inline-flex h-9 items-center gap-2 rounded-xl px-3 text-xs font-semibold transition hover:-translate-y-0.5 ${darkMode ? "bg-amber-300/10 text-amber-300 hover:bg-amber-300/15" : "bg-violet-100 text-violet-700 hover:bg-violet-200"}`} aria-label={darkMode ? "Use light mode" : "Use dark mode"} title={darkMode ? "Switch to light mode" : "Switch to dark mode"}>{darkMode ? <MdLightMode className="text-base"/> : <MdDarkMode className="text-base"/>}<span className="hidden md:inline">{darkMode ? "Light" : "Dark"}</span></button><Link to="/login" className={`grid h-9 w-9 place-items-center rounded-xl text-lg transition ${darkMode ? "text-white/40 hover:bg-white/5 hover:text-white" : "text-black/40 hover:bg-black/5 hover:text-black/70"}`} aria-label="Close onboarding" title="Exit onboarding"><MdClose/></Link></div>
         </header>
+        <div className="flex w-full gap-1.5 py-1" aria-label={`${progress}% onboarding complete`}>{steps.slice(0,-1).map((item,index)=><span key={item.title} className={`h-1 flex-1 overflow-hidden rounded-full transition-colors duration-500 ${index<=step ? "bg-gradient-to-r from-violet-600 to-pink-500" : darkMode?"bg-white/[.08]":"bg-violet-100/80"}`} />)}</div>
 
         <div className="grid flex-1 lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-14 xl:grid-cols-[250px_minmax(0,860px)] xl:justify-center">
           <aside className="hidden pt-12 lg:block">
@@ -619,24 +620,19 @@ export default function ClientOnboarding() {
                   </button>;
                 })}
               </nav>
-              <div className={`mt-4 flex items-center gap-3 rounded-xl border p-3 ${darkMode?"border-white/8 bg-black/10":"border-violet-100/70 bg-white/70"}`}><span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${darkMode?"bg-pink-300/10 text-pink-200":"bg-pink-50 text-pink-600"}`}><MdSecurity/></span><div><p className={`text-[11px] font-semibold ${darkMode?"text-white/55":"text-black/60"}`}>Secure onboarding</p><p className={`mt-0.5 text-[10px] ${darkMode?"text-white/25":"text-black/35"}`}>Encrypted and saved automatically</p></div></div>
             </div>
           </aside>
 
           <main className="w-full pb-10 pt-7 sm:pt-10 lg:pt-12">
             <div className="mx-auto max-w-[820px]">
-              <div className="mb-8 flex items-end justify-between gap-5">
+              <div className="mb-8">
                 <div><h1 className="rp-display text-[32px] font-semibold leading-tight tracking-[-.04em] sm:text-[40px]">{prompts[step]}</h1><p className={`mt-2.5 max-w-2xl text-sm leading-6 sm:text-[15px] ${darkMode?"text-white/45":"text-black/45"}`}>{descriptions[step]}</p></div>
-                <span className={`hidden shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold sm:block ${darkMode?"bg-violet-400/10 text-violet-200":"bg-violet-50 text-violet-700"}`}>{progress}% complete</span>
               </div>
-
-              <div className={`mb-5 h-1 rounded-full sm:hidden ${darkMode?"bg-white/8":"bg-black/7"}`}><span className="block h-full rounded-full bg-violet-600 transition-all duration-500" style={{width:`${Math.max(8,progress)}%`}}/></div>
 
               <section key={step} className="rp-step-panel">
                 <div className={`relative overflow-hidden rounded-[18px] border transition-shadow duration-300 ${darkMode?"border-white/8 bg-[#101219]":"border-white/90 bg-white/95 shadow-[0_22px_65px_rgba(48,29,66,.11)] backdrop-blur-sm hover:shadow-[0_28px_75px_rgba(48,29,66,.14)]"}`}>
-                  <div className={`absolute inset-x-0 top-0 h-1 ${darkMode?"bg-white/5":"bg-black/[.04]"}`}><span className="block h-full bg-gradient-to-r from-violet-600 to-pink-500 transition-all duration-700" style={{width:`${Math.max(4,progress)}%`}} /></div>
-                  <header className={`flex items-center justify-between border-b px-5 pb-4 pt-5 sm:px-8 ${darkMode?"border-white/8":"border-black/6"}`}><h2 className="rp-display text-base font-bold">{steps[step].title}</h2><span className={`text-[11px] font-semibold ${darkMode?"text-white/35":"text-black/35"}`}>Your details are saved</span></header>
-                  <div className="p-5 sm:p-8 lg:p-9"><div className={`mb-7 flex items-start gap-3 rounded-xl border px-4 py-3.5 ${darkMode?"border-white/8 bg-white/[.025]":"border-violet-100 bg-gradient-to-r from-violet-50/70 to-pink-50/40"}`}><span className="mt-0.5 h-8 w-1 shrink-0 rounded-full bg-gradient-to-b from-violet-600 to-pink-500" /><div><p className="text-sm font-semibold">A quick note before you continue</p><p className={`mt-1 text-xs leading-5 ${darkMode?"text-white/40":"text-black/45"}`}>{helperCopy[step]}</p></div></div>{content()}
+                  <header className={`border-b px-5 pb-4 pt-5 sm:px-8 ${darkMode?"border-white/8":"border-black/6"}`}><h2 className="rp-display text-base font-bold">{steps[step].title}</h2></header>
+                  <div className="p-5 sm:p-8 lg:p-9"><div className={`mb-7 flex items-center gap-3 rounded-xl border px-4 py-3.5 ${darkMode?"border-white/8 bg-white/[.025]":"border-violet-100 bg-gradient-to-r from-violet-50/70 to-pink-50/40"}`}><span className="h-8 w-1 shrink-0 rounded-full bg-gradient-to-b from-violet-600 to-pink-500" /><p className={`text-sm font-semibold leading-6 ${darkMode?"text-white/75":"text-black/70"}`}>{helperCopy[step]}</p></div>{content()}
                     {error && <div role="alert" className={`mt-6 flex items-start gap-3 rounded-xl border px-4 py-3.5 text-sm ${darkMode?"border-red-400/20 bg-red-400/5 text-red-300":"border-red-200 bg-red-50 text-red-700"}`}><MdErrorOutline className="mt-0.5 shrink-0"/><span>{error}</span></div>}
                   </div>
                   {step < steps.length-1 && <footer className={`flex items-center justify-between gap-4 border-t px-5 py-4 sm:px-8 ${darkMode?"border-white/8":"border-black/6"}`}>
