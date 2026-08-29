@@ -640,10 +640,10 @@ export default function ClientOnboarding() {
                   </footer>}
                 </div>
               </section>
-              <div className={`mt-5 flex items-center justify-center gap-2 text-xs ${darkMode?"text-white/25":"text-black/30"}`}><MdSecurity/> Your information is encrypted and securely saved.</div>
             </div>
           </main>
         </div>
+        <footer className={`flex min-h-12 items-center justify-center border-t text-xs ${darkMode?"border-white/[.06] text-white/25":"border-purple-950/[.06] text-black/35"}`}>© {new Date().getFullYear()} Reward Planners. All rights reserved.</footer>
       </div>
     </div>
   );
