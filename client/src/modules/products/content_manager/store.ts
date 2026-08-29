@@ -15,10 +15,12 @@ export function computeStatus(entry: ContentEntry, now: Date = new Date()): Stat
   return "active";
 }
 
-/** The entry currently displayed for a zone: highest-priority live entry, falling back to the zone's Default. */
+/** The entry currently displayed for a zone. Only navbar_background falls back to Default. */
 export function resolveZoneEntry(zone: Zone, entries: ContentEntry[], now: Date = new Date()): ContentEntry | undefined {
   const live = entries.filter((entry) => entry.zone === zone && !entry.isDefault && computeStatus(entry, now) === "active");
-  if (live.length === 0) return entries.find((entry) => entry.zone === zone && entry.isDefault);
+  if (live.length === 0) {
+    return zone === "navbar_background" ? entries.find((entry) => entry.zone === zone && entry.isDefault) : undefined;
+  }
 
   return [...live].sort((a, b) => {
     if (b.priority !== a.priority) return b.priority - a.priority;
@@ -42,4 +44,3 @@ export function findConflicts(candidate: ContentEntry, entries: ContentEntry[]):
     return start < entryEnd && entryStart < end;
   });
 }
-

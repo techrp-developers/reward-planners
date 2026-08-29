@@ -1,5 +1,6 @@
-import { FiChevronRight, FiImage } from "react-icons/fi";
+import { FiChevronRight } from "react-icons/fi";
 import type { ContentEntry, ContentZoneImage } from "../types";
+import { cmsColorToBackground } from "../utils/cmsColor";
 import { useImageDimensions, ZONE_IMAGE_SPECS } from "../utils/imageDimensions";
 
 interface Props {
@@ -20,6 +21,8 @@ function OfferCard({ image }: { image: ContentZoneImage }) {
 }
 
 export default function MobileOffersPreview({ entry }: Props) {
+  if (!entry) return null;
+
   const images = entry?.contentType === "image" ? [...(entry.images ?? [])].sort((a, b) => a.sortOrder - b.sortOrder) : [];
 
   return (
@@ -38,21 +41,15 @@ export default function MobileOffersPreview({ entry }: Props) {
               <OfferCard key={image.imageId ?? image.imageUrl} image={image} />
             ))}
           </div>
-        ) : (
-          <p className="rounded-xl border border-dashed border-white/15 py-6 text-center text-[11px] font-semibold text-white/40">No offer content</p>
-        )
+        ) : null
       ) : entry?.contentType === "color" ? (
         <div
           className="flex w-40 items-center justify-center rounded-xl text-[11px] font-bold text-white"
-          style={{ background: entry.colorValue || "#852BAF", aspectRatio: `${SPEC.recommendedWidth} / ${SPEC.recommendedHeight}` }}
+          style={{ ...cmsColorToBackground(entry.colorValue), aspectRatio: `${SPEC.recommendedWidth} / ${SPEC.recommendedHeight}` }}
         >
           {entry.title || "Offers"}
         </div>
-      ) : (
-        <p className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-white/15 py-6 text-center text-[11px] font-semibold text-white/40">
-          <FiImage size={13} /> No offer content
-        </p>
-      )}
+      ) : null}
     </div>
   );
 }

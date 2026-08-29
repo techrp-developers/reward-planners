@@ -6,6 +6,12 @@ const db = require("../config/database");
 const MODULE_KEY_PATTERN = /^[a-z0-9_-]{2,50}$/;
 const HEX_COLOR_PATTERN = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 const COLOR_FIELDS = ["normal_color", "active_color", "gradient_start_color", "gradient_end_color"];
+const DEFAULT_MODULES = [
+  { module_key: "product", label: "Product", route_key: "ProductModule", sort_order: 0 },
+  { module_key: "service", label: "Services", route_key: "ServicesModule", sort_order: 1 },
+  { module_key: "payment", label: "Payments", route_key: "PaymentsModule", sort_order: 2 },
+  { module_key: "dineout", label: "Bus Booking", route_key: "DineOutModule", sort_order: 3 },
+];
 
 class ModuleIconModel {
   validateModuleKeyFormat(moduleKey) {
@@ -30,8 +36,37 @@ class ModuleIconModel {
 
   //   =================================Reads===================================
 
+  async ensureDefaultModules() {
+    const [[{ moduleCount }]] = await db.query(
+      `SELECT COUNT(*) AS moduleCount FROM module_icons`,
+    );
+
+    if (Number(moduleCount) > 0) return;
+
+    await db.query(
+      `
+      INSERT INTO module_icons (
+        module_key, icon_type, icon_url, active_icon_url, route_key,
+        label, sort_order, is_active
+      )
+      VALUES ${DEFAULT_MODULES.map(() => "(?, 'image', '', NULL, ?, ?, ?, 1)").join(", ")}
+      ON DUPLICATE KEY UPDATE
+        route_key = COALESCE(route_key, VALUES(route_key)),
+        updated_at = updated_at
+      `,
+      DEFAULT_MODULES.flatMap((module) => [
+        module.module_key,
+        module.route_key,
+        module.label,
+        module.sort_order,
+      ]),
+    );
+  }
+
   /** Public resolved API - only what the mobile navbar should render, in display order. */
   async getActiveModules() {
+    await this.ensureDefaultModules();
+
     const [rows] = await db.query(
       `
       SELECT icon_id, module_key, icon_type, icon_url, active_icon_url, normal_color, active_color,
@@ -47,6 +82,8 @@ class ModuleIconModel {
 
   /** Admin list - every module regardless of is_active, same order. */
   async getAllModules() {
+    await this.ensureDefaultModules();
+
     const [rows] = await db.query(
       `
       SELECT icon_id, module_key, icon_type, icon_url, active_icon_url, normal_color, active_color,

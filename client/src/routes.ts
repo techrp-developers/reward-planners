@@ -86,7 +86,10 @@ export const routes = {
       edit: "/manager/partner-managers/edit/:id",
     },
     content: {
-      dashboard: "/manager/content",
+      product: "/manager/content/product",
+      service: "/manager/content/service",
+      payment: "/manager/content/payment",
+      mobileDashboard: "/manager/content/mobile-dashboard",
       moduleIcons: "/manager/content/module-icons",
     },
   },
@@ -99,6 +102,12 @@ export const routes = {
     services: "/admin/services",
     productView: "/admin/product/:id",
     vendorReview: "/admin/vendor-review/:id",
+    content: {
+      product: "/admin/content/product",
+      service: "/admin/content/service",
+      payment: "/admin/content/payment",
+      mobileDashboard: "/admin/content/mobile-dashboard",
+    },
   
   },
   warehouse: {

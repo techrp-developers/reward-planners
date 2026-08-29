@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ContentEntry, Zone } from "../types";
+import type { ContentModule } from "../api/ContentApi";
 import type { ResolvedModuleIcon } from "../api/ModuleIconApi";
 import { resolveZoneEntry } from "../store";
 import PhoneFrame from "./PhoneFrame";
@@ -9,6 +10,7 @@ interface Props {
   entries: ContentEntry[];
   draft: ContentEntry;
   now: Date;
+  module: ContentModule;
   /** From GET /content/resolved/modules - fetched once at the Content Management level, not per-preview. */
   moduleIcons?: ResolvedModuleIcon[];
 }
@@ -17,10 +19,14 @@ type PreviewMode = "default" | "campaign";
 
 const DEVICE_WIDTHS = [360, 390, 430] as const;
 
-export default function LivePreviewPanel({ entries, draft, now, moduleIcons = [] }: Props) {
+export default function LivePreviewPanel({ entries, draft, now, module, moduleIcons = [] }: Props) {
   const [mode, setMode] = useState<PreviewMode>("campaign");
-  const [previewModule, setPreviewModule] = useState("product");
+  const [previewModule, setPreviewModule] = useState<ContentModule>(module);
   const [deviceWidth, setDeviceWidth] = useState<(typeof DEVICE_WIDTHS)[number]>(390);
+
+  useEffect(() => {
+    setPreviewModule(module);
+  }, [module]);
 
   const resolve = (zone: Zone): ContentEntry | undefined => {
     if (zone === draft.zone) {

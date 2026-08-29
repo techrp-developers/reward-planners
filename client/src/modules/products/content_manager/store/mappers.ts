@@ -1,4 +1,4 @@
-import type { ApiContentEntry } from "../api/contentApi";
+import type { ApiContentEntry } from "../api/ContentApi";
 import type { ContentEntry } from "../types";
 
 // Backend always returns a complete, ready-to-use URL for image_url (or null) - see contentController.js buildContentImageUrl.

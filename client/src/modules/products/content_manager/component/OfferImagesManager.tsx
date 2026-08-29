@@ -3,7 +3,7 @@ import { FaSpinner } from "react-icons/fa";
 import { FiAlertTriangle, FiArrowLeft, FiArrowRight, FiCheckCircle, FiPlus, FiTrash2 } from "react-icons/fi";
 import { toast } from "sonner";
 import type { ContentZoneImage } from "../types";
-import { addEntryImages, deleteEntryImage, reorderEntryImages } from "../api/contentApi";
+import { addEntryImages, deleteEntryImage, reorderEntryImages } from "../api/ContentApi";
 import { aspectRatioLabel, ratioStatus, useImageDimensions, ZONE_IMAGE_SPECS } from "../utils/imageDimensions";
 
 const SPEC = ZONE_IMAGE_SPECS.offers_banner;
@@ -64,7 +64,7 @@ export default function OfferImagesManager({ contentId, images, onChange }: Prop
         ...added.map((image) => ({ imageId: image.image_id, imageUrl: image.image_url, sortOrder: image.sort_order })),
       ]);
       toast.success(added.length > 1 ? "Images added" : "Image added");
-    } catch (err) {
+    } catch {
       toast.error("Failed to add image(s)");
     } finally {
       setUploading(false);
@@ -78,7 +78,7 @@ export default function OfferImagesManager({ contentId, images, onChange }: Prop
       await deleteEntryImage(contentId, image.imageId);
       onChange(sorted.filter((img) => img.imageId !== image.imageId));
       toast.success("Image removed");
-    } catch (err) {
+    } catch {
       toast.error("Failed to remove image");
     } finally {
       setBusy(false);
@@ -107,7 +107,7 @@ export default function OfferImagesManager({ contentId, images, onChange }: Prop
         contentId,
         optimistic.map((img) => ({ image_id: img.imageId as number, sort_order: img.sortOrder })),
       );
-    } catch (err) {
+    } catch {
       onChange(sorted);
       toast.error("Failed to reorder images");
     } finally {

@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { FiCheckCircle, FiImage } from "react-icons/fi";
+import { FiCheckCircle } from "react-icons/fi";
 import type { ContentEntry } from "../types";
+import { cmsColorToBackground } from "../utils/cmsColor";
 import { ratioStatus, useImageDimensions, ZONE_IMAGE_SPECS } from "../utils/imageDimensions";
 
 interface Props {
@@ -16,6 +17,8 @@ export default function MobilePromoPreview({ entry }: Props) {
 
   const aspectRatio = dims ? `${dims.width} / ${dims.height}` : `${SPEC.recommendedWidth} / ${SPEC.recommendedHeight}`;
   const status = dims ? ratioStatus(dims.width / dims.height, SPEC.recommendedRatio) : null;
+
+  if (!entry) return null;
 
   if (hasImage) {
     return (
@@ -41,7 +44,7 @@ export default function MobilePromoPreview({ entry }: Props) {
       <div className="px-3">
         <div
           className="flex w-full flex-col items-start justify-center gap-1.5 rounded-2xl px-5 py-5 text-white"
-          style={{ aspectRatio, background: entry.colorValue || "#852BAF" }}
+          style={{ aspectRatio, ...cmsColorToBackground(entry.colorValue) }}
         >
           <p className="text-lg font-black leading-tight [text-shadow:0_1px_4px_rgba(0,0,0,0.45)]">{entry.title || "Promotional Banner"}</p>
           {entry.ctaText && (
@@ -54,17 +57,5 @@ export default function MobilePromoPreview({ entry }: Props) {
     );
   }
 
-  return (
-    <div className="px-3">
-      <div
-        className="grid w-full place-items-center rounded-2xl border border-dashed border-white/15 text-white/50"
-        style={{ aspectRatio, background: "linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))" }}
-      >
-        <span className="flex flex-col items-center gap-1.5 text-xs font-bold">
-          <FiImage size={18} />
-          Promotional Banner
-        </span>
-      </div>
-    </div>
-  );
+  return null;
 }

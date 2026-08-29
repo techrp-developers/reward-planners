@@ -1,6 +1,19 @@
 export type Zone = "navbar_background" | "promotional_banner" | "offers_banner";
 export type ContentKind = "color" | "image";
 export type Status = "default" | "draft" | "scheduled" | "active" | "expired";
+export type GradientDirection =
+  | "left-right"
+  | "right-left"
+  | "top-bottom"
+  | "bottom-top"
+  | "top-left-bottom-right"
+  | "bottom-left-top-right";
+
+export interface GradientConfig {
+  type: "gradient";
+  colors: string[];
+  direction: GradientDirection;
+}
 
 export interface ContentZoneImage {
   imageId: number | null;
@@ -47,6 +60,17 @@ export const STATUS_META: Record<Status, { label: string; badgeClass: string; do
 };
 
 export const COLOR_PRESETS = ["#852BAF", "#FC3F78", "#25103d", "#10B981", "#F59E0B", "#0EA5E9", "#111827", "#FFFFFF"];
+
+export const GRADIENT_PRESETS: { name: string; colors: string[] }[] = [
+  { name: "Brand", colors: ["#852BAF", "#FC3F78"] },
+  { name: "Royal Purple", colors: ["#6D28D9", "#A855F7"] },
+  { name: "Purple Pink", colors: ["#7E22CE", "#EC4899"] },
+  { name: "Premium", colors: ["#4C1D95", "#C026D3", "#F43F5E"] },
+  { name: "Dark Purple", colors: ["#1E1B4B", "#581C87", "#9D174D"] },
+  { name: "Blue Purple", colors: ["#4F46E5", "#7C3AED", "#C026D3"] },
+  { name: "Sunset", colors: ["#F97316", "#EC4899"] },
+  { name: "Gold", colors: ["#F59E0B", "#FACC15"] },
+];
 
 export function blankEntry(zone: Zone): ContentEntry {
   return {

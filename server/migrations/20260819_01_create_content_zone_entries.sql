@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS content_zone_entries (
   module ENUM('product', 'service', 'payment') NOT NULL DEFAULT 'product',
   zone ENUM('navbar_background', 'promotional_banner', 'offers_banner') NOT NULL,
   content_type ENUM('color', 'image') NOT NULL DEFAULT 'color',
-  color_value VARCHAR(7) NULL,
+  color_value VARCHAR(500) NULL,
   image_url VARCHAR(255) NULL,
   title VARCHAR(150) NOT NULL,
   cta_text VARCHAR(60) NULL,

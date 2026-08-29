@@ -4,6 +4,7 @@ import { FiChevronLeft, FiChevronRight, FiCopy, FiEdit2, FiImage, FiLock, FiPaus
 import type { ContentEntry, Status, Zone } from "../types";
 import { STATUS_META, ZONES } from "../types";
 import { computeStatus } from "../store";
+import { cmsColorToBackground } from "../utils/cmsColor";
 import StatusBadge from "./StatusBadge";
 
 type SortKey = "newest" | "priority" | "startDate";
@@ -119,7 +120,7 @@ export default function ContentTable({ entries, now, loading, onEdit, onDuplicat
                           onError={() => setBrokenImageIds((prev) => new Set(prev).add(entry.id))}
                         />
                       ) : entry.contentType === "color" ? (
-                        <span className="h-full w-full" style={{ background: entry.colorValue }} />
+                        <span className="h-full w-full" style={cmsColorToBackground(entry.colorValue)} />
                       ) : (
                         <FiImage />
                       )}

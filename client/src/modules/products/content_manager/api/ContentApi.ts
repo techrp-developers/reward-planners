@@ -65,7 +65,7 @@ export interface ResolvedZonesResult {
   offers_banner: ApiContentEntry | null;
 }
 
-export type ContentModule = "product" | "service" | "payment" | "dineout";
+export type ContentModule = "product" | "service" | "payment" | "dineout" | "mobile_dashboard";
 
 export type ResolvedNavbarResult = Record<ContentModule, ApiContentEntry | null>;
 

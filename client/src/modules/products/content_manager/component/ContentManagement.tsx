@@ -1,18 +1,19 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { FiList, FiPlus } from "react-icons/fi";
 import type { AxiosError } from "axios";
 import Swal from "sweetalert2";
 import { toast } from "sonner";
-import type { ContentEntry } from "../../types";
-import { blankEntry } from "../../types";
-import type { ContentModule } from "../../api/contentApi";
-import { buildEntryFormData, createEntry, deactivateEntry, deleteEntry, duplicateEntry, listEntries, updateEntry } from "../../api/contentApi";
-import { getResolvedModules } from "../../api/ModuleIconApi";
-import { fromApiEntry } from "../../store/mappers";
-import ContentForm from "../ContentForm";
-import ContentTable from "../ContentTable";
-import LivePreviewPanel from "../LivePreviewPanel";
+import type { ContentEntry } from "../types";
+import { blankEntry } from "../types";
+import type { ContentModule } from "../api/ContentApi";
+import { buildEntryFormData, createEntry, deactivateEntry, deleteEntry, duplicateEntry, listEntries, updateEntry } from "../api/ContentApi";
+import { getResolvedModules } from "../api/ModuleIconApi";
+import { fromApiEntry } from "../store/mappers";
+import { isGradientConfig, isValidHexColor } from "../utils/cmsColor";
+import ContentForm from "./ContentForm";
+import ContentTable from "./ContentTable";
+import LivePreviewPanel from "./LivePreviewPanel";
 
 type View = "table" | "form";
 
@@ -31,12 +32,14 @@ const MODULE_LABELS: Record<ContentModule, string> = {
   service: "Service",
   payment: "Payment",
   dineout: "DineOut",
+  mobile_dashboard: "Mobile Dashboard",
 };
 
-const MODULE_TABS: ContentModule[] = ["product", "service", "payment"];
+interface ContentManagementProps {
+  module: ContentModule;
+}
 
-export default function ContentManagement() {
-  const [module, setModule] = useState<ContentModule>("product");
+export default function ContentManagement({ module }: ContentManagementProps) {
   const [entries, setEntries] = useState<ContentEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>("table");
@@ -50,7 +53,7 @@ export default function ContentManagement() {
     return () => clearInterval(interval);
   }, []);
 
-  const loadEntries = async () => {
+  const loadEntries = useCallback(async () => {
     setLoading(true);
     try {
       const result = await listEntries({ pageSize: 200, module });
@@ -60,16 +63,9 @@ export default function ContentManagement() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [module]);
 
-  useEffect(() => { void loadEntries(); }, [module]);
-
-  const switchModule = (nextModule: ContentModule) => {
-    if (nextModule === module) return;
-    setModule(nextModule);
-    setView("table");
-    setDraft(blankEntry("navbar_background"));
-  };
+  useEffect(() => { void loadEntries(); }, [loadEntries]);
 
   // What the mobile app's top navbar actually shows - fetched once here and passed down so
   // the preview never diverges from the real GET /content/resolved/modules response.
@@ -85,7 +81,21 @@ export default function ContentManagement() {
   const validate = (entry: ContentEntry, requireContentValue: boolean) => {
     if (!entry.title.trim()) return "Title / Label is required.";
     if (requireContentValue) {
-      if (entry.contentType === "color" && !entry.colorValue.trim()) return "Pick a color for this zone.";
+      if (entry.contentType === "color") {
+        const colorValue = entry.colorValue.trim();
+        if (!colorValue) return "Pick a color for this zone.";
+        if (colorValue.startsWith("{")) {
+          try {
+            if (!isGradientConfig(JSON.parse(colorValue) as unknown)) {
+              return "Gradient must have at least two valid HEX colors and a valid direction.";
+            }
+          } catch {
+            return "Gradient color data is invalid.";
+          }
+        } else if (!isValidHexColor(colorValue)) {
+          return "Enter a valid HEX color, for example #852BAF.";
+        }
+      }
       if (entry.contentType === "image" && entry.zone === "offers_banner" && !(entry.images ?? []).length) {
         return "Add at least one offer image for this campaign.";
       }
@@ -210,39 +220,25 @@ export default function ContentManagement() {
     <main className="space-y-6">
       <header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#25103d] via-[#68258d] to-[#c33076] p-7 text-white shadow-[0_24px_65px_rgba(91,33,124,0.24)]">
         <div className="absolute -right-16 -top-24 h-64 w-64 rounded-full bg-white/10 blur-2xl" />
-        <div className="relative space-y-5">
-          <div className="flex flex-wrap items-center justify-between gap-5">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-purple-200">Content management · {moduleLabel}</p>
-              <h1 className="mt-1 text-3xl font-black">Home Screen Content</h1>
-              <p className="mt-2 text-sm text-purple-100/80">Manage the Navbar, Promotional Banner and Offers Banner shown on the {moduleLabel} home screen.</p>
-            </div>
-            <div className="flex gap-2 rounded-2xl bg-white/10 p-1.5">
-              <button
-                onClick={() => setView("table")}
-                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition ${view === "table" ? "bg-white text-[#852BAF] shadow" : "text-white/80 hover:bg-white/10"}`}
-              >
-                <FiList /> Content
-              </button>
-              <button
-                onClick={startAdd}
-                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition ${view === "form" ? "bg-white text-[#852BAF] shadow" : "text-white/80 hover:bg-white/10"}`}
-              >
-                <FiPlus /> Create
-              </button>
-            </div>
+        <div className="relative flex flex-wrap items-center justify-between gap-5">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-purple-200">Content Management · {moduleLabel}</p>
+            <h1 className="mt-1 text-3xl font-black">Home Screen Content</h1>
+            <p className="mt-2 text-sm text-purple-100/80">Manage the Navbar, Promotional Banner and Offers Banner shown on the {moduleLabel} home screen.</p>
           </div>
-
-          <div className="flex gap-2 border-t border-white/10 pt-4">
-            {MODULE_TABS.map((tab) => (
-              <button
-                key={tab}
-                onClick={() => switchModule(tab)}
-                className={`rounded-xl px-4 py-2 text-sm font-bold transition ${module === tab ? "bg-white text-[#852BAF] shadow" : "bg-white/10 text-white/80 hover:bg-white/20"}`}
-              >
-                {MODULE_LABELS[tab]}
-              </button>
-            ))}
+          <div className="flex gap-2 rounded-2xl bg-white/10 p-1.5">
+            <button
+              onClick={() => setView("table")}
+              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition ${view === "table" ? "bg-white text-[#852BAF] shadow" : "text-white/80 hover:bg-white/10"}`}
+            >
+              <FiList /> Content
+            </button>
+            <button
+              onClick={startAdd}
+              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition ${view === "form" ? "bg-white text-[#852BAF] shadow" : "text-white/80 hover:bg-white/10"}`}
+            >
+              <FiPlus /> Create
+            </button>
           </div>
         </div>
       </header>
@@ -269,7 +265,7 @@ export default function ContentManagement() {
             onPublish={() => void handlePublish()}
             saving={saving}
           />
-          <LivePreviewPanel entries={entries} draft={draft} now={now} moduleIcons={moduleIcons} />
+          <LivePreviewPanel entries={entries} draft={draft} now={now} module={module} moduleIcons={moduleIcons} />
         </div>
       )}
     </main>

@@ -1,8 +1,38 @@
 const db = require("../config/database");
 
-const MODULES = ["product", "service", "payment", "dineout"];
+const MODULES = ["product", "service", "payment", "dineout", "mobile_dashboard"];
 const ZONES = ["navbar_background", "promotional_banner", "offers_banner"];
 const CONTENT_TYPES = ["color", "image"];
+const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
+const GRADIENT_DIRECTIONS = new Set([
+  "left-right",
+  "right-left",
+  "top-bottom",
+  "bottom-top",
+  "top-left-bottom-right",
+  "bottom-left-top-right",
+]);
+
+const isValidColorValue = (value) => {
+  if (typeof value !== "string" || !value.trim()) return false;
+
+  const raw = value.trim();
+  if (HEX_COLOR_RE.test(raw)) return true;
+  if (!raw.startsWith("{")) return false;
+
+  try {
+    const parsed = JSON.parse(raw);
+    return (
+      parsed?.type === "gradient" &&
+      Array.isArray(parsed.colors) &&
+      parsed.colors.length >= 2 &&
+      parsed.colors.every((color) => typeof color === "string" && HEX_COLOR_RE.test(color)) &&
+      GRADIENT_DIRECTIONS.has(parsed.direction)
+    );
+  } catch {
+    return false;
+  }
+};
 
 class ContentZoneModel {
   //   =======================Helper=================================
@@ -26,14 +56,18 @@ class ContentZoneModel {
       if (!CONTENT_TYPES.includes(data.content_type)) {
         errors.push(`content_type must be one of: ${CONTENT_TYPES.join(", ")}`);
       }
-      if (data.content_type === "color" && !data.color_value) {
-        errors.push("color_value is required when content_type is 'color'");
+      if (data.content_type === "color" && !isValidColorValue(data.color_value)) {
+        errors.push("color_value must be a valid HEX color or gradient JSON");
       }
       // offers_banner images are added afterwards via the per-image endpoints, so a
       // main image_url/file isn't required up front the way it is for other zones.
       if (data.content_type === "image" && !isUpdate && data.zone !== "offers_banner" && !data.image_url && !hasImageFile) {
         errors.push("image_url is required when content_type is 'image'");
       }
+    }
+
+    if (isUpdate && data.color_value !== undefined && !isValidColorValue(data.color_value)) {
+      errors.push("color_value must be a valid HEX color or gradient JSON");
     }
 
     if (!isUpdate && (!data.title || !data.title.trim())) {

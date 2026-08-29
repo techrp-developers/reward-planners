@@ -1,7 +1,19 @@
 import { FiAlertTriangle, FiEye, FiSave } from "react-icons/fi";
-import type { ContentEntry, ContentKind, ContentZoneImage, Zone } from "../types";
-import { COLOR_PRESETS, ZONES } from "../types";
+import type { ContentEntry, ContentKind, ContentZoneImage, GradientConfig, GradientDirection, Zone } from "../types";
+import { COLOR_PRESETS, GRADIENT_PRESETS, ZONES } from "../types";
 import { computeStatus, findConflicts } from "../store";
+import {
+  DEFAULT_GRADIENT_COLORS,
+  DEFAULT_GRADIENT_DIRECTION,
+  DEFAULT_SOLID_COLOR,
+  GRADIENT_DIRECTION_LABELS,
+  GRADIENT_DIRECTIONS,
+  cmsColorToBackground,
+  gradientToCssBackground,
+  isValidHexColor,
+  makeGradientColorValue,
+  parseCmsColorValue,
+} from "../utils/cmsColor";
 import StatusBadge from "./StatusBadge";
 import OfferImagesManager from "./OfferImagesManager";
 import ImageDimensionInfo from "./ImageDimensionInfo";
@@ -24,11 +36,27 @@ interface Props {
 export default function ContentForm({ draft, entries, now, onChange, onSaveDraft, onPreview, onPublish, saving }: Props) {
   const status = computeStatus(draft, now);
   const conflicts = findConflicts(draft, entries);
+  const parsedColor = parseCmsColorValue(draft.colorValue);
+  const gradient: GradientConfig =
+    parsedColor.type === "gradient"
+      ? parsedColor
+      : { type: "gradient", colors: DEFAULT_GRADIENT_COLORS, direction: DEFAULT_GRADIENT_DIRECTION };
+  const solidColor = parsedColor.type === "solid" ? parsedColor.color : DEFAULT_SOLID_COLOR;
+  const nativeSolidColor = isValidHexColor(solidColor) ? solidColor : DEFAULT_SOLID_COLOR;
 
   const handleImageUpload = (file: File) => {
     const reader = new FileReader();
     reader.onload = () => onChange({ imageFile: file, imageUrl: String(reader.result || "") });
     reader.readAsDataURL(file);
+  };
+
+  const updateGradient = (patch: Partial<GradientConfig>) => {
+    const next = { ...gradient, ...patch };
+    onChange({ colorValue: makeGradientColorValue(next.colors, next.direction) });
+  };
+
+  const updateGradientColor = (index: number, color: string) => {
+    updateGradient({ colors: gradient.colors.map((existing, i) => (i === index ? color : existing)) });
   };
 
   return (
@@ -60,24 +88,131 @@ export default function ContentForm({ draft, entries, now, onChange, onSaveDraft
         </label>
 
         {draft.contentType === "color" ? (
-          <div className="sm:col-span-2">
-            <p className={labelClass}>Color</p>
-            <div className="mt-2 flex items-center gap-3">
-              <input type="color" value={draft.colorValue} onChange={(event) => onChange({ colorValue: event.target.value })} className="h-11 w-14 cursor-pointer rounded-lg border border-slate-200" />
-              <input value={draft.colorValue} onChange={(event) => onChange({ colorValue: event.target.value })} placeholder="#852BAF" className={`${inputClass} mt-0 flex-1`} />
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {COLOR_PRESETS.map((color) => (
+          <div className="sm:col-span-2 space-y-5 rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
+            <div>
+              <p className={labelClass}>Color Type</p>
+              <div className="mt-2 inline-flex rounded-xl border border-purple-100 bg-white p-1 shadow-sm">
                 <button
-                  key={color}
                   type="button"
-                  onClick={() => onChange({ colorValue: color })}
-                  className={`h-8 w-8 rounded-lg border-2 transition ${draft.colorValue === color ? "border-[#852BAF] scale-110" : "border-white shadow"}`}
-                  style={{ background: color }}
-                  aria-label={color}
-                />
-              ))}
+                  onClick={() => onChange({ colorValue: solidColor })}
+                  className={`rounded-lg px-4 py-2 text-xs font-bold transition ${parsedColor.type === "solid" ? "bg-[#852BAF] text-white shadow" : "text-slate-500 hover:bg-purple-50"}`}
+                >
+                  Solid Color
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onChange({ colorValue: makeGradientColorValue() })}
+                  className={`rounded-lg px-4 py-2 text-xs font-bold transition ${parsedColor.type === "gradient" ? "bg-[#852BAF] text-white shadow" : "text-slate-500 hover:bg-purple-50"}`}
+                >
+                  Gradient
+                </button>
+              </div>
             </div>
+
+            {parsedColor.type === "solid" ? (
+              <div>
+                <p className={labelClass}>Color</p>
+                <div className="mt-2 flex items-center gap-3">
+                  <input type="color" value={nativeSolidColor} onChange={(event) => onChange({ colorValue: event.target.value })} className="h-11 w-14 cursor-pointer rounded-lg border border-slate-200 bg-white" />
+                  <input value={draft.colorValue} onChange={(event) => onChange({ colorValue: event.target.value })} placeholder="#852BAF" className={`${inputClass} mt-0 flex-1 bg-white`} />
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {COLOR_PRESETS.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => onChange({ colorValue: color })}
+                      className={`h-8 w-8 rounded-lg border-2 transition ${solidColor.toLowerCase() === color.toLowerCase() ? "scale-110 border-[#852BAF]" : "border-white shadow"}`}
+                      style={{ background: color }}
+                      aria-label={color}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {gradient.colors.map((color, index) => (
+                    <label key={index} className={labelClass}>
+                      {index === 0 ? "Gradient Start Color" : index === gradient.colors.length - 1 ? "Gradient End Color" : "Gradient Middle Color"}
+                      <div className="mt-2 flex items-center gap-3">
+                        <input
+                          type="color"
+                          value={isValidHexColor(color) ? color : DEFAULT_SOLID_COLOR}
+                          onChange={(event) => updateGradientColor(index, event.target.value)}
+                          className="h-11 w-14 cursor-pointer rounded-lg border border-slate-200 bg-white"
+                        />
+                        <input
+                          value={color}
+                          onChange={(event) => updateGradientColor(index, event.target.value)}
+                          placeholder={index === 0 ? "#852BAF" : "#FC3F78"}
+                          className={`${inputClass} mt-0 flex-1 bg-white`}
+                        />
+                      </div>
+                    </label>
+                  ))}
+                </div>
+
+                <div className="flex flex-wrap items-end gap-3">
+                  {gradient.colors.length < 3 && (
+                    <button
+                      type="button"
+                      onClick={() => updateGradient({ colors: [gradient.colors[0] || DEFAULT_SOLID_COLOR, "#C026D3", gradient.colors[1] || "#FC3F78"] })}
+                      className="rounded-xl border border-purple-200 bg-white px-4 py-2.5 text-xs font-bold text-[#852BAF] hover:bg-purple-50"
+                    >
+                      + Add Color
+                    </button>
+                  )}
+                  {gradient.colors.length > 2 && (
+                    <button
+                      type="button"
+                      onClick={() => updateGradient({ colors: [gradient.colors[0], gradient.colors[gradient.colors.length - 1]] })}
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-50"
+                    >
+                      Remove Middle
+                    </button>
+                  )}
+                  <label className={`${labelClass} min-w-[220px] flex-1`}>
+                    Direction
+                    <select
+                      value={gradient.direction}
+                      onChange={(event) => updateGradient({ direction: event.target.value as GradientDirection })}
+                      className={`${inputClass} bg-white`}
+                    >
+                      {GRADIENT_DIRECTIONS.map((direction) => (
+                        <option key={direction} value={direction}>{GRADIENT_DIRECTION_LABELS[direction]}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <div>
+                  <p className={labelClass}>Gradient Preview</p>
+                  <div className="mt-2 flex min-h-28 items-center justify-center rounded-2xl border border-white shadow-inner" style={{ background: gradientToCssBackground(gradient) }}>
+                    <span className="rounded-full bg-black/20 px-4 py-2 text-xs font-black text-white backdrop-blur [text-shadow:0_1px_5px_rgba(0,0,0,0.4)]">
+                      {gradient.colors.join(" -> ")}
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <p className={labelClass}>Gradient Presets</p>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    {GRADIENT_PRESETS.map((preset) => (
+                      <button
+                        key={preset.name}
+                        type="button"
+                        onClick={() => onChange({ colorValue: makeGradientColorValue(preset.colors, gradient.direction) })}
+                        className="overflow-hidden rounded-xl border border-white bg-white p-0 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                      >
+                        <span className="block h-12" style={cmsColorToBackground(makeGradientColorValue(preset.colors, gradient.direction))} />
+                        <span className="block px-3 py-2 text-xs font-black text-slate-700">{preset.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ) : draft.zone === "offers_banner" ? (
           draft.id ? (

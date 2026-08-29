@@ -3,7 +3,6 @@ const router = express.Router();
 const contentController = require("../controllers/contentController");
 const moduleIconController = require("../controllers/moduleIconController");
 const { uploadContentImage } = require("../middleware/mediaUpload/contentUpload");
-const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 
 // Keep in sync with MAX_OFFER_IMAGES in controllers/contentController.js.
 const MAX_OFFER_IMAGES = 10;
@@ -48,52 +47,38 @@ const handleUpload = (middleware) => (req, res, next) => {
 
 router.post(
   "/entries",
-  authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
   handleUpload(uploadEntryFiles),
   contentController.createEntry,
 );
 
 router.get(
   "/entries",
-  authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
   contentController.listEntries,
 );
 
 router.get(
   "/entries/:id",
-  authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
   contentController.getEntry,
 );
 
 router.put(
   "/entries/:id",
-  authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
   handleUpload(uploadEntryFiles),
   contentController.updateEntry,
 );
 
 router.post(
   "/entries/:id/duplicate",
-  authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
   contentController.duplicateEntry,
 );
 
 router.patch(
   "/entries/:id/deactivate",
-  authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
   contentController.deactivateNow,
 );
 
 router.delete(
   "/entries/:id",
-  authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
   contentController.deleteEntry,
 );
 
@@ -101,37 +86,27 @@ router.delete(
 
 router.post(
   "/entries/:id/images",
-  authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
   handleUpload(uploadOfferImages),
   contentController.addEntryImages,
 );
 
 router.patch(
   "/entries/:id/images/reorder",
-  authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
   contentController.reorderEntryImages,
 );
 
 router.delete(
   "/entries/:id/images/:imageId",
-  authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
   contentController.deleteEntryImage,
 );
 
 router.patch(
   "/entries/:id/images/:imageId/deactivate",
-  authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
   contentController.deactivateEntryImage,
 );
 
 router.patch(
   "/entries/:id/images/:imageId/activate",
-  authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
   contentController.activateEntryImage,
 );
 
@@ -139,31 +114,23 @@ router.patch(
 
 router.get(
   "/modules",
-  authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
   moduleIconController.listModules,
 );
 
 router.post(
   "/modules",
-  authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
   handleUpload(uploadModuleIconFiles),
   moduleIconController.createModule,
 );
 
 router.put(
   "/modules/:module",
-  authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
   handleUpload(uploadModuleIconFiles),
   moduleIconController.updateModuleIcon,
 );
 
 router.delete(
   "/modules/:module",
-  authenticateToken,
-  authorizeRoles("vendor_manager", "admin"),
   moduleIconController.deleteModule,
 );
 

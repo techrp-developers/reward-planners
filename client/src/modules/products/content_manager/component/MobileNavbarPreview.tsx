@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import { FiBell, FiGift, FiGrid, FiMapPin, FiSearch, FiUser } from "react-icons/fi";
 import type { ContentEntry } from "../types";
 import type { ResolvedModuleIcon } from "../api/ModuleIconApi";
+import { cmsColorToBackground } from "../utils/cmsColor";
 
 interface Props {
   entry?: ContentEntry;
@@ -16,7 +17,7 @@ const backgroundStyle = (entry?: ContentEntry): CSSProperties => {
     // it's chrome behind other UI, not a standalone creative that must stay whole.
     return { backgroundImage: `url(${entry.imageUrl})`, backgroundSize: "cover", backgroundPosition: "center" };
   }
-  return { background: entry?.colorValue || "linear-gradient(135deg, #2b0f47, #4a1a63)" };
+  return entry?.colorValue ? cmsColorToBackground(entry.colorValue) : { background: "linear-gradient(135deg, #2b0f47, #4a1a63)" };
 };
 
 function ModuleIconTile({ module, isSelected, onSelect }: { module: ResolvedModuleIcon; isSelected: boolean; onSelect: () => void }) {
