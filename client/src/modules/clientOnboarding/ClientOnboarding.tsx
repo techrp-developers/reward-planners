@@ -353,7 +353,7 @@ export default function ClientOnboarding() {
     <div className="rp-field-grid grid gap-x-5 gap-y-5 sm:grid-cols-2">
       {(fields[step] || []).map((field) => (
         <label key={field.name} className="rp-field group block">
-          <span className={`mb-2 flex items-center justify-between text-[13px] font-bold ${darkMode ? "text-slate-200" : "text-slate-700"}`}><span>{field.label}{field.required && <span className="text-pink-500"> *</span>}</span>{String(data[field.name] ?? "").trim() && !fieldErrors[field.name] && <MdCheckCircle className={`text-base ${darkMode ? "text-purple-300" : "text-purple-600"}`} />}</span>
+          <span className={`mb-2 block text-[13px] font-bold ${darkMode ? "text-slate-200" : "text-slate-700"}`}>{field.label}{field.required && <span className="text-pink-500"> *</span>}</span>
           {field.name === "state" ? (
             <>
               <select
@@ -616,7 +616,7 @@ export default function ClientOnboarding() {
                   const current=index===step; const Icon=item.icon;
                   return <button key={item.title} type="button" disabled={!available} onClick={()=>{setStep(index);setError("");}} className={`group relative flex w-full items-center gap-3 overflow-hidden rounded-xl px-2.5 py-2.5 text-left transition ${current ? (darkMode?"bg-white/[.07] shadow-[inset_0_0_0_1px_rgba(255,255,255,.05)]":"bg-white shadow-[0_8px_22px_rgba(58,34,78,.1)]") : darkMode?"hover:translate-x-0.5 hover:bg-white/[.035]":"hover:translate-x-0.5 hover:bg-white/70"} disabled:translate-x-0 disabled:opacity-35`}>
                     {current&&<span className="absolute bottom-2 left-0 top-2 w-[3px] rounded-r-full bg-gradient-to-b from-violet-500 to-pink-500"/>}<span className={`relative z-10 grid h-8 w-8 shrink-0 place-items-center border text-sm transition group-hover:scale-105 ${current ? (darkMode?"rounded-lg border-transparent bg-gradient-to-br from-violet-500 to-pink-500 text-white shadow-[0_6px_18px_rgba(168,85,247,.28)]":"rounded-lg border-transparent bg-gradient-to-br from-violet-600 to-pink-500 text-white shadow-[0_6px_18px_rgba(124,58,237,.25)]") : completed ? (darkMode?"rounded-xl border-pink-300/20 bg-[#17131d] text-pink-200":"rounded-xl border-pink-200 bg-white text-pink-600") : (darkMode?"rounded-xl border-white/10 bg-[#11131b] text-white/35":"rounded-xl border-black/8 bg-[#f8f7fa] text-black/30")}`}><Icon/></span>
-                    <span className={`min-w-0 flex-1 text-sm font-semibold ${current ? (darkMode?"text-white":"text-black") : completed ? (darkMode?"text-white/80":"text-black/75") : darkMode?"text-white/40":"text-black/40"}`}>{item.title}</span>{current&&<MdArrowForward className={`text-sm ${darkMode?"text-pink-200":"text-violet-600"}`}/>} {completed&&!current&&<span className={`grid h-5 w-5 place-items-center rounded-full ${darkMode?"bg-pink-300/10 text-pink-200":"bg-pink-50 text-pink-600"}`}><Check className="text-xs"/></span>}
+                    <span className={`min-w-0 flex-1 text-sm font-semibold ${current ? (darkMode?"text-white":"text-black") : completed ? (darkMode?"text-white/80":"text-black/75") : darkMode?"text-white/40":"text-black/40"}`}>{item.title}</span>{completed&&!current&&<span className={`grid h-5 w-5 place-items-center rounded-full ${darkMode?"bg-pink-300/10 text-pink-200":"bg-pink-50 text-pink-600"}`}><Check className="text-xs"/></span>}
                   </button>;
                 })}
               </nav>
