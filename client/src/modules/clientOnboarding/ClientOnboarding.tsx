@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../../common/api/api";
 import logoImage from "../../common/assets/logo.svg";
-import { MdAdminPanelSettings, MdAnalytics, MdArrowBack, MdArrowForward, MdAutorenew, MdBusiness, MdCheck as Check, MdCheckCircle, MdClose, MdDarkMode, MdDraw, MdEmail, MdErrorOutline, MdFactCheck, MdGroups, MdHourglassTop, MdLightMode, MdLocationOn, MdPerson, MdRedeem, MdSecurity, MdVerifiedUser, MdVisibility, MdVisibilityOff, MdWhatsapp } from "react-icons/md";
+import { MdAdminPanelSettings, MdAnalytics, MdArrowForward, MdAutorenew, MdBusiness, MdCheck as Check, MdCheckCircle, MdClose, MdDarkMode, MdDraw, MdEmail, MdErrorOutline, MdFactCheck, MdGroups, MdHourglassTop, MdLightMode, MdLocationOn, MdPerson, MdRedeem, MdSecurity, MdVerifiedUser, MdVisibility, MdVisibilityOff, MdWhatsapp } from "react-icons/md";
 
 type FormData = Record<string, string | boolean>;
 type StateOption = { state_id: number; state_name: string };
@@ -14,6 +14,34 @@ type OtpState = { sessionId: string; otp: string; sent: boolean; verified: boole
 const emptyOtpState = (): OtpState => ({ sessionId: "", otp: "", sent: false, verified: false, verificationToken: "", loading: false, message: "", error: "" });
 const ENABLE_WHATSAPP_VERIFICATION = true;
 const REQUIRE_ZOHO_SIGNING = String(import.meta.env.VITE_REQUIRE_ZOHO_SIGNING ?? "true").toLowerCase() !== "false";
+const ONBOARDING_RETURN_URL_KEY = "rp-client-onboarding-return-url";
+
+const onboardingReturnUrl = () => {
+  const configuredOrigins = String(import.meta.env.VITE_ONBOARDING_RETURN_ORIGINS || "https://rewardplanners.com,https://www.rewardplanners.com")
+    .split(",").map((value) => value.trim()).filter(Boolean);
+  const allowedOrigins = new Set([window.location.origin, ...configuredOrigins]);
+  const validate = (candidate: string | null) => {
+    if (!candidate) return "";
+    try {
+      const url = new URL(candidate, window.location.origin);
+      return allowedOrigins.has(url.origin) && ["http:", "https:"].includes(url.protocol) ? url.toString() : "";
+    } catch { return ""; }
+  };
+
+  const requested = validate(new URLSearchParams(window.location.search).get("returnUrl"));
+  if (requested) {
+    sessionStorage.setItem(ONBOARDING_RETURN_URL_KEY, requested);
+    return requested;
+  }
+  const saved = validate(sessionStorage.getItem(ONBOARDING_RETURN_URL_KEY));
+  if (saved) return saved;
+  const referrer = validate(document.referrer);
+  if (referrer) {
+    sessionStorage.setItem(ONBOARDING_RETURN_URL_KEY, referrer);
+    return referrer;
+  }
+  return "https://rewardplanners.com/";
+};
 
 const steps = [
   { title: "Company", icon: MdBusiness },
@@ -59,6 +87,7 @@ const fields: Record<number, Array<{ name: string; label: string; type?: string;
 
 export default function ClientOnboarding() {
   const navigate = useNavigate();
+  const exitUrl = useMemo(onboardingReturnUrl, []);
   const saved = useMemo(() => {
     try {
       const parsed = JSON.parse(localStorage.getItem("rp-client-onboarding") || "null");
@@ -620,9 +649,8 @@ export default function ClientOnboarding() {
     return <div className={`rp-modern min-h-screen ${darkMode ? "bg-[#090b12] text-white" : "bg-[#fbfafc] text-[#15131a]"}`}>
       <style>{modernStyles}</style>
       <div className="mx-auto flex min-h-screen max-w-[1280px] flex-col px-5 sm:px-8 lg:px-10">
-        <header className={`flex h-[76px] items-center justify-between border-b ${darkMode ? "border-white/8" : "border-black/5"}`}>
-          <Link to="/login" className={`inline-flex items-center gap-3 text-sm font-medium transition ${darkMode ? "text-white/60 hover:text-white" : "text-black/55 hover:text-black"}`}><MdArrowBack className="text-lg" /> Back to login</Link>
-          <div className="flex items-center gap-3"><span className={`hidden text-xs font-medium sm:block ${darkMode ? "text-white/35" : "text-black/35"}`}>Already have an account?</span><button type="button" onClick={() => setDarkMode(v => !v)} className={`relative inline-flex h-9 w-16 items-center justify-between rounded-full border p-1 shadow-sm transition duration-200 hover:-translate-y-0.5 ${darkMode ? "border-white/10 bg-white/[.06] shadow-black/10" : "border-violet-200/70 bg-violet-100 shadow-violet-200/40"}`} aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"} title={darkMode ? "Switch to light mode" : "Switch to dark mode"}><span className={`absolute left-1 top-1 h-7 w-7 rounded-full shadow-sm transition-transform duration-300 ${darkMode ? "translate-x-7 bg-[#292330]" : "translate-x-0 bg-white"}`}/><MdLightMode className={`relative z-10 ml-1 text-sm transition ${darkMode ? "text-white/30" : "text-amber-500"}`}/><MdDarkMode className={`relative z-10 mr-1 text-sm transition ${darkMode ? "text-violet-200" : "text-violet-400/50"}`}/></button></div>
+        <header className={`flex h-[76px] items-center justify-end border-b ${darkMode ? "border-white/8" : "border-black/5"}`}>
+          <button type="button" onClick={() => setDarkMode(v => !v)} className={`relative inline-flex h-9 w-16 items-center justify-between rounded-full border p-1 shadow-sm transition duration-200 hover:-translate-y-0.5 ${darkMode ? "border-white/10 bg-white/[.06] shadow-black/10" : "border-violet-200/70 bg-violet-100 shadow-violet-200/40"}`} aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"} title={darkMode ? "Switch to light mode" : "Switch to dark mode"}><span className={`absolute left-1 top-1 h-7 w-7 rounded-full shadow-sm transition-transform duration-300 ${darkMode ? "translate-x-7 bg-[#292330]" : "translate-x-0 bg-white"}`}/><MdLightMode className={`relative z-10 ml-1 text-sm transition ${darkMode ? "text-white/30" : "text-amber-500"}`}/><MdDarkMode className={`relative z-10 mr-1 text-sm transition ${darkMode ? "text-violet-200" : "text-violet-400/50"}`}/></button>
         </header>
         <main className="grid flex-1 items-center gap-16 py-14 lg:grid-cols-[1.05fr_.95fr] lg:py-20">
           <section>
@@ -649,7 +677,7 @@ export default function ClientOnboarding() {
       <div className="relative mx-auto flex min-h-screen max-w-[1500px] flex-col px-4 sm:px-6 lg:px-8">
         <header className={`relative flex h-[76px] shrink-0 items-center justify-between border-b px-3 backdrop-blur-md sm:px-4 ${darkMode ? "border-white/10 bg-white/[.018]" : "border-purple-950/[.08] bg-white/35"}`}>
           <div className="flex min-w-0 items-center gap-3"><Link to="/login" className="group flex items-center gap-3"><span className={`grid h-10 w-10 place-items-center rounded-xl transition duration-300 group-hover:-rotate-3 group-hover:scale-105 ${darkMode ? "bg-white shadow-[0_6px_18px_rgba(0,0,0,.18)]" : "bg-[#17131d] shadow-[0_6px_18px_rgba(23,19,29,.16)]"}`}><img src={logoImage} alt="Reward Planners" className={`h-6 w-6 object-contain ${darkMode ? "" : "brightness-0 invert"}`}/></span><span><span className="rp-display block text-sm font-extrabold tracking-[-.025em]">Reward Planners</span><span className={`hidden text-[10px] font-medium sm:block ${darkMode?"text-white/30":"text-black/35"}`}>Rewards that make work better</span></span></Link><span className={`hidden h-6 w-px md:block ${darkMode?"bg-white/10":"bg-black/10"}`}/><span className={`hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[.1em] md:inline-flex ${darkMode?"border-violet-300/10 bg-violet-400/10 text-violet-200":"border-violet-100 bg-gradient-to-r from-violet-50 to-pink-50 text-violet-700"}`}><MdBusiness className="text-sm"/> Client onboarding</span></div>
-          <div className="flex items-center gap-2.5"><button type="button" onClick={() => setDarkMode(v=>!v)} className={`relative inline-flex h-9 w-16 items-center justify-between rounded-full border p-1 shadow-sm transition duration-200 hover:-translate-y-0.5 ${darkMode ? "border-white/10 bg-white/[.06] shadow-black/10" : "border-violet-200/70 bg-violet-100 shadow-violet-200/40"}`} aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"} title={darkMode ? "Switch to light mode" : "Switch to dark mode"}><span className={`absolute top-1 h-7 w-7 rounded-full shadow-sm transition-transform duration-300 ${darkMode ? "translate-x-7 bg-[#292330]" : "translate-x-0 bg-white"}`}/><MdLightMode className={`relative z-10 ml-1 text-sm transition ${darkMode ? "text-white/30" : "text-amber-500"}`}/><MdDarkMode className={`relative z-10 mr-1 text-sm transition ${darkMode ? "text-violet-200" : "text-violet-400/50"}`}/></button><Link to="/login" className={`grid h-9 w-9 place-items-center rounded-xl border text-xl shadow-sm transition duration-200 hover:-translate-y-0.5 ${darkMode ? "border-white/15 bg-white/[.08] text-white/80 shadow-black/10 hover:border-white/25 hover:bg-white/[.14] hover:text-white" : "border-black/8 bg-white/80 text-black/55 shadow-black/[.04] hover:border-pink-200 hover:bg-pink-50 hover:text-pink-700"}`} aria-label="Close onboarding" title="Exit onboarding"><MdClose/></Link></div>
+          <div className="flex items-center gap-2.5"><button type="button" onClick={() => setDarkMode(v=>!v)} className={`relative inline-flex h-9 w-16 items-center justify-between rounded-full border p-1 shadow-sm transition duration-200 hover:-translate-y-0.5 ${darkMode ? "border-white/10 bg-white/[.06] shadow-black/10" : "border-violet-200/70 bg-violet-100 shadow-violet-200/40"}`} aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"} title={darkMode ? "Switch to light mode" : "Switch to dark mode"}><span className={`absolute top-1 h-7 w-7 rounded-full shadow-sm transition-transform duration-300 ${darkMode ? "translate-x-7 bg-[#292330]" : "translate-x-0 bg-white"}`}/><MdLightMode className={`relative z-10 ml-1 text-sm transition ${darkMode ? "text-white/30" : "text-amber-500"}`}/><MdDarkMode className={`relative z-10 mr-1 text-sm transition ${darkMode ? "text-violet-200" : "text-violet-400/50"}`}/></button><a href={exitUrl} className={`grid h-9 w-9 place-items-center rounded-xl border text-xl shadow-sm transition duration-200 hover:-translate-y-0.5 ${darkMode ? "border-white/15 bg-white/[.08] text-white/80 shadow-black/10 hover:border-white/25 hover:bg-white/[.14] hover:text-white" : "border-black/8 bg-white/80 text-black/55 shadow-black/[.04] hover:border-pink-200 hover:bg-pink-50 hover:text-pink-700"}`} aria-label="Close onboarding and return to website" title="Return to website"><MdClose/></a></div>
         </header>
         <div className="flex w-full gap-1.5 py-1" aria-label={`${progress}% onboarding complete`}>{steps.slice(0,-1).map((item,index)=><span key={item.title} className={`h-1 flex-1 overflow-hidden rounded-full transition-colors duration-500 ${index<=step ? "bg-gradient-to-r from-violet-600 to-pink-500" : darkMode?"bg-white/[.08]":"bg-violet-100/80"}`} />)}</div>
 

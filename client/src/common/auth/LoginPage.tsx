@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { AxiosError } from "axios";
-import { AlertCircle, ArrowRight, Building2, CheckCircle2, Eye, EyeOff, LockKeyhole, Mail } from "lucide-react";
+import { AlertCircle, ArrowRight, CheckCircle2, Eye, EyeOff, LockKeyhole, Mail } from "lucide-react";
 import { useAuth } from "./useAuth";
 import AuthShell from "./AuthShell";
 
@@ -72,11 +72,6 @@ export default function LoginPage() {
 
       <p className="mt-6 text-center text-sm text-slate-500">New here? <Link to="/register" className="font-bold text-purple-700 hover:text-pink-600">Create an account</Link></p>
 
-      <Link to="/client-onboarding" className="mt-7 flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3.5 transition hover:border-purple-200 hover:bg-purple-50/50">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-purple-100 text-purple-700"><Building2 className="h-5 w-5" /></span>
-        <span className="min-w-0 flex-1"><span className="block text-sm font-bold text-slate-800">Register an organization</span><span className="block text-xs text-slate-500">Set up a new organization workspace</span></span>
-        <ArrowRight className="h-4 w-4 text-slate-400" />
-      </Link>
     </AuthShell>
   );
 }
