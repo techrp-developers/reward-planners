@@ -90,7 +90,27 @@ const getCategoryName = (category) =>
   category?.operator_category_name;
 
 const getCategoryId = (category) =>
-  category?.category_id ?? category?.categoryId ?? category?.operator_category;
+  category?.operator_category_id ??
+  category?.category_id ??
+  category?.categoryId ??
+  category?.operator_category;
+
+const getOperatorCategoryId = (operator) =>
+  operator?.operator_category ??
+  operator?.operator_category_id ??
+  operator?.category_id ??
+  operator?.categoryId;
+
+const normalizeCategory = (category) => ({
+  ...category,
+  category_id: getCategoryId(category),
+  category_name: getCategoryName(category),
+});
+
+const normalizeOperator = (operator) => ({
+  ...operator,
+  operator_category: getOperatorCategoryId(operator),
+});
 
 const isEnabledCategory = (category) =>
   ENABLED_CATEGORY_NAMES.has(normalizeCategoryName(getCategoryName(category)));
@@ -188,7 +208,9 @@ exports.getCategories = async () => {
 
   return {
     ...data,
-    data: (Array.isArray(data?.data) ? data.data : []).filter(isEnabledCategory),
+    data: (Array.isArray(data?.data) ? data.data : [])
+      .filter(isEnabledCategory)
+      .map(normalizeCategory),
   };
 };
 
@@ -203,9 +225,9 @@ exports.getOperators = async (category_id) => {
     getEnabledCategoryIds(),
   ]);
 
-  let operators = (Array.isArray(data?.data) ? data.data : []).filter((op) =>
-    enabledCategoryIds.has(String(op.operator_category)),
-  );
+  let operators = (Array.isArray(data?.data) ? data.data : [])
+    .map(normalizeOperator)
+    .filter((op) => enabledCategoryIds.has(String(op.operator_category)));
 
   if (category_id) {
     operators = operators.filter((op) => op.operator_category == category_id);
