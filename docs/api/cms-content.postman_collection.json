@@ -1,0 +1,288 @@
+{
+  "info": {
+    "name": "Reward Planners - CMS Content Zones",
+    "_postman_id": "cms-content-zones-collection",
+    "description": "Covers server/routes/contentRoutes.js (mounted at /content) and server/app/common/routes/cmsRoute.js (mounted at /v1/cms). Set the {{baseUrl}} variable to your running server, e.g. http://localhost:5000.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000" },
+    { "key": "contentId", "value": "1" },
+    { "key": "imageId", "value": "1" },
+    { "key": "moduleKey", "value": "product" },
+    { "key": "authToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Public - Resolved (mobile/storefront, no auth)",
+      "item": [
+        {
+          "name": "GET Resolved Navbar (all modules)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/content/resolved/navbar" }
+        },
+        {
+          "name": "GET Resolved Zones - product",
+          "request": { "method": "GET", "url": "{{baseUrl}}/content/resolved/product" }
+        },
+        {
+          "name": "GET Resolved Zones - service",
+          "request": { "method": "GET", "url": "{{baseUrl}}/content/resolved/service" }
+        },
+        {
+          "name": "GET Resolved Zones - payment",
+          "request": { "method": "GET", "url": "{{baseUrl}}/content/resolved/payment" }
+        },
+        {
+          "name": "GET Resolved Zones - dineout",
+          "request": { "method": "GET", "url": "{{baseUrl}}/content/resolved/dineout" }
+        },
+        {
+          "name": "GET Resolved Zones - mobile_dashboard",
+          "request": { "method": "GET", "url": "{{baseUrl}}/content/resolved/mobile_dashboard" }
+        },
+        {
+          "name": "GET Resolved Modules (navbar icons)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/content/resolved/modules" }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Content Entries (NO AUTH CURRENTLY - see note)",
+      "description": "As of commit cd9edca ('content remove auth'), none of these routes require a token. Test them anyway to confirm what should be locked back down.",
+      "item": [
+        {
+          "name": "GET List Entries",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/content/entries?module={{moduleKey}}&zone=navbar_background&status=&search=&sortBy=&sortDir=&page=1&pageSize=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["content", "entries"],
+              "query": [
+                { "key": "module", "value": "{{moduleKey}}" },
+                { "key": "zone", "value": "navbar_background" },
+                { "key": "status", "value": "" },
+                { "key": "search", "value": "" },
+                { "key": "sortBy", "value": "" },
+                { "key": "sortDir", "value": "" },
+                { "key": "page", "value": "1" },
+                { "key": "pageSize", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET Entry by ID",
+          "request": { "method": "GET", "url": "{{baseUrl}}/content/entries/{{contentId}}" }
+        },
+        {
+          "name": "POST Create Entry (color)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/content/entries",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "module", "value": "product", "type": "text" },
+                { "key": "zone", "value": "navbar_background", "type": "text" },
+                { "key": "content_type", "value": "color", "type": "text" },
+                { "key": "color_value", "value": "#852BAF", "type": "text" },
+                { "key": "title", "value": "Test Color Entry", "type": "text" },
+                { "key": "is_published", "value": "true", "type": "text" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST Create Entry (image)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/content/entries",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "module", "value": "product", "type": "text" },
+                { "key": "zone", "value": "promotional_banner", "type": "text" },
+                { "key": "content_type", "value": "image", "type": "text" },
+                { "key": "title", "value": "Test Image Entry", "type": "text" },
+                { "key": "cta_text", "value": "Shop Now", "type": "text" },
+                { "key": "redirect_link", "value": "rewardplanners://product/offers", "type": "text" },
+                { "key": "is_published", "value": "true", "type": "text" },
+                { "key": "image", "type": "file", "src": [] }
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST Create Entry (offers_banner, multi-image)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/content/entries",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "module", "value": "product", "type": "text" },
+                { "key": "zone", "value": "offers_banner", "type": "text" },
+                { "key": "content_type", "value": "image", "type": "text" },
+                { "key": "title", "value": "Test Offers Campaign", "type": "text" },
+                { "key": "is_published", "value": "true", "type": "text" },
+                { "key": "images", "type": "file", "src": [] },
+                { "key": "images", "type": "file", "src": [] }
+              ]
+            }
+          }
+        },
+        {
+          "name": "PUT Update Entry",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/content/entries/{{contentId}}",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "title", "value": "Updated Title", "type": "text" },
+                { "key": "color_value", "value": "#25103d", "type": "text" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST Duplicate Entry",
+          "request": { "method": "POST", "url": "{{baseUrl}}/content/entries/{{contentId}}/duplicate" }
+        },
+        {
+          "name": "PATCH Deactivate Entry Now",
+          "request": { "method": "PATCH", "url": "{{baseUrl}}/content/entries/{{contentId}}/deactivate" }
+        },
+        {
+          "name": "DELETE Entry",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/content/entries/{{contentId}}" }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Offers Banner Images (NO AUTH CURRENTLY)",
+      "item": [
+        {
+          "name": "POST Add Offer Images",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/content/entries/{{contentId}}/images",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "images", "type": "file", "src": [] }
+              ]
+            }
+          }
+        },
+        {
+          "name": "PATCH Reorder Offer Images",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/content/entries/{{contentId}}/images/reorder",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"images\": [\n    { \"image_id\": 1, \"sort_order\": 0 },\n    { \"image_id\": 2, \"sort_order\": 1 }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "DELETE Offer Image",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/content/entries/{{contentId}}/images/{{imageId}}" }
+        },
+        {
+          "name": "PATCH Deactivate Offer Image",
+          "request": { "method": "PATCH", "url": "{{baseUrl}}/content/entries/{{contentId}}/images/{{imageId}}/deactivate" }
+        },
+        {
+          "name": "PATCH Activate Offer Image",
+          "request": { "method": "PATCH", "url": "{{baseUrl}}/content/entries/{{contentId}}/images/{{imageId}}/activate" }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Module Icons (NO AUTH CURRENTLY)",
+      "item": [
+        {
+          "name": "GET List Modules",
+          "request": { "method": "GET", "url": "{{baseUrl}}/content/modules" }
+        },
+        {
+          "name": "POST Create Module",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/content/modules",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "module_key", "value": "wallet", "type": "text" },
+                { "key": "label", "value": "Wallet", "type": "text" },
+                { "key": "normal_color", "value": "#6B7280", "type": "text" },
+                { "key": "active_color", "value": "#852BAF", "type": "text" },
+                { "key": "route_key", "value": "WalletModule", "type": "text" },
+                { "key": "sort_order", "value": "5", "type": "text" },
+                { "key": "icon", "type": "file", "src": [] },
+                { "key": "active_icon", "type": "file", "src": [] }
+              ]
+            }
+          }
+        },
+        {
+          "name": "PUT Update Module Icon",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/content/modules/{{moduleKey}}",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "icon", "type": "file", "src": [] }
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE Module",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/content/modules/{{moduleKey}}" }
+        }
+      ]
+    },
+    {
+      "name": "v1/cms - Combined Mobile Content + Dashboard Layouts",
+      "item": [
+        {
+          "name": "GET Mobile Content (all modules)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/v1/cms/mobile-content" }
+        },
+        {
+          "name": "GET Mobile Content (single module)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/v1/cms/mobile-content?module=product" }
+        },
+        {
+          "name": "GET Mobile Content (selected modules)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/v1/cms/mobile-content?modules=mobile_dashboard,product,service" }
+        },
+        {
+          "name": "GET Dashboard Layout",
+          "request": { "method": "GET", "url": "{{baseUrl}}/v1/cms/dashboard-layouts/main" }
+        },
+        {
+          "name": "PUT Publish Dashboard Layout (requires admin auth token)",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/v1/cms/dashboard-layouts/main",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sections\": [\n    { \"key\": \"header\" },\n    { \"key\": \"birthdays\" }\n  ]\n}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
