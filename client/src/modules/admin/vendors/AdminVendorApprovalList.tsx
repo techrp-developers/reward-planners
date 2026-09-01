@@ -16,14 +16,14 @@ interface VendorItem {
   vendor_id: number;
   company_name: string;
   full_name: string;
-  status: "sent_for_approval" | "approved" | "rejected";
+  status: "sent_for_approval" | "approved" | "rejected" | "resubmission";
   rejection_reason?: string;
   email: string;
   phone?: string;
   submitted_at: string;
 }
 
-type VendorFilter = "All" | "sent_for_approval" | "approved" | "rejected";
+type VendorFilter = "All" | "sent_for_approval" | "approved" | "rejected" | "resubmission";
 
 // const API_BASE = import.meta.env.VITE_API_URL;
 import { api } from "../../../common/api/api";
@@ -42,6 +42,14 @@ const StatusChip = ({ status }: { status: VendorItem["status"] }) => {
     return (
       <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold border rounded-full text-rose-700 bg-rose-50 border-rose-200">
         <FaTimesCircle className="mr-1" /> Rejected
+      </span>
+    );
+  }
+
+  if (status === "resubmission") {
+    return (
+      <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold border rounded-full text-amber-700 bg-amber-50 border-amber-200">
+        <FaClock className="mr-1" /> Resubmission
       </span>
     );
   }
@@ -180,6 +188,7 @@ export default function VendorApprovalList() {
               { label: "Pending", value: "sent_for_approval" },
               { label: "Approved", value: "approved" },
               { label: "Rejected", value: "rejected" },
+              { label: "Resubmission", value: "resubmission" },
             ].map(({ label, value }) => (
               <button
                 key={value}
@@ -220,6 +229,7 @@ export default function VendorApprovalList() {
               <option value="All">All Status</option>
               <option value="approved">Approved</option>
               <option value="rejected">Rejected</option>
+              <option value="resubmission">Resubmission</option>
               <option value="sent_for_approval">Pending</option>
             </select>
 

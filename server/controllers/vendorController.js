@@ -245,7 +245,7 @@ class VendorController {
 
       status = status.toLowerCase().trim();
 
-      const allowed = ["approved", "rejected", "pending"];
+      const allowed = ["approved", "rejected", "pending", "resubmission"];
       if (!allowed.includes(status)) {
         return res.status(400).json({
           success: false,

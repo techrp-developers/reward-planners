@@ -14,6 +14,7 @@ import {
   FaCommentAlt,
   FaEye,
   FaFilePdf,
+  FaClock,
 } from "react-icons/fa";
 import { FiChevronLeft, FiShield } from "react-icons/fi";
 import Swal from "sweetalert2";
@@ -281,7 +282,7 @@ export default function VendorApprovalForm() {
   const vendorId = id;
 
   const [vendorStatus, setVendorStatus] = useState<
-    "pending" | "sent_for_approval" | "approved" | "rejected" | null
+    "pending" | "sent_for_approval" | "approved" | "rejected" | "resubmission" | null
   >(null);
   const [documentMap, setDocumentMap] = useState<Record<string, Record<string, string>>>({});
   const [formData, setFormData] = useState<VendorOnboardingData | null>(null);
@@ -317,11 +318,16 @@ export default function VendorApprovalForm() {
     fetchVendorData();
   }, [vendorId]);
 
-  const handleFinalDecision = async (status: "approved" | "rejected") => {
-    if (status === "rejected" && rejectionReason.trim() === "") {
+  const handleFinalDecision = async (
+    status: "approved" | "rejected" | "resubmission",
+    isResubmissionRequest = false,
+  ) => {
+    if ((status === "rejected" || status === "resubmission") && rejectionReason.trim() === "") {
       await Swal.fire({
         title: "Reason Required",
-        text: "Please provide a rejection reason before rejecting the vendor.",
+        text: isResubmissionRequest
+          ? "Please explain what the vendor needs to update before resubmitting."
+          : "Please provide a rejection reason before rejecting the vendor.",
         icon: "warning",
         customClass: { popup: "rounded-2xl" },
       });
@@ -329,13 +335,23 @@ export default function VendorApprovalForm() {
     }
 
     const confirm = await Swal.fire({
-      title: status === "approved" ? "Approve Vendor?" : "Reject Vendor?",
+      title: status === "approved"
+        ? "Approve Vendor?"
+        : isResubmissionRequest
+          ? "Request Resubmission?"
+          : "Reject Vendor?",
       text: status === "approved"
         ? "This vendor will be approved and can start selling on the platform."
-        : "This vendor will be rejected with the provided reason.",
+        : isResubmissionRequest
+          ? "The vendor's onboarding form will be reopened so they can make the requested changes and submit it again."
+          : "This vendor will be rejected with the provided reason.",
       icon: status === "approved" ? "success" : "warning",
       showCancelButton: true,
-      confirmButtonText: status === "approved" ? "Yes, Approve" : "Yes, Reject",
+      confirmButtonText: status === "approved"
+        ? "Yes, Approve"
+        : isResubmissionRequest
+          ? "Send for Resubmission"
+          : "Yes, Reject",
       cancelButtonText: "Cancel",
       confirmButtonColor: status === "approved" ? "#852BAF" : "#DC2626",
       cancelButtonColor: "#9CA3AF",
@@ -347,7 +363,7 @@ export default function VendorApprovalForm() {
 
     const payload = {
       status,
-      rejectionReason: status === "rejected" ? rejectionReason : null,
+      rejectionReason: status === "rejected" || status === "resubmission" ? rejectionReason : null,
     };
 
     setIsSubmitting(true);
@@ -356,8 +372,10 @@ export default function VendorApprovalForm() {
       if (!res.data.success) throw new Error(res.data.message || "Failed to update vendor status");
 
       await Swal.fire({
-        title: status === "approved" ? "Approved!" : "Rejected!",
-        text: `Vendor status updated to ${status}.`,
+        title: status === "approved" ? "Approved!" : isResubmissionRequest ? "Resubmission Requested!" : "Rejected!",
+        text: isResubmissionRequest
+          ? "The vendor can now update and resubmit the onboarding form."
+          : `Vendor status updated to ${status}.`,
         icon: "success",
         timer: 1500,
         showConfirmButton: false,
@@ -508,13 +526,44 @@ export default function VendorApprovalForm() {
 
         {(vendorStatus === "approved" || vendorStatus === "rejected") && (
           <div
-            className={`mt-4 px-4 py-3 rounded-xl text-sm font-bold ${
+            className={`mt-4 flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold ${
               vendorStatus === "approved"
                 ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                 : "bg-red-50 text-red-700 border border-red-200"
             }`}
           >
-            {vendorStatus === "approved" ? "✓ This vendor has been approved." : "✗ This vendor has been rejected."}
+            {vendorStatus === "approved" ? (
+              <>
+                <FaCheckCircle aria-hidden="true" className="shrink-0" />
+                <span>This vendor has been approved.</span>
+              </>
+            ) : (
+              <>
+                <FaTimesCircle aria-hidden="true" className="shrink-0" />
+                <span>This vendor has been rejected.</span>
+              </>
+            )}
+          </div>
+        )}
+
+        {vendorStatus === "resubmission" && (
+          <div className="mt-4 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-700">
+            <FaClock aria-hidden="true" className="shrink-0" />
+            <span>Changes have been requested from this vendor.</span>
+          </div>
+        )}
+
+        {vendorStatus === "approved" && (
+          <div className="flex justify-end mt-3">
+            <button
+              type="button"
+              onClick={() => handleFinalDecision("resubmission", true)}
+              disabled={isSubmitting}
+              className="flex items-center justify-center gap-2 px-6 py-3 text-sm font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-2xl transition-all cursor-pointer disabled:opacity-50 active:scale-95"
+            >
+              <FaCommentAlt size={14} />
+              {isSubmitting ? "Sending…" : "Request Resubmission"}
+            </button>
           </div>
         )}
       </div>

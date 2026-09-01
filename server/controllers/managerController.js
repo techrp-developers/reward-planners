@@ -319,7 +319,7 @@ class ManagerController {
     try {
       const { status = "", fromDate, toDate, search = "" } = req.query;
 
-      const allowedStatuses = ["", "sent_for_approval", "approved", "rejected", "deleted"];
+      const allowedStatuses = ["", "sent_for_approval", "approved", "rejected", "resubmission", "deleted"];
       if (!allowedStatuses.includes(status)) {
         return res.status(400).json({ success: false, message: "Invalid vendor status" });
       }

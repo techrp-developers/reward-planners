@@ -20,6 +20,12 @@ async function notifyVendorStatusChange(vendor, status) {
     variables.rejectionReason = vendor.rejection_reason;
   }
 
+  if (status === "resubmission") {
+    template = "vendor-resubmission";
+    subject = "Updates Requested for Your Vendor Onboarding";
+    variables.rejectionReason = vendor.rejection_reason;
+  }
+
   if (status === "pending" || status === "sent_for_approval") {
     template = "vendor-pending";
     subject = "Your Vendor Onboarding Is Under Review";

@@ -446,7 +446,7 @@ export default function Onboarding() {
   const [states, setStates] = useState<State[]>([]);
 
   const [vendorStatus, setVendorStatus] = useState<
-    "pending" | "sent_for_approval" | "approved" | "rejected" | null
+    "pending" | "sent_for_approval" | "approved" | "rejected" | "resubmission" | null
   >(null);
 
   const [rejectionReason, setRejectionReason] = useState("");
@@ -994,6 +994,22 @@ export default function Onboarding() {
             )}
           </p>
           <p className="mt-2">Please fix the issue and resubmit the form.</p>
+        </div>
+      )}
+
+      {vendorStatus === "resubmission" && (
+        <div className="p-6 mb-6 text-amber-800 bg-amber-100 border border-amber-300 rounded-xl">
+          <h3 className="text-lg font-semibold">Changes Requested</h3>
+          <p className="mt-2">
+            Your vendor manager has requested updates to your onboarding form.
+            {rejectionReason && (
+              <>
+                <br />
+                <span className="font-medium">Requested changes:</span> {rejectionReason}
+              </>
+            )}
+          </p>
+          <p className="mt-2">Please make the requested changes and resubmit the form.</p>
         </div>
       )}
 
