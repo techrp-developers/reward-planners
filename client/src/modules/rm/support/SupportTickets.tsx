@@ -7,6 +7,8 @@ import {
   FiSearch,
   FiPaperclip,
   FiHelpCircle,
+  FiEye,
+  FiX,
 } from "react-icons/fi";
 import Swal from "sweetalert2";
 import { api } from "../../../common/api/api";
@@ -104,6 +106,7 @@ export default function SupportTickets() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [updatingId, setUpdatingId] = useState<number | null>(null);
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const debouncedSearch = useDebounce(search.trim(), 350);
 
   async function loadTickets() {
@@ -141,6 +144,9 @@ export default function SupportTickets() {
     try {
       await api.put(`/manager/support-tickets/${ticket.ticket_id}/status`, { status });
       setTickets((prev) => prev.map((t) => (t.ticket_id === ticket.ticket_id ? { ...t, status } : t)));
+      setSelectedTicket((current) =>
+        current?.ticket_id === ticket.ticket_id ? { ...current, status } : current,
+      );
     } catch (err) {
       console.error("Error updating ticket status:", err);
       await Swal.fire({
@@ -287,6 +293,12 @@ export default function SupportTickets() {
 
                     <td className="px-6 py-4">
                       <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          onClick={() => setSelectedTicket(ticket)}
+                          className="flex items-center gap-1.5 rounded-xl border border-purple-200 px-3.5 py-2 text-xs font-bold text-[#852BAF] transition-all hover:bg-purple-50 active:scale-95"
+                        >
+                          <FiEye size={14} /> View
+                        </button>
                         {nextActions[ticket.status].map((action) => (
                           <button
                             key={action.status}
@@ -320,6 +332,93 @@ export default function SupportTickets() {
           </div>
         )}
       </div>
+
+      {selectedTicket && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-950/50 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="support-ticket-title"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setSelectedTicket(null);
+          }}
+        >
+          <section className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+            <header className="sticky top-0 z-10 flex items-start justify-between border-b border-gray-100 bg-white px-6 py-5">
+              <div className="min-w-0 pr-4">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-extrabold uppercase tracking-wider text-[#852BAF]">
+                    Ticket #{selectedTicket.ticket_id}
+                  </span>
+                  <StatusChip status={selectedTicket.status} />
+                </div>
+                <h2 id="support-ticket-title" className="text-xl font-extrabold text-gray-900">
+                  {selectedTicket.subject}
+                </h2>
+              </div>
+              <button
+                onClick={() => setSelectedTicket(null)}
+                aria-label="Close ticket details"
+                className="shrink-0 rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+              >
+                <FiX size={20} />
+              </button>
+            </header>
+
+            <div className="space-y-6 p-6">
+              <div>
+                <h3 className="mb-2 text-xs font-extrabold uppercase tracking-wider text-gray-400">Description</h3>
+                <p className="whitespace-pre-wrap rounded-xl bg-gray-50 p-4 text-sm leading-6 text-gray-700">
+                  {selectedTicket.description || "No description provided."}
+                </p>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                {[
+                  ["Customer", selectedTicket.user_name || "Unknown"],
+                  ["Email", selectedTicket.user_email || "Not provided"],
+                  ["Phone", selectedTicket.user_phone || "Not provided"],
+                  ["Category", selectedTicket.category_name || "Not specified"],
+                  ["Support module", selectedTicket.support_module.replaceAll("_", " ")],
+                  ["Reference", selectedTicket.reference_label || selectedTicket.reference_id || "Not provided"],
+                  ["Created", new Date(selectedTicket.created_at).toLocaleString()],
+                  ["Last updated", new Date(selectedTicket.updated_at).toLocaleString()],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-xl border border-gray-100 p-4">
+                    <p className="text-[11px] font-extrabold uppercase tracking-wider text-gray-400">{label}</p>
+                    <p className="mt-1 break-words text-sm font-semibold capitalize text-gray-800">{value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {selectedTicket.attachment_url && (
+                <a
+                  href={selectedTicket.attachment_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 rounded-xl border border-purple-200 px-4 py-2.5 text-sm font-bold text-[#852BAF] hover:bg-purple-50"
+                >
+                  <FiPaperclip /> Open attachment
+                </a>
+              )}
+
+              <div className="flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 pt-5">
+                {nextActions[selectedTicket.status].map((action) => (
+                  <button
+                    key={action.status}
+                    disabled={updatingId === selectedTicket.ticket_id}
+                    onClick={() => void updateStatus(selectedTicket, action.status)}
+                    className="rounded-xl px-4 py-2.5 text-sm font-bold text-white transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }}
+                  >
+                    {updatingId === selectedTicket.ticket_id ? "Updating..." : action.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
