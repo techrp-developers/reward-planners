@@ -56,6 +56,28 @@ async function createClientOnboarding(rawData, { signing = null, signingState = 
     const [[state]] = await connection.execute("SELECT state_id FROM states WHERE state_id = ? AND status = 1 LIMIT 1", [data.state]);
     if (!state) throw Object.assign(new Error("Select a valid active state."), { status: 400 });
 
+    const [[existingOnboarding]] = await connection.execute(
+      `SELECT a.status, a.review_due_at
+         FROM eusers u
+         INNER JOIN hr_account_approvals a ON a.user_id = u.user_id
+         INNER JOIN companies c ON c.company_id = a.company_id
+        WHERE LOWER(TRIM(u.email)) = ?
+          AND LOWER(TRIM(c.company_email)) = ?
+          AND EXISTS (
+            SELECT 1 FROM company_users cu
+             WHERE cu.company_id = a.company_id AND LOWER(TRIM(cu.email)) = ?
+          )
+        LIMIT 1`,
+      [data.adminEmail, data.officialEmail, data.repEmail],
+    );
+    if (existingOnboarding) {
+      throw Object.assign(new Error("This organization onboarding application has already been submitted."), {
+        status: 409,
+        code: "CLIENT_ONBOARDING_EXISTS",
+        data: { status: existingOnboarding.status, reviewDueAt: existingOnboarding.review_due_at },
+      });
+    }
+
     const [duplicates] = await connection.execute(
       `SELECT 'company_email' AS source, LOWER(TRIM(company_email)) AS duplicate_email
          FROM companies WHERE LOWER(TRIM(company_email)) = ?
@@ -75,7 +97,12 @@ async function createClientOnboarding(rawData, { signing = null, signingState = 
         admin_directory_email: "HR administrator email",
       };
       const conflicts = [...new Set(duplicates.map((item) => labels[item.source] || "email"))];
-      throw Object.assign(new Error(`The ${conflicts.join(" and ")} already ${conflicts.length === 1 ? "exists" : "exist"}. Use a different email or contact an administrator to recover the existing account.`), { status: 409 });
+      const conflictingEmails = [...new Set(duplicates.map((item) => String(item.duplicate_email || "").trim()).filter(Boolean))];
+      throw Object.assign(new Error(`The ${conflicts.join(" and ")} ${conflicts.length === 1 ? "already exists" : "already exist"}${conflictingEmails.length ? ` (${conflictingEmails.join(", ")})` : ""}. Use a different email or contact an administrator to recover the existing account.`), {
+        status: 409,
+        code: "CLIENT_ONBOARDING_EMAIL_CONFLICT",
+        data: { conflicts: duplicates.map((item) => ({ source: item.source, email: item.duplicate_email })) },
+      });
     }
 
     const [companyResult] = await connection.execute(

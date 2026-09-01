@@ -169,7 +169,12 @@ router.post("/submit", onboardingSubmitLimiter, async (req, res) => {
     return res.status(201).json({ success: true, message: "Organization onboarded successfully.", data: result });
   } catch (error) {
     console.error("[CLIENT_ONBOARDING] Submission failed:", error);
-    return res.status(error.status || 500).json({ success: false, message: error.status ? error.message : "Unable to complete onboarding right now." });
+    return res.status(error.status || 500).json({
+      success: false,
+      message: error.status ? error.message : "Unable to complete onboarding right now.",
+      ...(error.code ? { code: error.code } : {}),
+      ...(error.data ? { data: error.data } : {}),
+    });
   }
 });
 

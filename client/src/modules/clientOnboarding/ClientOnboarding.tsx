@@ -291,6 +291,15 @@ export default function ClientOnboarding() {
         setAdminWelcomeSent(true);
       } catch (requestError) {
         const responseError = requestError as { response?: { data?: { code?: string } } };
+        if (responseError.response?.data?.code === "CLIENT_ONBOARDING_EXISTS") {
+          localStorage.removeItem("rp-client-onboarding");
+          setAdminWelcomeSent(true);
+          setHighestStep(steps.length - 1);
+          setStep(steps.length - 1);
+          setSendingAdminWelcome(false);
+          window.scrollTo({ top: 0, behavior: "smooth" });
+          return;
+        }
         if (responseError.response?.data?.code === "EMAIL_VERIFICATION_REQUIRED") {
           setOtpVerification((current) => ({ ...current, email: emptyOtpState() }));
           setStep(2);
