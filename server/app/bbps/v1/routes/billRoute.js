@@ -27,7 +27,7 @@ router.get("/operators", providerReadLimiter, BillController.getOperators);
 router.post(
   "/operators/logo",
   authenticateToken,
-  authorizeRoles("admin"),
+  authorizeRoles("admin", "vendor_manager"),
   operatorLogoUpload.single("logo"),
   OperatorLogoController.upload,
 );
