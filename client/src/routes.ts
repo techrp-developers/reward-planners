@@ -42,6 +42,7 @@ export const routes = {
     addDocument:"/manager/document/DocumentAdd",
     linkDocument:"/manager/document/DocumentCategory",
     attributes: "/manager/attributes",
+    bbpsLogos: "/manager/bbps-logos",
     flashSales: {
       list: "/manager/flash-sales",
       create: "/manager/flash-sales/create",

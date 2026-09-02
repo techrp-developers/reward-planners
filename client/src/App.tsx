@@ -111,6 +111,7 @@ const ProductRewardMapping = lazy(() => import("./modules/products/vendorManager
 const AttributeManagement = lazy(() => import("./modules/products/vendorManager/attribute/attributes.tsx"));
 const FlashSaleList = lazy(() => import("./modules/products/vendorManager/flashSale/FlashSaleList.tsx"));
 const FlashSaleEditor = lazy(() => import("./modules/products/vendorManager/flashSale/FlashSaleEditor.tsx"));
+const BbpsLogoUpload = lazy(() => import("./modules/products/vendorManager/bbps/BbpsLogoUpload.tsx"));
 
 /* Sales */
 // import FlashSaleCreate from "./vendor/components/feature/manager/flashSale/FlashSaleCreate";
@@ -352,6 +353,7 @@ export default function App() {
         <Route path={routes.manager.flashSales.list} element={<FlashSaleList />} />
         <Route path={routes.manager.flashSales.create} element={<FlashSaleEditor />} />
         <Route path={routes.manager.flashSales.edit} element={<FlashSaleEditor />} />
+        <Route path={routes.manager.bbpsLogos} element={<BbpsLogoUpload />} />
 
         {/* Orders */}
         <Route path={routes.manager.orders.orderList} element={<OrderList />} />

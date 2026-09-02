@@ -15,6 +15,7 @@ import {
   FiUser,
   FiBarChart2,
   FiZap,
+  FiImage,
 } from "react-icons/fi";
 import { FaFileAlt } from "react-icons/fa";
 import { useAuth } from "../../../common/auth/useAuth";
@@ -107,6 +108,12 @@ export default function ManagerNavbar() {
       label: "Flash Sales",
       to: routes.manager.flashSales.list,
       Icon: FiZap,
+      type: "link",
+    },
+    {
+      label: "BBPS Logos",
+      to: routes.manager.bbpsLogos,
+      Icon: FiImage,
       type: "link",
     },
     {
