@@ -10,6 +10,7 @@
     "migrate:flea-market-stock": "node scripts/migrate-allocations-to-vendor-stock.js",
     "migrate:client-onboarding": "node scripts/migrate-client-onboarding.js",
     "migrate:client-onboarding-reference-data": "node scripts/migrate-client-onboarding-reference-data.js",
+    "migrate:bbps-operator-logos": "node scripts/migrate-bbps-operator-logos.js",
     "test": "node --test app/common/tests/notificationPayload.test.js app/bbps/v1/tests/operatorCatalog.test.js app/bbps/v1/tests/paymentSafety.test.js app/ecommerce/v1/tests/lifecycleSafety.test.js app/ecommerce/v1/tests/orderProgress.test.js app/ecommerce/v1/tests/itemCancellationPolicy.test.js app/ecommerce/v1/tests/courierBookingPolicy.test.js app/ecommerce/v1/tests/deliveryFeePolicy.test.js app/ecommerce/v1/tests/bookingGracePolicy.test.js app/ecommerce/v1/tests/xpressbeesPolicy.test.js app/ecommerce/v1/tests/whatsappStatusPolicy.test.js services/whatsapp/tests/phone.test.js"
   },
   "keywords": [

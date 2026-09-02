@@ -3,6 +3,7 @@ const TransactionModel = require("../models/transactionModel");
 const BillFetchModel = require("../models/billFetchModel");
 const db = require("../../../../config/database");
 const { mapFinalStatus } = require("../utils/finalStatus");
+const operatorLogoService = require("../services/operatorLogoService");
 
 /**
  * @typedef {Object} FrontendFetchBillPayload
@@ -502,7 +503,8 @@ class BillController {
     try {
       const { category_id } = req.query;
 
-      const data = await ekoService.getOperators(category_id);
+      const providerData = await ekoService.getOperators(category_id);
+      const data = await operatorLogoService.decorateProviderResponse(providerData);
 
       res.json(data);
     } catch (e) {
@@ -522,7 +524,8 @@ class BillController {
         });
       }
 
-      const data = await ekoService.getOperatorsGrouped(category_id, search);
+      const groupedOperators = await ekoService.getOperatorsGrouped(category_id, search);
+      const data = await operatorLogoService.decorateGroupedOperators(groupedOperators);
 
       res.json({
         success: true,
@@ -548,7 +551,8 @@ class BillController {
         return res.json({ success: true, data: [] });
       }
 
-      const data = await ekoService.searchOperators(q);
+      const operators = await ekoService.searchOperators(q);
+      const data = await operatorLogoService.decorateOperators(operators);
 
       return res.json({
         success: true,
@@ -705,11 +709,19 @@ class BillController {
       });
 
       let operatorMap = {};
+      let operatorLogoMap = {};
 
       try {
         const operatorsData = await ekoService.getOperators();
         (operatorsData?.data || []).forEach((op) => {
           operatorMap[op.operator_id] = op.name;
+        });
+
+        const decoratedOperators = await operatorLogoService.decorateOperators(
+          operatorsData?.data || [],
+        );
+        decoratedOperators.forEach((op) => {
+          operatorLogoMap[op.operator_id] = op.logo_url;
         });
       } catch (error) {
         console.error(
@@ -721,6 +733,7 @@ class BillController {
       const orders = result.orders.map((order) => ({
         ...order,
         operator_name: operatorMap[order.operator_id] || null,
+        operator_logo_url: operatorLogoMap[order.operator_id] || null,
         final_status: mapFinalStatus(order.bbps_status, order.refund_status),
       }));
 
@@ -743,7 +756,8 @@ class BillController {
 
   async getOperatorDetails(req, res) {
     try {
-      const data = await ekoService.getOperatorDetails(req.params.id);
+      const providerData = await ekoService.getOperatorDetails(req.params.id);
+      const data = await operatorLogoService.decorateProviderResponse(providerData);
       res.json(data);
     } catch (e) {
       res.status(500).json({ error: e.message });
