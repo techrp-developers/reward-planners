@@ -1,5 +1,6 @@
 const sharp = require("sharp");
 const { uploadToR2 } = require("../../../../utils/r2upload");
+const { deleteFromR2 } = require("../../../../utils/r2delete");
 const { getPublicUrl } = require("../../../../utils/publicUrl");
 const OperatorLogoModel = require("../models/operatorLogoModel");
 
@@ -110,5 +111,26 @@ exports.list = async (_req, res) => {
   } catch (error) {
     console.error("[BBPS][operator-logo][list] error", error);
     return res.status(500).json({ success: false, message: "Failed to fetch BBPS operator logos" });
+  }
+};
+
+exports.remove = async (req, res) => {
+  try {
+    const operatorId = String(req.params?.operatorId || "").trim();
+    if (!operatorId) return res.status(400).json({ success: false, message: "operator_id is required" });
+
+    const existing = await OperatorLogoModel.getById(operatorId);
+    if (!existing) return res.status(404).json({ success: false, message: "Operator logo not found" });
+
+    await OperatorLogoModel.remove(operatorId);
+    if (existing.logo_key) {
+      await deleteFromR2(existing.logo_key).catch((error) => {
+        console.error("[BBPS][operator-logo][delete-file] error", error);
+      });
+    }
+    return res.status(200).json({ success: true, message: "BBPS operator logo deleted successfully" });
+  } catch (error) {
+    console.error("[BBPS][operator-logo][delete] error", error);
+    return res.status(500).json({ success: false, message: "Failed to delete BBPS operator logo" });
   }
 };

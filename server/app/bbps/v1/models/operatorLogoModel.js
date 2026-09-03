@@ -42,6 +42,14 @@ const listAll = async () => {
   return rows;
 };
 
+const remove = async (operatorId) => {
+  const [result] = await db.execute(
+    `DELETE FROM bbps_operator_logos WHERE operator_id = ?`,
+    [normalizeId(operatorId)],
+  );
+  return result.affectedRows > 0;
+};
+
 const upsert = async ({
   operatorId,
   operatorName,
@@ -63,4 +71,4 @@ const upsert = async ({
   );
 };
 
-module.exports = { getActiveMap, getById, listAll, upsert };
+module.exports = { getActiveMap, getById, listAll, remove, upsert };

@@ -31,6 +31,13 @@ router.get(
   OperatorLogoController.list,
 );
 
+router.delete(
+  "/operators/logo/:operatorId",
+  authenticateToken,
+  authorizeRoles("admin", "vendor_manager"),
+  OperatorLogoController.remove,
+);
+
 router.post(
   "/operators/logo",
   authenticateToken,

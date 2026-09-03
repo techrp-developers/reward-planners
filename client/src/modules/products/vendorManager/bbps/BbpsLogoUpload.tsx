@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import Swal from "sweetalert2";
-import { FiEdit2, FiImage, FiUploadCloud, FiX } from "react-icons/fi";
+import { FiEdit2, FiImage, FiTrash2, FiUploadCloud, FiX } from "react-icons/fi";
 import { api } from "../../../../common/api/api";
 
 const ACCEPTED_TYPES = ["image/png", "image/jpeg", "image/webp"];
@@ -23,6 +23,7 @@ export default function BbpsLogoUpload() {
   const [uploadedLogos, setUploadedLogos] = useState<UploadedLogo[]>([]);
   const [loadingList, setLoadingList] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const loadUploadedLogos = async () => {
     try {
@@ -74,6 +75,24 @@ export default function BbpsLogoUpload() {
     setEditingId(item.operator_id); setOperatorId(item.operator_id); setOperatorName(item.operator_name || "");
     setAltText(item.logo_alt || ""); clearLogo(); window.scrollTo({ top: 0, behavior: "smooth" });
   };
+  const deleteLogo = async (item: UploadedLogo) => {
+    const confirmation = await Swal.fire({
+      icon: "warning", title: "Delete operator logo?",
+      text: `${item.operator_name} (${item.operator_id}) will be permanently removed.`,
+      showCancelButton: true, confirmButtonText: "Delete", confirmButtonColor: "#dc2626",
+    });
+    if (!confirmation.isConfirmed) return;
+    try {
+      setDeletingId(item.operator_id);
+      await api.delete(`/v1/bills/operators/logo/${encodeURIComponent(item.operator_id)}`);
+      if (editingId === item.operator_id) resetForm();
+      setUploadedLogos((current) => current.filter((logoItem) => logoItem.operator_id !== item.operator_id));
+      await Swal.fire({ icon: "success", title: "Operator logo deleted", timer: 1400, showConfirmButton: false });
+    } catch (error) {
+      const message = axios.isAxiosError(error) ? error.response?.data?.message : null;
+      await Swal.fire("Delete failed", message || "The operator logo could not be deleted.", "error");
+    } finally { setDeletingId(null); }
+  };
   const currentLogo = uploadedLogos.find((item) => item.operator_id === editingId)?.logo_url;
 
   return <div className="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-6 lg:p-8">
@@ -97,7 +116,7 @@ export default function BbpsLogoUpload() {
     </div>
     <section className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm sm:p-7">
       <div className="flex items-end justify-between gap-4"><div><h2 className="text-lg font-extrabold">Uploaded operators</h2><p className="mt-1 text-sm text-gray-500">Newest records are shown first by created date.</p></div><span className="rounded-full bg-purple-50 px-3 py-1 text-xs font-bold text-[#852BAF]">{uploadedLogos.length} total</span></div>
-      {loadingList ? <p className="py-10 text-center text-sm text-gray-500">Loading uploaded operators...</p> : uploadedLogos.length === 0 ? <p className="py-10 text-center text-sm text-gray-500">No operator logos have been uploaded yet.</p> : <div className="mt-5 overflow-x-auto"><table className="w-full min-w-[700px] text-left text-sm"><thead className="border-b border-gray-100 text-xs uppercase tracking-wider text-gray-400"><tr><th className="px-3 py-3">Logo</th><th className="px-3 py-3">Operator</th><th className="px-3 py-3">Operator ID</th><th className="px-3 py-3">Created date</th><th className="px-3 py-3 text-right">Action</th></tr></thead><tbody className="divide-y divide-gray-100">{uploadedLogos.map((item) => <tr key={item.operator_id} className="hover:bg-gray-50/60"><td className="px-3 py-3"><img src={item.logo_url} alt={item.logo_alt} className="h-12 w-12 rounded-lg border object-contain p-1" /></td><td className="px-3 py-3 font-bold">{item.operator_name}</td><td className="px-3 py-3 text-gray-500">{item.operator_id}</td><td className="px-3 py-3 text-gray-500">{new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.created_at))}</td><td className="px-3 py-3 text-right"><button type="button" onClick={() => editLogo(item)} className="inline-flex items-center gap-2 rounded-lg border border-purple-100 px-3 py-2 font-bold text-[#852BAF] hover:bg-purple-50"><FiEdit2 /> Edit</button></td></tr>)}</tbody></table></div>}
+      {loadingList ? <p className="py-10 text-center text-sm text-gray-500">Loading uploaded operators...</p> : uploadedLogos.length === 0 ? <p className="py-10 text-center text-sm text-gray-500">No operator logos have been uploaded yet.</p> : <div className="mt-5 overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead className="border-b border-gray-100 text-xs uppercase tracking-wider text-gray-400"><tr><th className="px-3 py-3">Logo</th><th className="px-3 py-3">Operator</th><th className="px-3 py-3">Operator ID</th><th className="px-3 py-3">Created date</th><th className="px-3 py-3 text-right">Actions</th></tr></thead><tbody className="divide-y divide-gray-100">{uploadedLogos.map((item) => <tr key={item.operator_id} className="hover:bg-gray-50/60"><td className="px-3 py-3"><img src={item.logo_url} alt={item.logo_alt} className="h-12 w-12 rounded-lg border object-contain p-1" /></td><td className="px-3 py-3 font-bold">{item.operator_name}</td><td className="px-3 py-3 text-gray-500">{item.operator_id}</td><td className="px-3 py-3 text-gray-500">{new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(item.created_at))}</td><td className="px-3 py-3 text-right"><div className="inline-flex gap-2"><button type="button" onClick={() => editLogo(item)} className="inline-flex items-center gap-2 rounded-lg border border-purple-100 px-3 py-2 font-bold text-[#852BAF] hover:bg-purple-50"><FiEdit2 /> Edit</button><button type="button" onClick={() => void deleteLogo(item)} disabled={deletingId === item.operator_id} className="inline-flex items-center gap-2 rounded-lg border border-red-100 px-3 py-2 font-bold text-red-600 hover:bg-red-50 disabled:opacity-50"><FiTrash2 /> {deletingId === item.operator_id ? "Deleting..." : "Delete"}</button></div></td></tr>)}</tbody></table></div>}
     </section>
   </div>;
 }
