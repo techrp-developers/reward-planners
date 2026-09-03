@@ -22,10 +22,10 @@ exports.upload = async (req, res) => {
     const operatorName = String(req.body?.operator_name || "").trim();
     const altText = String(req.body?.alt_text || operatorName).trim();
 
-    if (!operatorId || !operatorName || !req.file) {
+    if (!operatorId || !operatorName) {
       return res.status(400).json({
         success: false,
-        message: "operator_id, operator_name, and logo are required",
+        message: "operator_id and operator_name are required",
       });
     }
 
@@ -36,25 +36,36 @@ exports.upload = async (req, res) => {
       });
     }
 
-    const metadata = await sharp(req.file.buffer).metadata();
-    const extension = EXTENSIONS[metadata.format];
-    if (!extension) {
+    const existing = await OperatorLogoModel.getById(operatorId);
+    let logoKey = existing?.logo_key;
+    let logoUrl = existing?.logo_url;
+
+    if (req.file) {
+      const metadata = await sharp(req.file.buffer).metadata();
+      const extension = EXTENSIONS[metadata.format];
+      if (!extension) {
+        return res.status(400).json({
+          success: false,
+          message: "Image content must be PNG, JPEG, or WebP",
+        });
+      }
+
+      const operatorKey = safeKeyPart(operatorId);
+      if (!operatorKey) {
+        return res.status(400).json({ success: false, message: "Invalid operator_id" });
+      }
+
+      const contentType = metadata.format === "jpeg" ? "image/jpeg" : `image/${metadata.format}`;
+      logoKey = `public/bbps/operator-logos/${operatorKey}${extension}`;
+      await uploadToR2(req.file.buffer, logoKey, contentType);
+      logoUrl = getPublicUrl(logoKey);
+    } else if (!existing) {
       return res.status(400).json({
         success: false,
-        message: "Image content must be PNG, JPEG, or WebP",
+        message: "A logo is required for a new operator",
       });
     }
 
-    const operatorKey = safeKeyPart(operatorId);
-    if (!operatorKey) {
-      return res.status(400).json({ success: false, message: "Invalid operator_id" });
-    }
-
-    const contentType = metadata.format === "jpeg" ? "image/jpeg" : `image/${metadata.format}`;
-    const logoKey = `public/bbps/operator-logos/${operatorKey}${extension}`;
-    await uploadToR2(req.file.buffer, logoKey, contentType);
-
-    const logoUrl = getPublicUrl(logoKey);
     await OperatorLogoModel.upsert({
       operatorId,
       operatorName,
@@ -65,7 +76,7 @@ exports.upload = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "BBPS operator logo uploaded successfully",
+      message: existing ? "BBPS operator logo updated successfully" : "BBPS operator logo uploaded successfully",
       data: {
         operator_id: operatorId,
         operator_name: operatorName,
@@ -79,5 +90,25 @@ exports.upload = async (req, res) => {
       success: false,
       message: "Failed to upload BBPS operator logo",
     });
+  }
+};
+
+exports.list = async (_req, res) => {
+  try {
+    const rows = await OperatorLogoModel.listAll();
+    return res.status(200).json({
+      success: true,
+      data: rows.map((row) => ({
+        operator_id: String(row.operator_id),
+        operator_name: row.operator_name,
+        logo_url: row.logo_url,
+        logo_alt: row.alt_text || row.operator_name,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+      })),
+    });
+  } catch (error) {
+    console.error("[BBPS][operator-logo][list] error", error);
+    return res.status(500).json({ success: false, message: "Failed to fetch BBPS operator logos" });
   }
 };

@@ -24,6 +24,13 @@ router.get("/locations", providerReadLimiter, BillController.getLocations);
 // Operators
 router.get("/operators", providerReadLimiter, BillController.getOperators);
 
+router.get(
+  "/operators/logos",
+  authenticateToken,
+  authorizeRoles("admin", "vendor_manager"),
+  OperatorLogoController.list,
+);
+
 router.post(
   "/operators/logo",
   authenticateToken,

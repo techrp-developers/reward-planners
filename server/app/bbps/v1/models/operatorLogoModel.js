@@ -18,6 +18,30 @@ const getActiveMap = async (operatorIds = []) => {
   return new Map(rows.map((row) => [normalizeId(row.operator_id), row]));
 };
 
+const getById = async (operatorId) => {
+  const [rows] = await db.execute(
+    `SELECT operator_id, operator_name, logo_url, logo_key, alt_text,
+            is_active, created_at, updated_at
+     FROM bbps_operator_logos
+     WHERE operator_id = ?
+     LIMIT 1`,
+    [normalizeId(operatorId)],
+  );
+
+  return rows[0] || null;
+};
+
+const listAll = async () => {
+  const [rows] = await db.execute(
+    `SELECT operator_id, operator_name, logo_url, logo_key, alt_text,
+            is_active, created_at, updated_at
+     FROM bbps_operator_logos
+     ORDER BY created_at DESC, operator_id ASC`,
+  );
+
+  return rows;
+};
+
 const upsert = async ({
   operatorId,
   operatorName,
@@ -39,4 +63,4 @@ const upsert = async ({
   );
 };
 
-module.exports = { getActiveMap, upsert };
+module.exports = { getActiveMap, getById, listAll, upsert };
