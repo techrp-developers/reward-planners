@@ -159,6 +159,7 @@ app.use("/v1", stepCounterRoute);
 app.use("/v1", commonRoute);
 app.use("/v1", bbpsRoute);
 app.use("/v1", gamesRoute);
+app.use("/v1", require("./app/Insurrence/routes/indexRoute"));
 
 // External App Routes
 app.use("/mps", mpsRoute);
