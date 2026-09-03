@@ -35,6 +35,13 @@ router.get(
 );
 
 router.get(
+  "/employee-directory/report",
+  authenticateToken,
+  authorizeRoles("admin", "rm"),
+  managerController.downloadEmployeeActivationReport.bind(managerController),
+);
+
+router.get(
   "/employee-directory/companies/:companyId/employees",
   authenticateToken,
   authorizeRoles("admin", "rm"),

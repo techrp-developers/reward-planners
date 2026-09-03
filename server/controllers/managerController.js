@@ -177,6 +177,125 @@ class ManagerController {
     }
   }
 
+  async downloadEmployeeActivationReport(req, res) {
+    try {
+      const [employees] = await db.execute(`
+        SELECT
+          cu.id AS employee_id,
+          cu.name,
+          cu.email,
+          cu.contact AS phone,
+          cu.department,
+          cu.role,
+          cu.created_at,
+          co.company_name,
+          c.user_id AS customer_id,
+          c.status AS customer_status,
+          c.is_verified,
+          c.last_login_at,
+          c.device_name,
+          ${RESOLVED_DEVICE_PLATFORM_SQL} AS device_platform
+        FROM company_users cu
+        LEFT JOIN companies co ON co.company_id = cu.company_id
+        LEFT JOIN customer c ON c.company_user_id = cu.id
+        ORDER BY co.company_name ASC, cu.name ASC, cu.id ASC
+      `);
+
+      const isActivated = (employee) => employee.customer_id && Number(employee.customer_status) === 1;
+      const summary = {
+        total: employees.length,
+        activated: employees.filter(isActivated).length,
+        notActivated: employees.filter((employee) => !isActivated(employee)).length,
+        android: employees.filter((employee) => isActivated(employee) && employee.device_platform === "android").length,
+        ios: employees.filter((employee) => isActivated(employee) && employee.device_platform === "ios").length,
+        unknown: employees.filter((employee) => isActivated(employee) && !employee.device_platform).length,
+      };
+
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = "Reward Planners";
+      workbook.created = new Date();
+
+      const summarySheet = workbook.addWorksheet("Summary");
+      summarySheet.columns = [{ header: "Metric", key: "metric", width: 28 }, { header: "Count", key: "count", width: 14 }];
+      summarySheet.addRows([
+        { metric: "Total Employees", count: summary.total },
+        { metric: "Activated", count: summary.activated },
+        { metric: "Not Activated", count: summary.notActivated },
+        { metric: "Android Users", count: summary.android },
+        { metric: "iOS Users", count: summary.ios },
+        { metric: "Platform Unknown", count: summary.unknown },
+      ]);
+
+      const employeeSheet = workbook.addWorksheet("Employees");
+      employeeSheet.columns = [
+        { header: "Employee ID", key: "employeeId", width: 14 },
+        { header: "Employee Name", key: "name", width: 28 },
+        { header: "Company", key: "company", width: 28 },
+        { header: "Email", key: "email", width: 32 },
+        { header: "Phone", key: "phone", width: 18 },
+        { header: "Department", key: "department", width: 20 },
+        { header: "Role", key: "role", width: 20 },
+        { header: "Activation Status", key: "activationStatus", width: 20 },
+        { header: "Platform", key: "platform", width: 14 },
+        { header: "Device", key: "device", width: 24 },
+        { header: "Verified", key: "verified", width: 14 },
+        { header: "Last Login", key: "lastLogin", width: 22 },
+        { header: "Employee Created", key: "createdAt", width: 22 },
+      ];
+      const detailRows = employees.map((employee) => ({
+        employeeId: employee.employee_id,
+        name: employee.name,
+        company: employee.company_name || "Unassigned",
+        email: employee.email || "",
+        phone: employee.phone || "",
+        department: employee.department || "",
+        role: employee.role || "",
+        activationStatus: isActivated(employee) ? "Activated" : "Not Activated",
+        platform: employee.device_platform === "ios" ? "iOS" : employee.device_platform === "android" ? "Android" : "Unknown",
+        device: employee.device_name || "",
+        verified: Number(employee.is_verified) === 1 ? "Yes" : "No",
+        lastLogin: employee.last_login_at || "Never",
+        createdAt: employee.created_at,
+      }));
+      employeeSheet.addRows(detailRows);
+
+      const contactColumns = [
+        { header: "Employee Name", key: "name", width: 30 },
+        { header: "Email", key: "email", width: 34 },
+        { header: "Contact", key: "phone", width: 20 },
+        { header: "Company", key: "company", width: 28 },
+        { header: "Department", key: "department", width: 20 },
+        { header: "Role", key: "role", width: 20 },
+        { header: "Platform", key: "platform", width: 14 },
+        { header: "Last Login", key: "lastLogin", width: 22 },
+      ];
+      const activatedSheet = workbook.addWorksheet("Activated Employees");
+      activatedSheet.columns = contactColumns;
+      activatedSheet.addRows(detailRows.filter((employee) => employee.activationStatus === "Activated"));
+
+      const notActivatedSheet = workbook.addWorksheet("Not Activated Employees");
+      notActivatedSheet.columns = contactColumns;
+      notActivatedSheet.addRows(detailRows.filter((employee) => employee.activationStatus === "Not Activated"));
+
+      for (const sheet of [summarySheet, employeeSheet, activatedSheet, notActivatedSheet]) {
+        sheet.views = [{ state: "frozen", ySplit: 1 }];
+        sheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+        sheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF852BAF" } };
+        sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: sheet.columnCount } };
+      }
+
+      const date = new Date().toISOString().slice(0, 10);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="employee-activation-report-${date}.xlsx"`);
+      await workbook.xlsx.write(res);
+      return res.end();
+    } catch (error) {
+      console.error("Employee activation report error:", error);
+      if (!res.headersSent) return res.status(500).json({ success: false, message: "Failed to generate employee report" });
+      return res.end();
+    }
+  }
+
   async companyEmployees(req, res) {
     try {
       const companyId = Number(req.params.companyId);

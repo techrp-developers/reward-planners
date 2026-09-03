@@ -129,6 +129,7 @@ export default function EmployeeDirectory() {
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState("");
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [downloadingReport, setDownloadingReport] = useState(false);
   const query = useDebounce(search.trim().toLowerCase(), 250);
 
   async function fetchCompanies() {
@@ -344,6 +345,27 @@ export default function EmployeeDirectory() {
     }
   }
 
+  async function downloadEmployeeReport() {
+    setDownloadingReport(true);
+    setError("");
+    try {
+      const response = await api.get("/manager/employee-directory/report", { responseType: "blob" });
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `employee-activation-report-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (requestError) {
+      console.error("Unable to download employee report:", requestError);
+      setError("Unable to download the employee report.");
+    } finally {
+      setDownloadingReport(false);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       <section className="flex flex-col gap-4 rounded-2xl border border-purple-100 bg-white/70 p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
@@ -356,7 +378,7 @@ export default function EmployeeDirectory() {
             <p className="mt-0.5 text-xs font-medium text-gray-500">View companies and registered customer accounts</p>
           </div>
         </div>
-        <span className="rounded-xl bg-purple-50 px-3 py-1.5 text-xs font-bold text-[#852BAF]">{visibleCount} records</span>
+        <div className="flex flex-wrap items-center gap-3"><span className="rounded-xl bg-purple-50 px-3 py-1.5 text-xs font-bold text-[#852BAF]">{visibleCount} records</span><button type="button" onClick={() => void downloadEmployeeReport()} disabled={downloadingReport} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#C64EFE] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"><FiDownload /> {downloadingReport ? "Downloading..." : "Download Report"}</button></div>
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
