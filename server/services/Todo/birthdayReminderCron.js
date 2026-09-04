@@ -1,13 +1,14 @@
 const cron = require("node-cron");
 const db = require("../../config/database");
 const { notifyUser } = require("../../app/common/utils/notification");
+const SCHEDULE_TIMEZONE = process.env.SCHEDULE_TIMEZONE || "Asia/Kolkata";
 
 // Run every day at 9:00 AM: "0 9 * * *"
 // For testing purposes, you can change this to "* * * * *" to run every minute
 cron.schedule("0 9 * * *", async () => {
   console.log("[Cron] Checking for employee birthdays today...");
   await sendBirthdayWishes();
-});
+}, { timezone: SCHEDULE_TIMEZONE });
 
 async function sendBirthdayWishes() {
   try {

@@ -109,10 +109,29 @@ function notifyUser(data, label = "notification") {
   }, label);
 }
 
+// Awaitable variant for workers/cron jobs that must deliberately pace delivery.
+// Keeping this separate from notifyUser preserves the fire-and-forget behaviour
+// expected by request handlers.
+async function notifyUserAndWait(data) {
+  const userId = data?.userId || data?.user_id;
+  if (!userId) {
+    return { success: false, skipped: true, reason: "missing_user_id" };
+  }
+
+  const payload = buildNotificationPayload(data);
+  const persisted = await createInAppNotification(payload);
+  if (persisted?.created === false) {
+    return { success: false, skipped: true, reason: "duplicate" };
+  }
+
+  return sendPushNotification(payload);
+}
+
 module.exports = {
   buildNotificationPayload,
   buildPushMessage,
   notifyUser,
+  notifyUserAndWait,
   sendPushNotification,
   createInAppNotification,
 };
