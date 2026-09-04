@@ -25,6 +25,7 @@ const uploadEntryImage = async (id, file) => {
     const error = new Error("Invalid image file");
     error.statusCode = 400;
     throw error;
+    
   }
 
   const rawExtension = path.extname(file.originalname).toLowerCase();

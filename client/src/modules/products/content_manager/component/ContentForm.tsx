@@ -1,6 +1,7 @@
 import { FiAlertTriangle, FiEye, FiSave } from "react-icons/fi";
-import type { ContentEntry, ContentKind, ContentZoneImage, GradientConfig, GradientDirection, Zone } from "../types";
-import { COLOR_PRESETS, GRADIENT_PRESETS, ZONES } from "../types";
+import type { ContentDisplayMode, ContentEntry, ContentKind, ContentZoneImage, GradientConfig, GradientDirection, Zone } from "../types";
+import { COLOR_PRESETS, DISPLAY_MODES, GRADIENT_PRESETS, ZONES } from "../types";
+import type { ContentModule } from "../api/ContentApi";
 import { computeStatus, findConflicts } from "../store";
 import {
   DEFAULT_GRADIENT_COLORS,
@@ -26,6 +27,7 @@ interface Props {
   draft: ContentEntry;
   entries: ContentEntry[];
   now: Date;
+  module: ContentModule;
   onChange: (patch: Partial<ContentEntry>) => void;
   onSaveDraft: () => void;
   onPreview: () => void;
@@ -33,7 +35,10 @@ interface Props {
   saving: boolean;
 }
 
-export default function ContentForm({ draft, entries, now, onChange, onSaveDraft, onPreview, onPublish, saving }: Props) {
+export default function ContentForm({ draft, entries, now, module, onChange, onSaveDraft, onPreview, onPublish, saving }: Props) {
+  const showHeaderTextColor = draft.zone === "navbar_background" && module === "mobile_dashboard";
+  const showDisplayMode = draft.contentType === "image" && (draft.zone === "promotional_banner" || draft.zone === "offers_banner");
+  const headerTextColor = isValidHexColor(draft.textColor) ? draft.textColor : "#FFFFFF";
   const status = computeStatus(draft, now);
   const conflicts = findConflicts(draft, entries);
   const parsedColor = parseCmsColorValue(draft.colorValue);
@@ -86,6 +91,19 @@ export default function ContentForm({ draft, entries, now, onChange, onSaveDraft
             <option value="image">Image</option>
           </select>
         </label>
+
+        {showDisplayMode && (
+          <label className={labelClass}>
+            Display Mode
+            <select
+              value={draft.displayMode}
+              onChange={(event) => onChange({ displayMode: event.target.value as ContentDisplayMode })}
+              className={inputClass}
+            >
+              {DISPLAY_MODES.map((mode) => <option key={mode.key} value={mode.key}>{mode.label}</option>)}
+            </select>
+          </label>
+        )}
 
         {draft.contentType === "color" ? (
           <div className="sm:col-span-2 space-y-5 rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
@@ -241,6 +259,29 @@ export default function ContentForm({ draft, entries, now, onChange, onSaveDraft
         {draft.contentType === "image" && (
           <div className="sm:col-span-2">
             <AssetSpecPanel />
+          </div>
+        )}
+
+        {showHeaderTextColor && (
+          <div className="sm:col-span-2">
+            <p className={labelClass}>Header Text Color</p>
+            <p className="mt-1 text-[11px] font-medium text-slate-400">
+              Controls the greeting name, subtitle and search placeholder color in the mobile dashboard header.
+            </p>
+            <div className="mt-2 flex items-center gap-3">
+              <input
+                type="color"
+                value={headerTextColor}
+                onChange={(event) => onChange({ textColor: event.target.value })}
+                className="h-11 w-14 cursor-pointer rounded-lg border border-slate-200 bg-white"
+              />
+              <input
+                value={draft.textColor}
+                onChange={(event) => onChange({ textColor: event.target.value })}
+                placeholder="#FFFFFF"
+                className={`${inputClass} mt-0 flex-1 bg-white`}
+              />
+            </div>
           </div>
         )}
 

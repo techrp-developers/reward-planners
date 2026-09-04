@@ -67,14 +67,17 @@ const toPublicModule = (row) => ({
   ...row,
   icon_url: getContentImageUrl(row.icon_url),
   active_icon_url: row.active_icon_url ? getContentImageUrl(row.active_icon_url) : null,
+  dashboard_icon_url: row.dashboard_icon_url ? getContentImageUrl(row.dashboard_icon_url) : null,
 });
 
 // Public response only needs the fields the mobile navbar actually renders.
 const toResolvedModule = (row) => ({
   module_key: row.module_key,
   label: row.label,
+  placement: row.placement,
   icon_url: getContentImageUrl(row.icon_url),
   active_icon_url: row.active_icon_url ? getContentImageUrl(row.active_icon_url) : null,
+  dashboard_icon_url: row.dashboard_icon_url ? getContentImageUrl(row.dashboard_icon_url) : null,
   normal_color: row.normal_color,
   active_color: row.active_color,
   gradient_start_color: row.gradient_start_color,
@@ -89,7 +92,7 @@ class ModuleIconController {
 
   async getResolvedModules(req, res) {
     try {
-      const rows = await ModuleIconModel.getActiveModules();
+      const rows = await ModuleIconModel.getActiveModules(req.query.placement);
 
       return res.json({
         success: true,
@@ -128,6 +131,7 @@ class ModuleIconController {
   async createModule(req, res) {
     const iconFile = req.files?.icon?.[0] || null;
     const activeIconFile = req.files?.active_icon?.[0] || null;
+    const dashboardIconFile = req.files?.dashboard_icon?.[0] || null;
 
     try {
       const moduleKey = req.body.module_key;
@@ -137,6 +141,7 @@ class ModuleIconController {
         created_by_name: req.user?.email || null,
       };
 
+      if (req.body.placement !== undefined) data.placement = req.body.placement;
       if (req.body.sort_order !== undefined) data.sort_order = Number(req.body.sort_order) || 0;
       if (req.body.is_active !== undefined) {
         data.is_active = req.body.is_active === "true" || req.body.is_active === true || req.body.is_active === "1";
@@ -156,6 +161,10 @@ class ModuleIconController {
         data.active_icon_url = saveModuleIconFile(activeIconFile, moduleKey, "active");
       }
 
+      if (dashboardIconFile) {
+        data.dashboard_icon_url = saveModuleIconFile(dashboardIconFile, moduleKey, "dashboard");
+      }
+
       const created = await ModuleIconModel.createModule(data);
 
       return res.status(201).json({
@@ -166,6 +175,7 @@ class ModuleIconController {
     } catch (err) {
       cleanupTempFile(iconFile);
       cleanupTempFile(activeIconFile);
+      cleanupTempFile(dashboardIconFile);
       return res.status(err.statusCode || 500).json({
         success: false,
         message: err.message,
@@ -178,6 +188,7 @@ class ModuleIconController {
   async updateModuleIcon(req, res) {
     const iconFile = req.files?.icon?.[0] || null;
     const activeIconFile = req.files?.active_icon?.[0] || null;
+    const dashboardIconFile = req.files?.dashboard_icon?.[0] || null;
 
     try {
       const moduleKey = req.params.module;
@@ -186,6 +197,7 @@ class ModuleIconController {
       const data = {};
 
       if (req.body.label !== undefined) data.label = req.body.label;
+      if (req.body.placement !== undefined) data.placement = req.body.placement;
       if (req.body.sort_order !== undefined) data.sort_order = Number(req.body.sort_order) || 0;
       if (req.body.is_active !== undefined) {
         data.is_active = req.body.is_active === "true" || req.body.is_active === true || req.body.is_active === "1";
@@ -198,6 +210,7 @@ class ModuleIconController {
 
       let newIconPath = null;
       let newActiveIconPath = null;
+      let newDashboardIconPath = null;
 
       if (iconFile) {
         newIconPath = saveModuleIconFile(iconFile, moduleKey, "icon");
@@ -208,6 +221,11 @@ class ModuleIconController {
       if (activeIconFile) {
         newActiveIconPath = saveModuleIconFile(activeIconFile, moduleKey, "active");
         data.active_icon_url = newActiveIconPath;
+      }
+
+      if (dashboardIconFile) {
+        newDashboardIconPath = saveModuleIconFile(dashboardIconFile, moduleKey, "dashboard");
+        data.dashboard_icon_url = newDashboardIconPath;
       }
 
       const updated = await ModuleIconModel.updateModule(moduleKey, data);
@@ -229,6 +247,14 @@ class ModuleIconController {
         }
       }
 
+      if (newDashboardIconPath && existing.dashboard_icon_url) {
+        try {
+          deleteModuleIconFile(existing.dashboard_icon_url);
+        } catch (err) {
+          console.error("MODULE DASHBOARD ICON DELETE ERROR", err);
+        }
+      }
+
       return res.json({
         success: true,
         message: "Module icon updated successfully",
@@ -237,6 +263,7 @@ class ModuleIconController {
     } catch (err) {
       cleanupTempFile(iconFile);
       cleanupTempFile(activeIconFile);
+      cleanupTempFile(dashboardIconFile);
       return res.status(err.statusCode || 500).json({
         success: false,
         message: err.message,
@@ -253,6 +280,7 @@ class ModuleIconController {
       try {
         deleteModuleIconFile(deleted.icon_url);
         deleteModuleIconFile(deleted.active_icon_url);
+        deleteModuleIconFile(deleted.dashboard_icon_url);
       } catch (err) {
         console.error("MODULE ICON FILE DELETE ERROR", err);
       }

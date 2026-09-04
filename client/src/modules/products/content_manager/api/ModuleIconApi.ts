@@ -2,13 +2,37 @@ import { api } from "../../../../common/api/api";
 
 const BASE = "/content";
 
+export type ModulePlacement = "both" | "dashboard" | "navbar";
+
+export const PLACEMENT_OPTIONS: { key: ModulePlacement; label: string }[] = [
+  { key: "both", label: "Both Dashboard & Navbar" },
+  { key: "dashboard", label: "Dashboard Only" },
+  { key: "navbar", label: "Navbar Only" },
+];
+
+export const PLACEMENT_LABELS: Record<ModulePlacement, string> = {
+  both: "Both Dashboard & Navbar",
+  dashboard: "Dashboard Only",
+  navbar: "Navbar Only",
+};
+
+/** Legacy/missing placement (frontend-only fallback - never written back to the API). */
+export const normalizePlacement = (value: ModulePlacement | null | undefined): ModulePlacement =>
+  value === "dashboard" || value === "navbar" ? value : "both";
+
 export interface ApiModuleIcon {
   icon_id: number;
   module_key: string;
+  /** Where this module renders - defaults to "both" client-side if a legacy response omits it. */
+  placement: ModulePlacement;
   label: string;
   icon_type: "image" | "svg";
+  /** Navbar normal icon. */
   icon_url: string | null;
+  /** Navbar active icon. */
   active_icon_url: string | null;
+  /** Dashboard icon - distinct from the navbar pair above. Null falls back to icon_url for display only. */
+  dashboard_icon_url: string | null;
   /** Hex background color (#RGB/#RRGGBB) behind the icon in its normal state. */
   normal_color: string | null;
   /** Hex background color behind the icon in its active state. */
@@ -24,9 +48,11 @@ export interface ApiModuleIcon {
 
 export interface ResolvedModuleIcon {
   module_key: string;
+  placement: ModulePlacement;
   label: string;
   icon_url: string | null;
   active_icon_url: string | null;
+  dashboard_icon_url: string | null;
   normal_color: string | null;
   active_color: string | null;
   gradient_start_color: string | null;
@@ -49,6 +75,7 @@ interface ApiResponse<T> {
 
 export const getModules = async (): Promise<ApiModuleIcon[]> => {
   const { data } = await api.get<ApiResponse<ApiModuleIcon[]>>(`${BASE}/modules`);
+  console.log(`[ModuleIconApi] GET ${BASE}/modules`, data.data);
   return data.data;
 };
 
@@ -111,5 +138,6 @@ export const deleteModule = async (
 
 export const getResolvedModules = async (): Promise<ResolvedModuleIcon[]> => {
   const { data } = await api.get<ApiResponse<ResolvedModuleIcon[]>>(`${BASE}/resolved/modules`);
+  console.log(`[ModuleIconApi] GET ${BASE}/resolved/modules`, data.data);
   return data.data;
 };

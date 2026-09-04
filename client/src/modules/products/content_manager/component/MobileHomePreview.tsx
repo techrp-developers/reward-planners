@@ -2,7 +2,7 @@ import type { ContentEntry, Zone } from "../types";
 import type { ResolvedModuleIcon } from "../api/ModuleIconApi";
 import MobileStatusBar from "./MobileStatusBar";
 import MobileNavbarPreview from "./MobileNavbarPreview";
-import MobilePromoPreview from "./MobilePromoPreview";
+import PromotionalBanner from "./PromotionalBanner";
 import MobileOffersPreview from "./MobileOffersPreview";
 import MobileBottomNav from "./MobileBottomNav";
 
@@ -25,7 +25,7 @@ export default function MobileHomePreview({ resolve, moduleIcons, previewModule,
       <MobileNavbarPreview entry={navbar} moduleIcons={moduleIcons} previewModule={previewModule} onSelectModule={onSelectModule} />
 
       <div className="flex-1 space-y-4 py-4">
-        <MobilePromoPreview entry={promo} />
+        <PromotionalBanner entry={promo ?? null} />
         <MobileOffersPreview entry={offers} />
       </div>
 

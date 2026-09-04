@@ -3,7 +3,10 @@ const db = require("../config/database");
 const MODULES = ["product", "service", "payment", "dineout", "mobile_dashboard"];
 const ZONES = ["navbar_background", "promotional_banner", "offers_banner"];
 const CONTENT_TYPES = ["color", "image"];
+const DISPLAY_MODES = ["single", "carousel", "grid_2", "grid_3"];
+const DEFAULT_DISPLAY_MODE = "carousel";
 const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
+const HEX_TEXT_COLOR_RE = /^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$/;
 const GRADIENT_DIRECTIONS = new Set([
   "left-right",
   "right-left",
@@ -33,6 +36,10 @@ const isValidColorValue = (value) => {
     return false;
   }
 };
+
+// Optional per-entry override for header text color (6-digit HEX, or 8-digit with alpha) -
+// null/undefined just means "not set", not invalid.
+const isValidTextColor = (value) => value === null || value === undefined || value === "" || HEX_TEXT_COLOR_RE.test(String(value).trim());
 
 class ContentZoneModel {
   //   =======================Helper=================================
@@ -68,6 +75,14 @@ class ContentZoneModel {
 
     if (isUpdate && data.color_value !== undefined && !isValidColorValue(data.color_value)) {
       errors.push("color_value must be a valid HEX color or gradient JSON");
+    }
+
+    if (data.display_mode !== undefined && data.display_mode !== null && data.display_mode !== "" && !DISPLAY_MODES.includes(data.display_mode)) {
+      errors.push(`Invalid display_mode. Allowed values: ${DISPLAY_MODES.join(", ")}`);
+    }
+
+    if (data.text_color !== undefined && !isValidTextColor(data.text_color)) {
+      errors.push("text_color must be a valid HEX color, e.g. #FFFFFF");
     }
 
     if (!isUpdate && (!data.title || !data.title.trim())) {
@@ -298,16 +313,18 @@ class ContentZoneModel {
     const [result] = await db.query(
       `
       INSERT INTO content_zone_entries (
-        module, zone, content_type, color_value, image_url, title, cta_text,
+        module, zone, content_type, display_mode, color_value, text_color, image_url, title, cta_text,
         redirect_link, start_at, end_at, priority, is_default, is_published, created_by_name
       )
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `,
       [
         data.module,
         data.zone,
         data.content_type,
+        data.display_mode || DEFAULT_DISPLAY_MODE,
         data.content_type === "color" ? data.color_value : null,
+        data.text_color || null,
         data.content_type === "image" ? data.image_url || null : null,
         data.title,
         data.cta_text || null,
@@ -351,7 +368,9 @@ class ContentZoneModel {
 
     const settable = [
       "content_type",
+      "display_mode",
       "color_value",
+      "text_color",
       "image_url",
       "title",
       "cta_text",
@@ -365,7 +384,9 @@ class ContentZoneModel {
     for (const key of settable) {
       if (data[key] !== undefined) {
         fields.push(`${key} = ?`);
-        values.push(key === "is_published" ? (data[key] ? 1 : 0) : data[key]);
+        if (key === "is_published") values.push(data[key] ? 1 : 0);
+        else if (key === "text_color") values.push(data[key] || null);
+        else values.push(data[key]);
       }
     }
 
@@ -396,16 +417,18 @@ class ContentZoneModel {
     const [result] = await db.query(
       `
       INSERT INTO content_zone_entries (
-        module, zone, content_type, color_value, image_url, title, cta_text,
+        module, zone, content_type, display_mode, color_value, text_color, image_url, title, cta_text,
         redirect_link, start_at, end_at, priority, is_default, is_published, created_by_name
       )
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,0,0,?)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,?)
       `,
       [
         original.module,
         original.zone,
         original.content_type,
+        original.display_mode,
         original.color_value,
+        original.text_color,
         original.image_url,
         `${original.title} (Copy)`,
         original.cta_text,

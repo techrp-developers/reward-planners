@@ -17,10 +17,11 @@ const uploadEntryFiles = uploadContentImage.fields([
 
 const uploadOfferImages = uploadContentImage.array("images", MAX_OFFER_IMAGES);
 
-// Module icon replace/activate icon are both optional single files.
+// Module icon replace/activate/dashboard icons are all optional single files.
 const uploadModuleIconFiles = uploadContentImage.fields([
   { name: "icon", maxCount: 1 },
   { name: "active_icon", maxCount: 1 },
+  { name: "dashboard_icon", maxCount: 1 },
 ]);
 
 // Multer rejects extra files by calling next(err) rather than throwing - without this,

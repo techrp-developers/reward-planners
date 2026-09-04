@@ -259,6 +259,7 @@ export default function ContentManagement({ module }: ContentManagementProps) {
             draft={draft}
             entries={entries}
             now={now}
+            module={module}
             onChange={patchDraft}
             onSaveDraft={() => void handleSaveDraft()}
             onPreview={handlePreview}

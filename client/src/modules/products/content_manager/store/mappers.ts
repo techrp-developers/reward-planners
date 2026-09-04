@@ -7,6 +7,9 @@ export const fromApiEntry = (row: ApiContentEntry): ContentEntry => ({
   zone: row.zone,
   contentType: row.content_type,
   colorValue: row.color_value || "#852BAF",
+  textColor: row.text_color || "",
+  // Legacy rows may still be NULL - fall back to the same "carousel" default the backend uses for new rows.
+  displayMode: row.display_mode || "carousel",
   imageUrl: row.image_url || "",
   title: row.title,
   ctaText: row.cta_text || "",

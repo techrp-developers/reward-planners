@@ -6,6 +6,8 @@ const db = require("../config/database");
 const MODULE_KEY_PATTERN = /^[a-z0-9_-]{2,50}$/;
 const HEX_COLOR_PATTERN = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 const COLOR_FIELDS = ["normal_color", "active_color", "gradient_start_color", "gradient_end_color"];
+const PLACEMENTS = ["both", "dashboard", "navbar"];
+const DEFAULT_PLACEMENT = "both";
 const DEFAULT_MODULES = [
   { module_key: "product", label: "Product", route_key: "ProductModule", sort_order: 0 },
   { module_key: "service", label: "Services", route_key: "ServicesModule", sort_order: 1 },
@@ -17,6 +19,15 @@ class ModuleIconModel {
   validateModuleKeyFormat(moduleKey) {
     if (typeof moduleKey !== "string" || !MODULE_KEY_PATTERN.test(moduleKey)) {
       const error = new Error("module_key must be 2-50 characters of lowercase letters, numbers, underscore, or hyphen");
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
+  validatePlacement(value) {
+    if (value === undefined || value === null || value === "") return;
+    if (!PLACEMENTS.includes(value)) {
+      const error = new Error(`Invalid placement. Allowed values: ${PLACEMENTS.join(", ")}`);
       error.statusCode = 400;
       throw error;
     }
@@ -63,18 +74,32 @@ class ModuleIconModel {
     );
   }
 
-  /** Public resolved API - only what the mobile navbar should render, in display order. */
-  async getActiveModules() {
+  /**
+   * Public resolved API - only what the mobile navbar/dashboard should render, in display order.
+   * Optional placement filter: "dashboard" -> placement IN ('both','dashboard'), "navbar" ->
+   * placement IN ('both','navbar'), "both" -> placement = 'both' only; omitted -> every active
+   * module, unfiltered (unchanged behavior).
+   */
+  async getActiveModules(placement) {
+    this.validatePlacement(placement);
     await this.ensureDefaultModules();
+
+    const where = ["is_active = 1"];
+    const params = [];
+    if (placement !== undefined) {
+      where.push("placement IN ('both', ?)");
+      params.push(placement);
+    }
 
     const [rows] = await db.query(
       `
-      SELECT icon_id, module_key, icon_type, icon_url, active_icon_url, normal_color, active_color,
+      SELECT icon_id, module_key, placement, icon_type, icon_url, active_icon_url, dashboard_icon_url, normal_color, active_color,
         gradient_start_color, gradient_end_color, route_key, label, sort_order, is_active
       FROM module_icons
-      WHERE is_active = 1
+      WHERE ${where.join(" AND ")}
       ORDER BY sort_order ASC
       `,
+      params,
     );
 
     return rows;
@@ -86,7 +111,7 @@ class ModuleIconModel {
 
     const [rows] = await db.query(
       `
-      SELECT icon_id, module_key, icon_type, icon_url, active_icon_url, normal_color, active_color,
+      SELECT icon_id, module_key, placement, icon_type, icon_url, active_icon_url, dashboard_icon_url, normal_color, active_color,
         gradient_start_color, gradient_end_color, route_key, label, sort_order, is_active, created_by_name, created_at, updated_at
       FROM module_icons
       ORDER BY sort_order ASC
@@ -101,7 +126,7 @@ class ModuleIconModel {
 
     const [rows] = await db.query(
       `
-      SELECT icon_id, module_key, icon_type, icon_url, active_icon_url, normal_color, active_color,
+      SELECT icon_id, module_key, placement, icon_type, icon_url, active_icon_url, dashboard_icon_url, normal_color, active_color,
         gradient_start_color, gradient_end_color, route_key, label, sort_order, is_active, created_by_name, created_at, updated_at
       FROM module_icons
       WHERE module_key = ?
@@ -130,6 +155,7 @@ class ModuleIconModel {
   async createModule(data) {
     this.validateModuleKeyFormat(data.module_key);
     this.validateColorFields(data);
+    this.validatePlacement(data.placement);
 
     if (!data.label || !String(data.label).trim()) {
       const error = new Error("label is required");
@@ -147,17 +173,19 @@ class ModuleIconModel {
       await db.query(
         `
         INSERT INTO module_icons (
-          module_key, icon_type, icon_url, active_icon_url,
+          module_key, placement, icon_type, icon_url, active_icon_url, dashboard_icon_url,
           normal_color, active_color, gradient_start_color, gradient_end_color,
           label, sort_order, is_active, created_by_name
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
           data.module_key,
+          data.placement || DEFAULT_PLACEMENT,
           data.icon_type || "image",
           data.icon_url || "",
           data.active_icon_url || null,
+          data.dashboard_icon_url || null,
           data.normal_color || null,
           data.active_color || null,
           data.gradient_start_color || null,
@@ -183,6 +211,7 @@ class ModuleIconModel {
   async updateModule(moduleKey, data) {
     this.validateModuleKeyFormat(moduleKey);
     this.validateColorFields(data);
+    this.validatePlacement(data.placement);
     await this.getModuleByKey(moduleKey); // 404s if missing
 
     const fields = [];
@@ -191,7 +220,7 @@ class ModuleIconModel {
     // module_key and route_key are intentionally excluded - the CMS can't rename a
     // module's identifier or grant it a navigation route.
     const settable = [
-      "icon_type", "icon_url", "active_icon_url",
+      "placement", "icon_type", "icon_url", "active_icon_url", "dashboard_icon_url",
       "normal_color", "active_color", "gradient_start_color", "gradient_end_color",
       "label", "sort_order", "is_active", "created_by_name",
     ];

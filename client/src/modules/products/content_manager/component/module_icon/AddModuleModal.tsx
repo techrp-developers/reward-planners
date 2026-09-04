@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { FiTrash2, FiX } from "react-icons/fi";
 import { toast } from "sonner";
-import { createModule } from "../../api/ModuleIconApi";
+import type { ModulePlacement } from "../../api/ModuleIconApi";
+import { PLACEMENT_OPTIONS, createModule } from "../../api/ModuleIconApi";
 import ColorPickerField from "./ColorPickerField";
 
 interface Props {
@@ -13,13 +14,50 @@ const MODULE_KEY_PATTERN = /^[a-z0-9_-]{2,50}$/;
 const inputClass = "mt-2 w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100";
 const labelClass = "text-xs font-bold text-slate-500";
 
+function IconFileField({
+  label,
+  file,
+  onChange,
+}: {
+  label: string;
+  file: File | null;
+  onChange: (file: File | null) => void;
+}) {
+  return (
+    <label className={labelClass}>
+      {label}
+      <div className="mt-2 flex items-center gap-2">
+        <input
+          type="file"
+          accept="image/png,image/jpeg,image/svg+xml"
+          onChange={(event) => onChange(event.target.files?.[0] ?? null)}
+          className="block min-w-0 flex-1 text-xs text-slate-500 file:mr-2 file:rounded-lg file:border-0 file:bg-purple-50 file:px-2.5 file:py-2 file:text-[11px] file:font-bold file:text-[#852BAF]"
+        />
+        {file && (
+          <button
+            type="button"
+            onClick={() => onChange(null)}
+            title={`Remove selected ${label.toLowerCase()}`}
+            className="rounded-lg border border-red-100 bg-red-50 p-2 text-red-500 hover:bg-red-100"
+          >
+            <FiTrash2 size={14} />
+          </button>
+        )}
+      </div>
+      {file && <p className="mt-1 truncate text-[11px] text-slate-400">{file.name}</p>}
+    </label>
+  );
+}
+
 export default function AddModuleModal({ onClose, onCreated }: Props) {
   const [moduleKey, setModuleKey] = useState("");
   const [label, setLabel] = useState("");
+  const [placement, setPlacement] = useState<ModulePlacement>("both");
   const [sortOrder, setSortOrder] = useState(0);
   const [isActive, setIsActive] = useState(true);
   const [iconFile, setIconFile] = useState<File | null>(null);
   const [activeIconFile, setActiveIconFile] = useState<File | null>(null);
+  const [dashboardIconFile, setDashboardIconFile] = useState<File | null>(null);
   const [normalColor, setNormalColor] = useState<string | null>(null);
   const [activeColor, setActiveColor] = useState<string | null>(null);
   const [gradientStart, setGradientStart] = useState<string | null>(null);
@@ -45,10 +83,16 @@ export default function AddModuleModal({ onClose, onCreated }: Props) {
       const fd = new FormData();
       fd.append("module_key", key);
       fd.append("label", label.trim());
+      fd.append("placement", placement);
       fd.append("sort_order", String(sortOrder));
       fd.append("is_active", String(isActive));
-      if (iconFile) fd.append("icon", iconFile);
-      if (activeIconFile) fd.append("active_icon", activeIconFile);
+      // Gated by the current placement too, not just file presence - a file picked before
+      // switching placement away from its section must never be sent for the new placement.
+      const showDashboard = placement === "both" || placement === "dashboard";
+      const showNavbar = placement === "both" || placement === "navbar";
+      if (showNavbar && iconFile) fd.append("icon", iconFile);
+      if (showNavbar && activeIconFile) fd.append("active_icon", activeIconFile);
+      if (showDashboard && dashboardIconFile) fd.append("dashboard_icon", dashboardIconFile);
       fd.append("normal_color", normalColor || "");
       fd.append("active_color", activeColor || "");
       fd.append("gradient_start_color", gradientStart || "");
@@ -99,52 +143,46 @@ export default function AddModuleModal({ onClose, onCreated }: Props) {
             />
           </label>
 
-          <div className="grid grid-cols-2 gap-3">
-            <label className={labelClass}>
-              Normal Icon
-              <div className="mt-2 flex items-center gap-2">
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/svg+xml"
-                  onChange={(event) => setIconFile(event.target.files?.[0] ?? null)}
-                  className="block min-w-0 flex-1 text-xs text-slate-500 file:mr-2 file:rounded-lg file:border-0 file:bg-purple-50 file:px-2.5 file:py-2 file:text-[11px] file:font-bold file:text-[#852BAF]"
-                />
-                {iconFile && (
-                  <button
-                    type="button"
-                    onClick={() => setIconFile(null)}
-                    title="Remove selected normal icon"
-                    className="rounded-lg border border-red-100 bg-red-50 p-2 text-red-500 hover:bg-red-100"
-                  >
-                    <FiTrash2 size={14} />
-                  </button>
-                )}
-              </div>
-              {iconFile && <p className="mt-1 truncate text-[11px] text-slate-400">{iconFile.name}</p>}
-            </label>
+          <div>
+            <p className={labelClass}>Module Placement</p>
+            <div className="mt-2 flex flex-wrap gap-1 rounded-xl border border-purple-100 bg-white p-1 shadow-sm">
+              {PLACEMENT_OPTIONS.map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => setPlacement(option.key)}
+                  className={`flex-1 rounded-lg px-3 py-2 text-xs font-bold transition ${placement === option.key ? "bg-[#852BAF] text-white shadow" : "text-slate-500 hover:bg-purple-50"}`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
-            <label className={labelClass}>
-              Active Icon
-              <div className="mt-2 flex items-center gap-2">
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/svg+xml"
-                  onChange={(event) => setActiveIconFile(event.target.files?.[0] ?? null)}
-                  className="block min-w-0 flex-1 text-xs text-slate-500 file:mr-2 file:rounded-lg file:border-0 file:bg-purple-50 file:px-2.5 file:py-2 file:text-[11px] file:font-bold file:text-[#852BAF]"
-                />
-                {activeIconFile && (
-                  <button
-                    type="button"
-                    onClick={() => setActiveIconFile(null)}
-                    title="Remove selected active icon"
-                    className="rounded-lg border border-red-100 bg-red-50 p-2 text-red-500 hover:bg-red-100"
-                  >
-                    <FiTrash2 size={14} />
-                  </button>
-                )}
-              </div>
-              {activeIconFile && <p className="mt-1 truncate text-[11px] text-slate-400">{activeIconFile.name}</p>}
-            </label>
+          <div>
+            <p className={labelClass}>Module Icons</p>
+            <p className="mt-1 text-[11px] text-slate-400">
+              Dashboard Icon, Navbar Normal Icon, and Navbar Active Icon are independent artwork - upload different images for each when they should look different.
+            </p>
+            <div className="mt-3 space-y-4">
+              {(placement === "both" || placement === "dashboard") && (
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-purple-400">Dashboard</p>
+                  <div className="mt-2">
+                    <IconFileField label="Dashboard Icon" file={dashboardIconFile} onChange={setDashboardIconFile} />
+                  </div>
+                </div>
+              )}
+              {(placement === "both" || placement === "navbar") && (
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-purple-400">Navbar</p>
+                  <div className="mt-2 grid grid-cols-2 gap-3">
+                    <IconFileField label="Navbar Normal Icon" file={iconFile} onChange={setIconFile} />
+                    <IconFileField label="Navbar Active Icon" file={activeIconFile} onChange={setActiveIconFile} />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

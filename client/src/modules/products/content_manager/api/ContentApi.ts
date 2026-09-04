@@ -1,5 +1,5 @@
 import { api } from "../../../../common/api/api";
-import type { ContentEntry, Zone } from "../types";
+import type { ContentDisplayMode, ContentEntry, Zone } from "../types";
 
 const BASE = "/content";
 const MODULE = "product";
@@ -17,7 +17,9 @@ export interface ApiContentEntry {
   module: string;
   zone: Zone;
   content_type: "color" | "image";
+  display_mode: ContentDisplayMode | null;
   color_value: string | null;
+  text_color: string | null;
   image_url: string | null;
 
   title: string;
@@ -93,6 +95,7 @@ export const listEntries = async (
     },
   );
 
+  console.log(`[ContentApi] GET ${BASE}/entries`, data.data);
   return data.data;
 };
 
@@ -108,6 +111,7 @@ export const getEntry = async (
     `${BASE}/entries/${id}`,
   );
 
+  console.log(`[ContentApi] GET ${BASE}/entries/${id}`, data.data);
   return data.data;
 };
 
@@ -129,9 +133,14 @@ export const buildEntryFormData = (
   fd.append("module", opts.module ?? MODULE);
   fd.append("zone", draft.zone);
   fd.append("content_type", draft.contentType);
+  fd.append("display_mode", draft.displayMode);
 
   if (draft.contentType === "color") {
     fd.append("color_value", draft.colorValue);
+  }
+
+  if (draft.zone === "navbar_background") {
+    fd.append("text_color", draft.textColor);
   }
 
   fd.append("title", draft.title);
@@ -262,6 +271,7 @@ export const getResolvedZones = async (
     ApiResponse<ResolvedZonesResult>
   >(`${BASE}/resolved/${moduleName}`);
 
+  console.log(`[ContentApi] GET ${BASE}/resolved/${moduleName}`, data.data);
   return data.data;
 };
 
@@ -275,6 +285,7 @@ export const getResolvedNavbar = async (): Promise<ResolvedNavbarResult> => {
     ApiResponse<ResolvedNavbarResult>
   >(`${BASE}/resolved/navbar`);
 
+  console.log(`[ContentApi] GET ${BASE}/resolved/navbar`, data.data);
   return data.data;
 };
 

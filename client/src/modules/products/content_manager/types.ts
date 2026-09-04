@@ -1,6 +1,7 @@
 export type Zone = "navbar_background" | "promotional_banner" | "offers_banner";
 export type ContentKind = "color" | "image";
 export type Status = "default" | "draft" | "scheduled" | "active" | "expired";
+export type ContentDisplayMode = "single" | "carousel" | "grid_2" | "grid_3";
 export type GradientDirection =
   | "left-right"
   | "right-left"
@@ -26,6 +27,10 @@ export interface ContentEntry {
   zone: Zone;
   contentType: ContentKind;
   colorValue: string;
+  /** Optional header text color override - currently only surfaced for mobile_dashboard navbar_background. */
+  textColor: string;
+  /** promotional_banner/offers_banner layout - the CMS selection, never derived from image count. */
+  displayMode: ContentDisplayMode;
   imageUrl: string;
   title: string;
   ctaText: string;
@@ -49,6 +54,13 @@ export const ZONES: { key: Zone; label: string }[] = [
   { key: "navbar_background", label: "Navbar Background" },
   { key: "promotional_banner", label: "Promotional Banner" },
   { key: "offers_banner", label: "Offers Banner" },
+];
+
+export const DISPLAY_MODES: { key: ContentDisplayMode; label: string }[] = [
+  { key: "single", label: "Single Banner" },
+  { key: "carousel", label: "Horizontal Carousel" },
+  { key: "grid_2", label: "2 Column Grid" },
+  { key: "grid_3", label: "3 Column Grid" },
 ];
 
 export const STATUS_META: Record<Status, { label: string; badgeClass: string; dotClass: string }> = {
@@ -78,6 +90,8 @@ export function blankEntry(zone: Zone): ContentEntry {
     zone,
     contentType: "color",
     colorValue: "#852BAF",
+    textColor: "",
+    displayMode: "carousel",
     imageUrl: "",
     title: "",
     ctaText: "",

@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { FiCheckCircle, FiTrash2, FiUploadCloud, FiXCircle } from "react-icons/fi";
 import { toast } from "sonner";
 import { confirmDialog } from "../../../../../common/utils/confirmDialog";
-import type { ApiModuleIcon } from "../../api/ModuleIconApi";
-import { deleteModule, updateModuleIcon } from "../../api/ModuleIconApi";
+import type { ApiModuleIcon, ModulePlacement } from "../../api/ModuleIconApi";
+import { PLACEMENT_LABELS, PLACEMENT_OPTIONS, deleteModule, normalizePlacement, updateModuleIcon } from "../../api/ModuleIconApi";
 import ColorPickerField from "./ColorPickerField";
 
 interface Props {
@@ -15,12 +15,15 @@ const ICON_ACCEPT = "image/png,image/jpeg,image/svg+xml";
 
 export default function ModuleIconCard({ module, onSaved }: Props) {
   const [label, setLabel] = useState(module.label);
+  const [placement, setPlacement] = useState<ModulePlacement>(normalizePlacement(module.placement));
   const [sortOrder, setSortOrder] = useState(module.sort_order);
   const [isActive, setIsActive] = useState(!!module.is_active);
   const [iconFile, setIconFile] = useState<File | null>(null);
   const [activeIconFile, setActiveIconFile] = useState<File | null>(null);
+  const [dashboardIconFile, setDashboardIconFile] = useState<File | null>(null);
   const [iconPreview, setIconPreview] = useState<string | null>(null);
   const [activeIconPreview, setActiveIconPreview] = useState<string | null>(null);
+  const [dashboardIconPreview, setDashboardIconPreview] = useState<string | null>(null);
   const [normalColor, setNormalColor] = useState<string | null>(module.normal_color);
   const [activeColor, setActiveColor] = useState<string | null>(module.active_color);
   const [gradientStart, setGradientStart] = useState<string | null>(module.gradient_start_color);
@@ -33,6 +36,7 @@ export default function ModuleIconCard({ module, onSaved }: Props) {
   useEffect(() => {
     if (saving) return;
     setLabel(module.label);
+    setPlacement(normalizePlacement(module.placement));
     setSortOrder(module.sort_order);
     setIsActive(!!module.is_active);
     setNormalColor(module.normal_color);
@@ -41,6 +45,7 @@ export default function ModuleIconCard({ module, onSaved }: Props) {
     setGradientEnd(module.gradient_end_color);
   }, [
     module.label,
+    module.placement,
     module.sort_order,
     module.is_active,
     module.normal_color,
@@ -54,10 +59,11 @@ export default function ModuleIconCard({ module, onSaved }: Props) {
     return () => {
       if (iconPreview) URL.revokeObjectURL(iconPreview);
       if (activeIconPreview) URL.revokeObjectURL(activeIconPreview);
+      if (dashboardIconPreview) URL.revokeObjectURL(dashboardIconPreview);
     };
-  }, [iconPreview, activeIconPreview]);
+  }, [iconPreview, activeIconPreview, dashboardIconPreview]);
 
-  const handlePickIcon = (file: File | undefined, kind: "icon" | "active") => {
+  const handlePickIcon = (file: File | undefined, kind: "icon" | "active" | "dashboard") => {
     if (!file) return;
     const url = URL.createObjectURL(file);
 
@@ -65,10 +71,14 @@ export default function ModuleIconCard({ module, onSaved }: Props) {
       if (iconPreview) URL.revokeObjectURL(iconPreview);
       setIconFile(file);
       setIconPreview(url);
-    } else {
+    } else if (kind === "active") {
       if (activeIconPreview) URL.revokeObjectURL(activeIconPreview);
       setActiveIconFile(file);
       setActiveIconPreview(url);
+    } else {
+      if (dashboardIconPreview) URL.revokeObjectURL(dashboardIconPreview);
+      setDashboardIconFile(file);
+      setDashboardIconPreview(url);
     }
   };
 
@@ -77,10 +87,16 @@ export default function ModuleIconCard({ module, onSaved }: Props) {
     try {
       const fd = new FormData();
       fd.append("label", label);
+      fd.append("placement", placement);
       fd.append("sort_order", String(sortOrder));
       fd.append("is_active", String(isActive));
-      if (iconFile) fd.append("icon", iconFile);
-      if (activeIconFile) fd.append("active_icon", activeIconFile);
+      // Gated by the current placement too, not just file presence - a file picked before
+      // switching placement away from its section must never be sent for the new placement.
+      const showDashboard = placement === "both" || placement === "dashboard";
+      const showNavbar = placement === "both" || placement === "navbar";
+      if (showNavbar && iconFile) fd.append("icon", iconFile);
+      if (showNavbar && activeIconFile) fd.append("active_icon", activeIconFile);
+      if (showDashboard && dashboardIconFile) fd.append("dashboard_icon", dashboardIconFile);
       fd.append("normal_color", normalColor || "");
       fd.append("active_color", activeColor || "");
       fd.append("gradient_start_color", gradientStart || "");
@@ -90,10 +106,13 @@ export default function ModuleIconCard({ module, onSaved }: Props) {
 
       if (iconPreview) URL.revokeObjectURL(iconPreview);
       if (activeIconPreview) URL.revokeObjectURL(activeIconPreview);
+      if (dashboardIconPreview) URL.revokeObjectURL(dashboardIconPreview);
       setIconFile(null);
       setActiveIconFile(null);
+      setDashboardIconFile(null);
       setIconPreview(null);
       setActiveIconPreview(null);
+      setDashboardIconPreview(null);
 
       toast.success("Module icon updated successfully");
       onSaved();
@@ -129,6 +148,9 @@ export default function ModuleIconCard({ module, onSaved }: Props) {
 
   const displayIconUrl = iconPreview || module.icon_url;
   const displayActiveIconUrl = activeIconPreview || module.active_icon_url;
+  // Independently managed - no fallback to icon_url. A null dashboard_icon_url means
+  // "not uploaded yet", shown as an explicit empty state rather than borrowing navbar artwork.
+  const displayDashboardIconUrl = dashboardIconPreview || module.dashboard_icon_url;
 
   return (
     <div className="rounded-3xl border border-purple-100 bg-white p-6 shadow-[0_18px_55px_rgba(67,31,91,0.08)]">
@@ -136,6 +158,9 @@ export default function ModuleIconCard({ module, onSaved }: Props) {
         <div>
           <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{module.module_key}</p>
           <h3 className="text-lg font-black text-slate-900">{label || module.label}</h3>
+          <span className="mt-1 inline-flex w-fit items-center rounded-full bg-purple-50 px-2.5 py-1 text-[10px] font-bold text-[#852BAF]">
+            {PLACEMENT_LABELS[normalizePlacement(module.placement)]}
+          </span>
           {!module.route_key && (
             <p className="mt-0.5 text-[10px] font-semibold text-amber-600">Not linked to a mobile screen yet - displays only, not tappable</p>
           )}
@@ -167,6 +192,22 @@ export default function ModuleIconCard({ module, onSaved }: Props) {
         />
       </label>
 
+      <div className="mt-4">
+        <p className="text-xs font-bold text-slate-500">Module Placement</p>
+        <div className="mt-2 flex flex-wrap gap-1 rounded-xl border border-purple-100 bg-white p-1 shadow-sm">
+          {PLACEMENT_OPTIONS.map((option) => (
+            <button
+              key={option.key}
+              type="button"
+              onClick={() => setPlacement(option.key)}
+              className={`flex-1 rounded-lg px-3 py-2 text-xs font-bold transition ${placement === option.key ? "bg-[#852BAF] text-white shadow" : "text-slate-500 hover:bg-purple-50"}`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="mt-4 grid grid-cols-2 gap-3">
         <ColorPickerField label="Normal Color" value={normalColor} onChange={setNormalColor} />
         <ColorPickerField label="Active Color" value={activeColor} onChange={setActiveColor} />
@@ -186,49 +227,92 @@ export default function ModuleIconCard({ module, onSaved }: Props) {
         )}
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <div>
-          <p className="text-xs font-bold text-slate-500">Normal Icon</p>
-          <div className="mt-2 flex items-center gap-2">
-            <span className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
-              {displayIconUrl ? (
-                <img src={displayIconUrl} alt="" className="h-full w-full object-contain" />
-              ) : (
-                <FiUploadCloud className="text-slate-300" />
-              )}
-            </span>
-            <label className="cursor-pointer rounded-lg bg-purple-50 px-2.5 py-2 text-[11px] font-bold text-[#852BAF] hover:bg-purple-100">
-              Upload
-              <input
-                type="file"
-                accept={ICON_ACCEPT}
-                className="hidden"
-                onChange={(event) => handlePickIcon(event.target.files?.[0], "icon")}
-              />
-            </label>
-          </div>
-        </div>
+      <div className="mt-4">
+        <p className="text-xs font-bold text-slate-500">Module Icons</p>
+        <p className="mt-1 text-[11px] text-slate-400">
+          Dashboard Icon, Navbar Normal Icon, and Navbar Active Icon are independent artwork - upload different images for each when they should look different.
+        </p>
+        <div className="mt-3 space-y-4">
+          {(placement === "both" || placement === "dashboard") && (
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-wider text-purple-400">Dashboard</p>
+              <div className="mt-2">
+                <p className="text-xs font-bold text-slate-500">Dashboard Icon</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+                    {displayDashboardIconUrl ? (
+                      <img src={displayDashboardIconUrl} alt="" className="h-full w-full object-contain" />
+                    ) : (
+                      <FiUploadCloud className="text-slate-300" />
+                    )}
+                  </span>
+                  <label className="cursor-pointer rounded-lg bg-purple-50 px-2.5 py-2 text-[11px] font-bold text-[#852BAF] hover:bg-purple-100">
+                    {displayDashboardIconUrl ? "Replace" : "Upload"}
+                    <input
+                      type="file"
+                      accept={ICON_ACCEPT}
+                      className="hidden"
+                      onChange={(event) => handlePickIcon(event.target.files?.[0], "dashboard")}
+                    />
+                  </label>
+                </div>
+                {!displayDashboardIconUrl && (
+                  <p className="mt-1 text-[10px] font-semibold text-amber-600">No dashboard icon uploaded</p>
+                )}
+              </div>
+            </div>
+          )}
 
-        <div>
-          <p className="text-xs font-bold text-slate-500">Active Icon</p>
-          <div className="mt-2 flex items-center gap-2">
-            <span className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
-              {displayActiveIconUrl ? (
-                <img src={displayActiveIconUrl} alt="" className="h-full w-full object-contain" />
-              ) : (
-                <span className="px-1 text-center text-[9px] font-semibold text-slate-400">Same as normal icon</span>
-              )}
-            </span>
-            <label className="cursor-pointer rounded-lg bg-purple-50 px-2.5 py-2 text-[11px] font-bold text-[#852BAF] hover:bg-purple-100">
-              Upload
-              <input
-                type="file"
-                accept={ICON_ACCEPT}
-                className="hidden"
-                onChange={(event) => handlePickIcon(event.target.files?.[0], "active")}
-              />
-            </label>
-          </div>
+          {(placement === "both" || placement === "navbar") && (
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-wider text-purple-400">Navbar</p>
+              <div className="mt-2 grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs font-bold text-slate-500">Navbar Normal Icon</p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+                      {displayIconUrl ? (
+                        <img src={displayIconUrl} alt="" className="h-full w-full object-contain" />
+                      ) : (
+                        <FiUploadCloud className="text-slate-300" />
+                      )}
+                    </span>
+                    <label className="cursor-pointer rounded-lg bg-purple-50 px-2.5 py-2 text-[11px] font-bold text-[#852BAF] hover:bg-purple-100">
+                      Upload
+                      <input
+                        type="file"
+                        accept={ICON_ACCEPT}
+                        className="hidden"
+                        onChange={(event) => handlePickIcon(event.target.files?.[0], "icon")}
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs font-bold text-slate-500">Navbar Active Icon</p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+                      {displayActiveIconUrl ? (
+                        <img src={displayActiveIconUrl} alt="" className="h-full w-full object-contain" />
+                      ) : (
+                        <span className="px-1 text-center text-[9px] font-semibold text-slate-400">Same as normal icon</span>
+                      )}
+                    </span>
+                    <label className="cursor-pointer rounded-lg bg-purple-50 px-2.5 py-2 text-[11px] font-bold text-[#852BAF] hover:bg-purple-100">
+                      Upload
+                      <input
+                        type="file"
+                        accept={ICON_ACCEPT}
+                        className="hidden"
+                        onChange={(event) => handlePickIcon(event.target.files?.[0], "active")}
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
