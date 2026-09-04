@@ -7,6 +7,7 @@
   const FitnessService = require("../../step-counter/v1/service/fitnessService");
   const bcrypt = require("bcryptjs");
   const crypto = require("crypto");
+  const bwipjs = require("bwip-js");
   const {
     issueCustomerSession,
     rotateCustomerSession,
@@ -46,6 +47,40 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
     return typeof phone === "string" || typeof phone === "number"
       ? String(phone).trim()
       : "";
+  }
+
+  function escapeVCardValue(value) {
+    return String(value ?? "")
+      .replace(/\\/g, "\\\\")
+      .replace(/\n/g, "\\n")
+      .replace(/;/g, "\\;")
+      .replace(/,/g, "\\,");
+  }
+
+  async function createVisitCardQr(user) {
+    const companyName = user.company?.name || "Reward Planners";
+    const role = user.employeeInfo?.role || "Customer";
+    const vcard = [
+      "BEGIN:VCARD",
+      "VERSION:3.0",
+      `FN:${escapeVCardValue(user.name)}`,
+      `ORG:${escapeVCardValue(companyName)}`,
+      `TITLE:${escapeVCardValue(role)}`,
+      `EMAIL:${escapeVCardValue(user.email)}`,
+      ...(user.phone ? [`TEL:${escapeVCardValue(user.phone)}`] : []),
+      `NOTE:Reward Planners customer #${user.userId}`,
+      "END:VCARD",
+    ].join("\r\n");
+
+    const png = await bwipjs.toBuffer({
+      bcid: "qrcode",
+      text: vcard,
+      scale: 5,
+      padding: 2,
+      backgroundcolor: "FFFFFF",
+    });
+
+    return png;
   }
 
   function getActivationIdentity(body = {}) {
@@ -1684,6 +1719,10 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
             },
             thought: randomThought,
             birthday_employees: birthdayEmployees || [],
+            visit_card: {
+              qr_code_url: "/v1/auth/visit-card/qr",
+              format: "vcard",
+            },
           },
         });
       } catch (error) {
@@ -1692,6 +1731,31 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
         return res.status(500).json({
           success: false,
           message: "Failed to fetch user info",
+        });
+      }
+    }
+
+    async getVisitCardQr(req, res) {
+      try {
+        const userId = req.user?.user_id;
+        if (!userId) {
+          return res.status(401).json({ success: false, message: "Unauthorized user" });
+        }
+
+        const userInfo = await AuthModel.getUserInfo(userId);
+        if (!userInfo) {
+          return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        const png = await createVisitCardQr(userInfo);
+        res.set("Content-Type", "image/png");
+        res.set("Content-Disposition", `inline; filename=visit-card-${userId}.png`);
+        return res.send(png);
+      } catch (error) {
+        console.error("GET VISIT CARD QR ERROR:", error);
+        return res.status(500).json({
+          success: false,
+          message: "Failed to generate visit card QR",
         });
       }
     }
