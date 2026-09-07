@@ -36,11 +36,11 @@ export default function CompanyEmployees() {
   useEffect(() => { void load(); }, [companyId]);
 
   const filtered = useMemo(() => employees.filter((employee) => {
-    const activationMatches = tab === "activated" ? employee.customer_id !== null : employee.customer_id === null;
+    const activationMatches = tab === "activated" ? Number(employee.status) === 1 : Number(employee.status) !== 1;
     const searchMatches = [employee.name, employee.email, employee.phone, employee.department, employee.role, employee.reporting_manager].some((value) => String(value ?? "").toLowerCase().includes(query));
     return activationMatches && searchMatches;
   }), [employees, query, tab]);
-  const activated = employees.filter((employee) => employee.customer_id !== null).length;
+  const activated = employees.filter((employee) => Number(employee.status) === 1).length;
 
   const openEdit = (employee: Employee) => {
     setEditing(employee);
