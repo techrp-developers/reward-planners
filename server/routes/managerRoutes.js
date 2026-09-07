@@ -55,6 +55,13 @@ router.post(
   managerController.createCompanyEmployee.bind(managerController),
 );
 
+router.put(
+  "/employee-directory/companies/:companyId/employees/:employeeId",
+  authenticateToken,
+  authorizeRoles("admin", "rm"),
+  managerController.updateCompanyEmployee.bind(managerController),
+);
+
 router.post(
   "/employee-directory/employees/import",
   authenticateToken,

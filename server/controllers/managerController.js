@@ -177,6 +177,50 @@ class ManagerController {
     }
   }
 
+  async updateCompanyEmployee(req, res) {
+    try {
+      const companyId = Number(req.params.companyId);
+      const employeeId = Number(req.params.employeeId);
+      if (!Number.isInteger(companyId) || companyId < 1 || !Number.isInteger(employeeId) || employeeId < 1) {
+        return res.status(400).json({ success: false, message: "Invalid company or employee ID" });
+      }
+      if (!(await EmployeeModel.findById(employeeId, companyId))) {
+        return res.status(404).json({ success: false, message: "Employee not found" });
+      }
+      const employee = {
+        company_id: companyId,
+        name: String(req.body.name || "").trim(),
+        email: String(req.body.email || "").trim().toLowerCase(),
+        phone: String(req.body.phone || req.body.contact || "").trim(),
+        department: String(req.body.department || "").trim() || null,
+        role: String(req.body.role || "").trim() || null,
+        date_of_joining: req.body.date_of_joining || null,
+        dob: req.body.dob || null,
+        address1: String(req.body.address1 || "").trim() || null,
+        address2: String(req.body.address2 || "").trim() || null,
+        reporting_manager: String(req.body.reporting_manager || "").trim() || null,
+        ctc: req.body.ctc === "" || req.body.ctc == null ? null : Number(req.body.ctc),
+      };
+      if (!employee.name) return res.status(400).json({ success: false, message: "Employee name is required" });
+      if (!employee.email || !COMPANY_EMAIL_PATTERN.test(employee.email)) return res.status(400).json({ success: false, message: "A valid employee email is required" });
+      if (!employee.phone) return res.status(400).json({ success: false, message: "Employee phone is required" });
+      if (!employee.dob) return res.status(400).json({ success: false, message: "Date of birth is required" });
+      const dateOfBirth = new Date(`${employee.dob}T00:00:00Z`);
+      if (Number.isNaN(dateOfBirth.getTime()) || dateOfBirth.toISOString().slice(0, 10) !== employee.dob || dateOfBirth > new Date()) {
+        return res.status(400).json({ success: false, message: "Date of birth must be a valid past date" });
+      }
+      if (employee.ctc !== null && (!Number.isFinite(employee.ctc) || employee.ctc < 0)) return res.status(400).json({ success: false, message: "CTC must be a non-negative number" });
+      const duplicate = await EmployeeModel.findDuplicate({ ...employee, excludeId: employeeId });
+      if (duplicate) return res.status(409).json({ success: false, message: "Another employee with this email or phone already exists" });
+      await EmployeeModel.update(employeeId, companyId, employee);
+      if (req.body.status !== undefined) await EmployeeModel.setStatus(employeeId, companyId, Number(req.body.status) === 1);
+      return res.json({ success: true, message: "Employee updated successfully", data: await EmployeeModel.findById(employeeId, companyId) });
+    } catch (error) {
+      console.error("Update company employee error:", error);
+      return res.status(500).json({ success: false, message: "Failed to update employee" });
+    }
+  }
+
   async downloadEmployeeActivationReport(req, res) {
     try {
       const [employees] = await db.execute(`
@@ -325,6 +369,8 @@ class ManagerController {
            cu.role,
            cu.date_of_joining,
            cu.dob,
+           cu.address1,
+           cu.address2,
            cu.reporting_manager,
            cu.ctc,
            cu.status,
