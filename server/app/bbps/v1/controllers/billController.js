@@ -812,16 +812,27 @@ class BillController {
         data,
       });
     } catch (error) {
-      const statusCode = error.statusCode || error.response?.status || 502;
+      // Do not proxy an upstream 502/520 as 502. Cloudflare treats a 502 from
+      // our origin as an origin failure and replaces this JSON with its own
+      // error page. 424 accurately represents a failed provider dependency.
+      const statusCode = error.code === "RECHARGE_OPERATOR_MISMATCH" ? 409 : 424;
+      const providerMessage =
+        error.response?.data && typeof error.response.data === "object"
+          ? error.response.data.message
+          : null;
       console.error("[BBPS][recharge-plans] error", {
-        statusCode,
+        statusCode: error.response?.status || error.statusCode || statusCode,
         provider: error.response?.data || error.message,
       });
 
       return res.status(statusCode).json({
         success: false,
         message:
-          error.response?.data?.message || "Failed to fetch recharge plans",
+          error.code === "RECHARGE_OPERATOR_MISMATCH"
+            ? error.message
+            : providerMessage || "Recharge operator verification is temporarily unavailable. Please try again.",
+        code: error.code || "RECHARGE_PROVIDER_UNAVAILABLE",
+        data: error.code === "RECHARGE_OPERATOR_MISMATCH" ? error.details : undefined,
       });
     }
   }

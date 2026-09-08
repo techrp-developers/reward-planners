@@ -233,6 +233,29 @@ class PaymentController {
     } catch (err) {
       await conn.rollback();
 
+      if (err.code === "RECHARGE_OPERATOR_MISMATCH") {
+        return res.status(err.statusCode || 409).json({
+          success: false,
+          message: err.message,
+          code: err.code,
+          data: err.details,
+        });
+      }
+
+      if (err.statusCode || err.response) {
+        const providerMessage =
+          err.response?.data && typeof err.response.data === "object"
+            ? err.response.data.message
+            : null;
+        return res.status(424).json({
+          success: false,
+          message:
+            providerMessage ||
+            "Recharge operator verification is temporarily unavailable. Please try again.",
+          code: "RECHARGE_PROVIDER_UNAVAILABLE",
+        });
+      }
+
       if (razorpayOrder?.id) {
         razorpay.orders.cancel(razorpayOrder.id).catch((cancelError) => {
           console.error("[BBPS][create-order] orphan cancellation failed", {

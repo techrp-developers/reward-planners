@@ -58,6 +58,14 @@ const FETCH_BILL_TIMEOUT_MS =
   Number.isFinite(configuredFetchBillTimeout) && configuredFetchBillTimeout > 0
     ? configuredFetchBillTimeout
     : 30000;
+const configuredRechargeOperatorTimeout = Number(
+  process.env.EKO_RECHARGE_OPERATOR_TIMEOUT_MS || 8000,
+);
+const RECHARGE_OPERATOR_TIMEOUT_MS =
+  Number.isFinite(configuredRechargeOperatorTimeout) &&
+  configuredRechargeOperatorTimeout > 0
+    ? configuredRechargeOperatorTimeout
+    : 8000;
 const configuredCatalogCacheTtl = Number(
   process.env.EKO_CATALOG_CACHE_TTL_MS || 5 * 60 * 1000,
 );
@@ -319,7 +327,115 @@ exports.getOperatorDetails = async (id) => {
   });
 };
 
+const findRechargeOperatorRecord = (value) => {
+  if (!value || typeof value !== "object") return null;
+  if (Array.isArray(value)) {
+    const namedValues = Object.fromEntries(
+      value
+        .filter(
+          (item) =>
+            item &&
+            typeof item === "object" &&
+            typeof item.name === "string" &&
+            Object.prototype.hasOwnProperty.call(item, "value"),
+        )
+        .map((item) => [item.name.trim().toLowerCase(), item.value]),
+    );
+    const namedMatch = findRechargeOperatorRecord(namedValues);
+    if (namedMatch) return namedMatch;
+  }
+  const operatorCode =
+    value.phone_operator_code ??
+    value.operator_code ??
+    value.operatorCode ??
+    value.operator_id ??
+    value.operatorId;
+  const circleId =
+    value.circleid ??
+    value.circle_id ??
+    value.circleId ??
+    value.circle_code ??
+    value.circle_area;
+
+  if (operatorCode !== undefined && operatorCode !== null) {
+    return { value, operatorCode, circleId };
+  }
+
+  for (const child of Object.values(value)) {
+    const match = findRechargeOperatorRecord(child);
+    if (match) return match;
+  }
+  return null;
+};
+
+exports.getRechargeOperator = async (mobile) => {
+  const headers = await headerUtil.fetchHeaders();
+  const path = `customer/payment/bbps/recharge/${encodeURIComponent(
+    mobile,
+  )}/operator`;
+  const response = await retry(
+    () =>
+      axios.get(ekoRechargeUrl(path), {
+        headers,
+        params: {
+          initiator_id: process.env.EKO_INITIATOR_ID,
+          user_code: process.env.EKO_USER_CODE,
+        },
+        timeout: RECHARGE_OPERATOR_TIMEOUT_MS,
+      }),
+    1,
+    250,
+  );
+  const providerResponse = response.data || {};
+
+  if (Number(providerResponse.status) !== 0) {
+    const error = new Error(
+      providerResponse.message || "EKO failed to identify the mobile operator",
+    );
+    error.statusCode = 502;
+    error.details = providerResponse;
+    throw error;
+  }
+
+  const match = findRechargeOperatorRecord(providerResponse);
+  if (!match || String(match.operatorCode).trim() === "") {
+    const error = new Error("EKO did not return an operator for this mobile number");
+    error.statusCode = 502;
+    error.details = providerResponse;
+    throw error;
+  }
+
+  return {
+    operatorId: String(match.operatorCode).trim(),
+    operatorName: String(
+      match.value.operator_name ?? match.value.operatorName ?? match.value.name ?? "",
+    ).trim() || null,
+    circleId:
+      match.circleId === undefined || match.circleId === null
+        ? null
+        : String(match.circleId).trim() || null,
+  };
+};
+
 exports.getRechargePlans = async ({ mobile, operatorCode, circleId }) => {
+  const detected = await exports.getRechargeOperator(mobile);
+  if (operatorCode && String(operatorCode) !== detected.operatorId) {
+    const error = new Error(
+      `This mobile number belongs to ${detected.operatorName || "another operator"}. Please select the correct operator.`,
+    );
+    error.statusCode = 409;
+    error.code = "RECHARGE_OPERATOR_MISMATCH";
+    error.details = {
+      selectedOperatorId: String(operatorCode),
+      detectedOperatorId: detected.operatorId,
+      detectedOperatorName: detected.operatorName,
+      detectedCircleId: detected.circleId,
+    };
+    throw error;
+  }
+
+  const verifiedOperatorCode = detected.operatorId;
+  const verifiedCircleId = detected.circleId || circleId;
   const headers = await headerUtil.fetchHeaders();
   const path = `customer/payment/bbps/recharge/${encodeURIComponent(
     mobile,
@@ -330,12 +446,10 @@ exports.getRechargePlans = async ({ mobile, operatorCode, circleId }) => {
     user_code: process.env.EKO_USER_CODE,
   };
 
-  if (operatorCode) {
-    params.phone_operator_code = operatorCode;
-  }
+  params.phone_operator_code = verifiedOperatorCode;
 
-  if (circleId) {
-    params.circleid = circleId;
+  if (verifiedCircleId) {
+    params.circleid = verifiedCircleId;
   }
 
   const response = await axios.get(ekoRechargeUrl(path), {
@@ -368,7 +482,7 @@ exports.getRechargePlans = async ({ mobile, operatorCode, circleId }) => {
       return null;
     }
 
-    const fingerprint = `${operatorCode}|${circleId}|${amount}|${validity}|${description}`;
+    const fingerprint = `${verifiedOperatorCode}|${verifiedCircleId}|${amount}|${validity}|${description}`;
     return {
       planId: createHash("sha256")
         .update(fingerprint)
@@ -452,8 +566,9 @@ exports.getRechargePlans = async ({ mobile, operatorCode, circleId }) => {
     status: providerResponse.status,
     responseTypeId: providerResponse.response_type_id,
     message: providerResponse.message,
-    operatorId: operatorCode ? String(operatorCode) : null,
-    circleId: circleId ? String(circleId) : null,
+    operatorId: verifiedOperatorCode,
+    operatorName: detected.operatorName,
+    circleId: verifiedCircleId || null,
     mobile,
     count: plans.length,
     groups,
