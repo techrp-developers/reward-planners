@@ -7,6 +7,7 @@ const ekoService = require("../services/eko_service");
 const { processTransaction } = require("../services/paymentProcessor");
 const db = require("../../../../config/database");
 const { notifyUser } = require("../../../common/utils/notification");
+const { hasRazorpayPaymentAttempts } = require("../utils/paymentState");
 
 class PaymentController {
   //   create Order
@@ -257,11 +258,8 @@ class PaymentController {
       }
 
       if (razorpayOrder?.id) {
-        razorpay.orders.cancel(razorpayOrder.id).catch((cancelError) => {
-          console.error("[BBPS][create-order] orphan cancellation failed", {
-            razorpay_order_id: razorpayOrder.id,
-            message: cancelError.message,
-          });
+        console.warn("[BBPS][create-order] unpaid Razorpay order left to expire", {
+          razorpay_order_id: razorpayOrder.id,
         });
       }
 
@@ -366,9 +364,21 @@ class PaymentController {
         });
       }
 
-      // Razorpay rejects cancellation once an order has a payment attempt,
-      // which makes this the authoritative safety check before local expiry.
-      await razorpay.orders.cancel(rpOrder.razorpay_order_id);
+      // Razorpay does not provide an order-cancellation API. Before expiring
+      // our local order, query Razorpay to ensure checkout never created a
+      // payment attempt for it. Captured/authorised attempts must instead be
+      // completed through verification or webhook reconciliation.
+      const paymentCollection = await razorpay.orders.fetchPayments(
+        rpOrder.razorpay_order_id,
+      );
+      if (hasRazorpayPaymentAttempts(paymentCollection)) {
+        await conn.rollback();
+        return res.status(409).json({
+          success: false,
+          status: "payment_attempted",
+          message: "Payment was attempted and is being reconciled",
+        });
+      }
 
       await conn.execute(
         `UPDATE razorpay_orders SET status = 'failed'

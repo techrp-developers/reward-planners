@@ -17,7 +17,11 @@ const shouldIgnoreFailedEvent = ({
   Boolean(razorpayPaymentId) ||
   transactionStatus !== "INIT";
 
+const hasRazorpayPaymentAttempts = (paymentCollection) =>
+  Array.isArray(paymentCollection?.items) && paymentCollection.items.length > 0;
+
 module.exports = {
+  hasRazorpayPaymentAttempts,
   shouldIgnoreCapturedEvent,
   shouldIgnoreFailedEvent,
 };
