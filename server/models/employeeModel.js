@@ -337,17 +337,29 @@ class EmployeeModel {
   }
 
   async setStatus(employeeId, companyId, isActive, conn = db) {
-    await conn.execute(
-      `UPDATE company_users SET status = ? WHERE id = ? AND company_id = ?`,
-      [isActive ? 1 : 0, employeeId, companyId],
-    );
-    await conn.execute(
-      `UPDATE customer c
-       INNER JOIN company_users cu ON cu.id = c.company_user_id
-       SET c.status = ?
-       WHERE cu.id = ? AND cu.company_id = ?`,
-      [isActive ? 1 : 0, employeeId, companyId],
-    );
+    const status = isActive ? 1 : 0;
+    const connection = conn === db ? await db.getConnection() : conn;
+    const ownsTransaction = conn === db;
+
+    try {
+      if (ownsTransaction) await connection.beginTransaction();
+      await connection.execute(
+        `UPDATE company_users SET status = ? WHERE id = ? AND company_id = ?`,
+        [status, employeeId, companyId],
+      );
+      await connection.execute(
+        `UPDATE customer
+         SET status = ?
+         WHERE company_user_id = ? AND company_id = ?`,
+        [status, employeeId, companyId],
+      );
+      if (ownsTransaction) await connection.commit();
+    } catch (error) {
+      if (ownsTransaction) await connection.rollback();
+      throw error;
+    } finally {
+      if (ownsTransaction) connection.release();
+    }
   }
 
   async getExportRows(companyId) {
