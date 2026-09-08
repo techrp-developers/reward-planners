@@ -1,5 +1,6 @@
+import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
-import { FiCheckCircle, FiTrash2, FiUploadCloud, FiXCircle } from "react-icons/fi";
+import { FiCheckCircle, FiGrid, FiTrash2, FiUploadCloud, FiXCircle } from "react-icons/fi";
 import { toast } from "sonner";
 import { confirmDialog } from "../../../../../common/utils/confirmDialog";
 import type { ApiModuleIcon, ModulePlacement } from "../../api/ModuleIconApi";
@@ -116,13 +117,15 @@ export default function ModuleIconCard({ module, onSaved }: Props) {
 
       toast.success("Module icon updated successfully");
       onSaved();
-    } catch (err) {
-      toast.error("Failed to update module icon");
+    } catch (err: unknown) {
+      console.error("MODULE ICON UPDATE FAILED", err);
+      const message =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message || "Failed to update module icon";
+      toast.error(message);
     } finally {
       setSaving(false);
     }
   };
-
   const handleDelete = async () => {
     const confirmed = await confirmDialog({
       title: `Delete "${module.label}"?`,
@@ -139,7 +142,7 @@ export default function ModuleIconCard({ module, onSaved }: Props) {
       await deleteModule(module.module_key);
       toast.success("Module deleted successfully");
       onSaved();
-    } catch (err) {
+    } catch (err: unknown) {
       toast.error("Failed to delete module");
     } finally {
       setDeleting(false);
@@ -151,6 +154,11 @@ export default function ModuleIconCard({ module, onSaved }: Props) {
   // Independently managed - no fallback to icon_url. A null dashboard_icon_url means
   // "not uploaded yet", shown as an explicit empty state rather than borrowing navbar artwork.
   const displayDashboardIconUrl = dashboardIconPreview || module.dashboard_icon_url;
+
+  // Mirrors MobileNavbarPreview's selected-tile styling so this preview matches production.
+  const navbarActiveGradient =
+    gradientStart && gradientEnd ? `linear-gradient(135deg, ${gradientStart}, ${gradientEnd})` : null;
+  const navbarActiveBadgeStyle: CSSProperties = { background: navbarActiveGradient || activeColor || "#FFFFFF" };
 
   return (
     <div className="rounded-3xl border border-purple-100 bg-white p-6 shadow-[0_18px_55px_rgba(67,31,91,0.08)]">
@@ -175,11 +183,51 @@ export default function ModuleIconCard({ module, onSaved }: Props) {
         </button>
       </div>
 
-      <div className="mt-4 grid place-items-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 py-6">
-        {displayIconUrl ? (
-          <img src={displayIconUrl} alt="" className="h-16 w-16 object-contain" />
-        ) : (
-          <span className="text-xs font-semibold text-slate-400">No icon uploaded</span>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        {(placement === "both" || placement === "dashboard") && (
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-center">
+            <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Dashboard Preview</p>
+            <div className="mx-auto mt-3 grid h-14 w-14 place-items-center rounded-2xl border border-slate-100 bg-white shadow-sm">
+              {displayDashboardIconUrl ? (
+                <img src={displayDashboardIconUrl} alt="" className="h-9 w-9 object-contain" />
+              ) : (
+                <FiGrid className="text-slate-300" />
+              )}
+            </div>
+            <p className="mt-2 truncate text-[11px] font-bold text-slate-700">{label || module.label}</p>
+          </div>
+        )}
+
+        {(placement === "both" || placement === "navbar") && (
+          <div className="rounded-2xl bg-[#2b0f47] p-4 text-center">
+            <p className="text-[9px] font-black uppercase tracking-wider text-white/50">Navbar Preview</p>
+            <div className="mt-3 flex items-center justify-center gap-4">
+              <div className="flex flex-col items-center gap-1">
+                <span
+                  className="grid h-9 w-9 place-items-center rounded-2xl"
+                  style={{ background: normalColor || "rgba(255,255,255,0.14)" }}
+                >
+                  {displayIconUrl ? (
+                    <img src={displayIconUrl} alt="" className="h-5 w-5 object-contain" />
+                  ) : (
+                    <FiGrid size={14} className="text-white" />
+                  )}
+                </span>
+                <span className="text-[8px] font-bold text-white/60">Normal</span>
+              </div>
+              <div className="flex flex-col items-center gap-1">
+                <span className="grid h-11 w-11 place-items-center rounded-2xl shadow-lg" style={navbarActiveBadgeStyle}>
+                  {displayActiveIconUrl || displayIconUrl ? (
+                    <img src={displayActiveIconUrl || displayIconUrl || undefined} alt="" className="h-6 w-6 object-contain" />
+                  ) : (
+                    <FiGrid size={14} className="text-[#852BAF]" />
+                  )}
+                </span>
+                <span className="text-[8px] font-bold text-white">Active</span>
+              </div>
+            </div>
+            <p className="mt-2 truncate text-[11px] font-bold text-white">{label || module.label}</p>
+          </div>
         )}
       </div>
 
