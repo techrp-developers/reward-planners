@@ -58,6 +58,8 @@ const SubcategoryManagement = lazy(() => import("./modules/products/vendorManage
 const DocumentManagement = lazy(() => import("./modules/products/vendorManager/document/DocumentAdd.tsx"));
 const DocumentCategoryManagement = lazy(() => import("./modules/products/vendorManager/document/DocumentCategory.tsx"));
 const SubSubCategoryManagement = lazy(() => import("./modules/products/vendorManager/category/Subsubcategories.tsx"));
+const ContentManagement = lazy(() => import("./modules/products/content_manager/component/ContentManagement.tsx"));
+const ModuleIcon = lazy(() => import("./modules/products/content_manager/component/module_icon/ModuleIcon.tsx"));
 const ProductViewPage = lazy(() => import("./modules/products/vendorManager/ProductViewPage.tsx"));
 const Onboarding = lazy(() => import("./modules/products/vendor/Onboarding.tsx"));
 const ChangePasswordPage = lazy(() => import("./common/auth/changePassword.tsx"));
@@ -350,6 +352,13 @@ export default function App() {
           element={<AttributeManagement />}
         />
 
+        {/* Content */}
+        <Route path={routes.manager.content.product} element={<ContentManagement module="product" />} />
+        <Route path={routes.manager.content.service} element={<ContentManagement module="service" />} />
+        <Route path={routes.manager.content.payment} element={<ContentManagement module="payment" />} />
+        <Route path={routes.manager.content.mobileDashboard} element={<ContentManagement module="mobile_dashboard" />} />
+        <Route path={routes.manager.content.moduleIcons} element={<ModuleIcon />} />
+
         <Route path={routes.manager.flashSales.list} element={<FlashSaleList />} />
         <Route path={routes.manager.flashSales.create} element={<FlashSaleEditor />} />
         <Route path={routes.manager.flashSales.edit} element={<FlashSaleEditor />} />
@@ -419,6 +428,10 @@ export default function App() {
           element={<AdminVendorApprovalForm />}
         />
         <Route path={routes.admin.services} element={<AdminServicesPage />} />
+        <Route path={routes.admin.content.product} element={<ContentManagement module="product" />} />
+        <Route path={routes.admin.content.service} element={<ContentManagement module="service" />} />
+        <Route path={routes.admin.content.payment} element={<ContentManagement module="payment" />} />
+        <Route path={routes.admin.content.mobileDashboard} element={<ContentManagement module="mobile_dashboard" />} />
       </Route>
 
       {/* ========== SERVICES ========== */}

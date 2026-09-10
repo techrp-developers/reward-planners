@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import Drawer from "../ui/Drawer";
 import { ErrorState } from "../ui/EmptyState";
@@ -20,9 +20,17 @@ function VendorQuickCreateDrawer({ open, onClose, onCreated }: VendorQuickCreate
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const queryClient = useQueryClient();
 
   const mutation = useMutation({
     mutationFn: () => createVendor({ companyName, fullName, email, phone: phone || undefined }),
+    onSuccess: () => {
+      // Both places a vendor search box exists — StockPage's top-up flow and
+      // the Vendor Sales Report's filter — must see the new vendor on the
+      // very next search, not wait out an already-cached miss.
+      void queryClient.invalidateQueries({ queryKey: ["flea-market", "vendor-search"] });
+      void queryClient.invalidateQueries({ queryKey: ["flea-market", "report-vendor-search"] });
+    },
   });
 
   const reset = () => {

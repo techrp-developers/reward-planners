@@ -1,6 +1,6 @@
 import { Fragment, memo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   FiAlertTriangle,
@@ -22,6 +22,15 @@ import {
 import { getLabelPrintUrl } from "../../api/fleaMarketLabelsApi";
 import { EmptyState } from "../ui/EmptyState";
 import Spinner from "../ui/Spinner";
+
+// Every mutation here changes a pool's stock/price — that's visible on
+// three surfaces (this table, billing product search, All Products), all of
+// which must go stale together rather than one lagging behind the others.
+function invalidateStockSurfaces(queryClient: QueryClient) {
+  void queryClient.invalidateQueries({ queryKey: ["flea-market", "vendor-stock"] });
+  void queryClient.invalidateQueries({ queryKey: ["flea-market", "products", "search"] });
+  void queryClient.invalidateQueries({ queryKey: ["flea-market", "all-products"] });
+}
 
 interface AllocationsTableProps {
   pools: FleaMarketVendorStockPool[];
@@ -53,7 +62,7 @@ function DamageForm({
     mutationFn: () => recordDamage(poolId, Number(quantity), remarks, scheduleId ?? undefined),
     onSuccess: () => {
       toast.success("Damage recorded");
-      void queryClient.invalidateQueries({ queryKey: ["flea-market", "vendor-stock"] });
+      invalidateStockSurfaces(queryClient);
       onDone();
     },
     onError: (error) => {
@@ -125,7 +134,7 @@ function ReturnToVendorForm({
     mutationFn: () => returnToVendor(poolId, Number(returnQty), remarks, closePool),
     onSuccess: () => {
       toast.success("Stock returned to vendor");
-      void queryClient.invalidateQueries({ queryKey: ["flea-market", "vendor-stock"] });
+      invalidateStockSurfaces(queryClient);
       onDone();
     },
     onError: (error) => {
@@ -201,7 +210,7 @@ function EditPriceForm({
     mutationFn: () => updatePoolPrice(poolId, allocationPrice.trim() === "" ? null : Number(allocationPrice)),
     onSuccess: () => {
       toast.success("Allocation price updated");
-      void queryClient.invalidateQueries({ queryKey: ["flea-market", "vendor-stock"] });
+      invalidateStockSurfaces(queryClient);
       onDone();
     },
     onError: (error) => {
@@ -408,7 +417,7 @@ function AllocationsTable({ pools, activeScheduleId }: AllocationsTableProps) {
     mutationFn: (poolId: number) => deletePool(poolId),
     onSuccess: () => {
       toast.success("Pool deleted");
-      void queryClient.invalidateQueries({ queryKey: ["flea-market", "vendor-stock"] });
+      invalidateStockSurfaces(queryClient);
     },
     onError: (error) => {
       const message =

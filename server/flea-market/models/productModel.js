@@ -232,6 +232,50 @@ class ProductModel {
     return Number(row.total);
   }
 
+  // CSV export — same filter (search/vendor), but every matching row, not
+  // one page. Selects the columns the import format needs (vendor_id,
+  // category/subcategory ids, variant_attributes for the label, current
+  // stock) that the paginated overview query doesn't bother selecting.
+  async findAllForExport({ query, vendorId }) {
+    const params = [];
+    const where = this.buildOverviewFilter(query, vendorId, params);
+    const [rows] = await db.execute(
+      `SELECT
+         p.product_id, p.vendor_id, p.brand_name, p.product_name, p.category_id, p.subcategory_id,
+         pv.variant_id, pv.sku, pv.mrp, pv.sale_price, pv.variant_attributes,
+         COALESCE(fvs.available_qty, pv.stock) AS current_stock
+       FROM eproducts p
+       JOIN product_variants pv ON pv.product_id = p.product_id
+       LEFT JOIN flea_market_vendor_stock fvs ON fvs.variant_id = pv.variant_id AND fvs.status = 'active'
+       WHERE ${where}
+       ORDER BY p.product_name ASC, pv.variant_id ASC`,
+      params,
+    );
+    return rows;
+  }
+
+  // Product-level reward mapping only (variant_id IS NULL) — the same shape
+  // the CSV import's reward_rule_id column produces via
+  // RewardModel.mapRewardToProduct, so export/import round-trip correctly.
+  // A product could in principle have more than one active mapping row;
+  // the lowest id (oldest) wins, same as "first one wins" everywhere else
+  // this ambiguity could come up.
+  async findProductLevelRewardRuleIds(productIds) {
+    if (!productIds.length) return new Map();
+    const [rows] = await db.execute(
+      `SELECT product_id, reward_rule_id
+       FROM product_reward_settings
+       WHERE product_id IN (${productIds.map(() => "?").join(",")}) AND variant_id IS NULL AND is_active = 1
+       ORDER BY id ASC`,
+      productIds,
+    );
+    const map = new Map();
+    for (const row of rows) {
+      if (!map.has(row.product_id)) map.set(row.product_id, row.reward_rule_id);
+    }
+    return map;
+  }
+
   // Filter-dropdown source — only vendors that actually have a listed
   // product, not every vendor in the system (most of whom would just be
   // empty filter results here).

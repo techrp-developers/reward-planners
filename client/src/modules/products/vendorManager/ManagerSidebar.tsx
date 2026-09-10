@@ -93,6 +93,18 @@ export default function ManagerNavbar() {
       type: "link",
     },
     {
+      label: "Content",
+      Icon: FiImage,
+      type: "dropdown",
+      children: [
+        { label: "Product", to: routes.manager.content.product },
+        { label: "Service", to: routes.manager.content.service },
+        { label: "Payment", to: routes.manager.content.payment },
+        { label: "Mobile Dashboard", to: routes.manager.content.mobileDashboard },
+        { label: "Module Icons", to: routes.manager.content.moduleIcons },
+      ],
+    },
+    {
       label: "Orders",
       Icon: FiShoppingCart,
       type: "dropdown",

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ComponentType } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   FiAlertCircle,
@@ -83,6 +83,7 @@ type ModalStage = "none" | "pick" | "verify";
 function BillingPage() {
   const navigate = useNavigate();
   const routerLocation = useLocation();
+  const queryClient = useQueryClient();
   const billingState = (routerLocation.state as BillingRouteState | null) ?? null;
 
   // No customer is required to search products or build a cart at all —
@@ -418,6 +419,15 @@ function BillingPage() {
   const checkoutMutation = useMutation({
     mutationFn: (payload: { items: { variantId: number; qty: number; pointsApplied: number }[]; key: string }) =>
       checkout(payload.items, payload.key),
+    onSuccess: () => {
+      // A sale just moved stock — StockPage's pool table, billing's own
+      // product search, and the All Products overview all show figures
+      // derived from it, and should reflect this checkout on next view
+      // rather than whatever they last cached.
+      void queryClient.invalidateQueries({ queryKey: ["flea-market", "vendor-stock"] });
+      void queryClient.invalidateQueries({ queryKey: ["flea-market", "products", "search"] });
+      void queryClient.invalidateQueries({ queryKey: ["flea-market", "all-products"] });
+    },
   });
 
   const performCheckout = useCallback(() => {

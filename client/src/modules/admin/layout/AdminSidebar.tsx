@@ -8,6 +8,7 @@ import {
   FiChevronsRight,
   FiUser,
   FiLogOut,
+  FiImage,
 } from "react-icons/fi";
 
 import { useAuth } from "../../../common/auth/useAuth";
@@ -63,6 +64,17 @@ export default function AdminNavbar() {
       to: routes.admin.services,
       icon: <FiPackage />,
       type: "link",
+    },
+    {
+      label: "Content",
+      icon: <FiImage />,
+      type: "dropdown",
+      children: [
+        { label: "Product", to: routes.admin.content.product },
+        { label: "Service", to: routes.admin.content.service },
+        { label: "Payment", to: routes.admin.content.payment },
+        { label: "Mobile Dashboard", to: routes.admin.content.mobileDashboard },
+      ],
     },
 
     // Example dropdown
