@@ -21,7 +21,7 @@ const DEVICE_WIDTHS = [360, 390, 430] as const;
 
 export default function LivePreviewPanel({ entries, draft, now, module, moduleIcons = [] }: Props) {
   const [mode, setMode] = useState<PreviewMode>("campaign");
-  const [previewModule, setPreviewModule] = useState<ContentModule>(module);
+  const [previewModule, setPreviewModule] = useState<string>(module);
   const [deviceWidth, setDeviceWidth] = useState<(typeof DEVICE_WIDTHS)[number]>(390);
 
   useEffect(() => {
