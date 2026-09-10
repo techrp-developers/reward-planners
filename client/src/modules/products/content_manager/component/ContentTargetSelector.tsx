@@ -11,8 +11,8 @@ interface Props {
 }
 
 const fieldClass = "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100";
-const R2_BASE_URL = "https://cdn.rewardplanners.com";
-const productImageUrl = (path?: string | null) => !path ? "" : /^https?:\/\//i.test(path) ? path : `${R2_BASE_URL}/${path.replace(/^\/+/, "")}`;
+// const R2_BASE_URL = "https://cdn.rewardplanners.com";
+// const productImageUrl = (path?: string | null) => !path ? "" : /^https?:\/\//i.test(path) ? path : `${R2_BASE_URL}/${path.replace(/^\/+/, "")}`;
 
 export default function ContentTargetSelector({ targetType, targetId, onChange }: Props) {
   const [search, setSearch] = useState("");
