@@ -11,6 +11,8 @@ interface Props {
 }
 
 const fieldClass = "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100";
+const R2_BASE_URL = "https://cdn.rewardplanners.com";
+const productImageUrl = (path?: string | null) => !path ? "" : /^https?:\/\//i.test(path) ? path : `${R2_BASE_URL}/${path.replace(/^\/+/, "")}`;
 
 export default function ContentTargetSelector({ targetType, targetId, onChange }: Props) {
   const [search, setSearch] = useState("");
@@ -37,7 +39,7 @@ export default function ContentTargetSelector({ targetType, targetId, onChange }
     <div className="sm:col-span-2 rounded-2xl border border-purple-100 bg-purple-50/40 p-4">
       <div className="flex items-center gap-2"><FiLink className="text-[#852BAF]" /><p className="text-xs font-black text-slate-700">Mobile click destination</p></div>
       <p className="mt-1 text-[11px] text-slate-500">Choose what opens when the user taps this content below the navbar.</p>
-      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <select value={targetType} onChange={(event) => { onChange(event.target.value as ContentTargetType | "", null); setSearch(""); }} className={fieldClass}>
           <option value="">No destination</option>
           <option value="product">Product</option>

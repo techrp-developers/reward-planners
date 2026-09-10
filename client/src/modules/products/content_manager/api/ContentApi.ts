@@ -79,7 +79,7 @@ interface ApiResponse<T> {
   data: T;
 }
 
-export interface ContentTargetOption { id: number; label: string; }
+export interface ContentTargetOption { id: number; label: string; imageUrl?: string | null; }
 
 // ========================================
 // ADMIN: LIST

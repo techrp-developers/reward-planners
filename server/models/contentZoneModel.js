@@ -292,24 +292,24 @@ class ContentZoneModel {
     }
     const term = `%${String(search).trim()}%`;
     const queries = {
-      product: ["SELECT product_id AS id, product_name AS label FROM eproducts WHERE is_deleted = 0 AND product_name LIKE ? ORDER BY product_name LIMIT 40", [term]],
-      category: ["SELECT category_id AS id, category_name AS label FROM categories WHERE category_name LIKE ? ORDER BY category_name LIMIT 40", [term]],
-      subcategory: ["SELECT sc.subcategory_id AS id, CONCAT(COALESCE(c.category_name, 'Category'), ' / ', sc.subcategory_name) AS label FROM sub_categories sc LEFT JOIN categories c ON c.category_id = sc.category_id WHERE sc.subcategory_name LIKE ? OR c.category_name LIKE ? ORDER BY c.category_name, sc.subcategory_name LIMIT 40", [term, term]],
+      product: ["SELECT p.product_id AS id, p.product_name AS label, (SELECT pi.image_url FROM product_images pi WHERE pi.product_id = p.product_id ORDER BY pi.image_id ASC LIMIT 1) AS image_url FROM eproducts p WHERE p.is_deleted = 0 AND p.product_name LIKE ? ORDER BY p.product_name", [term]],
+      category: ["SELECT category_id AS id, category_name AS label FROM categories WHERE category_name LIKE ? ORDER BY category_name", [term]],
+      subcategory: ["SELECT sc.subcategory_id AS id, CONCAT(COALESCE(c.category_name, 'Category'), ' / ', sc.subcategory_name) AS label FROM sub_categories sc LEFT JOIN categories c ON c.category_id = sc.category_id WHERE sc.subcategory_name LIKE ? OR c.category_name LIKE ? ORDER BY c.category_name, sc.subcategory_name", [term, term]],
     };
     const [sql, params] = queries[type];
     const [rows] = await db.query(sql, params);
-    const result = rows.map((row) => ({ id: Number(row.id), label: row.label }));
+    const result = rows.map((row) => ({ id: Number(row.id), label: row.label, imageUrl: row.image_url || null }));
 
     const numericSelectedId = Number(selectedId);
     if (Number.isInteger(numericSelectedId) && numericSelectedId > 0 && !result.some((row) => row.id === numericSelectedId)) {
       const selectedQueries = {
-        product: ["SELECT product_id AS id, product_name AS label FROM eproducts WHERE product_id = ? AND is_deleted = 0", [numericSelectedId]],
+        product: ["SELECT p.product_id AS id, p.product_name AS label, (SELECT pi.image_url FROM product_images pi WHERE pi.product_id = p.product_id ORDER BY pi.image_id ASC LIMIT 1) AS image_url FROM eproducts p WHERE p.product_id = ? AND p.is_deleted = 0", [numericSelectedId]],
         category: ["SELECT category_id AS id, category_name AS label FROM categories WHERE category_id = ?", [numericSelectedId]],
         subcategory: ["SELECT sc.subcategory_id AS id, CONCAT(COALESCE(c.category_name, 'Category'), ' / ', sc.subcategory_name) AS label FROM sub_categories sc LEFT JOIN categories c ON c.category_id = sc.category_id WHERE sc.subcategory_id = ?", [numericSelectedId]],
       };
       const [selectedSql, selectedParams] = selectedQueries[type];
       const [selectedRows] = await db.query(selectedSql, selectedParams);
-      if (selectedRows[0]) result.unshift({ id: Number(selectedRows[0].id), label: selectedRows[0].label });
+      if (selectedRows[0]) result.unshift({ id: Number(selectedRows[0].id), label: selectedRows[0].label, imageUrl: selectedRows[0].image_url || null });
     }
     return result;
   }
