@@ -47,6 +47,14 @@ const validateRedirect = (redirect_type, redirect_id, redirect_url) => {
 };
 
 class CampaignController {
+  async getRedirectTargets(req, res) {
+    try {
+      const data = await CampaignModel.getRedirectTargets(req.query.type, req.query.search, req.query.selected_id);
+      return res.json({ success: true, data });
+    } catch (err) {
+      return res.status(err.statusCode || 500).json({ success: false, message: err.message });
+    }
+  }
   // ==========================
   // Create Campaign
   // ==========================
@@ -133,6 +141,12 @@ class CampaignController {
         normalizedRedirectId,
         normalizedRedirectUrl,
       );
+
+      if (normalizedRedirectType && normalizedRedirectType !== "external_url" && ["product", "category", "subcategory"].includes(normalizedRedirectType)) {
+        if (!(await CampaignModel.redirectTargetExists(normalizedRedirectType, normalizedRedirectId))) {
+          return res.status(400).json({ success: false, message: `Selected ${normalizedRedirectType} no longer exists` });
+        }
+      }
 
       if (display_order !== undefined && Number(display_order) < 0) {
         return res.status(400).json({
@@ -311,11 +325,18 @@ class CampaignController {
         });
       }
 
-      validateRedirect(
-        req.body.redirect_type,
-        req.body.redirect_id,
-        req.body.redirect_url,
-      );
+      const normalizedRedirectType = req.body.redirect_type || null;
+      const normalizedRedirectId = normalizedRedirectType && normalizedRedirectType !== "external_url" ? Number(req.body.redirect_id) || null : null;
+      const normalizedRedirectUrl = normalizedRedirectType === "external_url" ? req.body.redirect_url || null : null;
+      validateRedirect(normalizedRedirectType, normalizedRedirectId, normalizedRedirectUrl);
+      if (normalizedRedirectType && ["product", "category", "subcategory"].includes(normalizedRedirectType)) {
+        if (!(await CampaignModel.redirectTargetExists(normalizedRedirectType, normalizedRedirectId))) {
+          return res.status(400).json({ success: false, message: `Selected ${normalizedRedirectType} no longer exists` });
+        }
+      }
+      req.body.redirect_type = normalizedRedirectType;
+      req.body.redirect_id = normalizedRedirectId;
+      req.body.redirect_url = normalizedRedirectUrl;
 
       if (
         req.body.display_order !== undefined &&
