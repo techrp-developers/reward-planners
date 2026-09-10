@@ -80,6 +80,7 @@ export default function ContentManagement({ module }: ContentManagementProps) {
 
   const validate = (entry: ContentEntry, requireContentValue: boolean) => {
     if (!entry.title.trim()) return "Title / Label is required.";
+    if (entry.targetType && !entry.targetId) return `Select a ${entry.targetType} for this content destination.`;
     if (requireContentValue) {
       if (entry.contentType === "color") {
         const colorValue = entry.colorValue.trim();

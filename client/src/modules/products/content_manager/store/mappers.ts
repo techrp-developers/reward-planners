@@ -14,6 +14,8 @@ export const fromApiEntry = (row: ApiContentEntry): ContentEntry => ({
   title: row.title,
   ctaText: row.cta_text || "",
   redirectLink: row.redirect_link || "",
+  targetType: row.target_type || "",
+  targetId: row.target_id == null ? null : Number(row.target_id),
   startAt: row.start_at ? row.start_at.slice(0, 16) : "",
   endAt: row.end_at ? row.end_at.slice(0, 16) : "",
   priority: row.priority,

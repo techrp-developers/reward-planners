@@ -1,5 +1,5 @@
 import { api } from "../../../../common/api/api";
-import type { ContentDisplayMode, ContentEntry, Zone } from "../types";
+import type { ContentDisplayMode, ContentEntry, ContentTargetType, Zone } from "../types";
 
 const BASE = "/content";
 const MODULE = "product";
@@ -25,6 +25,8 @@ export interface ApiContentEntry {
   title: string;
   cta_text: string | null;
   redirect_link: string | null;
+  target_type: ContentTargetType | null;
+  target_id: number | null;
 
   start_at: string | null;
   end_at: string | null;
@@ -76,6 +78,8 @@ interface ApiResponse<T> {
   message?: string;
   data: T;
 }
+
+export interface ContentTargetOption { id: number; label: string; }
 
 // ========================================
 // ADMIN: LIST
@@ -152,6 +156,9 @@ export const buildEntryFormData = (
   if (draft.redirectLink) {
     fd.append("redirect_link", draft.redirectLink);
   }
+
+  fd.append("target_type", draft.targetType);
+  fd.append("target_id", draft.targetType && draft.targetId ? String(draft.targetId) : "");
 
   if (draft.startAt) {
     fd.append("start_at", draft.startAt);
@@ -333,5 +340,16 @@ export const reorderEntryImages = async (
     ApiResponse<ApiContentZoneImage[]>
   >(`${BASE}/entries/${id}/images/reorder`, { images });
 
+  return data.data;
+};
+
+export const listContentTargetOptions = async (
+  type: ContentTargetType,
+  search = "",
+  selectedId?: number | null,
+): Promise<ContentTargetOption[]> => {
+  const { data } = await api.get<ApiResponse<ContentTargetOption[]>>(`${BASE}/targets`, {
+    params: { type, search, selected_id: selectedId || undefined },
+  });
   return data.data;
 };

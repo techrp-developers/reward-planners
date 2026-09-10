@@ -47,6 +47,8 @@ const publicContentEntry = async (entry) => {
     title: entry.title,
     ctaText: entry.cta_text,
     redirectLink: entry.redirect_link,
+    targetType: entry.target_type || null,
+    targetId: entry.target_id == null ? null : Number(entry.target_id),
     colorValue: entry.content_type === 'color' ? entry.color_value : null,
     imageUrl: entry.content_type === 'image' ? getContentImageUrl(entry.image_url) : null,
     status: entry.status,

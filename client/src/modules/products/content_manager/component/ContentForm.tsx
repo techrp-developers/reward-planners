@@ -19,6 +19,7 @@ import StatusBadge from "./StatusBadge";
 import OfferImagesManager from "./OfferImagesManager";
 import ImageDimensionInfo from "./ImageDimensionInfo";
 import AssetSpecPanel from "./AssetSpecPanel";
+import ContentTargetSelector from "./ContentTargetSelector";
 
 const inputClass = "mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100";
 const labelClass = "text-xs font-bold text-slate-500";
@@ -299,6 +300,14 @@ export default function ContentForm({ draft, entries, now, module, onChange, onS
           Redirect Link <span className="font-normal text-slate-400">(optional)</span>
           <input value={draft.redirectLink} onChange={(event) => onChange({ redirectLink: event.target.value })} placeholder="https://..." className={inputClass} />
         </label>
+
+        {module === "product" && draft.zone !== "navbar_background" && (
+          <ContentTargetSelector
+            targetType={draft.targetType}
+            targetId={draft.targetId}
+            onChange={(targetType, targetId) => onChange({ targetType, targetId })}
+          />
+        )}
 
         <label className={labelClass}>
           Start Date &amp; Time

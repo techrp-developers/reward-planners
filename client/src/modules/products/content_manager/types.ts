@@ -2,6 +2,7 @@ export type Zone = "navbar_background" | "promotional_banner" | "offers_banner";
 export type ContentKind = "color" | "image";
 export type Status = "default" | "draft" | "scheduled" | "active" | "expired";
 export type ContentDisplayMode = "single" | "carousel" | "grid_2" | "grid_3";
+export type ContentTargetType = "product" | "category" | "subcategory";
 export type GradientDirection =
   | "left-right"
   | "right-left"
@@ -35,6 +36,8 @@ export interface ContentEntry {
   title: string;
   ctaText: string;
   redirectLink: string;
+  targetType: ContentTargetType | "";
+  targetId: number | null;
   /** ISO datetime-local string ("" for Default entries, which have no window) */
   startAt: string;
   /** ISO datetime-local string ("" means "no end date") */
@@ -96,6 +99,8 @@ export function blankEntry(zone: Zone): ContentEntry {
     title: "",
     ctaText: "",
     redirectLink: "",
+    targetType: "",
+    targetId: null,
     startAt: "",
     endAt: "",
     priority: 1,

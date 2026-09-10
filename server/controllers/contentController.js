@@ -180,6 +180,15 @@ class ContentController {
     }
   }
 
+  async getTargetOptions(req, res) {
+    try {
+      const data = await ContentZoneModel.getTargetOptions(req.query.type, req.query.search, req.query.selected_id);
+      return res.json({ success: true, message: "Content targets fetched successfully", data });
+    } catch (err) {
+      return res.status(err.statusCode || 500).json({ success: false, message: err.message });
+    }
+  }
+
   //   =========================== Admin: open Edit form ===========================
 
   async getEntry(req, res) {
@@ -208,6 +217,9 @@ class ContentController {
     try {
       const body = { ...req.body };
       body.is_published = body.is_published === "true" || body.is_published === true;
+      body.target_type = body.target_type || null;
+      body.target_id = body.target_type ? Number(body.target_id) : null;
+      if (body.target_type) await ContentZoneModel.validateTarget(body.target_type, body.target_id);
 
       if (offerFiles.length && body.zone !== "offers_banner") {
         cleanupTempFile(imageFile);
@@ -276,6 +288,11 @@ class ContentController {
       const { id } = req.params;
       const existing = await ContentZoneModel.getEntryById(id);
       const body = { ...req.body };
+      if (body.target_type !== undefined || body.target_id !== undefined) {
+        body.target_type = body.target_type || null;
+        body.target_id = body.target_type ? Number(body.target_id) : null;
+        if (body.target_type) await ContentZoneModel.validateTarget(body.target_type, body.target_id);
+      }
 
       if (offerFiles.length && existing.zone !== "offers_banner") {
         cleanupTempFile(imageFile);

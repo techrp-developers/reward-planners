@@ -5,6 +5,7 @@ const ZONES = ["navbar_background", "promotional_banner", "offers_banner"];
 const CONTENT_TYPES = ["color", "image"];
 const DISPLAY_MODES = ["single", "carousel", "grid_2", "grid_3"];
 const DEFAULT_DISPLAY_MODE = "carousel";
+const TARGET_TYPES = ["product", "category", "subcategory"];
 const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
 const HEX_TEXT_COLOR_RE = /^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$/;
 const GRADIENT_DIRECTIONS = new Set([
@@ -83,6 +84,11 @@ class ContentZoneModel {
 
     if (data.text_color !== undefined && !isValidTextColor(data.text_color)) {
       errors.push("text_color must be a valid HEX color, e.g. #FFFFFF");
+    }
+
+    if (data.target_type !== undefined && data.target_type !== null && data.target_type !== "") {
+      if (!TARGET_TYPES.includes(data.target_type)) errors.push(`target_type must be one of: ${TARGET_TYPES.join(", ")}`);
+      if (!Number.isInteger(Number(data.target_id)) || Number(data.target_id) <= 0) errors.push("target_id must be a positive integer");
     }
 
     if (!isUpdate && (!data.title || !data.title.trim())) {
@@ -278,6 +284,46 @@ class ContentZoneModel {
     return result;
   }
 
+  async getTargetOptions(type, search = "", selectedId = null) {
+    if (!TARGET_TYPES.includes(type)) {
+      const error = new Error(`type must be one of: ${TARGET_TYPES.join(", ")}`);
+      error.statusCode = 400;
+      throw error;
+    }
+    const term = `%${String(search).trim()}%`;
+    const queries = {
+      product: ["SELECT product_id AS id, product_name AS label FROM eproducts WHERE is_deleted = 0 AND product_name LIKE ? ORDER BY product_name LIMIT 40", [term]],
+      category: ["SELECT category_id AS id, category_name AS label FROM categories WHERE category_name LIKE ? ORDER BY category_name LIMIT 40", [term]],
+      subcategory: ["SELECT sc.subcategory_id AS id, CONCAT(COALESCE(c.category_name, 'Category'), ' / ', sc.subcategory_name) AS label FROM sub_categories sc LEFT JOIN categories c ON c.category_id = sc.category_id WHERE sc.subcategory_name LIKE ? OR c.category_name LIKE ? ORDER BY c.category_name, sc.subcategory_name LIMIT 40", [term, term]],
+    };
+    const [sql, params] = queries[type];
+    const [rows] = await db.query(sql, params);
+    const result = rows.map((row) => ({ id: Number(row.id), label: row.label }));
+
+    const numericSelectedId = Number(selectedId);
+    if (Number.isInteger(numericSelectedId) && numericSelectedId > 0 && !result.some((row) => row.id === numericSelectedId)) {
+      const selectedQueries = {
+        product: ["SELECT product_id AS id, product_name AS label FROM eproducts WHERE product_id = ? AND is_deleted = 0", [numericSelectedId]],
+        category: ["SELECT category_id AS id, category_name AS label FROM categories WHERE category_id = ?", [numericSelectedId]],
+        subcategory: ["SELECT sc.subcategory_id AS id, CONCAT(COALESCE(c.category_name, 'Category'), ' / ', sc.subcategory_name) AS label FROM sub_categories sc LEFT JOIN categories c ON c.category_id = sc.category_id WHERE sc.subcategory_id = ?", [numericSelectedId]],
+      };
+      const [selectedSql, selectedParams] = selectedQueries[type];
+      const [selectedRows] = await db.query(selectedSql, selectedParams);
+      if (selectedRows[0]) result.unshift({ id: Number(selectedRows[0].id), label: selectedRows[0].label });
+    }
+    return result;
+  }
+
+  async validateTarget(type, id) {
+    if (!type) return;
+    const options = await this.getTargetOptions(type, "", id);
+    if (!options.some((option) => option.id === Number(id))) {
+      const error = new Error(`Selected ${type} no longer exists`);
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
   /** Other published, non-default entries in the same module+zone whose window overlaps. */
   async findConflicts(contentModule, zone, startAt, endAt, excludeId = null) {
     const params = [contentModule, zone, endAt || "9999-12-31 23:59:59", startAt];
@@ -314,9 +360,9 @@ class ContentZoneModel {
       `
       INSERT INTO content_zone_entries (
         module, zone, content_type, display_mode, color_value, text_color, image_url, title, cta_text,
-        redirect_link, start_at, end_at, priority, is_default, is_published, created_by_name
+        redirect_link, target_type, target_id, start_at, end_at, priority, is_default, is_published, created_by_name
       )
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `,
       [
         data.module,
@@ -329,6 +375,8 @@ class ContentZoneModel {
         data.title,
         data.cta_text || null,
         data.redirect_link || null,
+        data.target_type || null,
+        data.target_type ? Number(data.target_id) : null,
         startAt,
         data.end_at || null,
         data.priority || 0,
@@ -375,6 +423,8 @@ class ContentZoneModel {
       "title",
       "cta_text",
       "redirect_link",
+      "target_type",
+      "target_id",
       "start_at",
       "end_at",
       "priority",
@@ -418,9 +468,9 @@ class ContentZoneModel {
       `
       INSERT INTO content_zone_entries (
         module, zone, content_type, display_mode, color_value, text_color, image_url, title, cta_text,
-        redirect_link, start_at, end_at, priority, is_default, is_published, created_by_name
+        redirect_link, target_type, target_id, start_at, end_at, priority, is_default, is_published, created_by_name
       )
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,?)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,?)
       `,
       [
         original.module,
@@ -433,6 +483,8 @@ class ContentZoneModel {
         `${original.title} (Copy)`,
         original.cta_text,
         original.redirect_link,
+        original.target_type,
+        original.target_id,
         original.start_at,
         original.end_at,
         original.priority,

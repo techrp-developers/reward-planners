@@ -57,6 +57,8 @@ router.get(
   contentController.listEntries,
 );
 
+router.get("/targets", contentController.getTargetOptions);
+
 router.get(
   "/entries/:id",
   contentController.getEntry,
