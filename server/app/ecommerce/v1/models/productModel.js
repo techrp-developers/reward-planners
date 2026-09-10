@@ -1745,7 +1745,7 @@ class ProductModel {
 
           const finalRedeemCoins = redemptionEnabled ? redeem_coins : 0;
 
-          const rp_price = salePrice - finalRedeemCoins;
+          const rp_price = (salePrice - finalRedeemCoins).toFixed(2);
 
           return {
             product_id: row.product_id,
@@ -1951,7 +1951,7 @@ class ProductModel {
 
           const finalRedeemCoins = redemptionEnabled ? redeem_coins : 0;
 
-          const rp_price = salePrice - finalRedeemCoins;
+          const rp_price = (salePrice - finalRedeemCoins).toFixed(2);
 
           return {
             product_id: row.product_id,
@@ -2129,7 +2129,7 @@ class ProductModel {
 
           const finalRedeemCoins = redemptionEnabled ? redeem_coins : 0;
 
-          const rp_price = salePrice - finalRedeemCoins;
+          const rp_price = (salePrice - finalRedeemCoins).toFixed(2);
 
           return {
             product_id: row.product_id,
@@ -2315,7 +2315,7 @@ class ProductModel {
 
           const finalRedeemCoins = redemptionEnabled ? redeem_coins : 0;
 
-          const rp_price = salePrice - finalRedeemCoins;
+          const rp_price = (salePrice - finalRedeemCoins).toFixed(2);
 
           return {
             product_id: row.product_id,
@@ -2487,7 +2487,7 @@ class ProductModel {
 
           const finalRedeemCoins = redemptionEnabled ? redeem_coins : 0;
 
-          const rp_price = salePrice - finalRedeemCoins;
+          const rp_price = (salePrice - finalRedeemCoins).toFixed(2);
 
           return {
             product_id: row.product_id,
@@ -2662,7 +2662,7 @@ class ProductModel {
 
           const finalRedeemCoins = redemptionEnabled ? redeem_coins : 0;
 
-          const rp_price = salePrice - finalRedeemCoins;
+          const rp_price = (salePrice - finalRedeemCoins).toFixed(2);
 
           return {
             product_id: row.product_id,
@@ -2832,7 +2832,7 @@ class ProductModel {
 
           const finalRedeemCoins = redemptionEnabled ? redeem_coins : 0;
 
-          const rp_price = salePrice - finalRedeemCoins;
+          const rp_price = (salePrice - finalRedeemCoins).toFixed(2);
 
           return {
             product_id: row.product_id,
@@ -2989,7 +2989,7 @@ class ProductModel {
 
           const finalRedeemCoins = redemptionEnabled ? redeem_coins : 0;
 
-          const rp_price = salePrice - finalRedeemCoins;
+          const rp_price = (salePrice - finalRedeemCoins).toFixed(2);
 
           return {
             product_id: row.product_id,

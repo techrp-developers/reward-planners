@@ -33,6 +33,20 @@ function getProductId(product) {
   return Number(product.product_id || product.id);
 }
 
+function shuffleProducts(products) {
+  const shuffled = [...products];
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[randomIndex]] = [
+      shuffled[randomIndex],
+      shuffled[index],
+    ];
+  }
+
+  return shuffled;
+}
+
 async function addWishlistStatus(products, userId) {
   const list = Array.isArray(products) ? products : [products];
 
@@ -195,7 +209,7 @@ class ProductController {
           const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
           const canRedeem = rules.some((r) => r.can_redeem_reward);
           const redemptionEnabled = canRedeem && redeem_coins > 0;
-          const rp_price = salePrice - redeem_coins;
+          const rp_price = (salePrice - redeem_coins).toFixed(2);
 
           const mrpDiscountPercent =
             mrp > 0 ? Math.round(((mrp - salePrice) / mrp) * 100) : 0;
@@ -348,7 +362,7 @@ class ProductController {
 
           const redemptionEnabled = canRedeem && redeem_coins > 0;
 
-          const rp_price = salePrice - redeem_coins;
+          const rp_price = (salePrice - redeem_coins).toFixed(2);
 
           const mrpDiscountPercent =
             mrp > 0 ? Math.round(((mrp - salePrice) / mrp) * 100) : 0;
@@ -499,7 +513,7 @@ class ProductController {
 
           const redemptionEnabled = canRedeem && redeem_coins > 0;
 
-          const rp_price = salePrice - redeem_coins;
+          const rp_price = (salePrice - redeem_coins).toFixed(2);
 
           const mrpDiscountPercent =
             mrp > 0 ? Math.round(((mrp - salePrice) / mrp) * 100) : 0;
@@ -994,7 +1008,7 @@ class ProductController {
 
           const finalRedeemCoins = redemptionEnabled ? redeem_coins : 0;
 
-          const rp_price = salePrice - finalRedeemCoins;
+          const rp_price = (salePrice - finalRedeemCoins).toFixed(2);
 
           return {
             product_id: row.product_id,
@@ -1062,7 +1076,7 @@ class ProductController {
         success: true,
         total: products.length,
         hasMore: products.length === limit,
-        products,
+        products: shuffleProducts(products),
       });
     } catch (error) {
       console.error("Recommendation error:", error);
@@ -1087,7 +1101,7 @@ class ProductController {
         success: true,
         total: products.length,
         hasMore: products.length === limit,
-        products,
+        products: shuffleProducts(products),
       });
     } catch (error) {
       console.error("New arrivals error:", error);
@@ -1124,7 +1138,7 @@ class ProductController {
         success: true,
         total: products.length,
         hasMore: products.length === limit,
-        products,
+        products: shuffleProducts(products),
       });
     } catch (error) {
       console.error("Customers also bought error:", error);
@@ -1155,7 +1169,7 @@ class ProductController {
         success: true,
         total: products.length,
         hasMore: products.length === limit,
-        products,
+        products: shuffleProducts(products),
       });
     } catch (error) {
       console.error("Trending products error:", error);
@@ -1182,7 +1196,7 @@ class ProductController {
         success: true,
         total: products.length,
         hasMore: products.length === limit,
-        products,
+        products: shuffleProducts(products),
       });
     } catch (error) {
       console.error("Best sellers error:", error);
@@ -1213,7 +1227,7 @@ class ProductController {
         success: true,
         total: products.length,
         hasMore: products.length === limit,
-        products,
+        products: shuffleProducts(products),
       });
     } catch (error) {
       console.error("Most viewed products error:", error);
@@ -1239,7 +1253,7 @@ class ProductController {
         success: true,
         total: products.length,
         hasMore: products.length === limit,
-        products,
+        products: shuffleProducts(products),
       });
     } catch (error) {
       console.error("Top rated products error:", error);
@@ -1369,7 +1383,7 @@ class ProductController {
         success: true,
         total: products.length,
         hasMore: products.length === limit,
-        products,
+        products: shuffleProducts(products),
       });
     } catch (error) {
       console.error("Get similar products error:", error);
