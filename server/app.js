@@ -181,6 +181,7 @@ app.get("/", (req, res) => {
 });
 
 // Dashboard Routes
+app.use("/api/crm", dashboardRoute);
 app.use("/", dashboardRoute);
 
 // App Routes

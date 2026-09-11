@@ -4,12 +4,10 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  // The flea-market backend (server/app.js, port 5000 by default) is only
-  // ever run locally — it isn't deployed to production yet — so it needs its
-  // own proxy target, separate from the rest of the app's /api/* traffic
-  // (e.g. /api/crm), which still goes to production/staging as before.
+  // Use the local Express server by default so CRM auth cookies are set on the
+  // same browser origin during development. Override this to hit staging/live.
   // Override with VITE_DEV_API_PROXY_TARGET if your local server runs elsewhere.
-  const apiProxyTarget = env.VITE_DEV_API_PROXY_TARGET || "https://rewardplanners.com";
+  const apiProxyTarget = env.VITE_DEV_API_PROXY_TARGET || "http://localhost:5000";
 
   return {
     base: "/crm/",
