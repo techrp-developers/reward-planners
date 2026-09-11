@@ -2,6 +2,13 @@ const db = require('../../../config/database');
 const ContentZoneModel = require('../../../models/contentZoneModel');
 const ModuleIconModel = require('../../../models/moduleIconModel');
 const { getContentImageUrl } = require('../../../utils/contentPublicUrl');
+const { getPublicUrl } = require('../../../utils/publicUrl');
+const RewardModel = require('../../../models/rewardModel');
+const {
+  calculateReward,
+  resolveRedemption,
+  calculateRedeemableCoins,
+} = require('../../ecommerce/v1/utils/rewardCalculate');
 
 const SUPPORTED_LAYOUTS = {
   main: ['header', 'birthdays', 'stepProgress', 'exploreModules', 'moduleBanner', 'rewardsOverview'],
@@ -93,6 +100,70 @@ const getRequestedModules = (queryValue) => {
 };
 
 class CmsController {
+  async getContentProducts(req, res) {
+    try {
+      const entry = await ContentZoneModel.getEntryById(req.params.id);
+      if (entry.zone !== 'promotional_banner') {
+        return res.status(400).json({ success: false, message: 'Content must be a promotional banner' });
+      }
+      if (entry.status !== 'active') {
+        return res.status(404).json({ success: false, message: 'Promotional content is not active' });
+      }
+
+      const rows = await ContentZoneModel.getContentProducts(entry.content_id);
+      const rewardCache = new Map();
+      const products = await Promise.all(rows.map(async (product) => {
+        const salePrice = Number(product.sale_price || 0);
+        const mrp = Number(product.mrp || 0);
+        const cacheKey = `${product.product_id}_${product.variant_id}_${salePrice}`;
+        let rules = rewardCache.get(cacheKey);
+        if (!rules) {
+          rules = await RewardModel.getProductRewards(
+            product.product_id, product.variant_id, product.category_id,
+            product.subcategory_id, salePrice, product.is_discount_eligible,
+          );
+          rewardCache.set(cacheKey, rules);
+        }
+        const rewardCoins = rules.length ? calculateReward(salePrice, rules) : 0;
+        const redeemCoins = calculateRedeemableCoins(salePrice, resolveRedemption(salePrice, rules));
+        const canRedeem = rules.some((rule) => rule.can_redeem_reward) && redeemCoins > 0;
+
+        return {
+          id: Number(product.product_id),
+          product_id: Number(product.product_id),
+          variant_id: Number(product.variant_id),
+          title: product.product_name,
+          brand: product.brand_name,
+          category: product.category_name,
+          subcategory: product.subcategory_name,
+          short_description: product.short_description,
+          image: getPublicUrl(product.image_url, product.image_updated_at),
+          price: salePrice ? `₹${salePrice.toFixed(2)}` : null,
+          originalPrice: mrp ? `₹${mrp.toFixed(2)}` : null,
+          discount: `${mrp > 0 ? Math.round(((mrp - salePrice) / mrp) * 100) : 0}%`,
+          rating: Number(product.rating).toFixed(1),
+          reviews: Number(product.reviews),
+          rewardCoins,
+          rewardLabel: rewardCoins > 0 ? `Earn up to ${rewardCoins} coins` : null,
+          reward: { enabled: rules.some((rule) => rule.can_earn_reward) && rewardCoins > 0 },
+          redeem_coins: canRedeem ? redeemCoins : 0,
+          rp_price: canRedeem ? `₹${(salePrice - redeemCoins).toFixed(2)}` : null,
+        };
+      }));
+
+      return res.json({
+        success: true,
+        count: products.length,
+        data: {
+          content: await publicContentEntry(entry),
+          products,
+        },
+      });
+    } catch (error) {
+      return res.status(error.statusCode || 500).json({ success: false, message: error.message });
+    }
+  }
+
   async getMobileContent(req, res) {
     try {
       const requestedModules = getRequestedModules(req.query.modules || req.query.module);

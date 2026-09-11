@@ -334,6 +334,53 @@ class ContentZoneModel {
     }
   }
 
+  /** Product cards linked to a promotional banner, in the same order selected in CMS. */
+  async getContentProducts(contentId) {
+    const entry = await this.getEntryById(contentId);
+    if (entry.target_type !== "product") return [];
+
+    const ids = parseTargetIds(entry.target_ids)
+      .map(Number)
+      .filter((id) => Number.isInteger(id) && id > 0);
+    if (!ids.length && entry.target_id) ids.push(Number(entry.target_id));
+    if (!ids.length) return [];
+
+    const placeholders = ids.map(() => "?").join(", ");
+    const [rows] = await db.query(
+      `SELECT
+        p.product_id, p.product_name, p.brand_name, p.category_id,
+        p.subcategory_id, p.short_description, p.is_discount_eligible,
+        c.category_name, sc.subcategory_name,
+        v.variant_id, v.mrp, v.sale_price,
+        COALESCE(rev.avg_rating, 0) AS rating,
+        COALESCE(rev.total_reviews, 0) AS reviews,
+        pi.image_url, pi.updated_at AS image_updated_at
+      FROM eproducts p
+      LEFT JOIN categories c ON c.category_id = p.category_id
+      LEFT JOIN sub_categories sc ON sc.subcategory_id = p.subcategory_id
+      LEFT JOIN product_variants v ON v.variant_id = (
+        SELECT pv.variant_id FROM product_variants pv
+        WHERE pv.product_id = p.product_id AND pv.is_visible = 1 AND pv.sale_price IS NOT NULL
+        ORDER BY pv.sale_price ASC, pv.variant_id ASC LIMIT 1
+      )
+      LEFT JOIN (
+        SELECT product_id, ROUND(AVG(rating), 1) AS avg_rating, COUNT(*) AS total_reviews
+        FROM product_reviews WHERE status = 'approved' GROUP BY product_id
+      ) rev ON rev.product_id = p.product_id
+      LEFT JOIN product_images pi ON pi.image_id = (
+        SELECT pi2.image_id FROM product_images pi2
+        WHERE pi2.product_id = p.product_id
+        ORDER BY (pi2.type = 'gallery') DESC, pi2.sort_order ASC, pi2.image_id ASC LIMIT 1
+      )
+      WHERE p.product_id IN (${placeholders})
+        AND p.status = 'approved' AND p.is_visible = 1 AND p.is_deleted = 0
+        AND v.variant_id IS NOT NULL
+      ORDER BY FIELD(p.product_id, ${placeholders})`,
+      [...ids, ...ids],
+    );
+    return rows;
+  }
+
   /** Other published, non-default entries in the same module+zone whose window overlaps. */
   async findConflicts(contentModule, zone, startAt, endAt, excludeId = null) {
     const params = [contentModule, zone, endAt || "9999-12-31 23:59:59", startAt];
