@@ -23,6 +23,7 @@ const parseConfig = (value) => {
 };
 
 const MOBILE_CONTENT_MODULES = ['mobile_dashboard', 'product', 'service', 'payment', 'dineout'];
+const contentAssetUrl = (path) => path?.startsWith('/uploads/') ? getContentImageUrl(path) : getPublicUrl(path);
 
 const targetIds = (entry) => {
   let ids = entry.target_ids;
@@ -50,7 +51,7 @@ const publicModule = (row) => ({
 
 const publicImage = (row) => ({
   imageId: row.image_id,
-  imageUrl: getContentImageUrl(row.image_url),
+  imageUrl: contentAssetUrl(row.image_url),
   sortOrder: Number(row.sort_order || 0),
 });
 
@@ -69,7 +70,7 @@ const publicContentEntry = async (entry) => {
     targetId: entry.target_id == null ? null : Number(entry.target_id),
     targetIds: entry.target_type === 'product' ? targetIds(entry) : [],
     colorValue: entry.content_type === 'color' ? entry.color_value : null,
-    imageUrl: entry.content_type === 'image' ? getContentImageUrl(entry.image_url) : null,
+    imageUrl: entry.content_type === 'image' ? contentAssetUrl(entry.image_url) : null,
     status: entry.status,
     priority: Number(entry.priority || 0),
     startAt: entry.start_at,
