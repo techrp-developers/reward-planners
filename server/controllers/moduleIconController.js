@@ -2,6 +2,9 @@ const fs = require("fs");
 const path = require("path");
 const ModuleIconModel = require("../models/moduleIconModel");
 const { getContentImageUrl } = require("../utils/contentPublicUrl");
+const { getPublicUrl } = require("../utils/publicUrl");
+const { uploadToR2 } = require("../utils/r2upload");
+const { deleteFromR2 } = require("../utils/r2delete");
 
 const MODULE_ICON_ROOT = path.join(__dirname, "../uploads/module-icons");
 const MAX_ICON_SIZE = 500 * 1024;
@@ -12,7 +15,7 @@ const ALLOWED_ICON_EXTENSIONS = {
 };
 
 const cleanupTempFile = (file) => {
-  if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+  if (file?.path && fs.existsSync(file.path)) fs.unlinkSync(file.path);
 };
 
 const validateIconFile = (file) => {
@@ -31,30 +34,29 @@ const validateIconFile = (file) => {
   }
 };
 
-// Stored/returned as a relative web path, e.g. /uploads/module-icons/travel-icon-xxx.png
-const saveModuleIconFile = (file, moduleKey, kind) => {
+// Uploads the icon to R2 and returns the object key stored in MySQL.
+const saveModuleIconFile = async (file, moduleKey, kind) => {
   validateIconFile(file);
-
-  if (!fs.existsSync(MODULE_ICON_ROOT)) {
-    fs.mkdirSync(MODULE_ICON_ROOT, { recursive: true });
-  }
 
   const extension = ALLOWED_ICON_EXTENSIONS[file.mimetype];
   const filename = `${moduleKey}-${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${extension}`;
-  const destination = path.join(MODULE_ICON_ROOT, filename);
-
-  fs.copyFileSync(file.path, destination);
+  const key = `public/module-icons/${filename}`;
+  const buffer = file.buffer || fs.readFileSync(file.path);
+  await uploadToR2(buffer, key, file.mimetype);
   cleanupTempFile(file);
-
-  return `/uploads/module-icons/${filename}`;
+  return key;
 };
 
-// Ignores anything that isn't one of our own local module-icon paths, and guards against traversal.
-const deleteModuleIconFile = (relativePath) => {
-  if (!relativePath || !relativePath.startsWith("/uploads/module-icons/")) return;
+// Deletes new R2 assets and still supports icons created by the former local uploader.
+const deleteModuleIconFile = async (storedPath) => {
+  if (!storedPath || /^https?:\/\//i.test(storedPath)) return;
+  if (!storedPath.startsWith("/uploads/module-icons/")) {
+    await deleteFromR2(storedPath);
+    return;
+  }
 
   const uploadsRoot = path.join(__dirname, "../uploads");
-  const absolutePath = path.join(uploadsRoot, relativePath.replace(/^\/uploads[\\/]/, ""));
+  const absolutePath = path.join(uploadsRoot, storedPath.replace(/^\/uploads[\\/]/, ""));
 
   if (!absolutePath.startsWith(MODULE_ICON_ROOT)) return;
 
@@ -63,11 +65,15 @@ const deleteModuleIconFile = (relativePath) => {
   }
 };
 
+const getModuleIconUrl = (storedPath) => storedPath?.startsWith("/uploads/")
+  ? getContentImageUrl(storedPath)
+  : getPublicUrl(storedPath);
+
 const toPublicModule = (row) => ({
   ...row,
-  icon_url: getContentImageUrl(row.icon_url),
-  active_icon_url: row.active_icon_url ? getContentImageUrl(row.active_icon_url) : null,
-  dashboard_icon_url: row.dashboard_icon_url ? getContentImageUrl(row.dashboard_icon_url) : null,
+  icon_url: getModuleIconUrl(row.icon_url),
+  active_icon_url: row.active_icon_url ? getModuleIconUrl(row.active_icon_url) : null,
+  dashboard_icon_url: row.dashboard_icon_url ? getModuleIconUrl(row.dashboard_icon_url) : null,
 });
 
 // Public response only needs the fields the mobile navbar actually renders.
@@ -75,9 +81,9 @@ const toResolvedModule = (row) => ({
   module_key: row.module_key,
   label: row.label,
   placement: row.placement,
-  icon_url: getContentImageUrl(row.icon_url),
-  active_icon_url: row.active_icon_url ? getContentImageUrl(row.active_icon_url) : null,
-  dashboard_icon_url: row.dashboard_icon_url ? getContentImageUrl(row.dashboard_icon_url) : null,
+  icon_url: getModuleIconUrl(row.icon_url),
+  active_icon_url: row.active_icon_url ? getModuleIconUrl(row.active_icon_url) : null,
+  dashboard_icon_url: row.dashboard_icon_url ? getModuleIconUrl(row.dashboard_icon_url) : null,
   normal_color: row.normal_color,
   active_color: row.active_color,
   gradient_start_color: row.gradient_start_color,
@@ -153,16 +159,16 @@ class ModuleIconController {
       // route_key is never accepted from the request - new modules stay non-navigable
       // (icon_url/label still display fine) until a developer implements a real screen.
       if (iconFile) {
-        data.icon_url = saveModuleIconFile(iconFile, moduleKey, "icon");
+        data.icon_url = await saveModuleIconFile(iconFile, moduleKey, "icon");
         data.icon_type = iconFile.mimetype === "image/svg+xml" ? "svg" : "image";
       }
 
       if (activeIconFile) {
-        data.active_icon_url = saveModuleIconFile(activeIconFile, moduleKey, "active");
+        data.active_icon_url = await saveModuleIconFile(activeIconFile, moduleKey, "active");
       }
 
       if (dashboardIconFile) {
-        data.dashboard_icon_url = saveModuleIconFile(dashboardIconFile, moduleKey, "dashboard");
+        data.dashboard_icon_url = await saveModuleIconFile(dashboardIconFile, moduleKey, "dashboard");
       }
 
       const created = await ModuleIconModel.createModule(data);
@@ -213,18 +219,18 @@ class ModuleIconController {
       let newDashboardIconPath = null;
 
       if (iconFile) {
-        newIconPath = saveModuleIconFile(iconFile, moduleKey, "icon");
+        newIconPath = await saveModuleIconFile(iconFile, moduleKey, "icon");
         data.icon_url = newIconPath;
         data.icon_type = iconFile.mimetype === "image/svg+xml" ? "svg" : "image";
       }
 
       if (activeIconFile) {
-        newActiveIconPath = saveModuleIconFile(activeIconFile, moduleKey, "active");
+        newActiveIconPath = await saveModuleIconFile(activeIconFile, moduleKey, "active");
         data.active_icon_url = newActiveIconPath;
       }
 
       if (dashboardIconFile) {
-        newDashboardIconPath = saveModuleIconFile(dashboardIconFile, moduleKey, "dashboard");
+        newDashboardIconPath = await saveModuleIconFile(dashboardIconFile, moduleKey, "dashboard");
         data.dashboard_icon_url = newDashboardIconPath;
       }
 
@@ -233,7 +239,7 @@ class ModuleIconController {
       // Only remove the old files after the DB update has succeeded.
       if (newIconPath && existing.icon_url) {
         try {
-          deleteModuleIconFile(existing.icon_url);
+          await deleteModuleIconFile(existing.icon_url);
         } catch (err) {
           console.error("MODULE ICON DELETE ERROR", err);
         }
@@ -241,7 +247,7 @@ class ModuleIconController {
 
       if (newActiveIconPath && existing.active_icon_url) {
         try {
-          deleteModuleIconFile(existing.active_icon_url);
+          await deleteModuleIconFile(existing.active_icon_url);
         } catch (err) {
           console.error("MODULE ACTIVE ICON DELETE ERROR", err);
         }
@@ -249,7 +255,7 @@ class ModuleIconController {
 
       if (newDashboardIconPath && existing.dashboard_icon_url) {
         try {
-          deleteModuleIconFile(existing.dashboard_icon_url);
+          await deleteModuleIconFile(existing.dashboard_icon_url);
         } catch (err) {
           console.error("MODULE DASHBOARD ICON DELETE ERROR", err);
         }
@@ -278,9 +284,11 @@ class ModuleIconController {
       const deleted = await ModuleIconModel.deleteModule(req.params.module);
 
       try {
-        deleteModuleIconFile(deleted.icon_url);
-        deleteModuleIconFile(deleted.active_icon_url);
-        deleteModuleIconFile(deleted.dashboard_icon_url);
+        await Promise.all([
+          deleteModuleIconFile(deleted.icon_url),
+          deleteModuleIconFile(deleted.active_icon_url),
+          deleteModuleIconFile(deleted.dashboard_icon_url),
+        ]);
       } catch (err) {
         console.error("MODULE ICON FILE DELETE ERROR", err);
       }

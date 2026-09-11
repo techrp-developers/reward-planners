@@ -39,8 +39,8 @@ const targetIds = (entry) => {
 const publicModule = (row) => ({
   moduleKey: row.module_key,
   label: row.label,
-  iconUrl: getContentImageUrl(row.icon_url),
-  activeIconUrl: row.active_icon_url ? getContentImageUrl(row.active_icon_url) : null,
+  iconUrl: contentAssetUrl(row.icon_url),
+  activeIconUrl: row.active_icon_url ? contentAssetUrl(row.active_icon_url) : null,
   normalColor: row.normal_color,
   activeColor: row.active_color,
   gradientStartColor: row.gradient_start_color,
