@@ -224,8 +224,10 @@ class ProductController {
             sub_subcategory: product.sub_subcategory_name,
             short_description: product.short_description,
             image: mainImage,
-            price: salePrice ? `₹${salePrice}` : null,
-            originalPrice: product.mrp ? `₹${Number(product.mrp)}` : null,
+            price: salePrice ? `₹${salePrice.toFixed(2)}` : null,
+            originalPrice: product.mrp
+              ? `₹${Number(product.mrp).toFixed(2)}`
+              : null,
 
             rp_price: redemptionEnabled ? `₹${rp_price}` : null,
             redeem_coins: redemptionEnabled ? redeem_coins : 0,
@@ -377,8 +379,8 @@ class ProductController {
             sub_subcategory: product.sub_subcategory_name,
             image: mainImage,
 
-            price: salePrice ? `₹${salePrice}` : null,
-            originalPrice: mrp ? `₹${mrp}` : null,
+            price: salePrice ? `₹${salePrice.toFixed(2)}` : null,
+            originalPrice: mrp ? `₹${mrp.toFixed(2)}` : null,
             discount: `${mrpDiscountPercent}%`,
             rp_price: redemptionEnabled ? `₹${rp_price}` : 0,
             redeem_coins: redemptionEnabled ? redeem_coins : 0,
@@ -528,8 +530,8 @@ class ProductController {
             sub_subcategory: product.sub_subcategory_name,
             image: mainImage,
 
-            price: salePrice ? `₹${salePrice}` : null,
-            originalPrice: mrp ? `₹${mrp}` : null,
+            price: salePrice ? `₹${salePrice.toFixed(2)}` : null,
+            originalPrice: mrp ? `₹${mrp.toFixed(2)}` : null,
             discount: `${mrpDiscountPercent}%`,
             rp_price: redemptionEnabled ? `₹${rp_price}` : 0,
             redeem_coins: redemptionEnabled ? redeem_coins : 0,
@@ -656,8 +658,10 @@ class ProductController {
 
             return {
               ...variant,
-              price: `₹${salePrice}`,
-              finalPrice: redemptionEnabled ? `₹${finalPrice}` : null,
+              price: `₹${salePrice.toFixed(2)}`,
+              finalPrice: redemptionEnabled
+                ? `₹${finalPrice.toFixed(2)}`
+                : null,
               discount: `${mrpDiscountPercent}%`,
               redemption: {
                 enabled: redemptionEnabled,
@@ -1018,8 +1022,8 @@ class ProductController {
 
             image,
 
-            price: `₹${salePrice}`,
-            originalPrice: `₹${mrp}`,
+            price: `₹${salePrice.toFixed(2)}`,
+            originalPrice: `₹${mrp.toFixed(2)}`,
             discount: `${mrpDiscountPercent}%`,
             rp_price: redemptionEnabled ? `₹${rp_price}` : 0,
 
@@ -1486,12 +1490,14 @@ class ProductController {
 
             image: mainImage,
 
-            price: `₹${salePrice}`,
-            originalPrice: `₹${mrp}`,
+            price: `₹${salePrice.toFixed(2)}`,
+            originalPrice: `₹${mrp.toFixed(2)}`,
 
             discount: `${mrpDiscountPercent}%`,
 
-            pointsPrice: redemptionEnabled ? `₹${finalPrice}` : null,
+            pointsPrice: redemptionEnabled
+              ? `₹${finalPrice.toFixed(2)}`
+              : null,
 
             points: finalRedeemCoins,
           };

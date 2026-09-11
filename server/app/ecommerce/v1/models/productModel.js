@@ -1754,8 +1754,8 @@ class ProductModel {
             variant_id: row.variant_id,
             image,
 
-            price: `₹${salePrice}`,
-            originalPrice: `₹${mrp}`,
+            price: `₹${salePrice.toFixed(2)}`,
+            originalPrice: `₹${mrp.toFixed(2)}`,
             discount: `${mrpDiscountPercent}%`,
             rp_price: redemptionEnabled ? `₹${rp_price}` : 0,
 
@@ -1960,8 +1960,8 @@ class ProductModel {
             variant_id: row.variant_id,
             image,
 
-            price: `₹${salePrice}`,
-            originalPrice: `₹${mrp}`,
+            price: `₹${salePrice.toFixed(2)}`,
+            originalPrice: `₹${mrp.toFixed(2)}`,
             discount: `${mrpDiscountPercent}%`,
             rp_price: redemptionEnabled ? `₹${rp_price}` : 0,
 
@@ -2139,8 +2139,8 @@ class ProductModel {
 
             image,
 
-            price: `₹${salePrice}`,
-            originalPrice: `₹${mrp}`,
+            price: `₹${salePrice.toFixed(2)}`,
+            originalPrice: `₹${mrp.toFixed(2)}`,
             discount: `${mrpDiscountPercent}%`,
             rp_price: redemptionEnabled ? `₹${rp_price}` : 0,
 
@@ -2324,8 +2324,8 @@ class ProductModel {
             variant_id: row.variant_id,
             image,
 
-            price: `₹${salePrice}`,
-            originalPrice: `₹${mrp}`,
+            price: `₹${salePrice.toFixed(2)}`,
+            originalPrice: `₹${mrp.toFixed(2)}`,
             discount: `${mrpDiscountPercent}%`,
             rp_price: redemptionEnabled ? `₹${rp_price}` : 0,
 
@@ -2497,8 +2497,8 @@ class ProductModel {
 
             image,
 
-            price: `₹${salePrice}`,
-            originalPrice: `₹${mrp}`,
+            price: `₹${salePrice.toFixed(2)}`,
+            originalPrice: `₹${mrp.toFixed(2)}`,
             discount: `${mrpDiscountPercent}%`,
             rp_price: redemptionEnabled ? `₹${rp_price}` : 0,
 
@@ -2672,8 +2672,8 @@ class ProductModel {
 
             image,
 
-            price: `₹${salePrice}`,
-            originalPrice: `₹${mrp}`,
+            price: `₹${salePrice.toFixed(2)}`,
+            originalPrice: `₹${mrp.toFixed(2)}`,
             discount: `${mrpDiscountPercent}%`,
             rp_price: redemptionEnabled ? `₹${rp_price}` : 0,
 
@@ -2842,8 +2842,8 @@ class ProductModel {
 
             image,
 
-            price: `₹${salePrice}`,
-            originalPrice: `₹${mrp}`,
+            price: `₹${salePrice.toFixed(2)}`,
+            originalPrice: `₹${mrp.toFixed(2)}`,
             discount: `${mrpDiscountPercent}%`,
             rp_price: redemptionEnabled ? `₹${rp_price}` : 0,
 
@@ -2999,8 +2999,8 @@ class ProductModel {
 
             image,
 
-            price: `₹${salePrice}`,
-            originalPrice: `₹${mrp}`,
+            price: `₹${salePrice.toFixed(2)}`,
+            originalPrice: `₹${mrp.toFixed(2)}`,
             discount: `${mrpDiscountPercent}%`,
             rp_price: redemptionEnabled ? `₹${rp_price}` : 0,
 
