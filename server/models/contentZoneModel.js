@@ -42,6 +42,12 @@ const isValidColorValue = (value) => {
 // null/undefined just means "not set", not invalid.
 const isValidTextColor = (value) => value === null || value === undefined || value === "" || HEX_TEXT_COLOR_RE.test(String(value).trim());
 
+const parseTargetIds = (value) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string" || !value.trim()) return [];
+  try { return JSON.parse(value); } catch { return []; }
+};
+
 class ContentZoneModel {
   //   =======================Helper=================================
 
@@ -89,6 +95,10 @@ class ContentZoneModel {
     if (data.target_type !== undefined && data.target_type !== null && data.target_type !== "") {
       if (!TARGET_TYPES.includes(data.target_type)) errors.push(`target_type must be one of: ${TARGET_TYPES.join(", ")}`);
       if (!Number.isInteger(Number(data.target_id)) || Number(data.target_id) <= 0) errors.push("target_id must be a positive integer");
+      const targetIds = parseTargetIds(data.target_ids);
+      if (data.target_type === "product" && targetIds.some((id) => !Number.isInteger(Number(id)) || Number(id) <= 0)) {
+        errors.push("target_ids must contain only positive product IDs");
+      }
     }
 
     if (!isUpdate && (!data.title || !data.title.trim())) {
@@ -360,9 +370,9 @@ class ContentZoneModel {
       `
       INSERT INTO content_zone_entries (
         module, zone, content_type, display_mode, color_value, text_color, image_url, title, cta_text,
-        redirect_link, target_type, target_id, start_at, end_at, priority, is_default, is_published, created_by_name
+        redirect_link, target_type, target_id, target_ids, start_at, end_at, priority, is_default, is_published, created_by_name
       )
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `,
       [
         data.module,
@@ -377,6 +387,7 @@ class ContentZoneModel {
         data.redirect_link || null,
         data.target_type || null,
         data.target_type ? Number(data.target_id) : null,
+        data.target_type === "product" ? JSON.stringify(parseTargetIds(data.target_ids)) : null,
         startAt,
         data.end_at || null,
         data.priority || 0,
@@ -425,6 +436,7 @@ class ContentZoneModel {
       "redirect_link",
       "target_type",
       "target_id",
+      "target_ids",
       "start_at",
       "end_at",
       "priority",
@@ -436,6 +448,7 @@ class ContentZoneModel {
         fields.push(`${key} = ?`);
         if (key === "is_published") values.push(data[key] ? 1 : 0);
         else if (key === "text_color") values.push(data[key] || null);
+        else if (key === "target_ids") values.push(data.target_type === "product" ? JSON.stringify(parseTargetIds(data[key])) : null);
         else values.push(data[key]);
       }
     }
@@ -468,9 +481,9 @@ class ContentZoneModel {
       `
       INSERT INTO content_zone_entries (
         module, zone, content_type, display_mode, color_value, text_color, image_url, title, cta_text,
-        redirect_link, target_type, target_id, start_at, end_at, priority, is_default, is_published, created_by_name
+        redirect_link, target_type, target_id, target_ids, start_at, end_at, priority, is_default, is_published, created_by_name
       )
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,?)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,?)
       `,
       [
         original.module,
@@ -485,6 +498,7 @@ class ContentZoneModel {
         original.redirect_link,
         original.target_type,
         original.target_id,
+        original.target_type === "product" ? JSON.stringify(parseTargetIds(original.target_ids)) : null,
         original.start_at,
         original.end_at,
         original.priority,

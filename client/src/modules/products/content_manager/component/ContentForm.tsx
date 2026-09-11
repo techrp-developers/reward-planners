@@ -305,7 +305,9 @@ export default function ContentForm({ draft, entries, now, module, onChange, onS
           <ContentTargetSelector
             targetType={draft.targetType}
             targetId={draft.targetId}
-            onChange={(targetType, targetId) => onChange({ targetType, targetId })}
+            targetIds={draft.targetIds}
+            multiple={draft.zone === "promotional_banner"}
+            onChange={(targetType, targetId, targetIds = targetId ? [targetId] : []) => onChange({ targetType, targetId, targetIds })}
           />
         )}
 

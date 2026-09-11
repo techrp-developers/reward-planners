@@ -17,6 +17,17 @@ const parseConfig = (value) => {
 
 const MOBILE_CONTENT_MODULES = ['mobile_dashboard', 'product', 'service', 'payment', 'dineout'];
 
+const targetIds = (entry) => {
+  let ids = entry.target_ids;
+  if (typeof ids === 'string') {
+    try { ids = JSON.parse(ids); } catch { ids = []; }
+  }
+  if (!Array.isArray(ids)) ids = [];
+  const normalized = ids.map(Number).filter((id) => Number.isInteger(id) && id > 0);
+  if (!normalized.length && entry.target_id != null) normalized.push(Number(entry.target_id));
+  return [...new Set(normalized)];
+};
+
 const publicModule = (row) => ({
   moduleKey: row.module_key,
   label: row.label,
@@ -49,6 +60,7 @@ const publicContentEntry = async (entry) => {
     redirectLink: entry.redirect_link,
     targetType: entry.target_type || null,
     targetId: entry.target_id == null ? null : Number(entry.target_id),
+    targetIds: entry.target_type === 'product' ? targetIds(entry) : [],
     colorValue: entry.content_type === 'color' ? entry.color_value : null,
     imageUrl: entry.content_type === 'image' ? getContentImageUrl(entry.image_url) : null,
     status: entry.status,

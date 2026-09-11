@@ -38,6 +38,8 @@ export interface ContentEntry {
   redirectLink: string;
   targetType: ContentTargetType | "";
   targetId: number | null;
+  /** Promotional product banners may open a collection containing several products. */
+  targetIds: number[];
   /** ISO datetime-local string ("" for Default entries, which have no window) */
   startAt: string;
   /** ISO datetime-local string ("" means "no end date") */
@@ -101,6 +103,7 @@ export function blankEntry(zone: Zone): ContentEntry {
     redirectLink: "",
     targetType: "",
     targetId: null,
+    targetIds: [],
     startAt: "",
     endAt: "",
     priority: 1,

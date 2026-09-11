@@ -2,6 +2,16 @@ import type { ApiContentEntry } from "../api/ContentApi";
 import type { ContentEntry } from "../types";
 
 // Backend always returns a complete, ready-to-use URL for image_url (or null) - see contentController.js buildContentImageUrl.
+const targetIdsFromApi = (row: ApiContentEntry): number[] => {
+  let values: unknown = row.target_ids;
+  if (typeof values === "string") {
+    try { values = JSON.parse(values); } catch { values = []; }
+  }
+  const ids = Array.isArray(values) ? values.map(Number).filter((id) => Number.isInteger(id) && id > 0) : [];
+  if (!ids.length && row.target_id != null) ids.push(Number(row.target_id));
+  return [...new Set(ids)];
+};
+
 export const fromApiEntry = (row: ApiContentEntry): ContentEntry => ({
   id: row.content_id,
   zone: row.zone,
@@ -16,6 +26,7 @@ export const fromApiEntry = (row: ApiContentEntry): ContentEntry => ({
   redirectLink: row.redirect_link || "",
   targetType: row.target_type || "",
   targetId: row.target_id == null ? null : Number(row.target_id),
+  targetIds: targetIdsFromApi(row),
   startAt: row.start_at ? row.start_at.slice(0, 16) : "",
   endAt: row.end_at ? row.end_at.slice(0, 16) : "",
   priority: row.priority,

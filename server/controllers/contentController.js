@@ -10,6 +10,29 @@ const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
 // multer maxCount values in routes/contentRoutes.js.
 const MAX_OFFER_IMAGES = 10;
 
+const normalizeTargetIds = (body) => {
+  let raw = body.target_ids;
+  if (typeof raw === "string") {
+    try { raw = JSON.parse(raw); } catch { raw = []; }
+  }
+  const ids = Array.isArray(raw)
+    ? [...new Set(raw.map(Number).filter((id) => Number.isInteger(id) && id > 0))]
+    : [];
+  if (body.target_type === "product" && !ids.length && Number(body.target_id) > 0) ids.push(Number(body.target_id));
+  body.target_ids = body.target_type === "product" ? ids : [];
+  body.target_id = body.target_type ? (ids[0] ?? Number(body.target_id)) : null;
+  return ids;
+};
+
+const validateTargets = async (body) => {
+  const ids = normalizeTargetIds(body);
+  if (body.target_type === "product") {
+    await Promise.all(ids.map((id) => ContentZoneModel.validateTarget("product", id)));
+  } else if (body.target_type) {
+    await ContentZoneModel.validateTarget(body.target_type, body.target_id);
+  }
+};
+
 const cleanupTempFile = (file) => {
   if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
 };
@@ -218,8 +241,7 @@ class ContentController {
       const body = { ...req.body };
       body.is_published = body.is_published === "true" || body.is_published === true;
       body.target_type = body.target_type || null;
-      body.target_id = body.target_type ? Number(body.target_id) : null;
-      if (body.target_type) await ContentZoneModel.validateTarget(body.target_type, body.target_id);
+      await validateTargets(body);
 
       if (offerFiles.length && body.zone !== "offers_banner") {
         cleanupTempFile(imageFile);
@@ -290,8 +312,7 @@ class ContentController {
       const body = { ...req.body };
       if (body.target_type !== undefined || body.target_id !== undefined) {
         body.target_type = body.target_type || null;
-        body.target_id = body.target_type ? Number(body.target_id) : null;
-        if (body.target_type) await ContentZoneModel.validateTarget(body.target_type, body.target_id);
+        await validateTargets(body);
       }
 
       if (offerFiles.length && existing.zone !== "offers_banner") {
