@@ -4,6 +4,9 @@ const db = require("../../../../config/database");
 const fs = require("fs");
 const path = require("path");
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
+// Also refresh fixed-path images that were overwritten before image uploads
+// started using versioned object names. This stays cacheable for this process.
+const CATEGORY_IMAGE_CACHE_VERSION = Date.now();
 
 function buildImageUrl(path, updatedAt) {
   if (!path) return null;
@@ -709,9 +712,10 @@ class ProductController {
       const processedCategories = rows.map((category) => ({
         id: category.category_id,
         name: category.category_name,
-        image: category.cover_image
-          ? `${CDN_BASE_URL}/${category.cover_image}`
-          : null,
+        image: buildImageUrl(
+          category.cover_image,
+          CATEGORY_IMAGE_CACHE_VERSION,
+        ),
       }));
 
       res.json({
@@ -1289,9 +1293,10 @@ class ProductController {
       const processedSubCategories = data.map((subcategory) => ({
         id: subcategory.subcategory_id,
         name: subcategory.subcategory_name,
-        image: subcategory.cover_image
-          ? `${CDN_BASE_URL}/${subcategory.cover_image}`
-          : null,
+        image: buildImageUrl(
+          subcategory.cover_image,
+          CATEGORY_IMAGE_CACHE_VERSION,
+        ),
       }));
 
       res.json({
@@ -1331,9 +1336,10 @@ class ProductController {
           categoryMap[row.category_id] = {
             id: row.category_id,
             name: row.category_name,
-            image: row.category_image
-              ? `${CDN_BASE_URL}/${row.category_image}`
-              : null,
+            image: buildImageUrl(
+              row.category_image,
+              CATEGORY_IMAGE_CACHE_VERSION,
+            ),
             subcategories: [],
           };
         }
@@ -1343,9 +1349,10 @@ class ProductController {
           categoryMap[row.category_id].subcategories.push({
             id: row.subcategory_id,
             name: row.subcategory_name,
-            image: row.subcategory_image
-              ? `${CDN_BASE_URL}/${row.subcategory_image}`
-              : null,
+            image: buildImageUrl(
+              row.subcategory_image,
+              CATEGORY_IMAGE_CACHE_VERSION,
+            ),
           });
         }
       });
