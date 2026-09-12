@@ -669,6 +669,9 @@ class ProductController {
 
             return {
               ...variant,
+              sale_price: salePrice,
+              original_sale_price: Number(variant.sale_price) || 0,
+              offer_price: isCampaignPrice ? salePrice : null,
               price: `₹${salePrice.toFixed(2)}`,
               campaign_id: isCampaignPrice ? campaignId : null,
               finalPrice: redemptionEnabled
