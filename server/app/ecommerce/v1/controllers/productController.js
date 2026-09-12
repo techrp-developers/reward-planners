@@ -709,9 +709,10 @@ class ProductController {
       const processedCategories = rows.map((category) => ({
         id: category.category_id,
         name: category.category_name,
-        image: category.cover_image
-          ? `${CDN_BASE_URL}/${category.cover_image}`
-          : null,
+        image: buildImageUrl(
+          category.cover_image,
+          category.updated_at,
+        ),
       }));
 
       res.json({
@@ -1289,9 +1290,10 @@ class ProductController {
       const processedSubCategories = data.map((subcategory) => ({
         id: subcategory.subcategory_id,
         name: subcategory.subcategory_name,
-        image: subcategory.cover_image
-          ? `${CDN_BASE_URL}/${subcategory.cover_image}`
-          : null,
+        image: buildImageUrl(
+          subcategory.cover_image,
+          subcategory.updated_at,
+        ),
       }));
 
       res.json({
@@ -1311,9 +1313,11 @@ class ProductController {
         c.category_id,
         c.category_name,
         c.cover_image AS category_image,
+        c.updated_at AS category_updated_at,
         sc.subcategory_id,
         sc.subcategory_name,
-        sc.cover_image AS subcategory_image
+        sc.cover_image AS subcategory_image,
+        sc.updated_at AS subcategory_updated_at
       FROM categories c
       LEFT JOIN sub_categories sc 
         ON sc.category_id = c.category_id 
@@ -1331,9 +1335,10 @@ class ProductController {
           categoryMap[row.category_id] = {
             id: row.category_id,
             name: row.category_name,
-            image: row.category_image
-              ? `${CDN_BASE_URL}/${row.category_image}`
-              : null,
+            image: buildImageUrl(
+              row.category_image,
+              row.category_updated_at,
+            ),
             subcategories: [],
           };
         }
@@ -1343,9 +1348,10 @@ class ProductController {
           categoryMap[row.category_id].subcategories.push({
             id: row.subcategory_id,
             name: row.subcategory_name,
-            image: row.subcategory_image
-              ? `${CDN_BASE_URL}/${row.subcategory_image}`
-              : null,
+            image: buildImageUrl(
+              row.subcategory_image,
+              row.subcategory_updated_at,
+            ),
           });
         }
       });

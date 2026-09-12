@@ -24,7 +24,7 @@ class SubCategoryModel {
   async updateSubCategoryImage(id, imagePath) {
     await db.execute(
       `UPDATE sub_categories
-     SET cover_image = ?
+     SET cover_image = ?, updated_at = NOW()
      WHERE subcategory_id = ?`,
       [imagePath, id],
     );
