@@ -661,6 +661,7 @@ class CampaignModel {
       `
     SELECT
       ci.id,
+      ci.campaign_id,
 
       ep.product_id,
       ep.product_name,
@@ -675,7 +676,6 @@ class CampaignModel {
 
       CASE
         WHEN ci.offer_price IS NOT NULL
-          AND ci.offer_price > 0
         THEN ci.offer_price
         ELSE pv.sale_price
       END AS final_price,

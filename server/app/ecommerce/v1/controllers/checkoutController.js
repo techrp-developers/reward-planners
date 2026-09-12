@@ -157,6 +157,7 @@ class CheckoutController {
         product_id,
         variant_id,
         quantity = 1,
+        campaign_id = null,
         address_id,
         use_rewards = true,
         expected_total,
@@ -182,6 +183,7 @@ class CheckoutController {
         productId: product_id,
         variantId: variant_id,
         quantity,
+        campaignId: campaign_id,
         companyId,
         addressId: address_id,
         useRewards: use_rewards,
@@ -217,6 +219,13 @@ class CheckoutController {
         return res.status(400).json({
           success: false,
           message: "Invalid product variant",
+        });
+      }
+
+      if (error.message === "INVALID_FLASH_SALE") {
+        return res.status(400).json({
+          success: false,
+          message: "Flash sale is no longer active or does not include this product",
         });
       }
 
@@ -341,6 +350,7 @@ class CheckoutController {
         qty = 1,
         use_rewards = "true",
         address_id,
+        campaign_id,
       } = req.query;
 
       if (!product_id || !variant_id || Number(qty) < 1) {
@@ -362,6 +372,7 @@ class CheckoutController {
         productId: Number(product_id),
         variantId: Number(variant_id),
         quantity: Number(qty),
+        campaignId: campaign_id ? Number(campaign_id) : null,
         useRewards: use_rewards === "true",
         userId,
         addressId,

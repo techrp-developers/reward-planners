@@ -75,7 +75,7 @@ class CartController {
         });
       }
 
-      const { product_id, variant_id, quantity = 1 } = req.body;
+      const { product_id, variant_id, quantity = 1, campaign_id = null } = req.body;
 
       if (!product_id || !variant_id) {
         return res.status(400).json({
@@ -96,6 +96,7 @@ class CartController {
         productId: product_id,
         variantId: variant_id,
         quantity,
+        campaignId: campaign_id,
       });
 
       const summary = await CartModel.getCartSummary(userId, true);
@@ -119,6 +120,13 @@ class CartController {
         return res.status(400).json({
           success: false,
           message: "Insufficient stock",
+        });
+      }
+
+      if (error.message === "INVALID_FLASH_SALE") {
+        return res.status(400).json({
+          success: false,
+          message: "Flash sale is no longer active or does not include this product",
         });
       }
 
