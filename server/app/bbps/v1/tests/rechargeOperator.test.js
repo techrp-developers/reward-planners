@@ -35,6 +35,37 @@ test("recharge plans reject a manually selected operator that does not own the n
   );
 });
 
+test("recharge plans reject a postpaid number", async (t) => {
+  t.mock.method(headerUtil, "fetchHeaders", async () => ({}));
+  t.mock.method(axios, "get", async (url) => {
+    assert.match(url, /\/operator$/);
+    return {
+      data: {
+        status: 0,
+        data: {
+          operator_code: "2",
+          operator_name: "Vi Postpaid",
+          circle_id: "7",
+        },
+      },
+    };
+  });
+
+  await assert.rejects(
+    ekoService.getRechargePlans({
+      mobile: "9876543210",
+      operatorCode: "2",
+      circleId: "7",
+    }),
+    (error) => {
+      assert.equal(error.code, "RECHARGE_POSTPAID_NUMBER");
+      assert.equal(error.statusCode, 422);
+      assert.equal(error.details.detectedOperatorName, "Vi Postpaid");
+      return true;
+    },
+  );
+});
+
 test("recharge plans use the operator and circle detected by EKO", async (t) => {
   t.mock.method(headerUtil, "fetchHeaders", async () => ({}));
   t.mock.method(axios, "get", async (url, config) => {

@@ -419,6 +419,21 @@ exports.getRechargeOperator = async (mobile) => {
 
 exports.getRechargePlans = async ({ mobile, operatorCode, circleId }) => {
   const detected = await exports.getRechargeOperator(mobile);
+
+  if (/\bpostpaid\b/i.test(String(detected.operatorName || ""))) {
+    const error = new Error(
+      "This mobile number is postpaid. Recharge packages are available only for prepaid numbers.",
+    );
+    error.statusCode = 422;
+    error.code = "RECHARGE_POSTPAID_NUMBER";
+    error.details = {
+      detectedOperatorId: detected.operatorId,
+      detectedOperatorName: detected.operatorName,
+      detectedCircleId: detected.circleId,
+    };
+    throw error;
+  }
+
   if (operatorCode && String(operatorCode) !== detected.operatorId) {
     const error = new Error(
       `This mobile number belongs to ${detected.operatorName || "another operator"}. Please select the correct operator.`,
