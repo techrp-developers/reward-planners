@@ -1,7 +1,6 @@
 const fs = require("fs");
 const path = require("path");
 const ModuleIconModel = require("../models/moduleIconModel");
-const { getContentImageUrl } = require("../utils/contentPublicUrl");
 const { getPublicUrl } = require("../utils/publicUrl");
 const { uploadToR2 } = require("../utils/r2upload");
 const { deleteFromR2 } = require("../utils/r2delete");
@@ -65,9 +64,19 @@ const deleteModuleIconFile = async (storedPath) => {
   }
 };
 
-const getModuleIconUrl = (storedPath) => storedPath?.startsWith("/uploads/")
-  ? getContentImageUrl(storedPath)
-  : getPublicUrl(storedPath);
+const getModuleIconUrl = (storedPath) => {
+  if (!storedPath) return null;
+
+  const normalizedPath = String(storedPath).trim();
+  if (!normalizedPath) return null;
+  if (/^https?:\/\//i.test(normalizedPath)) return normalizedPath;
+
+  const r2Key = normalizedPath.startsWith("/uploads/module-icons/")
+    ? `public/module-icons/${normalizedPath.split("/").pop()}`
+    : normalizedPath;
+
+  return getPublicUrl(r2Key);
+};
 
 const toPublicModule = (row) => ({
   ...row,
