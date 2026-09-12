@@ -593,6 +593,11 @@ class ProductController {
         });
       }
 
+      const campaignId = Number.parseInt(req.query.campaign_id, 10);
+      const campaignOfferPrices = Number.isInteger(campaignId) && campaignId > 0
+        ? await ProductModel.getActiveCampaignOfferPrices(campaignId, productId)
+        : new Map();
+
       if (req.user?.user_id) {
         await db.execute(
           `
@@ -608,17 +613,23 @@ class ProductController {
         ...product,
         variants: await Promise.all(
           product.variants.map(async (variant) => {
-            const salePrice = Number(variant.sale_price) || 0;
+            const campaignPrice = campaignOfferPrices.get(Number(variant.variant_id));
+            const isCampaignPrice = campaignPrice !== undefined;
+            const salePrice = isCampaignPrice
+              ? campaignPrice
+              : Number(variant.sale_price) || 0;
             const mrp = Number(variant.mrp) || 0;
 
-            const rules = await RewardModel.getProductRewards(
-              product.product_id,
-              variant.variant_id,
-              product.category_id,
-              product.subcategory_id,
-              salePrice,
-              product.is_discount_eligible,
-            );
+            const rules = isCampaignPrice
+              ? []
+              : await RewardModel.getProductRewards(
+                  product.product_id,
+                  variant.variant_id,
+                  product.category_id,
+                  product.subcategory_id,
+                  salePrice,
+                  product.is_discount_eligible,
+                );
 
             let rewardCoins = 0;
             let canEarn = false;
@@ -659,6 +670,7 @@ class ProductController {
             return {
               ...variant,
               price: `₹${salePrice.toFixed(2)}`,
+              campaign_id: isCampaignPrice ? campaignId : null,
               finalPrice: redemptionEnabled
                 ? `₹${finalPrice.toFixed(2)}`
                 : null,

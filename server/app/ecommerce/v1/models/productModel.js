@@ -735,6 +735,27 @@ class ProductModel {
     }
   }
 
+  async getActiveCampaignOfferPrices(campaignId, productId) {
+    const [rows] = await db.execute(
+      `
+      SELECT ci.variant_id, ci.offer_price
+      FROM campaign_items ci
+      INNER JOIN campaigns c ON c.campaign_id = ci.campaign_id
+      WHERE ci.campaign_id = ?
+        AND ci.product_id = ?
+        AND c.campaign_type = 'flash_sale'
+        AND c.status = 'active'
+        AND NOW() BETWEEN c.start_at AND c.end_at
+        AND ci.offer_price IS NOT NULL
+      `,
+      [campaignId, productId],
+    );
+
+    return new Map(
+      rows.map((row) => [Number(row.variant_id), Number(row.offer_price)]),
+    );
+  }
+
   // async getProductsByCategory({
   //   search,
   //   sortBy,
