@@ -11,6 +11,23 @@ const { getPublicUrl } = require("../../../utils/publicUrl");
 const VIDEO_MAX_SECONDS = 30;
 const TEXT_MAX_LENGTH = 700;
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+const VISIBILITIES = new Set([
+  "same_company", "all_companies", "all_except_companies", "custom_people",
+]);
+
+function parseIdList(value, fieldName) {
+  if (value === undefined || value === null || value === "") return [];
+  let parsed = value;
+  if (typeof value === "string") {
+    try { parsed = JSON.parse(value); } catch { parsed = value.split(","); }
+  }
+  if (!Array.isArray(parsed)) throw new Error(`${fieldName} must be an array of IDs`);
+  const ids = parsed.map(Number);
+  if (ids.some((id) => !Number.isSafeInteger(id) || id <= 0)) {
+    throw new Error(`${fieldName} contains an invalid ID`);
+  }
+  return [...new Set(ids)];
+}
 
 function removeTemp(file) {
   if (file?.path) fs.promises.unlink(file.path).catch(() => {});
@@ -41,6 +58,7 @@ function serialize(row) {
     media_url: getPublicUrl(row.media_key),
     media_mime_type: row.media_mime_type,
     duration_seconds: row.media_duration_seconds,
+    visibility: row.visibility,
     viewed: Boolean(Number(row.viewed || 0)),
     view_count: row.view_count === undefined ? undefined : Number(row.view_count),
     created_at: row.created_at,
@@ -54,6 +72,27 @@ exports.create = async (req, res) => {
     const text = typeof req.body.text === "string" ? req.body.text.trim() : "";
     const inferredType = req.file?.mimetype.startsWith("video/") ? "video" : req.file ? "image" : "text";
     const type = req.body.type || inferredType;
+    const visibility = req.body.visibility || "same_company";
+    let excludedCompanyIds;
+    let allowedUserIds;
+    try {
+      excludedCompanyIds = parseIdList(req.body.excluded_company_ids, "excluded_company_ids");
+      allowedUserIds = parseIdList(req.body.allowed_user_ids, "allowed_user_ids");
+    } catch (error) {
+      return res.status(422).json({ success: false, message: error.message });
+    }
+
+    if (!VISIBILITIES.has(visibility)) {
+      return res.status(422).json({ success: false, message: "Invalid status visibility" });
+    }
+    if (visibility === "all_except_companies" && !excludedCompanyIds.length) {
+      return res.status(422).json({ success: false, message: "Select at least one excluded company" });
+    }
+    if (visibility === "custom_people" && !allowedUserIds.length) {
+      return res.status(422).json({ success: false, message: "Select at least one allowed user" });
+    }
+    if (visibility !== "all_except_companies") excludedCompanyIds = [];
+    if (visibility !== "custom_people") allowedUserIds = [];
 
     if (!['text', 'image', 'video'].includes(type)) {
       return res.status(422).json({ success: false, message: "type must be text, image, or video" });
@@ -95,12 +134,16 @@ exports.create = async (req, res) => {
       backgroundColor, fontStyle: req.body.font_style || null,
       mediaKey: uploadedKey, mediaMimeType: req.file?.mimetype || null,
       mediaDurationSeconds: duration ? Math.ceil(duration) : null,
+      visibility, excludedCompanyIds, allowedUserIds,
     });
     return res.status(201).json({ success: true, data: serialize(status) });
   } catch (error) {
     if (uploadedKey) await deleteFromR2(uploadedKey).catch(() => {});
     console.error("Create status error:", error);
-    return res.status(500).json({ success: false, message: "Failed to create status" });
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.statusCode ? error.message : "Failed to create status",
+    });
   } finally {
     removeTemp(req.file);
   }
@@ -113,6 +156,31 @@ exports.mine = async (req, res) => {
   } catch (error) {
     console.error("Get own statuses error:", error);
     return res.status(500).json({ success: false, message: "Failed to fetch statuses" });
+  }
+};
+
+exports.audienceOptions = async (req, res) => {
+  try {
+    const data = await StatusModel.getAudienceOptions(req.user.user_id, req.query.q);
+    return res.json({
+      success: true,
+      data: {
+        companies: data.companies.map((company) => ({
+          id: company.id,
+          name: company.name,
+          logo_url: getPublicUrl(company.company_logo),
+        })),
+        people: data.people.map((person) => ({
+          id: person.id,
+          name: person.name,
+          image_url: getPublicUrl(person.user_image),
+          company: { id: person.company_id, name: person.company_name },
+        })),
+      },
+    });
+  } catch (error) {
+    console.error("Get status audience options error:", error);
+    return res.status(500).json({ success: false, message: "Failed to fetch audience options" });
   }
 };
 

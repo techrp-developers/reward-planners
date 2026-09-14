@@ -35,6 +35,7 @@ function uploadStatusMedia(req, res, next) {
 
 router.post("/", uploadStatusMedia, controller.create);
 router.get("/mine", controller.mine);
+router.get("/audience-options", controller.audienceOptions);
 router.get("/feed", controller.feed);
 router.post("/:status_id/view", controller.view);
 router.get("/:status_id/views", controller.views);
