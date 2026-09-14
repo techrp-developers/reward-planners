@@ -85,6 +85,47 @@ class PollModel {
     return result.affectedRows > 0;
   }
 
+  async getParticipants(pollId, companyId) {
+    const [[poll]] = await db.execute(
+      `SELECT poll_id FROM company_polls WHERE poll_id = ? AND company_id = ? LIMIT 1`,
+      [pollId, companyId],
+    );
+    if (!poll) return null;
+
+    const [rows] = await db.execute(
+      `SELECT o.option_id, o.option_text, o.display_order,
+              c.user_id, c.name, c.email, c.user_image, v.created_at AS voted_at
+       FROM company_poll_options o
+       LEFT JOIN company_poll_votes v ON v.option_id = o.option_id AND v.poll_id = o.poll_id
+       LEFT JOIN customer c ON c.user_id = v.user_id
+       LEFT JOIN company_users cu ON cu.id = c.company_user_id
+       WHERE o.poll_id = ? AND (c.user_id IS NULL OR cu.company_id = ?)
+       ORDER BY o.display_order, v.created_at, c.name`,
+      [pollId, companyId],
+    );
+    const options = new Map();
+    rows.forEach((row) => {
+      if (!options.has(String(row.option_id))) {
+        options.set(String(row.option_id), {
+          option_id: row.option_id,
+          option_text: row.option_text,
+          display_order: row.display_order,
+          participants: [],
+        });
+      }
+      if (row.user_id) {
+        options.get(String(row.option_id)).participants.push({
+          user_id: row.user_id,
+          name: row.name,
+          email: row.email,
+          user_image: row.user_image,
+          voted_at: row.voted_at,
+        });
+      }
+    });
+    return [...options.values()];
+  }
+
   async getEmployeeCompany(userId, conn = db) {
     const [[employee]] = await conn.execute(
       `SELECT cu.company_id

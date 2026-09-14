@@ -13,6 +13,22 @@ exports.list = async (req, res) => {
   }
 };
 
+exports.participants = async (req, res) => {
+  const pollId = Number(req.params.id);
+  if (!Number.isInteger(pollId) || pollId < 1) {
+    return res.status(400).json({ success: false, message: "Invalid poll" });
+  }
+  try {
+    const data = await PollModel.getParticipants(pollId, companyIdFor(req));
+    return data
+      ? res.json({ success: true, data })
+      : res.status(404).json({ success: false, message: "Poll not found" });
+  } catch (error) {
+    console.error("Unable to load poll participants:", error);
+    return res.status(500).json({ success: false, message: "Unable to load participants" });
+  }
+};
+
 exports.create = async (req, res) => {
   const question = String(req.body?.question || "").trim();
   const options = Array.isArray(req.body?.options)

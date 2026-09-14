@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { FiBarChart2, FiCheckCircle, FiClock, FiPlus, FiTrash2, FiUsers, FiX } from "react-icons/fi";
+import { FiBarChart2, FiCheckCircle, FiChevronDown, FiClock, FiPlus, FiTrash2, FiUsers, FiX } from "react-icons/fi";
 import { toast } from "sonner";
 import { hrApi } from "../../../common/api/hrApi";
 
@@ -20,6 +20,20 @@ interface Poll {
   options: PollOption[];
 }
 
+interface Participant {
+  user_id: number;
+  name: string;
+  email: string;
+  user_image: string | null;
+  voted_at: string;
+}
+
+interface OptionParticipants {
+  option_id: number;
+  option_text: string;
+  participants: Participant[];
+}
+
 const emptyOptions = () => ["", ""];
 
 function errorMessage(error: unknown) {
@@ -35,6 +49,9 @@ export default function PollManagement() {
   const [options, setOptions] = useState(emptyOptions);
   const [allowMultiple, setAllowMultiple] = useState(false);
   const [closesAt, setClosesAt] = useState("");
+  const [openParticipants, setOpenParticipants] = useState<number | null>(null);
+  const [participantData, setParticipantData] = useState<Record<number, OptionParticipants[]>>({});
+  const [participantsLoading, setParticipantsLoading] = useState<number | null>(null);
 
   const loadPolls = useCallback(async () => {
     try {
@@ -89,6 +106,24 @@ export default function PollManagement() {
       setPolls((current) => current.filter((item) => item.poll_id !== poll.poll_id));
       toast.success("Poll deleted");
     } catch (error) { toast.error(errorMessage(error)); }
+  };
+
+  const toggleParticipants = async (pollId: number) => {
+    if (openParticipants === pollId) {
+      setOpenParticipants(null);
+      return;
+    }
+    setOpenParticipants(pollId);
+    setParticipantsLoading(pollId);
+    try {
+      const response = await hrApi.get(`/polls/${pollId}/participants`);
+      setParticipantData((current) => ({ ...current, [pollId]: response.data?.data || [] }));
+    } catch (error) {
+      setOpenParticipants(null);
+      toast.error(errorMessage(error));
+    } finally {
+      setParticipantsLoading(null);
+    }
   };
 
   return (
@@ -154,6 +189,29 @@ export default function PollManagement() {
                     return <div key={option.option_id}><div className="mb-1.5 flex justify-between text-sm"><span className="font-semibold text-slate-700">{option.option_text}</span><span className="font-bold text-slate-500">{percentage}%</span></div><div className="h-2.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-gradient-to-r from-[#852BAF] to-[#FC3F78] transition-all" style={{ width: `${percentage}%` }} /></div></div>;
                   })}</div>
                   <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-500"><span className="flex items-center gap-1.5"><FiUsers /> {poll.participant_count} participants</span><span className="flex items-center gap-1.5"><FiCheckCircle /> {totalVotes} votes</span><span className="flex items-center gap-1.5"><FiClock /> {poll.closes_at ? `Closes ${new Date(poll.closes_at).toLocaleString()}` : "No closing date"}</span></div>
+                  <button type="button" onClick={() => void toggleParticipants(poll.poll_id)} className="mt-4 flex w-full items-center justify-between rounded-xl bg-purple-50/70 px-4 py-3 text-sm font-extrabold text-[#852BAF] transition hover:bg-purple-100">
+                    <span className="flex items-center gap-2"><FiUsers /> View votes by participant</span>
+                    <FiChevronDown className={`transition-transform ${openParticipants === poll.poll_id ? "rotate-180" : ""}`} />
+                  </button>
+                  {openParticipants === poll.poll_id && (
+                    <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
+                      {participantsLoading === poll.poll_id ? <p className="py-4 text-center text-sm text-slate-400">Loading participants...</p> : (
+                        <div className="space-y-5">{(participantData[poll.poll_id] || []).map((option) => (
+                          <div key={option.option_id}>
+                            <div className="mb-2 flex items-center justify-between"><h4 className="text-sm font-extrabold text-slate-700">{option.option_text}</h4><span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-slate-500">{option.participants.length}</span></div>
+                            {option.participants.length === 0 ? <p className="rounded-xl bg-white px-3 py-2 text-xs text-slate-400">No votes for this option</p> : (
+                              <div className="grid gap-2 sm:grid-cols-2">{option.participants.map((participant) => (
+                                <div key={`${option.option_id}-${participant.user_id}`} className="flex items-center gap-3 rounded-xl bg-white p-3 shadow-sm">
+                                  {participant.user_image ? <img src={participant.user_image} alt="" className="h-9 w-9 rounded-full object-cover" /> : <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#852BAF] to-[#FC3F78] text-xs font-black text-white">{participant.name?.charAt(0).toUpperCase() || "E"}</div>}
+                                  <div className="min-w-0"><p className="truncate text-sm font-bold text-slate-700">{participant.name}</p><p className="truncate text-[11px] text-slate-400">{participant.email}</p></div>
+                                </div>
+                              ))}</div>
+                            )}
+                          </div>
+                        ))}</div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/60 px-5 py-3"><span className="text-[11px] text-slate-400">Created {new Date(poll.created_at).toLocaleDateString()}</span><button onClick={() => void changeStatus(poll)} className="text-xs font-extrabold text-[#852BAF] hover:underline">{poll.status === "published" ? "Close poll" : "Reopen poll"}</button></div>
               </article>;

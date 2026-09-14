@@ -6,6 +6,7 @@ const router = express.Router();
 const hrOnly = [authenticateToken, authorizeRoles("hr")];
 
 router.get("/", ...hrOnly, pollController.list);
+router.get("/:id/participants", ...hrOnly, pollController.participants);
 router.post("/", ...hrOnly, pollController.create);
 router.patch("/:id/status", ...hrOnly, pollController.setStatus);
 router.delete("/:id", ...hrOnly, pollController.remove);
