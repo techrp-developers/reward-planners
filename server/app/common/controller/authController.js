@@ -36,7 +36,16 @@ const { getPublicUrl } = require("../../../utils/publicUrl");
 const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
 
   function generateOTP() {
-    return crypto.randomInt(100000, 1000000).toString();
+    const otp = crypto.randomInt(100000, 1000000).toString();
+    const shouldLogOtp =
+      process.env.NODE_ENV !== "production" ||
+      String(process.env.LOG_OTP_TO_CONSOLE).toLowerCase() === "true";
+
+    if (shouldLogOtp) {
+      console.warn(`[DEV OTP] Generated customer OTP: ${otp}`);
+    }
+
+    return otp;
   }
 
   function normalizeEmail(email) {

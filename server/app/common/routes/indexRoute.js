@@ -11,6 +11,7 @@ const walletRoutes = require("./walletRoute");
 const globalRoutes = require("./globalRoute");
 const cmsRoutes = require("./cmsRoute");
 const statusRoutes = require("./statusRoute");
+const pollRoutes = require("./pollRoute");
 
 router.use("/auth", authRoutes);
 router.use("/global", globalRoutes);
@@ -22,5 +23,6 @@ router.use("/notification", notificationRoutes);
 router.use("/wallet", walletRoutes);
 router.use("/cms", cmsRoutes);
 router.use("/status", statusRoutes);
+router.use("/polls", pollRoutes);
 
 module.exports = router;
