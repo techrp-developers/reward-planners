@@ -10,6 +10,7 @@ const notificationRoutes = require("./notificationRoute");
 const walletRoutes = require("./walletRoute");
 const globalRoutes = require("./globalRoute");
 const cmsRoutes = require("./cmsRoute");
+const statusRoutes = require("./statusRoute");
 
 router.use("/auth", authRoutes);
 router.use("/global", globalRoutes);
@@ -20,5 +21,6 @@ router.use("/todo", todoRoute);
 router.use("/notification", notificationRoutes);
 router.use("/wallet", walletRoutes);
 router.use("/cms", cmsRoutes);
+router.use("/status", statusRoutes);
 
 module.exports = router;

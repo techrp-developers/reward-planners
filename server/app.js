@@ -16,6 +16,7 @@ const swaggerSpec = require("./config/swagger");
 require("dotenv").config();
 if (String(process.env.RUN_SCHEDULED_JOBS ?? "true").toLowerCase() === "true") {
   require("./services/ExpressBees/cron/shipmentCron");
+  require("./services/Status/statusCleanupCron");
 }
 require("./services/Bbps/retryCron");
 require("./services/Bbps/refundCron");
