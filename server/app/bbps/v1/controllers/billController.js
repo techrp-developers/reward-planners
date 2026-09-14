@@ -273,6 +273,17 @@ const getFieldAliases = (name) => {
   return [name];
 };
 
+const isFastagOperator = (operatorRecord) =>
+  [
+    operatorRecord?.operator_id,
+    operatorRecord?.category_name,
+    operatorRecord?.categoryName,
+    operatorRecord?.operator_category_name,
+    operatorRecord?.category,
+  ].some((value) =>
+    /fastag/i.test(String(value || "")) || String(value || "").trim() === "267",
+  );
+
 /**
  * Converts frontend payload into EKO payload using operator input parameters.
  * @param {FrontendFetchBillPayload & Record<string, any>} requestBody
@@ -280,6 +291,7 @@ const getFieldAliases = (name) => {
  */
 const normalizeFetchBillRequest = (requestBody, operatorRecord) => {
   const normalizedOperatorId = String(requestBody?.operator_id || "").trim();
+  const fastagOperator = isFastagOperator(operatorRecord);
 
   const inputParams = parseInputParams(operatorRecord) || [];
   const requiredParams = inputParams.filter((param) => param.required);
@@ -295,7 +307,11 @@ const normalizeFetchBillRequest = (requestBody, operatorRecord) => {
     const value = getFirstFromKeys(requestBody, getFieldAliases(param.name));
 
     if (hasValue(value)) {
-      providerPayload[param.name] = String(value).trim();
+      const normalizedValue = String(value).trim();
+      providerPayload[param.name] =
+        fastagOperator && param.name === "utility_acc_no"
+          ? normalizedValue.toUpperCase()
+          : normalizedValue;
     }
   }
 
@@ -303,7 +319,20 @@ const normalizeFetchBillRequest = (requestBody, operatorRecord) => {
   // 2. MAP ALL OTHER PARAMS (fallback)
   // =========================
   Object.entries(requestBody || {}).forEach(([key, value]) => {
-    if (!hasValue(value) || key === "operator_id") return;
+    if (
+      !hasValue(value) ||
+      [
+        "operator_id",
+        "consumer_number",
+        "consumerNumber",
+        "mobile_number",
+        "mobileNo",
+        "mobile_no",
+        "mobile",
+      ].includes(key)
+    ) {
+      return;
+    }
 
     if (providerPayload[key] === undefined) {
       providerPayload[key] = String(value).trim();
@@ -321,7 +350,10 @@ const normalizeFetchBillRequest = (requestBody, operatorRecord) => {
     ]);
 
     if (hasValue(accountNo)) {
-      providerPayload.utility_acc_no = String(accountNo).trim();
+      const normalizedAccountNo = String(accountNo).trim();
+      providerPayload.utility_acc_no = fastagOperator
+        ? normalizedAccountNo.toUpperCase()
+        : normalizedAccountNo;
     }
   }
 

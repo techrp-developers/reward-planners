@@ -719,23 +719,22 @@ exports.fetchBill = async (body, req) => {
       ),
     });
 
+    const fetchBillEndpoint = ekoRechargeUrl("customer/payment/bbps/bill");
+
     console.info("[BBPS][provider][fetch-bill] request-meta", {
       initiator_id: process.env.EKO_INITIATOR_ID,
       source_ip: payload.source_ip,
-      endpoint: ekoUrl(
-        `billpayments/fetchbill?initiator_id=${process.env.EKO_INITIATOR_ID}`,
-      ),
+      endpoint: fetchBillEndpoint,
+      method: "GET",
     });
 
     const res = await retry(
       () =>
-        axios.post(
-          ekoUrl(
-            `billpayments/fetchbill?initiator_id=${process.env.EKO_INITIATOR_ID}`,
-          ),
-          payload,
-          { headers, timeout: FETCH_BILL_TIMEOUT_MS },
-        ),
+        axios.get(fetchBillEndpoint, {
+          headers,
+          params: payload,
+          timeout: FETCH_BILL_TIMEOUT_MS,
+        }),
       1,
     );
 
