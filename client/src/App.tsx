@@ -124,6 +124,7 @@ const BbpsLogoUpload = lazy(() => import("./modules/products/vendorManager/bbps/
 const CancellationRequest = lazy(() => import("./modules/products/vendorManager/order/CancellationRequest.tsx"));
 const CancellationDetail = lazy(() => import("./modules/products/vendorManager/order/CancellationDetail.tsx"));
 const ManageRewards = lazy(() => import("./modules/hr/rewards/ManageRewards.tsx"));
+const PollManagement = lazy(() => import("./modules/hr/polls/PollManagement.tsx"));
 
 // Service Partners (Services vertical)
 const ServicePartnerList = lazy(() => import("./modules/service/serviceManager/servicePartners/pages/ServicePartnerList.tsx"));
@@ -597,6 +598,7 @@ export default function App() {
         />
         <Route path={routes.hr.profile} element={<EditProfilePage />} />
         <Route path={routes.hr.rewards} element={<ManageRewards />} />
+        <Route path={routes.hr.polls} element={<PollManagement />} />
       </Route>
 
       {/* ========== RM ========== */}

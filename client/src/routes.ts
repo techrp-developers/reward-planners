@@ -137,7 +137,8 @@ export const routes = {
     profile: "/hr/profile",
     onboarding: "/hr/onboarding",
     employees: "/hr/employees",
-      rewards: "/hr/rewards",
+    rewards: "/hr/rewards",
+    polls: "/hr/polls",
 
   },
   service: {

@@ -23,6 +23,7 @@ const companyWalletRoutes = require("./companyWalletRoutes");
 const clientOnboardingOtpRoutes = require("./clientOnboardingOtpRoutes");
 const clientOnboardingReviewRoutes = require("./clientOnboardingReviewRoutes");
 const supportTicketRoutes = require("./supportTicketRoutes");
+const pollRoutes = require("./pollRoutes");
 
 // dashboard Routes
 router.use("/auth", authRoutes);
@@ -48,5 +49,6 @@ router.use("/company-wallet", companyWalletRoutes);
 router.use("/client-onboarding/otp", clientOnboardingOtpRoutes);
 router.use("/client-onboarding/reviews", clientOnboardingReviewRoutes);
 router.use("/manager", supportTicketRoutes);
+router.use("/polls", pollRoutes);
 
 module.exports = router;
