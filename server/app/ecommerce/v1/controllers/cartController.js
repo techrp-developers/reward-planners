@@ -75,7 +75,7 @@ class CartController {
         });
       }
 
-      const { product_id, variant_id, quantity = 1, campaign_id = null } = req.body;
+      const { product_id, variant_id, quantity = 1, campaign_id = null, content_id = null } = req.body;
 
       if (!product_id || !variant_id) {
         return res.status(400).json({
@@ -97,6 +97,7 @@ class CartController {
         variantId: variant_id,
         quantity,
         campaignId: campaign_id,
+        contentId: content_id,
       });
 
       const summary = await CartModel.getCartSummary(userId, true);
@@ -128,6 +129,10 @@ class CartController {
           success: false,
           message: "Flash sale is no longer active or does not include this product",
         });
+      }
+
+      if (error.message === "INVALID_PROMOTIONAL_OFFER") {
+        return res.status(400).json({ success: false, message: "Promotional offer is no longer active or does not include this product variant" });
       }
 
       return res.status(500).json({

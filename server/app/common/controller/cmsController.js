@@ -114,11 +114,13 @@ class CmsController {
       const rows = await ContentZoneModel.getContentProducts(entry.content_id);
       const rewardCache = new Map();
       const products = await Promise.all(rows.map(async (product) => {
-        const salePrice = Number(product.sale_price || 0);
+        const originalSalePrice = Number(product.sale_price || 0);
+        const offerPrice = product.offer_price == null ? null : Number(product.offer_price);
+        const salePrice = offerPrice ?? originalSalePrice;
         const mrp = Number(product.mrp || 0);
         const cacheKey = `${product.product_id}_${product.variant_id}_${salePrice}`;
-        let rules = rewardCache.get(cacheKey);
-        if (!rules) {
+        let rules = offerPrice !== null ? [] : rewardCache.get(cacheKey);
+        if (offerPrice === null && !rules) {
           rules = await RewardModel.getProductRewards(
             product.product_id, product.variant_id, product.category_id,
             product.subcategory_id, salePrice, product.is_discount_eligible,
@@ -133,12 +135,16 @@ class CmsController {
           id: Number(product.product_id),
           product_id: Number(product.product_id),
           variant_id: Number(product.variant_id),
+          content_id: Number(entry.content_id),
           title: product.product_name,
           brand: product.brand_name,
           category: product.category_name,
           subcategory: product.subcategory_name,
           short_description: product.short_description,
           image: getPublicUrl(product.image_url, product.image_updated_at),
+          sale_price: salePrice,
+          original_sale_price: originalSalePrice,
+          offer_price: offerPrice,
           price: salePrice ? `₹${salePrice.toFixed(2)}` : null,
           originalPrice: mrp ? `₹${mrp.toFixed(2)}` : null,
           discount: `${mrp > 0 ? Math.round(((mrp - salePrice) / mrp) * 100) : 0}%`,

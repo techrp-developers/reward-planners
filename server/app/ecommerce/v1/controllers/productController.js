@@ -594,8 +594,12 @@ class ProductController {
       }
 
       const campaignId = Number.parseInt(req.query.campaign_id, 10);
+      const contentId = Number.parseInt(req.query.content_id, 10);
       const campaignOfferPrices = Number.isInteger(campaignId) && campaignId > 0
         ? await ProductModel.getActiveCampaignOfferPrices(campaignId, productId)
+        : new Map();
+      const contentOfferPrices = Number.isInteger(contentId) && contentId > 0
+        ? await ProductModel.getActiveContentOfferPrices(contentId, productId)
         : new Map();
 
       if (req.user?.user_id) {
@@ -614,13 +618,17 @@ class ProductController {
         variants: await Promise.all(
           product.variants.map(async (variant) => {
             const campaignPrice = campaignOfferPrices.get(Number(variant.variant_id));
+            const contentPrice = contentOfferPrices.get(Number(variant.variant_id));
             const isCampaignPrice = campaignPrice !== undefined;
+            const isContentPrice = !isCampaignPrice && contentPrice !== undefined;
+            const isOfferPrice = isCampaignPrice || isContentPrice;
             const salePrice = isCampaignPrice
               ? campaignPrice
+              : isContentPrice ? contentPrice
               : Number(variant.sale_price) || 0;
             const mrp = Number(variant.mrp) || 0;
 
-            const rules = isCampaignPrice
+            const rules = isOfferPrice
               ? []
               : await RewardModel.getProductRewards(
                   product.product_id,
@@ -671,9 +679,11 @@ class ProductController {
               ...variant,
               sale_price: salePrice,
               original_sale_price: Number(variant.sale_price) || 0,
-              offer_price: isCampaignPrice ? salePrice : null,
+              offer_price: isOfferPrice ? salePrice : null,
               price: `₹${salePrice.toFixed(2)}`,
               campaign_id: isCampaignPrice ? campaignId : null,
+              content_id: isContentPrice ? contentId : null,
+              promotional_offer_price: isContentPrice ? salePrice : null,
               finalPrice: redemptionEnabled
                 ? `₹${finalPrice.toFixed(2)}`
                 : null,

@@ -72,8 +72,9 @@ class CheckoutModel {
           ci.product_id,
           ci.variant_id,
           ci.quantity,
-          COALESCE(csi.offer_price, v.sale_price) AS sale_price,
+          COALESCE(csi.offer_price, pco.offer_price, v.sale_price) AS sale_price,
           CASE WHEN csi.offer_price IS NOT NULL THEN csi.campaign_id ELSE NULL END AS flash_sale_campaign_id,
+          CASE WHEN pco.offer_price IS NOT NULL THEN pco.content_id ELSE NULL END AS promotional_content_id,
           v.mrp,
           v.stock,
           v.weight,
@@ -99,6 +100,11 @@ class CheckoutModel {
               AND active_campaign.status = 'active'
               AND NOW() BETWEEN active_campaign.start_at AND active_campaign.end_at
           )
+        LEFT JOIN content_product_offers pco
+          ON pco.content_id = ci.promotional_content_id AND pco.product_id = ci.product_id AND pco.variant_id = ci.variant_id
+          AND EXISTS (SELECT 1 FROM content_zone_entries cze WHERE cze.content_id = pco.content_id
+            AND cze.zone = 'promotional_banner' AND cze.is_published = 1
+            AND (cze.start_at IS NULL OR cze.start_at <= NOW()) AND (cze.end_at IS NULL OR cze.end_at >= NOW()))
 
         WHERE ci.user_id = ?
           AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
@@ -149,7 +155,7 @@ class CheckoutModel {
 
         let rules = rewardCache[key];
 
-        if (item.flash_sale_campaign_id === null && !rules) {
+        if (item.flash_sale_campaign_id === null && item.promotional_content_id === null && !rules) {
           rules = await RewardModel.getProductRewards(
             item.product_id,
             item.variant_id,
@@ -165,10 +171,10 @@ class CheckoutModel {
         let redeemable = 0;
 
         if (useRewards && remainingWallet > 0) {
-          const redemption = item.flash_sale_campaign_id === null
+          const redemption = item.flash_sale_campaign_id === null && item.promotional_content_id === null
             ? resolveRedemption(itemTotal, rules)
             : null;
-          const maxAllowed = item.flash_sale_campaign_id === null
+          const maxAllowed = item.flash_sale_campaign_id === null && item.promotional_content_id === null
             ? calculateRedeemableCoins(itemTotal, redemption)
             : 0;
 
@@ -183,7 +189,7 @@ class CheckoutModel {
         /* ---------- EARN ---------- */
         let rewardEarn = 0;
 
-        if (item.flash_sale_campaign_id === null && rules.length) {
+        if (item.flash_sale_campaign_id === null && item.promotional_content_id === null && rules.length) {
           rewardEarn = calculateReward(finalItemTotal, rules);
           totalRewardEarn += rewardEarn;
         }
@@ -343,7 +349,7 @@ class CheckoutModel {
 
       const [lockedCart] = await conn.execute(
         `SELECT ci.variant_id, ci.quantity,
-                COALESCE(csi.offer_price, v.sale_price) AS sale_price,
+                COALESCE(csi.offer_price, pco.offer_price, v.sale_price) AS sale_price,
                 v.stock
          FROM cart_items ci
          JOIN product_variants v ON v.variant_id = ci.variant_id
@@ -358,6 +364,11 @@ class CheckoutModel {
                AND active_campaign.status = 'active'
                AND NOW() BETWEEN active_campaign.start_at AND active_campaign.end_at
            )
+         LEFT JOIN content_product_offers pco
+           ON pco.content_id = ci.promotional_content_id AND pco.product_id = ci.product_id AND pco.variant_id = ci.variant_id
+           AND EXISTS (SELECT 1 FROM content_zone_entries cze WHERE cze.content_id = pco.content_id
+             AND cze.zone = 'promotional_banner' AND cze.is_published = 1
+             AND (cze.start_at IS NULL OR cze.start_at <= NOW()) AND (cze.end_at IS NULL OR cze.end_at >= NOW()))
          WHERE ci.user_id = ? FOR UPDATE`,
         [userId],
       );
@@ -551,6 +562,7 @@ class CheckoutModel {
     variantId,
     quantity,
     campaignId = null,
+    contentId = null,
     companyId,
     addressId,
     useRewards = true,
@@ -583,8 +595,9 @@ class CheckoutModel {
       const [[item]] = await conn.execute(
         `
       SELECT 
-        COALESCE(csi.offer_price, v.sale_price) AS sale_price,
+        COALESCE(csi.offer_price, pco.offer_price, v.sale_price) AS sale_price,
         CASE WHEN csi.offer_price IS NOT NULL THEN csi.campaign_id ELSE NULL END AS flash_sale_campaign_id,
+        CASE WHEN pco.offer_price IS NOT NULL THEN pco.content_id ELSE NULL END AS promotional_content_id,
         v.mrp,
         v.stock,
         v.weight,
@@ -611,11 +624,16 @@ class CheckoutModel {
             AND active_campaign.status = 'active'
             AND NOW() BETWEEN active_campaign.start_at AND active_campaign.end_at
         )
+      LEFT JOIN content_product_offers pco
+        ON pco.content_id = ? AND pco.product_id = ? AND pco.variant_id = v.variant_id
+        AND EXISTS (SELECT 1 FROM content_zone_entries cze WHERE cze.content_id = pco.content_id
+          AND cze.zone = 'promotional_banner' AND cze.is_published = 1
+          AND (cze.start_at IS NULL OR cze.start_at <= NOW()) AND (cze.end_at IS NULL OR cze.end_at >= NOW()))
 
       WHERE v.variant_id = ? AND v.product_id = ?
         AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
       `,
-        [campaignId, productId, variantId, productId],
+        [campaignId, productId, contentId, productId, variantId, productId],
       );
 
       if (!item) throw new Error("INVALID_VARIANT");
@@ -623,6 +641,7 @@ class CheckoutModel {
       if (campaignId !== null && item.flash_sale_campaign_id === null) {
         throw new Error("INVALID_FLASH_SALE");
       }
+      if (contentId !== null && item.promotional_content_id === null) throw new Error("INVALID_PROMOTIONAL_OFFER");
 
       if (quantity > item.stock) throw new Error("OUT_OF_STOCK");
 
@@ -631,7 +650,7 @@ class CheckoutModel {
       // ===============================
       const itemTotal = Number(item.sale_price) * quantity;
 
-      const rules = item.flash_sale_campaign_id === null
+      const rules = item.flash_sale_campaign_id === null && item.promotional_content_id === null
         ? await RewardModel.getProductRewards(
           productId,
           variantId,
@@ -644,7 +663,7 @@ class CheckoutModel {
 
       let redeemable = 0;
 
-      if (item.flash_sale_campaign_id === null && useRewards && walletBalance > 0) {
+      if (item.flash_sale_campaign_id === null && item.promotional_content_id === null && useRewards && walletBalance > 0) {
         const redemption = resolveRedemption(itemTotal, rules);
         const maxAllowed = calculateRedeemableCoins(itemTotal, redemption);
 
@@ -656,7 +675,7 @@ class CheckoutModel {
 
       // 4.EARNING
       let rewardEarn = 0;
-      if (item.flash_sale_campaign_id === null && rules.length) {
+      if (item.flash_sale_campaign_id === null && item.promotional_content_id === null && rules.length) {
         rewardEarn = calculateReward(finalItemTotal, rules);
       }
 
@@ -950,8 +969,9 @@ class CheckoutModel {
       v.variant_id,
       v.variant_attributes,
       v.mrp,
-      COALESCE(csi.offer_price, v.sale_price) AS sale_price,
+      COALESCE(csi.offer_price, pco.offer_price, v.sale_price) AS sale_price,
       CASE WHEN csi.offer_price IS NOT NULL THEN csi.campaign_id ELSE NULL END AS flash_sale_campaign_id,
+      CASE WHEN pco.offer_price IS NOT NULL THEN pco.content_id ELSE NULL END AS promotional_content_id,
       v.stock,
       v.weight,
       v.length,
@@ -982,6 +1002,11 @@ class CheckoutModel {
           AND active_campaign.status = 'active'
           AND NOW() BETWEEN active_campaign.start_at AND active_campaign.end_at
       )
+    LEFT JOIN content_product_offers pco
+      ON pco.content_id = ci.promotional_content_id AND pco.product_id = ci.product_id AND pco.variant_id = ci.variant_id
+      AND EXISTS (SELECT 1 FROM content_zone_entries cze WHERE cze.content_id = pco.content_id
+        AND cze.zone = 'promotional_banner' AND cze.is_published = 1
+        AND (cze.start_at IS NULL OR cze.start_at <= NOW()) AND (cze.end_at IS NULL OR cze.end_at >= NOW()))
 
     WHERE ci.user_id = ?
       AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
@@ -1023,6 +1048,7 @@ class CheckoutModel {
         subcategory_id: row.subcategory_id,
         variant_id: row.variant_id,
         flash_sale_campaign_id: row.flash_sale_campaign_id,
+        promotional_content_id: row.promotional_content_id,
         variant_attributes: attributes,
         attributes,
         vendor_id: row.vendor_id,
@@ -1070,7 +1096,7 @@ class CheckoutModel {
 
       let rules = rewardCache[key];
 
-      if (item.flash_sale_campaign_id === null && !rules) {
+      if (item.flash_sale_campaign_id === null && item.promotional_content_id === null && !rules) {
         rules = await RewardModel.getProductRewards(
           item.product_id,
           item.variant_id,
@@ -1083,7 +1109,7 @@ class CheckoutModel {
       }
 
       // Redemption (rule-based)
-      if (item.flash_sale_campaign_id === null && useRewards && remainingWallet > 0) {
+      if (item.flash_sale_campaign_id === null && item.promotional_content_id === null && useRewards && remainingWallet > 0) {
         const redemption = resolveRedemption(itemTotal, rules);
         const maxAllowed = calculateRedeemableCoins(itemTotal, redemption);
 
@@ -1097,7 +1123,7 @@ class CheckoutModel {
       // Earning (on amount actually paid, after redemption)
       let rewardEarn = 0;
 
-      if (item.flash_sale_campaign_id === null && rules.length) {
+      if (item.flash_sale_campaign_id === null && item.promotional_content_id === null && rules.length) {
         const effectiveAmount = itemTotal - item.redeemable;
         rewardEarn = calculateReward(effectiveAmount, rules);
       }
@@ -1281,6 +1307,7 @@ class CheckoutModel {
     variantId,
     quantity,
     campaignId = null,
+    contentId = null,
     useRewards = true,
     userId,
     addressId = null,
@@ -1313,8 +1340,9 @@ class CheckoutModel {
       v.variant_id,
       v.variant_attributes,
       v.mrp,
-      COALESCE(csi.offer_price, v.sale_price) AS sale_price,
+      COALESCE(csi.offer_price, pco.offer_price, v.sale_price) AS sale_price,
       CASE WHEN csi.offer_price IS NOT NULL THEN csi.campaign_id ELSE NULL END AS flash_sale_campaign_id,
+      CASE WHEN pco.offer_price IS NOT NULL THEN pco.content_id ELSE NULL END AS promotional_content_id,
       v.stock,
       v.weight,
       v.length,
@@ -1344,12 +1372,17 @@ class CheckoutModel {
           AND active_campaign.status = 'active'
           AND NOW() BETWEEN active_campaign.start_at AND active_campaign.end_at
       )
+    LEFT JOIN content_product_offers pco
+      ON pco.content_id = ? AND pco.product_id = ? AND pco.variant_id = v.variant_id
+      AND EXISTS (SELECT 1 FROM content_zone_entries cze WHERE cze.content_id = pco.content_id
+        AND cze.zone = 'promotional_banner' AND cze.is_published = 1
+        AND (cze.start_at IS NULL OR cze.start_at <= NOW()) AND (cze.end_at IS NULL OR cze.end_at >= NOW()))
 
     WHERE v.variant_id = ? AND p.product_id = ?
       AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
     GROUP BY v.variant_id
     `,
-      [campaignId, variantId, productId],
+      [campaignId, contentId, productId, variantId, productId],
     );
 
     if (!row) throw new Error("INVALID_VARIANT");
@@ -1357,6 +1390,7 @@ class CheckoutModel {
     if (campaignId !== null && row.flash_sale_campaign_id === null) {
       throw new Error("INVALID_FLASH_SALE");
     }
+    if (contentId !== null && row.promotional_content_id === null) throw new Error("INVALID_PROMOTIONAL_OFFER");
 
     if (quantity > row.stock || row.stock <= 0) {
       throw new Error("OUT_OF_STOCK");
@@ -1368,7 +1402,7 @@ class CheckoutModel {
     /* ===============================
      3. REWARD ENGINE
   =============================== */
-    const rules = row.flash_sale_campaign_id === null
+    const rules = row.flash_sale_campaign_id === null && row.promotional_content_id === null
       ? await RewardModel.getProductRewards(
         row.product_id,
         row.variant_id,
@@ -1386,7 +1420,7 @@ class CheckoutModel {
     /* ===============================
      4. REDEMPTION (rule-based)
   =============================== */
-    if (row.flash_sale_campaign_id === null && useRewards && remainingWallet > 0) {
+    if (row.flash_sale_campaign_id === null && row.promotional_content_id === null && useRewards && remainingWallet > 0) {
       const redemption = resolveRedemption(itemTotal, rules);
       const maxAllowed = calculateRedeemableCoins(itemTotal, redemption);
 
@@ -1401,7 +1435,7 @@ class CheckoutModel {
   =============================== */
     let rewardEarn = 0;
 
-    if (row.flash_sale_campaign_id === null && rules.length) {
+    if (row.flash_sale_campaign_id === null && row.promotional_content_id === null && rules.length) {
       const effectiveAmount = itemTotal - redeemable;
       rewardEarn = calculateReward(effectiveAmount, rules);
     }

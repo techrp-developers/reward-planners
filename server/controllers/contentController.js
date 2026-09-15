@@ -28,6 +28,14 @@ const normalizeTargetIds = (body) => {
   return ids;
 };
 
+const normalizeProductOffers = (value) => {
+  let raw = value;
+  if (typeof raw === "string") { try { raw = JSON.parse(raw); } catch { raw = []; } }
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw)) { const error = new Error("product_offers must be an array"); error.statusCode = 400; throw error; }
+  return raw.map((item) => ({ product_id: Number(item.product_id), variant_id: Number(item.variant_id), offer_price: Number(item.offer_price) }));
+};
+
 const validateTargets = async (body) => {
   const ids = normalizeTargetIds(body);
   if (body.target_type === "product") {
@@ -180,7 +188,11 @@ const withOffersImageCount = async (entry) => {
   return { ...entry, image_count: rows.length || (entry.image_url ? 1 : 0) };
 };
 
-const hydrateEntry = async (entry) => withOffersImages(withPublicImageUrl(entry));
+const hydrateEntry = async (entry) => {
+  const hydrated = await withOffersImages(withPublicImageUrl(entry));
+  if (!hydrated || hydrated.zone !== "promotional_banner" || hydrated.target_type !== "product") return hydrated;
+  return { ...hydrated, product_offers: await ContentZoneModel.getProductOffers(hydrated.content_id) };
+};
 const hydrateEntryForList = async (entry) => withOffersImageCount(withPublicImageUrl(entry));
 
 class ContentController {
@@ -250,6 +262,8 @@ class ContentController {
 
     try {
       const body = { ...req.body };
+      const productOffers = normalizeProductOffers(body.product_offers) || [];
+      delete body.product_offers;
       body.is_published = body.is_published === "true" || body.is_published === true;
       body.target_type = body.target_type || null;
       await validateTargets(body);
@@ -284,6 +298,14 @@ class ContentController {
       body.created_by_name = req.user?.email || null;
 
       const entry = await ContentZoneModel.createEntry(body, { hasImageFile: !!imageFile || !!offerFiles.length });
+      if (productOffers.length) {
+        if (body.zone !== "promotional_banner" || body.target_type !== "product") {
+          const error = new Error("Product offer prices are only supported for promotional banners targeting products");
+          error.statusCode = 400;
+          throw error;
+        }
+        await ContentZoneModel.replaceProductOffers(entry.content_id, productOffers);
+      }
 
       let imageUrl = null;
 
@@ -321,6 +343,8 @@ class ContentController {
       const { id } = req.params;
       const existing = await ContentZoneModel.getEntryById(id);
       const body = { ...req.body };
+      const productOffers = normalizeProductOffers(body.product_offers);
+      delete body.product_offers;
       if (body.target_type !== undefined || body.target_id !== undefined) {
         body.target_type = body.target_type || null;
         await validateTargets(body);
@@ -370,6 +394,16 @@ class ContentController {
       }
 
       const entry = await ContentZoneModel.updateEntry(id, body);
+      if (productOffers !== undefined) {
+        const zone = body.zone || existing.zone;
+        const targetType = body.target_type || existing.target_type;
+        if (productOffers.length && (zone !== "promotional_banner" || targetType !== "product")) {
+          const error = new Error("Product offer prices are only supported for promotional banners targeting products");
+          error.statusCode = 400;
+          throw error;
+        }
+        await ContentZoneModel.replaceProductOffers(id, productOffers);
+      }
 
       if (imageUrl && previousImageKey) {
         try {

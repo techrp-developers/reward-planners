@@ -351,7 +351,7 @@ class ContentZoneModel {
         p.product_id, p.product_name, p.brand_name, p.category_id,
         p.subcategory_id, p.short_description, p.is_discount_eligible,
         c.category_name, sc.subcategory_name,
-        v.variant_id, v.mrp, v.sale_price,
+        v.variant_id, v.mrp, v.sale_price, cpo.offer_price,
         COALESCE(rev.avg_rating, 0) AS rating,
         COALESCE(rev.total_reviews, 0) AS reviews,
         pi.image_url, pi.updated_at AS image_updated_at
@@ -372,13 +372,36 @@ class ContentZoneModel {
         WHERE pi2.product_id = p.product_id
         ORDER BY (pi2.type = 'gallery') DESC, pi2.sort_order ASC, pi2.image_id ASC LIMIT 1
       )
+      LEFT JOIN content_product_offers cpo
+        ON cpo.content_id = ? AND cpo.product_id = p.product_id AND cpo.variant_id = v.variant_id
       WHERE p.product_id IN (${placeholders})
         AND p.status = 'approved' AND p.is_visible = 1 AND p.is_deleted = 0
         AND v.variant_id IS NOT NULL
       ORDER BY FIELD(p.product_id, ${placeholders})`,
-      [...ids, ...ids],
+      [contentId, ...ids, ...ids],
     );
     return rows;
+  }
+
+  async getProductOffers(contentId) {
+    const [rows] = await db.query(`SELECT content_id, product_id, variant_id, offer_price FROM content_product_offers WHERE content_id = ? ORDER BY product_id, variant_id`, [contentId]);
+    return rows.map((row) => ({ ...row, offer_price: Number(row.offer_price) }));
+  }
+
+  async replaceProductOffers(contentId, offers = []) {
+    const conn = await db.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.query(`DELETE FROM content_product_offers WHERE content_id = ?`, [contentId]);
+      for (const offer of offers) {
+        const [[variant]] = await conn.query(`SELECT sale_price FROM product_variants WHERE variant_id = ? AND product_id = ?`, [offer.variant_id, offer.product_id]);
+        if (!variant) { const error = new Error(`Variant ${offer.variant_id} does not belong to product ${offer.product_id}`); error.statusCode = 400; throw error; }
+        const price = Number(offer.offer_price);
+        if (!(price > 0) || price > Number(variant.sale_price)) { const error = new Error(`Offer price for variant ${offer.variant_id} must be greater than zero and cannot exceed sale price`); error.statusCode = 400; throw error; }
+        await conn.query(`INSERT INTO content_product_offers (content_id, product_id, variant_id, offer_price) VALUES (?, ?, ?, ?)`, [contentId, offer.product_id, offer.variant_id, price]);
+      }
+      await conn.commit();
+    } catch (error) { await conn.rollback(); throw error; } finally { conn.release(); }
   }
 
   /** Other published, non-default entries in the same module+zone whose window overlaps. */
