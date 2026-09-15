@@ -53,9 +53,12 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
   }
 
   function normalizePhone(phone) {
-    return typeof phone === "string" || typeof phone === "number"
-      ? String(phone).trim()
-      : "";
+    if (typeof phone !== "string" && typeof phone !== "number") return "";
+    const digits = String(phone).replace(/\D/g, "");
+    // Employee contacts are stored as Indian 10-digit mobile numbers.
+    if (digits.length === 12 && digits.startsWith("91")) return digits.slice(2);
+    if (digits.length === 11 && digits.startsWith("0")) return digits.slice(1);
+    return digits;
   }
 
   function escapeVCardValue(value) {
@@ -93,7 +96,15 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
   }
 
   function getActivationIdentity(body = {}) {
-    const rawLogin = [body.login, body.email, body.phone, body.mobile, body.contact].find(
+    const rawLogin = [
+      body.login,
+      body.identifier,
+      body.username,
+      body.email,
+      body.phone,
+      body.mobile,
+      body.contact,
+    ].find(
       (value) => value !== undefined && value !== null && String(value).trim(),
     );
     const normalizedLogin =
@@ -369,7 +380,10 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
         });
       } catch (error) {
         console.error("Activate account error:", error);
-        return res.status(500).json({ success: false });
+        return res.status(500).json({
+          success: false,
+          message: "Unable to generate login code. Please try again.",
+        });
       }
     }
 
@@ -412,8 +426,10 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
           message: "OTP resent successfully",
         });
       } catch (error) {
+        console.error("Resend activation OTP error:", error);
         return res.status(500).json({
           success: false,
+          message: "Unable to generate login code. Please try again.",
         });
       }
     }
