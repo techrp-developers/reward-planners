@@ -1,2 +1,169 @@
 Firebase Admin initialized successfully.
 ✅ Maintenance cron started
+
+=================================
+Reward Planners Backend Started!
+🔗 Server URL: http://localhost:5000
+Swagger docs at http://localhost:5000/api-docs
+Flea Market API ready at http://localhost:5000
+CORS allowed origins (parsed): [ 'https://rewardplanners.com' ]
+=================================
+
+✅ WhatsApp worker started (START_WA_WORKER=true)
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+
+[REQUEST] 2026-09-16T07:14:05.845Z GET /
+[0mGET / [32m200[0m 8.702 ms - 103[0m
+
+[REQUEST] 2026-09-16T07:14:06.475Z POST /v1/auth/request-otp
+[REQUEST BODY] { login: 'devashishpal15@gmail.com' }
+[0mPOST /v1/auth/request-otp [32m200[0m 149.069 ms - 88[0m
+🔁 BBPS retry cron running...
+[ORDER_EXPIRY] Running...
+[Cron] Checking due todo reminders...
+[STATUS_CLEANUP] Finished: 0 deleted, 0 failed.
+
+[REQUEST] 2026-09-16T07:15:12.184Z GET /
+[0mGET / [32m200[0m 5.943 ms - 103[0m
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T07:18:58.390Z POST /v1/auth/request-otp
+[REQUEST BODY] { login: '8805714266' }
+[0mPOST /v1/auth/request-otp [32m200[0m 124.232 ms - 88[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T07:19:10.541Z POST /v1/auth/verify-otp
+[REQUEST BODY] {
+  login: '8805714266',
+  otp: '678509',
+  device_id: 'rp-android-mty3tqjj-v4kaaci0q1',
+  device_name: 'realme RMX3710 (Android 15)'
+}
+[0mPOST /v1/auth/verify-otp [32m200[0m 512.246 ms - 458[0m
+
+[REQUEST] 2026-09-16T07:19:11.222Z GET /v1/auth/user-info
+[0mGET /v1/auth/user-info [32m200[0m 166.247 ms - 945[0m
+
+[REQUEST] 2026-09-16T07:19:11.451Z GET /v1/terms/current-status
+[0mGET /v1/terms/current-status [32m200[0m 3.938 ms - 38[0m
+
+[REQUEST] 2026-09-16T07:19:11.706Z GET /v1/product/categories
+
+[REQUEST] 2026-09-16T07:19:11.718Z GET /v1/cart/cart-items
+
+[REQUEST] 2026-09-16T07:19:11.726Z GET /v1/product/best-sellers?offset=0&limit=10
+
+[REQUEST] 2026-09-16T07:19:11.734Z GET /v1/product/top-rated?offset=0&limit=10
+[0mGET /v1/product/categories [32m200[0m 59.117 ms - 983[0m
+
+[REQUEST] 2026-09-16T07:19:11.771Z GET /v1/product/most-viewed?offset=0&limit=10
+[0mGET /v1/product/top-rated?offset=0&limit=10 [32m200[0m 153.473 ms - 56[0m
+[0mGET /v1/cart/cart-items [32m200[0m 182.301 ms - 606[0m
+[0mGET /v1/product/best-sellers?offset=0&limit=10 [32m200[0m 183.489 ms - 56[0m
+[0mGET /v1/product/most-viewed?offset=0&limit=10 [32m200[0m 335.151 ms - 4721[0m
+
+[REQUEST] 2026-09-16T07:19:12.938Z GET /v1/status/mine
+
+[REQUEST] 2026-09-16T07:19:12.939Z GET /v1/status/feed
+
+[REQUEST] 2026-09-16T07:19:12.944Z GET /v1/polls
+[0mGET /v1/status/mine [32m200[0m 10.911 ms - 443[0m
+
+[REQUEST] 2026-09-16T07:19:12.950Z GET /v1/wallet/balance
+[0mGET /v1/status/feed [32m200[0m 15.195 ms - 601[0m
+
+[REQUEST] 2026-09-16T07:19:12.956Z GET /v1/wallet/transactions?type=credit&page=1&limit=50
+[0mGET /v1/wallet/transactions?type=credit&page=1&limit=50 [32m200[0m 9.850 ms - 1868[0m
+[0mGET /v1/wallet/balance [32m200[0m 18.131 ms - 129[0m
+[0mGET /v1/polls [32m200[0m 25.866 ms - 412[0m
+
+[REQUEST] 2026-09-16T07:19:12.981Z GET /v1/wallet/transactions?type=debit&page=1&limit=50
+
+[REQUEST] 2026-09-16T07:19:12.985Z GET /v1/wallet/balance
+[0mGET /v1/wallet/transactions?type=debit&page=1&limit=50 [32m200[0m 4.439 ms - 864[0m
+
+[REQUEST] 2026-09-16T07:19:12.989Z GET /v1/campaign/home
+[0mGET /v1/wallet/balance [32m200[0m 6.228 ms - 129[0m
+[0mGET /v1/campaign/home [32m200[0m 5.099 ms - 3521[0m
+
+[REQUEST] 2026-09-16T07:19:13.000Z GET /v1/auth/user-info
+[0mGET /v1/auth/user-info [32m200[0m 6.780 ms - 933[0m
+
+[REQUEST] 2026-09-16T07:19:13.009Z POST /v1/auth/update-fcm-token
+[REQUEST BODY] {
+  fcm_token: 'dh4e3bk7SnacqFdDv9kX2Z:APA91bGltPfttyjkrvm9OYoE5xd13lcai8ZWxqefuvN1On2mwaice6_nWSiZG7cWGVGAJc7ZjGNWtJqf4XKgB4KALWRb9mBnUYzlkLafUJaIDjNGAYBkAdY',
+  device_platform: 'android'
+}
+[0mPOST /v1/auth/update-fcm-token [32m200[0m 9.051 ms - 46[0m
+
+[REQUEST] 2026-09-16T07:19:13.057Z GET /v1/cms/dashboard-layouts/main
+[0mGET /v1/cms/dashboard-layouts/main [32m200[0m 14.346 ms - 386[0m
+
+[REQUEST] 2026-09-16T07:19:13.367Z GET /v1/product/categories
+[0mGET /v1/product/categories [32m200[0m 2.803 ms - 983[0m
+
+[REQUEST] 2026-09-16T07:19:23.488Z GET /v1/auth/user-info
+
+[REQUEST] 2026-09-16T07:19:23.490Z GET /v1/auth/user-info
+[0mGET /v1/auth/user-info [32m200[0m 11.537 ms - 926[0m
+[0mGET /v1/auth/user-info [32m200[0m 15.126 ms - 918[0m
+
+[REQUEST] 2026-09-16T07:19:28.128Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 9.569 ms - 412[0m
+
+[REQUEST] 2026-09-16T07:19:43.288Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.628 ms - 412[0m
+
+[REQUEST] 2026-09-16T07:19:58.421Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.976 ms - 412[0m
+🔁 BBPS retry cron running...
+[ORDER_EXPIRY] Running...
+🔁 Booking retry cron running...
+💰 [retryFailedRefunds] Running...
+💰 [retryMpsFailedRefunds] Running...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T07:20:15.114Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 5.286 ms - 412[0m
+
+[REQUEST] 2026-09-16T07:20:48.556Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.548 ms - 412[0m
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T07:22:47.679Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 5.956 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T07:23:02.775Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.687 ms - 412[0m
+
+[REQUEST] 2026-09-16T07:23:17.876Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 5.012 ms - 412[0m
+
+[REQUEST] 2026-09-16T07:23:33.003Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.134 ms - 412[0m
+
+[REQUEST] 2026-09-16T07:23:48.145Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.764 ms - 412[0m
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+🔁 BBPS retry cron running...
+[ORDER_EXPIRY] Running...
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T07:26:13.804Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 5.267 ms - 412[0m
+[Cron] Checking due todo reminders...
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...

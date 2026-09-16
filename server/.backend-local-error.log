@@ -1,29 +1,60 @@
-node:events:486
-      throw er; // Unhandled 'error' event
-      ^
-
-Error: listen EADDRINUSE: address already in use :::5000
-    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
-    at listenInCluster (node:net:1997:12)
-    at Server.listen (node:net:2102:7)
-    at app.listen (C:\xampp\htdocs\rewardReactApp\server\node_modules\express\lib\application.js:635:24)
-    at Object.<anonymous> (C:\xampp\htdocs\rewardReactApp\server\app.js:237:5)
-    at Module._compile (node:internal/modules/cjs/loader:1761:14)
-    at Object..js (node:internal/modules/cjs/loader:1893:10)
-    at Module.load (node:internal/modules/cjs/loader:1481:32)
-    at Module._load (node:internal/modules/cjs/loader:1300:12)
-    at TracingChannel.traceSync (node:diagnostics_channel:328:14)
-    at wrapModuleLoad (node:internal/modules/cjs/loader:245:24)
-    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
-    at node:internal/main/run_main_module:33:47
-Emitted 'error' event on Server instance at:
-    at emitErrorNT (node:net:1976:8)
-    at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
-  code: 'EADDRINUSE',
-  errno: -4091,
-  syscall: 'listen',
-  address: '::',
-  port: 5000
+❌ Database connection failed: connect ETIMEDOUT
+SMTP Error Mail Services: Error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5a478bee46e88-33bfb19f8cesm5660624eec.2 - gsmtp
+    at SMTPConnection._formatError (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection._actionAUTHComplete (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:1617:34)
+    at SMTPConnection.<anonymous> (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:556:26)
+    at SMTPConnection._processResponse (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+    at TLSSocket.emit (node:events:508:28)
+    at addChunk (node:internal/streams/readable:559:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+    at Readable.push (node:internal/streams/readable:390:5)
+    at TLSWrap.onStreamRead (node:internal/stream_base_commons:189:23) {
+  code: 'EAUTH',
+  response: '535-5.7.8 Username and Password not accepted. For more information, go to\n' +
+    '535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5a478bee46e88-33bfb19f8cesm5660624eec.2 - gsmtp',
+  responseCode: 535,
+  command: 'AUTH PLAIN'
 }
-
-Node.js v24.11.1
+SMTP Error: Error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5a478bee46e88-33bf5ad9ed5sm5639159eec.22 - gsmtp
+    at SMTPConnection._formatError (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection._actionAUTHComplete (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:1617:34)
+    at SMTPConnection.<anonymous> (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:556:26)
+    at SMTPConnection._processResponse (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+    at TLSSocket.emit (node:events:508:28)
+    at addChunk (node:internal/streams/readable:559:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+    at Readable.push (node:internal/streams/readable:390:5)
+    at TLSWrap.onStreamRead (node:internal/stream_base_commons:189:23) {
+  code: 'EAUTH',
+  response: '535-5.7.8 Username and Password not accepted. For more information, go to\n' +
+    '535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5a478bee46e88-33bf5ad9ed5sm5639159eec.22 - gsmtp',
+  responseCode: 535,
+  command: 'AUTH PLAIN'
+}
+[DEV OTP] Generated customer OTP: 699867
+Activation OTP email failed: Error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5a478bee46e88-33bf5e40494sm5139632eec.15 - gsmtp
+    at SMTPConnection._formatError (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection._actionAUTHComplete (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:1617:34)
+    at SMTPConnection.<anonymous> (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:556:26)
+    at SMTPConnection._processResponse (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+    at TLSSocket.emit (node:events:508:28)
+    at addChunk (node:internal/streams/readable:559:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+    at Readable.push (node:internal/streams/readable:390:5)
+    at TLSWrap.onStreamRead (node:internal/stream_base_commons:189:23) {
+  code: 'EAUTH',
+  response: '535-5.7.8 Username and Password not accepted. For more information, go to\n' +
+    '535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5a478bee46e88-33bf5e40494sm5139632eec.15 - gsmtp',
+  responseCode: 535,
+  command: 'AUTH PLAIN'
+}
+[DEV OTP] Generated customer OTP: 678509
