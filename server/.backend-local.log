@@ -167,3 +167,1772 @@ CORS allowed origins (parsed): [ 'https://rewardplanners.com' ]
 [Cron] Checking due todo reminders...
 [BBPS][refund] retry cron running...
 [Cron] Checking due todo reminders...
+🚚 Tracking cron running...
+🛒 [Cron] Checking for e-commerce cart abandonment, low stock, and price drops...
+🔁 Booking retry cron running...
+💰 [retryFailedRefunds] Running...
+💰 [retryMpsFailedRefunds] Running...
+🔁 BBPS retry cron running...
+[ORDER_EXPIRY] Running...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+🔁 BBPS retry cron running...
+[ORDER_EXPIRY] Running...
+[Cron] Checking due todo reminders...
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+🔁 Booking retry cron running...
+💰 [retryFailedRefunds] Running...
+💰 [retryMpsFailedRefunds] Running...
+🔁 BBPS retry cron running...
+[ORDER_EXPIRY] Running...
+[Cron] Checking due todo reminders...
+[Cron] Checking due todo reminders...
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+🔁 BBPS retry cron running...
+[ORDER_EXPIRY] Running...
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+[Cron] Checking due todo reminders...
+🔁 Booking retry cron running...
+🔁 BBPS retry cron running...
+[ORDER_EXPIRY] Running...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+💰 [retryFailedRefunds] Running...
+💰 [retryMpsFailedRefunds] Running...
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+🔁 BBPS retry cron running...
+[ORDER_EXPIRY] Running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T07:55:42.976Z GET /v1/polls
+[0mGET /v1/polls [33m401[0m 42.454 ms - 54[0m
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+[Cron] Checking due todo reminders...
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+🚚 Tracking cron running...
+🛒 [Cron] Checking for e-commerce cart abandonment, low stock, and price drops...
+🔁 Booking retry cron running...
+💰 [retryFailedRefunds] Running...
+💰 [retryMpsFailedRefunds] Running...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+[ORDER_EXPIRY] Running...
+🔁 BBPS retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T08:01:50.175Z POST /v1/auth/refresh
+[REQUEST BODY] {
+  refreshToken: '7YDiCoG2tyA0_cINC6a3H95cfGR2wNd2bwNMFkUhWyYIVhMAS28UVf4_STT0QAC1'
+}
+[0mPOST /v1/auth/refresh [32m200[0m 143.882 ms - 282[0m
+
+[REQUEST] 2026-09-16T08:01:50.297Z GET /v1/settings/app-settings?_=1789545706644
+
+[REQUEST] 2026-09-16T08:01:50.298Z GET /v1/product/categories
+
+[REQUEST] 2026-09-16T08:01:50.304Z GET /v1/product/best-sellers?offset=0&limit=10
+
+[REQUEST] 2026-09-16T08:01:50.308Z GET /v1/product/top-rated?offset=0&limit=10
+[0mGET /v1/settings/app-settings?_=1789545706644 [32m200[0m 23.755 ms - 559[0m
+[0mGET /v1/product/categories [32m200[0m 26.356 ms - 983[0m
+[0mGET /v1/product/top-rated?offset=0&limit=10 [32m200[0m 56.092 ms - 56[0m
+
+[REQUEST] 2026-09-16T08:01:50.369Z GET /v1/product/most-viewed?offset=0&limit=10
+[0mGET /v1/product/best-sellers?offset=0&limit=10 [32m200[0m 83.785 ms - 56[0m
+
+[REQUEST] 2026-09-16T08:01:50.422Z GET /
+[0mGET / [32m200[0m 1.119 ms - 103[0m
+
+[REQUEST] 2026-09-16T08:01:50.446Z GET /v1/auth/user-info
+[0mGET /v1/auth/user-info [32m200[0m 23.553 ms - 928[0m
+
+[REQUEST] 2026-09-16T08:01:50.521Z GET /v1/terms/current-status
+[0mGET /v1/terms/current-status [32m200[0m 38.544 ms - 38[0m
+
+[REQUEST] 2026-09-16T08:01:50.572Z GET /v1/cart/cart-items
+[0mGET /v1/product/most-viewed?offset=0&limit=10 [32m200[0m 212.853 ms - 4721[0m
+
+[REQUEST] 2026-09-16T08:01:50.588Z POST /v1/auth/update-fcm-token
+[REQUEST BODY] {
+  fcm_token: 'dh4e3bk7SnacqFdDv9kX2Z:APA91bGltPfttyjkrvm9OYoE5xd13lcai8ZWxqefuvN1On2mwaice6_nWSiZG7cWGVGAJc7ZjGNWtJqf4XKgB4KALWRb9mBnUYzlkLafUJaIDjNGAYBkAdY',
+  device_platform: 'android'
+}
+[0mGET /v1/cart/cart-items [32m200[0m 32.957 ms - 606[0m
+[0mPOST /v1/auth/update-fcm-token [32m200[0m 20.552 ms - 46[0m
+
+[REQUEST] 2026-09-16T08:01:52.151Z GET /v1/status/feed
+
+[REQUEST] 2026-09-16T08:01:52.180Z GET /v1/status/mine
+[0mGET /v1/status/feed [32m200[0m 37.295 ms - 601[0m
+[0mGET /v1/status/mine [32m200[0m 13.832 ms - 443[0m
+
+[REQUEST] 2026-09-16T08:01:52.195Z GET /v1/wallet/balance
+
+[REQUEST] 2026-09-16T08:01:52.207Z GET /v1/polls
+[0mGET /v1/wallet/balance [32m200[0m 31.712 ms - 129[0m
+[0mGET /v1/polls [32m200[0m 21.423 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:01:52.239Z GET /v1/wallet/transactions?type=credit&page=1&limit=50
+
+[REQUEST] 2026-09-16T08:01:52.244Z GET /v1/wallet/transactions?type=debit&page=1&limit=50
+[0mGET /v1/wallet/transactions?type=credit&page=1&limit=50 [32m200[0m 17.076 ms - 1868[0m
+
+[REQUEST] 2026-09-16T08:01:52.260Z GET /v1/wallet/balance
+[0mGET /v1/wallet/transactions?type=debit&page=1&limit=50 [32m200[0m 21.221 ms - 864[0m
+
+[REQUEST] 2026-09-16T08:01:52.271Z GET /v1/campaign/home
+[0mGET /v1/campaign/home [32m200[0m 17.207 ms - 3521[0m
+[0mGET /v1/wallet/balance [32m200[0m 31.655 ms - 129[0m
+
+[REQUEST] 2026-09-16T08:01:52.293Z GET /v1/auth/user-info
+[0mGET /v1/auth/user-info [32m200[0m 21.470 ms - 927[0m
+
+[REQUEST] 2026-09-16T08:01:52.333Z GET /v1/cms/dashboard-layouts/main
+[0mGET /v1/cms/dashboard-layouts/main [32m200[0m 6.728 ms - 386[0m
+
+[REQUEST] 2026-09-16T08:01:52.605Z GET /v1/product/categories
+[0mGET /v1/product/categories [32m200[0m 3.159 ms - 983[0m
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T08:02:01.012Z GET /v1/auth/user-info
+
+[REQUEST] 2026-09-16T08:02:01.015Z GET /v1/auth/user-info
+[0mGET /v1/auth/user-info [32m200[0m 10.149 ms - 929[0m
+[0mGET /v1/auth/user-info [32m200[0m 12.466 ms - 916[0m
+
+[REQUEST] 2026-09-16T08:02:07.406Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 10.385 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:02:39.060Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.417 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:02:54.189Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.583 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T08:03:09.315Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.085 ms - 412[0m
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T08:04:41.710Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 8.468 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:04:56.848Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 50.996 ms - 412[0m
+🔁 BBPS retry cron running...
+[ORDER_EXPIRY] Running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T08:05:12.244Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 115.639 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:05:27.482Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 8.848 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:05:42.607Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 8.962 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:05:51.367Z GET /
+[0mGET / [32m200[0m 1.296 ms - 103[0m
+
+[REQUEST] 2026-09-16T08:05:57.719Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 19.286 ms - 412[0m
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T08:06:12.843Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.731 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:06:27.959Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.848 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:06:43.058Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.211 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:06:58.221Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 62.433 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T08:07:13.520Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 36.668 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:07:28.668Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 8.733 ms - 412[0m
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+
+[REQUEST] 2026-09-16T08:08:46.005Z POST /v1/auth/refresh
+[REQUEST BODY] {
+  refreshToken: 'aCdGx9ZReGBpziocIlRdMZbc04gm6FENH7PiaVwxYG0gpbDA836lqHvgHH9L2Nm-'
+}
+[0mPOST /v1/auth/refresh [32m200[0m 46.305 ms - 282[0m
+
+[REQUEST] 2026-09-16T08:08:46.121Z GET /v1/settings/app-settings?_=1789546122498
+[0mGET /v1/settings/app-settings?_=1789546122498 [32m200[0m 3.584 ms - 559[0m
+
+[REQUEST] 2026-09-16T08:08:46.136Z GET /v1/product/categories
+[0mGET /v1/product/categories [32m200[0m 5.953 ms - 983[0m
+
+[REQUEST] 2026-09-16T08:08:46.150Z GET /v1/product/best-sellers?offset=0&limit=10
+
+[REQUEST] 2026-09-16T08:08:46.160Z GET /v1/product/top-rated?offset=0&limit=10
+
+[REQUEST] 2026-09-16T08:08:46.161Z GET /v1/product/most-viewed?offset=0&limit=10
+
+[REQUEST] 2026-09-16T08:08:46.193Z GET /v1/auth/user-info
+[0mGET /v1/auth/user-info [32m200[0m 15.428 ms - 923[0m
+[0mGET /v1/product/top-rated?offset=0&limit=10 [32m200[0m 88.573 ms - 56[0m
+[0mGET /v1/product/best-sellers?offset=0&limit=10 [32m200[0m 109.817 ms - 56[0m
+
+[REQUEST] 2026-09-16T08:08:46.262Z GET /v1/terms/current-status
+[0mGET /v1/terms/current-status [32m200[0m 4.216 ms - 38[0m
+[0mGET /v1/product/most-viewed?offset=0&limit=10 [32m200[0m 210.161 ms - 4721[0m
+
+[REQUEST] 2026-09-16T08:08:47.749Z GET /v1/status/mine
+
+[REQUEST] 2026-09-16T08:08:47.751Z GET /v1/status/feed
+[0mGET /v1/status/mine [32m200[0m 8.783 ms - 443[0m
+
+[REQUEST] 2026-09-16T08:08:47.760Z GET /v1/polls
+[0mGET /v1/status/feed [32m200[0m 11.309 ms - 601[0m
+
+[REQUEST] 2026-09-16T08:08:47.766Z GET /v1/wallet/balance
+[0mGET /v1/polls [32m200[0m 13.828 ms - 412[0m
+[0mGET /v1/wallet/balance [32m200[0m 17.716 ms - 129[0m
+
+[REQUEST] 2026-09-16T08:08:47.788Z GET /v1/wallet/transactions?type=credit&page=1&limit=50
+
+[REQUEST] 2026-09-16T08:08:47.791Z GET /v1/wallet/transactions?type=debit&page=1&limit=50
+[0mGET /v1/wallet/transactions?type=credit&page=1&limit=50 [32m200[0m 5.762 ms - 1868[0m
+[0mGET /v1/wallet/transactions?type=debit&page=1&limit=50 [32m200[0m 6.062 ms - 864[0m
+
+[REQUEST] 2026-09-16T08:08:47.805Z GET /v1/wallet/balance
+[0mGET /v1/wallet/balance [32m200[0m 8.081 ms - 129[0m
+
+[REQUEST] 2026-09-16T08:08:47.815Z GET /v1/cart/cart-items
+
+[REQUEST] 2026-09-16T08:08:47.825Z GET /v1/campaign/home
+
+[REQUEST] 2026-09-16T08:08:47.830Z GET /v1/auth/user-info
+[0mGET /v1/campaign/home [32m200[0m 7.913 ms - 3521[0m
+[0mGET /v1/auth/user-info [32m200[0m 8.322 ms - 918[0m
+[0mGET /v1/cart/cart-items [32m200[0m 44.284 ms - 606[0m
+
+[REQUEST] 2026-09-16T08:08:47.930Z GET /v1/cms/dashboard-layouts/main
+[0mGET /v1/cms/dashboard-layouts/main [32m200[0m 3.773 ms - 386[0m
+
+[REQUEST] 2026-09-16T08:08:48.097Z GET /v1/product/categories
+[0mGET /v1/product/categories [32m200[0m 3.397 ms - 983[0m
+
+[REQUEST] 2026-09-16T08:08:48.122Z POST /v1/auth/update-fcm-token
+[REQUEST BODY] {
+  fcm_token: 'dh4e3bk7SnacqFdDv9kX2Z:APA91bGltPfttyjkrvm9OYoE5xd13lcai8ZWxqefuvN1On2mwaice6_nWSiZG7cWGVGAJc7ZjGNWtJqf4XKgB4KALWRb9mBnUYzlkLafUJaIDjNGAYBkAdY',
+  device_platform: 'android'
+}
+[0mPOST /v1/auth/update-fcm-token [32m200[0m 11.546 ms - 46[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T08:09:03.098Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 14.556 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:09:18.248Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.953 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:09:33.395Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.981 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:09:48.525Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.343 ms - 412[0m
+🔁 Booking retry cron running...
+💰 [retryFailedRefunds] Running...
+💰 [retryMpsFailedRefunds] Running...
+🔁 BBPS retry cron running...
+[Cron] Checking due todo reminders...
+[ORDER_EXPIRY] Running...
+[BBPS][refund] retry cron running...
+
+[REQUEST] 2026-09-16T08:10:03.646Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 5.305 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:10:18.757Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.806 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:10:27.050Z GET /v1/auth/user-info
+
+[REQUEST] 2026-09-16T08:10:27.056Z GET /v1/auth/user-info
+[0mGET /v1/auth/user-info [32m200[0m 29.701 ms - 928[0m
+[0mGET /v1/auth/user-info [32m200[0m 26.653 ms - 930[0m
+
+[REQUEST] 2026-09-16T08:10:33.901Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 19.871 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:10:55.941Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.762 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T08:11:11.062Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.292 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:11:26.194Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.346 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:11:41.315Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 5.732 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:11:56.440Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.510 ms - 412[0m
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T08:12:11.549Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 9.489 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:12:26.860Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 63.879 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:12:38.609Z GET /v1/auth/user-info
+
+[REQUEST] 2026-09-16T08:12:38.610Z GET /v1/auth/user-info
+[0mGET /v1/auth/user-info [32m200[0m 11.036 ms - 928[0m
+[0mGET /v1/auth/user-info [32m200[0m 14.668 ms - 914[0m
+
+[REQUEST] 2026-09-16T08:12:42.035Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 66.907 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:12:57.244Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.154 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T08:13:12.377Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.740 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:13:27.506Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 8.189 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:13:42.631Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.876 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:13:57.755Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.513 ms - 412[0m
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+
+[REQUEST] 2026-09-16T08:14:12.839Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.354 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:14:14.638Z GET /v1/cart/cart-items
+
+[REQUEST] 2026-09-16T08:14:14.652Z GET /v1/wallet/balance
+
+[REQUEST] 2026-09-16T08:14:14.657Z GET /v1/status/mine
+[0mGET /v1/cart/cart-items [32m200[0m 22.798 ms - 606[0m
+[0mGET /v1/wallet/balance [32m200[0m 11.055 ms - 129[0m
+
+[REQUEST] 2026-09-16T08:14:14.664Z GET /v1/polls
+
+[REQUEST] 2026-09-16T08:14:14.666Z GET /v1/status/feed
+[0mGET /v1/status/mine [32m200[0m 9.768 ms - 443[0m
+[0mGET /v1/polls [32m200[0m 6.915 ms - 412[0m
+[0mGET /v1/status/feed [32m200[0m 6.711 ms - 601[0m
+
+[REQUEST] 2026-09-16T08:14:14.686Z GET /v1/wallet/transactions?type=debit&page=1&limit=50
+
+[REQUEST] 2026-09-16T08:14:14.689Z GET /v1/wallet/balance
+[0mGET /v1/wallet/transactions?type=debit&page=1&limit=50 [32m200[0m 4.162 ms - 864[0m
+
+[REQUEST] 2026-09-16T08:14:14.691Z GET /v1/wallet/transactions?type=credit&page=1&limit=50
+
+[REQUEST] 2026-09-16T08:14:14.692Z GET /v1/campaign/home
+
+[REQUEST] 2026-09-16T08:14:14.698Z GET /v1/auth/user-info
+[0mGET /v1/wallet/transactions?type=credit&page=1&limit=50 [32m200[0m 10.415 ms - 1868[0m
+[0mGET /v1/campaign/home [32m200[0m 11.475 ms - 3521[0m
+[0mGET /v1/wallet/balance [32m200[0m 15.474 ms - 129[0m
+[0mGET /v1/auth/user-info [32m200[0m 9.438 ms - 930[0m
+
+[REQUEST] 2026-09-16T08:14:15.624Z GET /v1/auth/user-info
+
+[REQUEST] 2026-09-16T08:14:15.630Z GET /v1/auth/user-info
+[0mGET /v1/auth/user-info [32m200[0m 12.589 ms - 929[0m
+[0mGET /v1/auth/user-info [32m200[0m 7.073 ms - 931[0m
+
+[REQUEST] 2026-09-16T08:14:29.900Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.445 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:14:45.015Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.718 ms - 412[0m
+🔁 BBPS retry cron running...
+[ORDER_EXPIRY] Running...
+[Cron] Checking due todo reminders...
+[STATUS_CLEANUP] Finished: 0 deleted, 0 failed.
+
+[REQUEST] 2026-09-16T08:15:00.135Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.704 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:15:15.250Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.433 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:15:30.626Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 124.236 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:15:45.882Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.679 ms - 412[0m
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T08:16:01.017Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.238 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:16:34.086Z GET /v1/settings/app-settings?_=1789546590424
+[0mGET /v1/settings/app-settings?_=1789546590424 [32m200[0m 3.478 ms - 559[0m
+
+[REQUEST] 2026-09-16T08:16:34.222Z GET /v1/cms/dashboard-layouts/main
+[0mGET /v1/cms/dashboard-layouts/main [32m200[0m 2.835 ms - 386[0m
+
+[REQUEST] 2026-09-16T08:16:34.597Z POST /v1/auth/update-fcm-token
+[REQUEST BODY] {
+  fcm_token: 'dh4e3bk7SnacqFdDv9kX2Z:APA91bGltPfttyjkrvm9OYoE5xd13lcai8ZWxqefuvN1On2mwaice6_nWSiZG7cWGVGAJc7ZjGNWtJqf4XKgB4KALWRb9mBnUYzlkLafUJaIDjNGAYBkAdY',
+  device_platform: 'android'
+}
+[0mPOST /v1/auth/update-fcm-token [32m200[0m 17.186 ms - 46[0m
+
+[REQUEST] 2026-09-16T08:16:34.640Z GET /v1/product/categories
+[0mGET /v1/product/categories [32m200[0m 3.412 ms - 983[0m
+
+[REQUEST] 2026-09-16T08:16:34.658Z GET /v1/product/best-sellers?offset=0&limit=10
+
+[REQUEST] 2026-09-16T08:16:34.666Z GET /v1/product/top-rated?offset=0&limit=10
+[0mGET /v1/product/top-rated?offset=0&limit=10 [32m200[0m 32.538 ms - 56[0m
+[0mGET /v1/product/best-sellers?offset=0&limit=10 [32m200[0m 49.348 ms - 56[0m
+
+[REQUEST] 2026-09-16T08:16:42.005Z GET /
+[0mGET / [32m200[0m 1.690 ms - 103[0m
+
+[REQUEST] 2026-09-16T08:16:49.040Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 16.781 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T08:17:04.237Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.878 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:17:19.511Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 106.998 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:17:34.946Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 157.801 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:17:50.233Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.005 ms - 412[0m
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T08:18:05.360Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 8.032 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:18:20.495Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.359 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:18:35.628Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.964 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:18:50.743Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.891 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T08:19:05.874Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.268 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:19:21.011Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.789 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:19:36.131Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.210 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:19:51.267Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.031 ms - 412[0m
+🔁 Booking retry cron running...
+💰 [retryFailedRefunds] Running...
+💰 [retryMpsFailedRefunds] Running...
+[BBPS][refund] retry cron running...
+🔁 BBPS retry cron running...
+[ORDER_EXPIRY] Running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T08:20:06.400Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.269 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:20:21.491Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.015 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:20:36.594Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.741 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:20:51.716Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.927 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T08:21:06.846Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.711 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:21:21.926Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.212 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:21:37.036Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.963 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:21:52.156Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.619 ms - 412[0m
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T08:22:07.276Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.790 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:22:22.395Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.090 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:22:37.526Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.027 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:22:40.611Z POST /v1/polls/2/votes
+[REQUEST BODY] { option_ids: [ 4 ] }
+[0mPOST /v1/polls/2/votes [32m200[0m 48.965 ms - 437[0m
+
+[REQUEST] 2026-09-16T08:22:55.758Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.252 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T08:23:05.735Z POST /v1/polls/2/votes
+[REQUEST BODY] { option_ids: [ 3 ] }
+[0mPOST /v1/polls/2/votes [32m200[0m 15.951 ms - 437[0m
+
+[REQUEST] 2026-09-16T08:23:07.416Z POST /v1/polls/2/votes
+[REQUEST BODY] { option_ids: [ 4 ] }
+[0mPOST /v1/polls/2/votes [32m200[0m 11.553 ms - 437[0m
+
+[REQUEST] 2026-09-16T08:23:08.187Z POST /v1/polls/2/votes
+[REQUEST BODY] { option_ids: [ 3 ] }
+[0mPOST /v1/polls/2/votes [32m200[0m 11.306 ms - 437[0m
+
+[REQUEST] 2026-09-16T08:23:23.317Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.808 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:23:38.438Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.853 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:23:53.110Z POST /v1/status/7/view
+[0mPOST /v1/status/7/view [33m401[0m 4.973 ms - 54[0m
+
+[REQUEST] 2026-09-16T08:23:53.223Z POST /v1/auth/refresh
+[REQUEST BODY] {
+  refreshToken: 'e8idXX6CZKC5_roN4YaI5Ki0GNdbB0rPibvSYBqxAIg0M8I8F9GLtf1yKt-oNVSq'
+}
+[0mPOST /v1/auth/refresh [32m200[0m 26.924 ms - 282[0m
+
+[REQUEST] 2026-09-16T08:23:53.367Z POST /v1/status/7/view
+[0mPOST /v1/status/7/view [32m200[0m 16.087 ms - 42[0m
+
+[REQUEST] 2026-09-16T08:23:53.532Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.654 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:23:54.677Z GET /v1/status/mine
+[0mGET /v1/status/mine [32m200[0m 4.214 ms - 443[0m
+
+[REQUEST] 2026-09-16T08:23:54.698Z GET /v1/status/feed
+[0mGET /v1/status/feed [32m200[0m 6.766 ms - 601[0m
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T08:24:08.645Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.682 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:24:23.755Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 5.325 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:24:38.894Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.207 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:24:54.018Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.923 ms - 412[0m
+[ORDER_EXPIRY] Running...
+🔁 BBPS retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T08:25:09.123Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.954 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:25:24.244Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.222 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:25:39.376Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 5.983 ms - 412[0m
+
+[REQUEST] 2026-09-16T08:25:54.499Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.886 ms - 412[0m
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T08:26:09.621Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.775 ms - 412[0m
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+[Cron] Checking due todo reminders...
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+[Cron] Checking due todo reminders...
+🚚 Tracking cron running...
+🔁 BBPS retry cron running...
+🛒 [Cron] Checking for e-commerce cart abandonment, low stock, and price drops...
+🔁 Booking retry cron running...
+💰 [retryFailedRefunds] Running...
+💰 [retryMpsFailedRefunds] Running...
+[ORDER_EXPIRY] Running...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+[Cron] Checking due todo reminders...
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+[Cron] Checking due todo reminders...
+🔁 BBPS retry cron running...
+[ORDER_EXPIRY] Running...
+
+[REQUEST] 2026-09-16T09:35:18.235Z POST /v1/auth/request-otp
+[REQUEST BODY] { login: '8805714266' }
+[0mPOST /v1/auth/request-otp [32m200[0m 170.923 ms - 88[0m
+
+[REQUEST] 2026-09-16T09:35:49.119Z POST /v1/auth/verify-otp
+[REQUEST BODY] {
+  login: '8805714266',
+  otp: '587049',
+  device_id: 'rp-android-mty3tqjj-v4kaaci0q1',
+  device_name: 'realme RMX3710 (Android 15)'
+}
+[0mPOST /v1/auth/verify-otp [32m200[0m 544.830 ms - 458[0m
+
+[REQUEST] 2026-09-16T09:35:49.958Z GET /v1/auth/user-info
+[0mGET /v1/auth/user-info [32m200[0m 20.620 ms - 927[0m
+
+[REQUEST] 2026-09-16T09:35:50.017Z GET /v1/terms/current-status
+[0mGET /v1/terms/current-status [32m200[0m 6.473 ms - 38[0m
+
+[REQUEST] 2026-09-16T09:35:50.220Z GET /v1/product/categories
+[0mGET /v1/product/categories [32m200[0m 6.774 ms - 983[0m
+
+[REQUEST] 2026-09-16T09:35:50.233Z GET /v1/cart/cart-items
+
+[REQUEST] 2026-09-16T09:35:50.242Z GET /v1/product/top-rated?offset=0&limit=10
+
+[REQUEST] 2026-09-16T09:35:50.243Z GET /v1/product/best-sellers?offset=0&limit=10
+
+[REQUEST] 2026-09-16T09:35:50.247Z GET /v1/product/most-viewed?offset=0&limit=10
+[0mGET /v1/cart/cart-items [32m200[0m 33.882 ms - 606[0m
+[0mGET /v1/product/top-rated?offset=0&limit=10 [32m200[0m 55.139 ms - 56[0m
+[0mGET /v1/product/best-sellers?offset=0&limit=10 [32m200[0m 66.642 ms - 56[0m
+[0mGET /v1/product/most-viewed?offset=0&limit=10 [32m200[0m 169.093 ms - 4732[0m
+
+[REQUEST] 2026-09-16T09:35:51.030Z GET /
+[0mGET / [32m200[0m 1.520 ms - 103[0m
+
+[REQUEST] 2026-09-16T09:35:51.330Z GET /v1/status/mine
+
+[REQUEST] 2026-09-16T09:35:51.334Z GET /v1/status/feed
+
+[REQUEST] 2026-09-16T09:35:51.338Z GET /v1/polls
+[0mGET /v1/status/mine [32m200[0m 10.735 ms - 443[0m
+
+[REQUEST] 2026-09-16T09:35:51.344Z GET /v1/wallet/balance
+[0mGET /v1/status/feed [32m200[0m 14.425 ms - 601[0m
+[0mGET /v1/polls [32m200[0m 21.374 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:35:51.361Z GET /v1/wallet/transactions?type=credit&page=1&limit=50
+[0mGET /v1/wallet/balance [32m200[0m 18.204 ms - 129[0m
+
+[REQUEST] 2026-09-16T09:35:51.366Z GET /v1/wallet/transactions?type=debit&page=1&limit=50
+[0mGET /v1/wallet/transactions?type=credit&page=1&limit=50 [32m200[0m 5.718 ms - 1868[0m
+[0mGET /v1/wallet/transactions?type=debit&page=1&limit=50 [32m200[0m 4.709 ms - 864[0m
+
+[REQUEST] 2026-09-16T09:35:51.376Z GET /v1/wallet/balance
+[0mGET /v1/wallet/balance [32m200[0m 3.620 ms - 129[0m
+
+[REQUEST] 2026-09-16T09:35:51.383Z GET /v1/campaign/home
+[0mGET /v1/campaign/home [32m200[0m 5.517 ms - 3521[0m
+
+[REQUEST] 2026-09-16T09:35:51.390Z GET /v1/auth/user-info
+[0mGET /v1/auth/user-info [32m200[0m 7.990 ms - 938[0m
+
+[REQUEST] 2026-09-16T09:35:51.402Z POST /v1/auth/update-fcm-token
+[REQUEST BODY] {
+  fcm_token: 'dh4e3bk7SnacqFdDv9kX2Z:APA91bGltPfttyjkrvm9OYoE5xd13lcai8ZWxqefuvN1On2mwaice6_nWSiZG7cWGVGAJc7ZjGNWtJqf4XKgB4KALWRb9mBnUYzlkLafUJaIDjNGAYBkAdY',
+  device_platform: 'android'
+}
+[0mPOST /v1/auth/update-fcm-token [32m200[0m 9.655 ms - 46[0m
+
+[REQUEST] 2026-09-16T09:35:51.445Z GET /v1/cms/dashboard-layouts/main
+[0mGET /v1/cms/dashboard-layouts/main [32m200[0m 4.080 ms - 386[0m
+
+[REQUEST] 2026-09-16T09:35:52.132Z GET /v1/product/categories
+[0mGET /v1/product/categories [32m200[0m 5.406 ms - 983[0m
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T09:36:00.842Z POST /v1/status/7/view
+[0mPOST /v1/status/7/view [32m200[0m 20.549 ms - 42[0m
+
+[REQUEST] 2026-09-16T09:36:02.898Z GET /v1/status/mine
+[0mGET /v1/status/mine [32m200[0m 6.805 ms - 443[0m
+
+[REQUEST] 2026-09-16T09:36:02.922Z GET /v1/status/feed
+[0mGET /v1/status/feed [32m200[0m 3.603 ms - 601[0m
+
+[REQUEST] 2026-09-16T09:36:06.499Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 8.157 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:36:15.497Z GET /v1/auth/user-info
+
+[REQUEST] 2026-09-16T09:36:15.498Z GET /v1/auth/user-info
+[0mGET /v1/auth/user-info [32m200[0m 8.837 ms - 923[0m
+[0mGET /v1/auth/user-info [32m200[0m 11.173 ms - 927[0m
+
+[REQUEST] 2026-09-16T09:36:21.645Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.387 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:36:36.767Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.117 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:36:52.849Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.938 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T09:37:07.950Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.430 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:37:23.051Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.108 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:37:38.166Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.274 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:37:53.275Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.048 ms - 412[0m
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+
+[REQUEST] 2026-09-16T09:38:08.397Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.075 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:38:23.502Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.030 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:38:38.599Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.287 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:38:53.701Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.059 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T09:39:08.826Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.846 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:39:23.933Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.753 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:39:29.904Z GET /v1/auth/user-info
+[0mGET /v1/auth/user-info [32m200[0m 8.186 ms - 914[0m
+
+[REQUEST] 2026-09-16T09:39:29.917Z GET /v1/auth/user-info
+[0mGET /v1/auth/user-info [32m200[0m 6.997 ms - 926[0m
+
+[REQUEST] 2026-09-16T09:39:39.387Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 42.336 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:39:54.564Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 5.609 ms - 412[0m
+🔁 BBPS retry cron running...
+🔁 Booking retry cron running...
+💰 [retryFailedRefunds] Running...
+💰 [retryMpsFailedRefunds] Running...
+[ORDER_EXPIRY] Running...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T09:40:09.689Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.769 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:40:24.807Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.652 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:40:39.933Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.236 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:40:55.081Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 5.702 ms - 412[0m
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+[Cron] Checking due todo reminders...
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+🔁 BBPS retry cron running...
+[ORDER_EXPIRY] Running...
+[Cron] Checking due todo reminders...
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T09:48:39.303Z POST /v1/auth/refresh
+[REQUEST BODY] {
+  refreshToken: 'r3q5lCSA5ulVAoZqDxAk_SrPyo4RNZLmHWKJYit80RL8VsLo4ouTcGBKjhpIrSE5'
+}
+[0mPOST /v1/auth/refresh [32m200[0m 66.248 ms - 282[0m
+
+[REQUEST] 2026-09-16T09:48:39.386Z GET /v1/settings/app-settings?_=1789552115984
+[0mGET /v1/settings/app-settings?_=1789552115984 [32m200[0m 6.523 ms - 559[0m
+
+[REQUEST] 2026-09-16T09:48:39.412Z GET /v1/product/categories
+
+[REQUEST] 2026-09-16T09:48:39.417Z GET /v1/product/best-sellers?offset=0&limit=10
+[0mGET /v1/product/categories [32m200[0m 9.621 ms - 983[0m
+
+[REQUEST] 2026-09-16T09:48:39.424Z GET /v1/product/top-rated?offset=0&limit=10
+
+[REQUEST] 2026-09-16T09:48:39.432Z GET /v1/product/most-viewed?offset=0&limit=10
+[0mGET /v1/product/top-rated?offset=0&limit=10 [32m200[0m 47.700 ms - 56[0m
+
+[REQUEST] 2026-09-16T09:48:39.474Z GET /v1/auth/user-info
+[0mGET /v1/product/best-sellers?offset=0&limit=10 [32m200[0m 69.274 ms - 56[0m
+[0mGET /v1/auth/user-info [32m200[0m 18.325 ms - 933[0m
+
+[REQUEST] 2026-09-16T09:48:39.550Z GET /v1/terms/current-status
+[0mGET /v1/terms/current-status [32m200[0m 33.576 ms - 38[0m
+[0mGET /v1/product/most-viewed?offset=0&limit=10 [32m200[0m 168.788 ms - 4732[0m
+
+[REQUEST] 2026-09-16T09:48:39.618Z GET /v1/cart/cart-items
+
+[REQUEST] 2026-09-16T09:48:39.632Z POST /v1/auth/update-fcm-token
+[REQUEST BODY] {
+  fcm_token: 'dh4e3bk7SnacqFdDv9kX2Z:APA91bGltPfttyjkrvm9OYoE5xd13lcai8ZWxqefuvN1On2mwaice6_nWSiZG7cWGVGAJc7ZjGNWtJqf4XKgB4KALWRb9mBnUYzlkLafUJaIDjNGAYBkAdY',
+  device_platform: 'android'
+}
+[0mGET /v1/cart/cart-items [32m200[0m 26.467 ms - 606[0m
+[0mPOST /v1/auth/update-fcm-token [32m200[0m 14.315 ms - 46[0m
+
+[REQUEST] 2026-09-16T09:48:40.954Z GET /v1/status/mine
+
+[REQUEST] 2026-09-16T09:48:40.959Z GET /v1/polls
+
+[REQUEST] 2026-09-16T09:48:40.960Z GET /v1/status/feed
+[0mGET /v1/status/mine [32m200[0m 11.267 ms - 443[0m
+
+[REQUEST] 2026-09-16T09:48:40.967Z GET /v1/wallet/balance
+[0mGET /v1/status/feed [32m200[0m 13.200 ms - 601[0m
+[0mGET /v1/polls [32m200[0m 17.546 ms - 412[0m
+[0mGET /v1/wallet/balance [32m200[0m 12.094 ms - 129[0m
+
+[REQUEST] 2026-09-16T09:48:40.993Z GET /v1/wallet/transactions?type=credit&page=1&limit=50
+[0mGET /v1/wallet/transactions?type=credit&page=1&limit=50 [32m200[0m 4.143 ms - 1868[0m
+
+[REQUEST] 2026-09-16T09:48:41.019Z GET /v1/wallet/balance
+
+[REQUEST] 2026-09-16T09:48:41.020Z GET /v1/wallet/transactions?type=debit&page=1&limit=50
+
+[REQUEST] 2026-09-16T09:48:41.021Z GET /v1/campaign/home
+[0mGET /v1/campaign/home [32m200[0m 10.637 ms - 3521[0m
+[0mGET /v1/wallet/transactions?type=debit&page=1&limit=50 [32m200[0m 12.907 ms - 864[0m
+[0mGET /v1/wallet/balance [32m200[0m 15.850 ms - 129[0m
+
+[REQUEST] 2026-09-16T09:48:41.039Z GET /v1/auth/user-info
+[0mGET /v1/auth/user-info [32m200[0m 7.966 ms - 928[0m
+
+[REQUEST] 2026-09-16T09:48:41.141Z GET /v1/cms/dashboard-layouts/main
+[0mGET /v1/cms/dashboard-layouts/main [32m200[0m 5.828 ms - 386[0m
+
+[REQUEST] 2026-09-16T09:48:41.408Z GET /v1/product/categories
+[0mGET /v1/product/categories [32m200[0m 2.201 ms - 983[0m
+
+[REQUEST] 2026-09-16T09:48:56.312Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.962 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T09:49:11.445Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.546 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:49:26.571Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.661 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:49:41.709Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.120 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:49:56.855Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.552 ms - 412[0m
+🔁 Booking retry cron running...
+💰 [retryFailedRefunds] Running...
+💰 [retryMpsFailedRefunds] Running...
+[BBPS][refund] retry cron running...
+🔁 BBPS retry cron running...
+[ORDER_EXPIRY] Running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T09:50:11.978Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.699 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:50:27.114Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.733 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:50:42.328Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.708 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:50:57.461Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.188 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T09:51:12.574Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.464 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:51:27.731Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.659 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:51:42.876Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.637 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:51:58.011Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 12.225 ms - 412[0m
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T09:52:13.142Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 8.200 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:52:28.286Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.321 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:52:43.422Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 8.431 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:52:58.550Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 9.977 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T09:53:13.670Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 8.918 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:53:28.802Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.892 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:53:43.916Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.025 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:53:59.028Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.156 ms - 412[0m
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T09:54:14.160Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 5.659 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:54:29.282Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.311 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:54:44.403Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 5.215 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:54:59.495Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.580 ms - 412[0m
+[Cron] Checking due todo reminders...
+🔁 BBPS retry cron running...
+[ORDER_EXPIRY] Running...
+
+[REQUEST] 2026-09-16T09:55:14.583Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 12.061 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:55:29.710Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.559 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:55:44.833Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.013 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:55:59.957Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 10.599 ms - 412[0m
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T09:56:15.077Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.245 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:56:30.198Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 5.581 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:56:45.320Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.645 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T09:57:00.451Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.741 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:57:15.545Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.006 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:57:30.601Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.213 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:57:45.717Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.749 ms - 412[0m
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T09:58:00.855Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.416 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:58:15.997Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.474 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:58:31.136Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 8.054 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:58:46.278Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.288 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T09:59:01.406Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 9.928 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:59:16.551Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.676 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:59:31.688Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.633 ms - 412[0m
+
+[REQUEST] 2026-09-16T09:59:46.783Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 10.293 ms - 412[0m
+🛒 [Cron] Checking for e-commerce cart abandonment, low stock, and price drops...
+💰 [retryFailedRefunds] Running...
+💰 [retryMpsFailedRefunds] Running...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+🚚 Tracking cron running...
+🔁 Booking retry cron running...
+🔁 BBPS retry cron running...
+[ORDER_EXPIRY] Running...
+
+[REQUEST] 2026-09-16T10:00:01.897Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 14.063 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:00:17.106Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.171 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:00:32.211Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 5.350 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:00:47.317Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.986 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:01:02.429Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.483 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:01:17.538Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.544 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:01:32.684Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.548 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:01:47.805Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 8.067 ms - 412[0m
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+
+[REQUEST] 2026-09-16T10:02:02.944Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 9.151 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:02:18.068Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 10.443 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:02:33.212Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 9.099 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:02:48.339Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 5.934 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:03:03.473Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 9.303 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:03:18.590Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 9.575 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:03:33.715Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 10.125 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:03:48.832Z GET /v1/polls
+[0mGET /v1/polls [33m401[0m 6.397 ms - 54[0m
+
+[REQUEST] 2026-09-16T10:03:49.051Z POST /v1/auth/refresh
+[REQUEST BODY] {
+  refreshToken: 'DHI9fCt4q3YPQkjj5NF-_bpKLenkYPhLKIYNEi536jSN_F4oM9S-cvVNpP1m7Rd0'
+}
+[0mPOST /v1/auth/refresh [32m200[0m 20.094 ms - 282[0m
+
+[REQUEST] 2026-09-16T10:03:49.208Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 9.680 ms - 412[0m
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:04:04.591Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 11.594 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:04:19.718Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 9.011 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:04:34.848Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 10.188 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:04:49.981Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 8.392 ms - 412[0m
+🔁 BBPS retry cron running...
+[ORDER_EXPIRY] Running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:05:05.121Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 9.221 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:05:20.254Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.921 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:05:35.370Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 8.312 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:05:50.529Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 9.669 ms - 412[0m
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:06:05.599Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 10.963 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:06:20.702Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 8.855 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:06:35.824Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 9.220 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:06:50.944Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 8.799 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:07:06.072Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 9.044 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:07:21.217Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.901 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:07:36.337Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 14.555 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:07:51.432Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.538 ms - 412[0m
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:08:06.532Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.617 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:08:21.629Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.880 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:08:36.764Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.156 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:08:51.887Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.784 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:09:07.036Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 5.143 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:09:22.169Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.738 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:09:37.295Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.289 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:09:52.402Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.420 ms - 412[0m
+🔁 Booking retry cron running...
+🔁 BBPS retry cron running...
+[ORDER_EXPIRY] Running...
+[BBPS][refund] retry cron running...
+💰 [retryFailedRefunds] Running...
+💰 [retryMpsFailedRefunds] Running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:10:07.528Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 5.074 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:10:22.633Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.308 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:10:37.750Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.275 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:10:52.875Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.768 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:11:07.988Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.731 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:11:23.109Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.693 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:11:38.237Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.537 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:11:53.366Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.088 ms - 412[0m
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+
+[REQUEST] 2026-09-16T10:12:08.487Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.934 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:12:23.583Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.332 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:12:38.696Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.295 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:12:53.815Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.197 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:13:08.925Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.998 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:13:24.040Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.053 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:13:39.148Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 9.352 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:13:54.270Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 8.842 ms - 412[0m
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+
+[REQUEST] 2026-09-16T10:14:09.387Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 5.451 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:14:24.494Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.430 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:14:39.588Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.370 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:14:54.695Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.270 ms - 412[0m
+[Cron] Checking due todo reminders...
+🔁 BBPS retry cron running...
+[ORDER_EXPIRY] Running...
+[STATUS_CLEANUP] Finished: 0 deleted, 0 failed.
+
+[REQUEST] 2026-09-16T10:15:09.806Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.941 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:15:24.918Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.231 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:15:40.032Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.587 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:15:55.156Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.711 ms - 412[0m
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+
+[REQUEST] 2026-09-16T10:16:10.279Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 8.600 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:16:25.413Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.997 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:16:40.538Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 5.899 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:16:55.656Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 5.016 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:17:10.783Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.915 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:17:25.907Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.278 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:17:41.030Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 12.035 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:17:56.160Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.137 ms - 412[0m
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+
+[REQUEST] 2026-09-16T10:18:11.283Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 14.418 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:18:26.416Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 5.854 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:18:41.522Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 5.834 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:18:56.623Z GET /v1/polls
+[0mGET /v1/polls [33m401[0m 4.134 ms - 54[0m
+
+[REQUEST] 2026-09-16T10:18:56.750Z POST /v1/auth/refresh
+[REQUEST BODY] {
+  refreshToken: 'stm7KVtkRPgDmsE5RbSfxJozXflbrjCi0xGIdbSg-GM1eVTbAEqnrLlUn7f2dQ6d'
+}
+[0mPOST /v1/auth/refresh [32m200[0m 11.858 ms - 282[0m
+
+[REQUEST] 2026-09-16T10:18:56.962Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.309 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:19:12.366Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 8.672 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:19:27.463Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.328 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:19:42.545Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.196 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:19:57.654Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.477 ms - 412[0m
+🔁 BBPS retry cron running...
+[ORDER_EXPIRY] Running...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+🔁 Booking retry cron running...
+💰 [retryFailedRefunds] Running...
+💰 [retryMpsFailedRefunds] Running...
+
+[REQUEST] 2026-09-16T10:20:12.782Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.212 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:20:27.895Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.583 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:20:43.043Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.897 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:20:58.159Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.133 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:21:13.271Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.243 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:21:28.363Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.020 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:21:43.451Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.610 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:21:58.551Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.219 ms - 412[0m
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:22:13.665Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.397 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:22:28.786Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.768 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:22:43.893Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.018 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:22:59.006Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.891 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:23:14.124Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.738 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:23:29.241Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.143 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:23:44.355Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.883 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:23:59.470Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.951 ms - 412[0m
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+
+[REQUEST] 2026-09-16T10:24:14.578Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.361 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:24:29.687Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.115 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:24:44.809Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.800 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:24:59.930Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.483 ms - 412[0m
+🔁 BBPS retry cron running...
+[ORDER_EXPIRY] Running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:25:15.056Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.691 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:25:30.171Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.224 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:25:45.296Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.035 ms - 412[0m
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:26:00.424Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.000 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:26:15.534Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.342 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:26:30.651Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 5.770 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:26:45.777Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.180 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:27:00.885Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.606 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:27:15.990Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.709 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:27:31.121Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.282 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:27:46.259Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.511 ms - 412[0m
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:28:01.376Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.439 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:28:16.491Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.286 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:28:31.601Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.489 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:28:46.715Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 5.877 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:29:01.828Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.994 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:29:16.920Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.567 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:29:32.014Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.668 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:29:47.122Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.098 ms - 412[0m
+🚚 Tracking cron running...
+🔁 Booking retry cron running...
+🔁 BBPS retry cron running...
+🛒 [Cron] Checking for e-commerce cart abandonment, low stock, and price drops...
+💰 [retryFailedRefunds] Running...
+💰 [retryMpsFailedRefunds] Running...
+[ORDER_EXPIRY] Running...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:30:02.240Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 8.198 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:30:17.365Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.109 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:30:32.481Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.871 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:30:47.568Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.473 ms - 412[0m
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+[Cron] Checking due todo reminders...
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+🔁 BBPS retry cron running...
+[ORDER_EXPIRY] Running...
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:38:04.409Z GET /v1/polls
+[0mGET /v1/polls [33m401[0m 1.941 ms - 54[0m
+
+[REQUEST] 2026-09-16T10:38:04.655Z POST /v1/auth/refresh
+[REQUEST BODY] {
+  refreshToken: 'e5jsePH85f1iwl7zOyEWT4z2dncDdxvsnfPqig3IhYdP5NGzJTh5sscFAwOwAMRB'
+}
+[0mPOST /v1/auth/refresh [32m200[0m 11.389 ms - 282[0m
+
+[REQUEST] 2026-09-16T10:38:04.744Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.633 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:39:32.965Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.311 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:39:34.846Z GET /v1/wallet/balance
+[0mGET /v1/wallet/balance [32m200[0m 7.311 ms - 129[0m
+
+[REQUEST] 2026-09-16T10:39:34.865Z GET /v1/wallet/transactions?type=all&page=1&limit=50
+[0mGET /v1/wallet/transactions?type=all&page=1&limit=50 [32m200[0m 3.381 ms - 2707[0m
+
+[REQUEST] 2026-09-16T10:39:40.303Z GET /v1/wallet/transactions?type=credit&page=1&limit=50
+[0mGET /v1/wallet/transactions?type=credit&page=1&limit=50 [32m200[0m 5.945 ms - 1868[0m
+
+[REQUEST] 2026-09-16T10:39:42.943Z GET /v1/wallet/transactions?type=all&page=1&limit=50
+[0mGET /v1/wallet/transactions?type=all&page=1&limit=50 [32m200[0m 6.772 ms - 2707[0m
+
+[REQUEST] 2026-09-16T10:39:43.704Z GET /v1/auth/user-info
+[0mGET /v1/auth/user-info [32m200[0m 14.435 ms - 930[0m
+
+[REQUEST] 2026-09-16T10:39:48.044Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.810 ms - 412[0m
+🔁 BBPS retry cron running...
+🔁 Booking retry cron running...
+💰 [retryFailedRefunds] Running...
+💰 [retryMpsFailedRefunds] Running...
+[ORDER_EXPIRY] Running...
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+
+[REQUEST] 2026-09-16T10:40:03.179Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.889 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:40:18.326Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.226 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:40:33.449Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.497 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:40:48.552Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.105 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:41:03.659Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.568 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:41:18.765Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 5.912 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:41:33.884Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.157 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:41:49.007Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.282 ms - 412[0m
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+
+[REQUEST] 2026-09-16T10:42:04.107Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 8.216 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:42:19.217Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.522 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:42:34.324Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.510 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:42:49.436Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.159 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:43:04.550Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.988 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:43:19.662Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.073 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:43:34.771Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.847 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:43:49.885Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.575 ms - 412[0m
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:44:04.996Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.078 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:44:20.118Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.271 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:44:35.239Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.252 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:44:50.357Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.506 ms - 412[0m
+[Cron] Checking due todo reminders...
+🔁 BBPS retry cron running...
+[ORDER_EXPIRY] Running...
+
+[REQUEST] 2026-09-16T10:45:05.477Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.595 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:45:20.557Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.416 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:45:35.653Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.023 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:45:50.754Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.434 ms - 412[0m
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+
+[REQUEST] 2026-09-16T10:46:05.830Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 5.533 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:46:20.918Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.162 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:46:36.029Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.631 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:46:51.127Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.949 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:47:06.248Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.761 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:47:21.348Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.965 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:47:36.455Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.265 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:47:51.556Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.895 ms - 412[0m
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:48:06.683Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.579 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:48:21.779Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.430 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:48:36.892Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.581 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:48:52.007Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 5.982 ms - 412[0m
+[Cron] Checking due todo reminders...
+
+[REQUEST] 2026-09-16T10:49:07.118Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.030 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:49:22.226Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 3.679 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:49:37.407Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 7.244 ms - 412[0m
+
+[REQUEST] 2026-09-16T10:49:52.532Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 4.341 ms - 412[0m
+[ORDER_EXPIRY] Running...
+🔁 BBPS retry cron running...
+[BBPS][refund] retry cron running...
+💰 [retryFailedRefunds] Running...
+💰 [retryMpsFailedRefunds] Running...
+[Cron] Checking due todo reminders...
+🔁 Booking retry cron running...
+
+[REQUEST] 2026-09-16T10:50:02.297Z GET /v1/auth/user-info
+
+[REQUEST] 2026-09-16T10:50:02.298Z GET /v1/auth/user-info
+[0mGET /v1/auth/user-info [32m200[0m 10.073 ms - 928[0m
+[0mGET /v1/auth/user-info [32m200[0m 10.280 ms - 932[0m
+
+[REQUEST] 2026-09-16T10:50:07.668Z GET /v1/polls
+[0mGET /v1/polls [32m200[0m 6.510 ms - 412[0m
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+🔁 BBPS retry cron running...
+[Cron] Checking due todo reminders...
+[ORDER_EXPIRY] Running...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+[Cron] Checking due todo reminders...
+[Cron] Checking due todo reminders...
+[BBPS][refund] retry cron running...
+🚚 Tracking cron running...
+🛒 [Cron] Checking for e-commerce cart abandonment, low stock, and price drops...
+💰 [retryFailedRefunds] Running...
+💰 [retryMpsFailedRefunds] Running...
+🔁 Booking retry cron running...
+[Cron] Checking due todo reminders...
+🔁 BBPS retry cron running...
+[ORDER_EXPIRY] Running...
