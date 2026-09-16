@@ -95,7 +95,9 @@ router.get(
           COALESCE(SUM(status = 'approved'), 0) AS approvedProducts,
           COALESCE(SUM(status = 'rejected'), 0) AS rejectedProducts
         FROM eproducts
-        WHERE is_deleted = 0`),
+        WHERE is_deleted = 0
+          AND COALESCE(created_via, '') != 'flea_market_quick_create'
+          AND status != 'pending'`),
         db.execute(`SELECT COUNT(*) AS totalOrders,
           COALESCE(SUM(status = 'cancelled'), 0) AS cancelledOrders,
           COALESCE(SUM(cancellation_status = 'requested'), 0) AS cancellationRequests,
@@ -115,7 +117,7 @@ router.get(
         FROM (
           SELECT DATE_FORMAT(created_at, '%Y-%m') month_key, DATE_FORMAT(created_at, '%b') month_label, COUNT(*) vendors, 0 products, 0 orders, 0 order_value FROM vendors WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 5 MONTH) GROUP BY month_key, month_label
           UNION ALL
-          SELECT DATE_FORMAT(created_at, '%Y-%m'), DATE_FORMAT(created_at, '%b'), 0, COUNT(*), 0, 0 FROM eproducts WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 5 MONTH) AND is_deleted = 0 GROUP BY DATE_FORMAT(created_at, '%Y-%m'), DATE_FORMAT(created_at, '%b')
+          SELECT DATE_FORMAT(created_at, '%Y-%m'), DATE_FORMAT(created_at, '%b'), 0, COUNT(*), 0, 0 FROM eproducts WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 5 MONTH) AND is_deleted = 0 AND COALESCE(created_via, '') != 'flea_market_quick_create' AND status != 'pending' GROUP BY DATE_FORMAT(created_at, '%Y-%m'), DATE_FORMAT(created_at, '%b')
           UNION ALL
           SELECT DATE_FORMAT(created_at, '%Y-%m'), DATE_FORMAT(created_at, '%b'), 0, 0, COUNT(*), SUM(CASE WHEN status != 'cancelled' THEN total_amount ELSE 0 END) FROM eorders WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 5 MONTH) GROUP BY DATE_FORMAT(created_at, '%Y-%m'), DATE_FORMAT(created_at, '%b')
         ) monthly GROUP BY month_key, month_label ORDER BY month_key`),
