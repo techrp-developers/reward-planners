@@ -127,7 +127,9 @@ class StatusModel {
     }
     const [rows] = await db.execute(
       `SELECT s.*, c.name AS user_name, c.user_image,
-              IF(v.status_id IS NULL, 0, 1) AS viewed
+              IF(s.user_id = viewer.user_id OR v.status_id IS NOT NULL, 1, 0) AS viewed,
+              (SELECT COUNT(*) FROM user_status_views status_view
+               WHERE status_view.status_id = s.status_id) AS view_count
        FROM user_statuses s
        INNER JOIN customer c ON c.user_id = s.user_id AND c.status = 1
        LEFT JOIN user_status_views v ON v.status_id = s.status_id AND v.viewer_id = ?
@@ -186,6 +188,12 @@ class StatusModel {
         [statusId, viewerId],
       );
     }
+    const [[viewSummary]] = await db.execute(
+      `SELECT COUNT(*) AS view_count FROM user_status_views WHERE status_id = ?`,
+      [statusId],
+    );
+    status.viewed = 1;
+    status.view_count = Number(viewSummary.view_count);
     return status;
   }
 

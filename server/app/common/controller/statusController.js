@@ -211,7 +211,15 @@ exports.view = async (req, res) => {
   try {
     const status = await StatusModel.markViewed(req.params.status_id, req.user.user_id);
     if (!status) return res.status(404).json({ success: false, message: "Status not found or expired" });
-    return res.json({ success: true, message: "Status viewed" });
+    return res.json({
+      success: true,
+      message: "Status viewed",
+      data: {
+        id: status.status_id,
+        viewed: true,
+        view_count: Number(status.view_count || 0),
+      },
+    });
   } catch (error) {
     console.error("View status error:", error);
     return res.status(500).json({ success: false, message: "Failed to record view" });
@@ -222,7 +230,15 @@ exports.views = async (req, res) => {
   try {
     const rows = await StatusModel.getViews(req.params.status_id, req.user.user_id);
     if (!rows) return res.status(404).json({ success: false, message: "Status not found" });
-    return res.json({ success: true, data: rows.map((row) => ({ ...row, image_url: getPublicUrl(row.user_image), user_image: undefined })) });
+    return res.json({
+      success: true,
+      view_count: rows.length,
+      data: rows.map((row) => ({
+        ...row,
+        image_url: getPublicUrl(row.user_image),
+        user_image: undefined,
+      })),
+    });
   } catch (error) {
     console.error("Get status views error:", error);
     return res.status(500).json({ success: false, message: "Failed to fetch status views" });
