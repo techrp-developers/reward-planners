@@ -3,6 +3,7 @@ import type { ChangeEvent, FormEvent } from "react";
 import type { ComponentType } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import QuillEditor from "../components/QuillEditor";
+import CustomAttributeBuilder, { type CustomAttributeRow } from "../components/CustomAttributeBuilder";
 import { FaArrowLeft } from "react-icons/fa";
 // import imageCompression from "browser-image-compression";
 
@@ -210,6 +211,9 @@ export default function EditProductPage() {
   const [productAttributes, setProductAttributes] = useState<
     Record<string, any>
   >({});
+  const [customAttributes, setCustomAttributes] = useState<
+    CustomAttributeRow[]
+  >([]);
 
   // --- Fetch data from API ---
   useEffect(() => {
@@ -501,7 +505,7 @@ export default function EditProductPage() {
   }, [productId]);
 
   // character Limit
-  const CHAR_LIMIT = 150;
+  const CHAR_LIMIT = 170;
 
   const handleShortDescriptionChange = (
     e: React.ChangeEvent<
@@ -581,6 +585,34 @@ export default function EditProductPage() {
 
       const p = json.product;
       if (!p) throw new Error("Product not found");
+
+      // Custom attributes live inside the same JSON blob as the schema-driven
+      // ones, so parse them here — independent of whether the product has a
+      // real category/subcategory (loadAttributesForEdit only runs for those).
+      try {
+        if (p.attributes) {
+          let raw =
+            typeof p.attributes === "string"
+              ? JSON.parse(p.attributes)
+              : p.attributes;
+          const parsedAttrs = raw.attributes
+            ? typeof raw.attributes === "string"
+              ? JSON.parse(raw.attributes)
+              : raw.attributes
+            : raw;
+          const custom = Array.isArray(parsedAttrs.__custom)
+            ? parsedAttrs.__custom.map((row: any) => ({
+                id: crypto.randomUUID(), key: String(row.key ?? ""), label: String(row.label ?? ""),
+                input_type: row.input_type || "text", is_variant: Number(row.is_variant) === 1 ? 1 : 0,
+                is_required: Number(row.is_required) === 1 ? 1 : 0,
+                values: Array.isArray(row.values) ? row.values.map(String) : [String(row.value ?? "")],
+              }))
+            : [];
+          setCustomAttributes(custom);
+        }
+      } catch (err) {
+        console.error("Failed to parse custom attributes", err);
+      }
 
       // Detect custom taxonomy
       const hasCustomCategory = !p.category_id && !!p.custom_category;
@@ -714,6 +746,19 @@ export default function EditProductPage() {
         );
       }
 
+      const invalidCustom = customAttributes.find((attr) =>
+        !attr.label.trim() || (attr.is_required === 1 && !attr.values.some((value) => value.trim())),
+      );
+      if (invalidCustom) {
+        throw new Error(!invalidCustom.label.trim() ? "Every custom attribute needs a label." : `${invalidCustom.label} is required.`);
+      }
+
+      const customVariantCount = customAttributes.filter((attr) => attr.is_variant === 1).reduce((count, attr) => {
+        const options = new Set(attr.values.map((value) => value.trim()).filter(Boolean)).size;
+        return options ? count * options : count;
+      }, 1);
+      if (customVariantCount > 100) throw new Error(`This selection creates ${customVariantCount} variants. Reduce it to 100 combinations or fewer.`);
+
       /* ================= DELIVERY VALIDATION ================= */
       const minDays = Number(product.deliveryMinDays);
       const maxDays = Number(product.deliveryMaxDays);
@@ -832,7 +877,18 @@ export default function EditProductPage() {
         if (file) formData.append(docId, file);
       });
 
-      formData.append("attributes", JSON.stringify(productAttributes));
+      const cleanedCustomAttributes = customAttributes
+        .filter((row) => row.label.trim() && row.values.some((value) => value.trim()))
+        .map((row) => ({
+          key: row.key || `custom_${row.id.replaceAll("-", "")}`,
+          label: row.label.trim(), input_type: row.input_type,
+          is_variant: row.is_variant, is_required: row.is_required,
+          values: [...new Set(row.values.map((value) => value.trim()).filter(Boolean))],
+        }));
+      const attributesPayload: Record<string, any> = { ...productAttributes };
+      if (cleanedCustomAttributes.length)
+        attributesPayload.__custom = cleanedCustomAttributes;
+      formData.append("attributes", JSON.stringify(attributesPayload));
 
       /* ================= SUBMIT ================= */
       const response = await api.put(
@@ -1272,6 +1328,9 @@ export default function EditProductPage() {
                 </div>
               </div>
             )}
+
+            {/* ── CUSTOM ATTRIBUTES ── */}
+            <CustomAttributeBuilder rows={customAttributes} onChange={setCustomAttributes} />
           </section>
 
           {/* Product Description */}
@@ -1329,7 +1388,7 @@ export default function EditProductPage() {
                   required
                   value={product.shortDescription}
                   onChange={handleShortDescriptionChange}
-                  placeholder="Short description (max 150 characters)"
+                  placeholder="Short description (max 170 characters)"
                 />
 
                 <p

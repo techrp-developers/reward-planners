@@ -4,6 +4,21 @@ function toDbValue(value) {
   return value === undefined ? null : value;
 }
 
+function parseMetadata(value) {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeLimit(value) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return 50;
+  return Math.min(parsed, 100);
+}
+
 class NotificationModel {
   /* ================================
      CREATE NOTIFICATION
@@ -22,6 +37,8 @@ class NotificationModel {
       action_url,
       metadata,
       priority,
+      idempotency_key,
+      screen,
     } = data;
 
     const notificationUserId = userId ?? user_id;
@@ -35,6 +52,44 @@ class NotificationModel {
         message,
       });
       return null;
+    }
+
+    const storedMetadata = screen
+      ? { ...(metadata && typeof metadata === "object" ? metadata : {}), screen }
+      : metadata;
+
+    const values = [
+      notificationUserId,
+      module,
+      type,
+      title,
+      message,
+      toDbValue(icon) || null,
+      toDbValue(reference_type) || "none",
+      reference_id == null ? null : String(reference_id),
+      toDbValue(action_url) || null,
+      storedMetadata == null ? null : JSON.stringify(storedMetadata),
+      toDbValue(priority) || "normal",
+    ];
+
+    if (idempotency_key) {
+      try {
+        const [result] = await db.execute(
+          `
+          INSERT INTO notifications
+          (user_id, module, type, title, message, icon, reference_type,
+           reference_id, action_url, metadata, priority, idempotency_key)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON DUPLICATE KEY UPDATE notification_id = LAST_INSERT_ID(notification_id)
+          `,
+          [...values, String(idempotency_key).slice(0, 191)],
+        );
+        return { notificationId: result.insertId, created: result.affectedRows === 1 };
+      } catch (error) {
+        // Keep deployments backward-compatible while the additive migration is
+        // being rolled out. Idempotency becomes active as soon as it is applied.
+        if (error.code !== "ER_BAD_FIELD_ERROR") throw error;
+      }
     }
 
     const [result] = await db.execute(
@@ -55,22 +110,10 @@ class NotificationModel {
       )
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
-      [
-        notificationUserId,
-        module,
-        type,
-        title,
-        message,
-        toDbValue(icon) || null,
-        toDbValue(reference_type) || "none",
-        reference_id == null ? null : String(reference_id),
-        toDbValue(action_url) || null,
-        metadata == null ? null : JSON.stringify(metadata),
-        toDbValue(priority) || "normal",
-      ],
+      values,
     );
 
-    return result.insertId;
+    return { notificationId: result.insertId, created: true };
   }
 
   /* ================================
@@ -98,15 +141,12 @@ class NotificationModel {
       ORDER BY notification_id DESC
       LIMIT ?
       `,
-      [userId, Number(limit)],
+      [userId, normalizeLimit(limit)],
     );
 
     return rows.map((row) => ({
       ...row,
-      metadata:
-        typeof row.metadata === "string"
-          ? JSON.parse(row.metadata)
-          : row.metadata,
+      metadata: parseMetadata(row.metadata),
     }));
   }
 

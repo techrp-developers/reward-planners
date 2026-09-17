@@ -544,13 +544,16 @@ class orderModel {
           AND sibling.fulfillment_status <> 'cancelled'
       ) AS active_shipment_item_count,
 
-      (
-        SELECT pi.image_url
-        FROM product_images pi
-        WHERE pi.product_id = p.product_id
-        ORDER BY pi.sort_order ASC
-        LIMIT 1
+    
+      COALESCE(
+        (SELECT pvi.image_url FROM product_variant_images pvi
+         WHERE pvi.variant_id = oi.variant_id
+         ORDER BY pvi.sort_order ASC, pvi.image_id ASC LIMIT 1),
+        (SELECT pi.image_url FROM product_images pi
+         WHERE pi.product_id = p.product_id
+         ORDER BY pi.sort_order ASC, pi.image_id ASC LIMIT 1)
       ) AS image
+
 
     FROM eorder_items oi
     JOIN eproducts p 
@@ -577,7 +580,9 @@ class orderModel {
 
       if (i.variant_attributes) {
         try {
-          attributes = JSON.parse(i.variant_attributes);
+          attributes = typeof i.variant_attributes === "string"
+            ? JSON.parse(i.variant_attributes)
+            : i.variant_attributes;
         } catch {
           attributes = {};
         }

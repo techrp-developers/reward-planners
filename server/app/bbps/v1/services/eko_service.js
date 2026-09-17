@@ -67,6 +67,44 @@ const CATALOG_CACHE_TTL_MS =
     : 5 * 60 * 1000;
 const catalogCache = new Map();
 
+// BBPS services currently enabled in the app. Keep the remaining provider
+// categories disabled until their payment journeys are supported end to end.
+const ENABLED_CATEGORY_NAMES = new Set([
+  "mobile prepaid",
+  "mobile postpaid",
+  "credit card",
+  "electricity",
+  "fastag",
+]);
+
+const normalizeCategoryName = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, " ");
+
+const getCategoryName = (category) =>
+  category?.category_name ??
+  category?.categoryName ??
+  category?.name ??
+  category?.operator_category_name;
+
+const getCategoryId = (category) =>
+  category?.category_id ?? category?.categoryId ?? category?.operator_category;
+
+const isEnabledCategory = (category) =>
+  ENABLED_CATEGORY_NAMES.has(normalizeCategoryName(getCategoryName(category)));
+
+const getEnabledCategoryIds = async () => {
+  const categoryResponse = await exports.getCategories();
+  return new Set(
+    (Array.isArray(categoryResponse?.data) ? categoryResponse.data : [])
+      .map(getCategoryId)
+      .filter((id) => id !== undefined && id !== null)
+      .map(String),
+  );
+};
+
 const normalizeProviderError = (error, fallbackMessage) => {
   const isTimeout =
     error.code === "ECONNABORTED" ||
@@ -140,24 +178,34 @@ exports.getLocations = async () => {
 
 // 1. Categories
 exports.getCategories = async () => {
-  return withCatalogCache("categories", async () => {
+  const data = await withCatalogCache("categories", async () => {
     const headers = await headerUtil.fetchHeaders();
     const res = await axios.get(ekoUrl("billpayments/operators_category"), {
       headers,
     });
     return res.data;
   });
+
+  return {
+    ...data,
+    data: (Array.isArray(data?.data) ? data.data : []).filter(isEnabledCategory),
+  };
 };
 
 // 2. Operators
 exports.getOperators = async (category_id) => {
-  const data = await withCatalogCache("operators", async () => {
-    const headers = await headerUtil.fetchHeaders();
-    const res = await axios.get(ekoUrl("billpayments/operators"), { headers });
-    return res.data;
-  });
+  const [data, enabledCategoryIds] = await Promise.all([
+    withCatalogCache("operators", async () => {
+      const headers = await headerUtil.fetchHeaders();
+      const res = await axios.get(ekoUrl("billpayments/operators"), { headers });
+      return res.data;
+    }),
+    getEnabledCategoryIds(),
+  ]);
 
-  let operators = data?.data || [];
+  let operators = (Array.isArray(data?.data) ? data.data : []).filter((op) =>
+    enabledCategoryIds.has(String(op.operator_category)),
+  );
 
   if (category_id) {
     operators = operators.filter((op) => op.operator_category == category_id);

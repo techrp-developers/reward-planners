@@ -8,14 +8,26 @@ type RetryableConfig = InternalAxiosRequestConfig & { _sessionRetry?: boolean };
 const readCookie = (name: string) =>
   document.cookie.split(";").map((value) => value.trim()).find((value) => value.startsWith(`${name}=`))?.slice(name.length + 1);
 
+const readCsrfCookie = () => readCookie("rp_csrf_v2") || readCookie("rp_csrf") || "";
+
 export const api = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
 });
 
 api.interceptors.request.use((config) => {
-  if (!["get", "head", "options"].includes((config.method || "get").toLowerCase())) {
-    const csrfToken = readCookie("rp_csrf");
+  const method = (config.method || "get").toLowerCase();
+
+  // Authenticated GET responses were previously cached by the production CDN.
+  // Keep requests unique so a browser can never receive one of those legacy
+  // edge objects. The API also sends no-store headers; this is an additional
+  // client-side safety net during cache remediation.
+  if (method === "get") {
+    config.params = { ...(config.params || {}), _request: Date.now() };
+  }
+
+  if (!["get", "head", "options"].includes(method)) {
+    const csrfToken = readCsrfCookie();
     if (csrfToken) config.headers["X-CSRF-Token"] = decodeURIComponent(csrfToken);
   }
   return config;
@@ -35,7 +47,7 @@ api.interceptors.response.use(
     try {
       refreshRequest ||= axios.post(`${API_BASE_URL}/auth/refresh`, null, {
         withCredentials: true,
-        headers: { "X-CSRF-Token": decodeURIComponent(readCookie("rp_csrf") || "") },
+        headers: { "X-CSRF-Token": decodeURIComponent(readCsrfCookie()) },
       }).then(() => undefined).finally(() => { refreshRequest = null; });
       await refreshRequest;
       return api(config);

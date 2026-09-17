@@ -6,15 +6,16 @@ const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 const router = express.Router();
 const guard = [authenticateToken, authorizeRoles("hr", "admin")];
 
-const csvUpload = multer({
+const employeeFileUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, callback) => {
-    const isCsv =
+    const isEmployeeFile =
       file.mimetype === "text/csv" ||
       file.mimetype === "application/vnd.ms-excel" ||
-      file.originalname.toLowerCase().endsWith(".csv");
-    callback(isCsv ? null : new Error("Only CSV files are allowed"), isCsv);
+      file.mimetype === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+      /\.(csv|xls|xlsx)$/i.test(file.originalname);
+    callback(isEmployeeFile ? null : new Error("Only CSV or Excel files are allowed"), isEmployeeFile);
   },
 });
 
@@ -74,7 +75,7 @@ router.get(
 router.post(
   "/bulk-upload",
   ...guard,
-  csvUpload.single("file"),
+  employeeFileUpload.single("file"),
   employeeController.bulkUpload.bind(employeeController),
 );
 

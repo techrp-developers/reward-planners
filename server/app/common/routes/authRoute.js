@@ -10,6 +10,9 @@ const { authLimiter } = require("../middlewares/rateLimiter");
 // Activate account
 router.post("/activate-account", authLimiter, authController.activateAccount);
 
+// Passwordless login: request a code for a preloaded employee.
+router.post("/request-otp", authLimiter, authController.activateAccount);
+
 //resend activation otp
 router.post(
   "/resend-activation-otp",
@@ -20,6 +23,13 @@ router.post(
 // verify OTP
 router.post(
   "/verify-activation-otp",
+  authLimiter,
+  authController.verifyActivationOTP,
+);
+
+// Passwordless login: verify the code, activate on first use, and create a session.
+router.post(
+  "/verify-otp",
   authLimiter,
   authController.verifyActivationOTP,
 );
@@ -37,7 +47,7 @@ router.post("/refresh", authLimiter, authController.refreshAccessToken);
 router.post("/update-fcm-token", auth, authController.updateFcmToken);
 
 // Logout user
-router.post("/logout", auth, authController.logoutUser);
+router.post("/logout", optionalAuth, authController.logoutUser);
 
 // Forgot password
 router.post("/forgot-password", authLimiter, authController.forgotPassword);
@@ -97,5 +107,11 @@ router.put(
 
 // delete customer record
 router.delete("/delete-customer", auth, authController.deleteCustomer);
+
+/*=========================================Device change verification==================================*/
+// Opened directly in a browser from the approval email — no app auth token.
+router.get("/device-change/allow", authController.allowDeviceChange);
+
+router.get("/device-change/deny", authController.denyDeviceChange);
 
 module.exports = router;

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { AxiosError } from "axios";
 import { AlertCircle, ArrowRight, Building2, CheckCircle2, Eye, EyeOff, LockKeyhole, Mail } from "lucide-react";
 import { useAuth } from "./useAuth";
 import AuthShell from "./AuthShell";
@@ -19,7 +20,9 @@ export default function LoginPage() {
     try {
       await login(formData.email.trim(), formData.password);
     } catch (err) {
-      setError("Login failed. Please check your credentials.");
+      setError(err instanceof AxiosError
+        ? String(err.response?.data?.message || "Login failed. Please check your credentials.")
+        : err instanceof Error ? err.message : "Login failed. Please check your credentials.");
       console.error(err);
     }
   };

@@ -70,7 +70,7 @@ class authModel {
     if (!conditions.length) return null;
 
     const [rows] = await db.execute(
-      `SELECT 
+      `SELECT
         user_id,
         name,
         email,
@@ -79,6 +79,7 @@ class authModel {
         password,
         status,
         is_verified,
+        deleted_at,
         device_id,
         device_name
      FROM customer
@@ -92,7 +93,7 @@ class authModel {
 
   async findByCompanyUserId(company_user_id) {
     const [rows] = await db.execute(
-      `SELECT user_id, name, email, company_user_id
+      `SELECT user_id, name, email, company_user_id, status, is_verified, deleted_at, device_id, device_name
      FROM customer
      WHERE company_user_id = ?`,
       [company_user_id],
@@ -190,12 +191,13 @@ class authModel {
 
   async storeActivationOTP(email, otp) {
     const expiry = new Date(Date.now() + 10 * 60 * 1000);
+    const hashedOtp = await bcrypt.hash(otp.toString(), 10);
 
     await db.execute(
       `INSERT INTO email_otps
      (email, otp, expiry)
      VALUES (?, ?, ?)`,
-      [email.toLowerCase(), otp, expiry],
+      [email.toLowerCase(), hashedOtp, expiry],
     );
   }
 
@@ -230,16 +232,22 @@ class authModel {
 
   async verifyOTP(email, otp) {
     const [rows] = await db.execute(
-      `SELECT id, attempt_count
+      `SELECT id, otp, attempt_count
      FROM email_otps
      WHERE email = ?
-     AND otp = ?
      AND expiry > NOW()
+     ORDER BY id DESC
      LIMIT 1`,
-      [email, otp],
+      [email],
     );
 
-    return rows[0];
+    const otpRecord = rows[0];
+    if (!otpRecord) return null;
+
+    const isMatch = await bcrypt.compare(otp.toString(), otpRecord.otp);
+    if (!isMatch) return null;
+
+    return { id: otpRecord.id, attempt_count: otpRecord.attempt_count };
   }
 
   async incrementOtpAttempts(email) {
@@ -325,6 +333,50 @@ class authModel {
     return result.insertId;
   }
 
+  async findOrCreateCustomerForEmployee(employee, password, conn) {
+    const [existingRows] = await conn.execute(
+      `SELECT user_id, name, email, phone, company_user_id, status, is_verified
+       FROM customer
+       WHERE company_user_id = ?
+       LIMIT 1
+       FOR UPDATE`,
+      [employee.id],
+    );
+
+    if (existingRows[0]) {
+      await conn.execute(
+        `UPDATE customer
+         SET is_verified = 1
+         WHERE user_id = ?`,
+        [existingRows[0].user_id],
+      );
+      return { ...existingRows[0], is_verified: 1, created: false };
+    }
+
+    const userId = await this.createCustomer(
+      {
+        company_id: employee.company_id,
+        company_user_id: employee.id,
+        name: employee.name,
+        email: employee.email,
+        phone: employee.phone,
+        password,
+      },
+      conn,
+    );
+
+    return {
+      user_id: userId,
+      name: employee.name,
+      email: employee.email,
+      phone: employee.phone,
+      company_user_id: employee.id,
+      status: 1,
+      is_verified: 1,
+      created: true,
+    };
+  }
+
   async getUserPassword(conn, userId) {
     const [rows] = await conn.execute(
       `SELECT password FROM customer WHERE user_id = ?`,
@@ -369,6 +421,12 @@ class authModel {
 
   async clearFcmToken(userId) {
     await db.execute(
+      `UPDATE user_push_tokens SET is_active = 0, updated_at = NOW() WHERE user_id = ?`,
+      [userId],
+    ).catch((error) => {
+      if (error.code !== "ER_NO_SUCH_TABLE") throw error;
+    });
+    await db.execute(
       `UPDATE customer
      SET fcm_token = NULL
      WHERE user_id = ?`,
@@ -386,6 +444,21 @@ class authModel {
   // }
 
   async updateFcmToken(userId, fcmToken, devicePlatform = null) {
+    await db.execute(
+      `INSERT INTO user_push_tokens
+       (user_id, fcm_token, platform, is_active, last_seen_at)
+       VALUES (?, ?, ?, 1, NOW())
+       ON DUPLICATE KEY UPDATE
+         user_id = VALUES(user_id),
+         platform = COALESCE(VALUES(platform), platform),
+         is_active = 1,
+         last_seen_at = NOW(),
+         updated_at = NOW()`,
+      [userId, fcmToken, devicePlatform],
+    ).catch((error) => {
+      if (error.code !== "ER_NO_SUCH_TABLE") throw error;
+    });
+
     await db.execute(
       `UPDATE customer
      SET fcm_token = ?,
@@ -549,50 +622,38 @@ class authModel {
     }));
   }
 
-  // Delete Customer
+  // Delete Customer — soft delete only. The account and its cart/wishlist/
+  // addresses/notifications are kept for a 30-day grace period so the user
+  // can get everything back by simply logging in again (see
+  // reactivateIfWithinGracePeriod below). If they don't return in time,
+  // accountPurgeCron.js removes the account and its data for good.
   async deleteCustomerAccount(userId) {
-    const connection = await db.getConnection();
-
-    try {
-      await connection.beginTransaction();
-
-      // Soft delete customer
-      await connection.execute(
-        `UPDATE customer
-       SET status = 0
+    await db.execute(
+      `UPDATE customer
+       SET status = 0, deleted_at = NOW()
        WHERE user_id = ?`,
-        [userId],
-      );
+      [userId],
+    );
+  }
 
-      // Remove cart items
-      await connection.execute(`DELETE FROM cart_items WHERE user_id = ?`, [
-        userId,
-      ]);
+  // Undo a soft delete if the account is still inside its 30-day grace
+  // period. Returns true when the account was reactivated. Callers must
+  // only invoke this after verifying the caller's credentials — reactivation
+  // reverses an account deletion and must never be reachable by someone who
+  // only knows the account's email/phone.
+  async reactivateIfWithinGracePeriod(userId, deletedAt) {
+    if (!deletedAt) return false;
 
-      // Remove wishlist
-      await connection.execute(
-        `DELETE FROM customer_wishlist WHERE user_id = ?`,
-        [userId],
-      );
+    const graceMs = 30 * 24 * 60 * 60 * 1000; // keep in sync with accountPurgeCron.js
+    if (Date.now() - new Date(deletedAt).getTime() > graceMs) return false;
 
-      // Remove addresses
-      await connection.execute(
-        `DELETE FROM customer_addresses WHERE user_id = ?`,
-        [userId],
-      );
-
-      // Remove notifications
-      await connection.execute(`DELETE FROM notifications WHERE user_id = ?`, [
-        userId,
-      ]);
-
-      await connection.commit();
-    } catch (err) {
-      await connection.rollback();
-      throw err;
-    } finally {
-      connection.release();
-    }
+    await db.execute(
+      `UPDATE customer
+       SET status = 1, deleted_at = NULL
+       WHERE user_id = ?`,
+      [userId],
+    );
+    return true;
   }
 
   // Get profile for update
@@ -614,6 +675,77 @@ class authModel {
      SET phone = ?, user_image = ?
      WHERE user_id = ?`,
       [data.phone, data.user_image, userId],
+    );
+  }
+
+  /* ======================================================
+     DEVICE CHANGE VERIFICATION
+  ====================================================== */
+
+  // First time we ever see a device_id for this account: trust it silently,
+  // nothing to compare against yet.
+  async bootstrapDevice(userId, deviceId, deviceName) {
+    await db.execute(
+      `UPDATE customer SET device_id = ?, device_name = ? WHERE user_id = ?`,
+      [deviceId, deviceName || null, userId],
+    );
+  }
+
+  // Called once the user approves a device-change request.
+  async approveDevice(userId, deviceId, deviceName) {
+    await db.execute(
+      `UPDATE customer SET device_id = ?, device_name = ? WHERE user_id = ?`,
+      [deviceId, deviceName || null, userId],
+    );
+  }
+
+  async createDeviceChangeRequest({
+    userId,
+    tokenHash,
+    deviceId,
+    deviceName,
+    ipAddress,
+    userAgent,
+    expiresAt,
+  }) {
+    const [result] = await db.execute(
+      `INSERT INTO device_change_requests
+       (user_id, token_hash, new_device_id, new_device_name, ip_address, user_agent, status, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`,
+      [userId, tokenHash, deviceId, deviceName || null, ipAddress || null, userAgent || null, expiresAt],
+    );
+    return result.insertId;
+  }
+
+  async findPendingDeviceChangeRequest(userId, deviceId) {
+    const [rows] = await db.execute(
+      `SELECT id, token_hash, expires_at
+       FROM device_change_requests
+       WHERE user_id = ? AND new_device_id = ? AND status = 'pending' AND expires_at > NOW()
+       ORDER BY id DESC
+       LIMIT 1`,
+      [userId, deviceId],
+    );
+    return rows[0];
+  }
+
+  async findDeviceChangeRequestByTokenHash(tokenHash) {
+    const [rows] = await db.execute(
+      `SELECT dcr.id, dcr.user_id, dcr.status, dcr.expires_at, dcr.new_device_id, dcr.new_device_name,
+              c.email, c.name
+       FROM device_change_requests dcr
+       JOIN customer c ON c.user_id = dcr.user_id
+       WHERE dcr.token_hash = ?
+       LIMIT 1`,
+      [tokenHash],
+    );
+    return rows[0];
+  }
+
+  async decideDeviceChangeRequest(id, status) {
+    await db.execute(
+      `UPDATE device_change_requests SET status = ?, decided_at = NOW() WHERE id = ?`,
+      [status, id],
     );
   }
 }

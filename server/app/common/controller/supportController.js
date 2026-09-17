@@ -1,17 +1,8 @@
 const db = require("../../../config/database");
+const fs = require("fs");
+const path = require("path");
 const { sendNewTicketMail } = require("../../../services/mailBuilder/ticketNotification");
 const { notifyUser } = require("../utils/notification");
-
-async function getSupportTicketColumnSet() {
-  const [columns] = await db.execute(
-    `SELECT COLUMN_NAME
-     FROM information_schema.COLUMNS
-     WHERE TABLE_SCHEMA = DATABASE()
-       AND TABLE_NAME = 'support_tickets'`,
-  );
-
-  return new Set(columns.map((column) => column.COLUMN_NAME));
-}
 
 class SupportController {
   async getCategories(req, res) {
@@ -51,8 +42,7 @@ class SupportController {
         subject,
         description,
         category_id,
-        product_id,
-        product_name,
+        // attachment_url,
       } = req.body;
 
       const attachmentUrls = (req.files || []).map(
@@ -64,11 +54,114 @@ class SupportController {
           : attachmentUrls[0] || null;
 
       // validation
-      if (!subject || !description || !category_id) {
+      if (!description || !category_id) {
+        cleanupUploadedAttachment(req.file);
         return res.status(400).json({
           success: false,
-          message: "subject, description and category_id are required",
+          message: "description and category_id are required",
         });
+      }
+
+      const allowedModules = new Set([
+        "general",
+        "ecommerce",
+        "services",
+        "bbps",
+        "step_counter",
+      ]);
+      const normalizedModule = String(support_module || "general").trim().toLowerCase();
+      if (!allowedModules.has(normalizedModule)) {
+        cleanupUploadedAttachment(req.file);
+        return res.status(400).json({
+          success: false,
+          message: "Invalid support module",
+        });
+      }
+
+      const [[category]] = await db.execute(
+        `SELECT name FROM support_categories
+         WHERE category_id = ? AND is_active = 1
+         LIMIT 1`,
+        [category_id],
+      );
+      if (!category) {
+        cleanupUploadedAttachment(req.file);
+        return res.status(400).json({
+          success: false,
+          message: "Invalid support category",
+        });
+      }
+
+      let verifiedReferenceType = null;
+      let verifiedReferenceId = null;
+      let verifiedReferenceLabel = null;
+
+      if (reference_id) {
+        if (!['ecommerce', 'services'].includes(normalizedModule) || reference_type !== 'order') {
+          cleanupUploadedAttachment(req.file);
+          return res.status(400).json({
+            success: false,
+            message: "This support area does not accept an order reference",
+          });
+        }
+
+        if (normalizedModule === 'ecommerce') {
+          const [[order]] = await db.execute(
+            `SELECT order_id, order_ref
+             FROM eorders
+             WHERE user_id = ? AND order_id = ?
+             LIMIT 1`,
+            [userId, reference_id],
+          );
+          if (!order) {
+            cleanupUploadedAttachment(req.file);
+            return res.status(400).json({ success: false, message: 'Order not found' });
+          }
+          verifiedReferenceType = 'order';
+          verifiedReferenceId = String(order.order_id);
+          verifiedReferenceLabel = String(order.order_ref || reference_label || order.order_id);
+        } else {
+          const [[order]] = await db.execute(
+            `SELECT parent_order_id, MIN(order_ref) AS order_ref
+             FROM service_orders
+             WHERE user_id = ? AND parent_order_id = ?
+             GROUP BY parent_order_id
+             LIMIT 1`,
+            [userId, reference_id],
+          );
+          if (!order) {
+            cleanupUploadedAttachment(req.file);
+            return res.status(400).json({ success: false, message: 'Service order not found' });
+          }
+          verifiedReferenceType = 'order';
+          verifiedReferenceId = String(order.parent_order_id);
+          verifiedReferenceLabel = String(reference_label || order.order_ref || order.parent_order_id);
+        }
+      }
+
+      const moduleLabels = {
+        general: "General support",
+        ecommerce: "Shopping support",
+        services: "Service support",
+        bbps: "Bills and recharge support",
+        step_counter: "Step counter support",
+      };
+      const generatedSubject = `${moduleLabels[normalizedModule]} - ${category.name}${
+        verifiedReferenceLabel ? ` (#${verifiedReferenceLabel})` : ""
+      }`;
+      const ticketSubject = String(subject || generatedSubject).trim().slice(0, 255);
+
+      // Store the attachment in R2 (the ticket table keeps the R2 key, not a
+      // local path) and drop the multer temp file once it's uploaded.
+      let attachmentUrl = null;
+      if (req.file) {
+        const fileBuffer = fs.readFileSync(req.file.path);
+        const extension = path.extname(req.file.originalname);
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}${extension}`;
+        const key = `public/support/${userId}/${fileName}`;
+
+        attachmentUrl = await uploadToR2(fileBuffer, key, req.file.mimetype);
+        fs.unlinkSync(req.file.path);
       }
 
       // check for existing open ticket in the same category
@@ -77,12 +170,16 @@ class SupportController {
        FROM support_tickets 
        WHERE user_id = ?
          AND category_id = ?
+         AND support_module = ?
+         AND reference_type <=> ?
+         AND reference_id <=> ?
          AND status IN ('open', 'in_progress')
        LIMIT 1`,
-        [userId, category_id],
+        [userId, category_id, normalizedModule, verifiedReferenceType, verifiedReferenceId],
       );
 
       if (existing.length > 0) {
+        cleanupUploadedAttachment(req.file);
         return res.status(200).json({
           success: false,
           message: "You already have an active request for this issue",
@@ -90,39 +187,17 @@ class SupportController {
         });
       }
 
-      const supportTicketColumns = await getSupportTicketColumnSet();
-      const insertColumns = [
-        "user_id",
-        "subject",
-        "description",
-        "category_id",
-        "attachment_url",
-      ];
-      const insertValues = [
-        userId,
-        subject,
-        description,
-        category_id,
-        attachmentUrl,
-      ];
-
-      if (supportTicketColumns.has("product_id")) {
-        insertColumns.push("product_id");
-        insertValues.push(product_id ? Number(product_id) : null);
-      }
-
-      if (supportTicketColumns.has("product_name")) {
-        insertColumns.push("product_name");
-        insertValues.push(product_name || null);
-      }
-
-      const placeholders = insertColumns.map(() => "?").join(", ");
-
       const [result] = await db.execute(
-        `INSERT INTO support_tickets
-       (${insertColumns.join(", ")})
-       VALUES (${placeholders})`,
-        insertValues,
+        `INSERT INTO support_tickets 
+       (user_id, subject, description, category_id, attachment_url)
+       VALUES (?, ?, ?, ?, ?)`,
+        [
+          userId,
+          subject,
+          description,
+          category_id,
+          null
+        ],
       );
 
       const ticketId = result.insertId;
@@ -139,7 +214,7 @@ class SupportController {
 
       sendNewTicketMail({
         ticketId,
-        subject,
+        subject: ticketSubject,
         description,
         category: meta?.category_name,
         user: meta?.user_name,
@@ -156,7 +231,14 @@ class SupportController {
           reference_type: "support_ticket",
           reference_id: ticketId,
           action_url: `/support/tickets/${ticketId}`,
-          metadata: { category_id, category: meta?.category_name },
+          metadata: {
+            category_id,
+            category: meta?.category_name,
+            support_module: normalizedModule,
+            reference_type: verifiedReferenceType,
+            reference_id: verifiedReferenceId,
+            reference_label: verifiedReferenceLabel,
+          },
         },
         "support ticket notification",
       );
@@ -167,6 +249,7 @@ class SupportController {
         ticket_id: result.insertId,
       });
     } catch (error) {
+      cleanupUploadedAttachment(req.file);
       console.error("Create ticket error:", error);
       return res.status(500).json({
         success: false,
@@ -205,6 +288,10 @@ class SupportController {
           st.description,
           st.category_id,
           sc.name AS category_name,
+          st.support_module,
+          st.reference_type,
+          st.reference_id,
+          st.reference_label,
           st.attachment_url,
           st.status,
           st.created_at,
@@ -218,157 +305,17 @@ class SupportController {
         [userId],
       );
 
+      const formatted = tickets.map((ticket) => ({
+        ...ticket,
+        attachment_url: getPublicUrl(ticket.attachment_url, ticket.updated_at),
+      }));
+
       return res.status(200).json({
         success: true,
-        data: tickets,
+        data: formatted,
       });
     } catch (error) {
       console.error("Get my tickets error:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Internal server error",
-      });
-    }
-  }
-
-  async getRecentOrders(req, res) {
-    try {
-      const loggedInUserId = Number(req.user?.user_id);
-      const requestedUserId = req.query.user_id
-        ? Number(req.query.user_id)
-        : loggedInUserId;
-
-      if (!loggedInUserId) {
-        return res.status(401).json({
-          success: false,
-          message: "Unauthorized user",
-        });
-      }
-
-      if (!requestedUserId) {
-        return res.status(400).json({
-          success: false,
-          message: "user_id is required",
-        });
-      }
-
-      if (requestedUserId !== loggedInUserId) {
-        return res.status(403).json({
-          success: false,
-          message: "You can only access your own orders",
-        });
-      }
-
-      const [ecommerceOrders] = await db.execute(
-        `SELECT
-          o.order_id,
-          o.order_ref,
-          o.total_amount,
-          o.product_total,
-          o.reward_discount,
-          o.reward_coins_used,
-          o.reward_earned,
-          o.reward_coins_earned,
-          o.shipping_total,
-          o.status,
-          o.cancellation_status,
-          o.expires_at,
-          o.created_at,
-          o.paid_at
-        FROM eorders o
-        WHERE o.user_id = ?
-        ORDER BY o.created_at DESC, o.order_id DESC
-        LIMIT 5`,
-        [requestedUserId],
-      );
-
-      const ecommerceOrderIds = ecommerceOrders.map((order) => order.order_id);
-      let ecommerceItems = [];
-
-      if (ecommerceOrderIds.length > 0) {
-        const placeholders = ecommerceOrderIds.map(() => "?").join(", ");
-        const [rows] = await db.execute(
-          `SELECT
-            oi.order_item_id,
-            oi.order_id,
-            oi.vendor_order_id,
-            oi.product_id,
-            oi.variant_id,
-            oi.quantity,
-            oi.price,
-            oi.reward_discount,
-            oi.reward_coins_used,
-            oi.reward_earned,
-            oi.reward_coins_earned,
-            oi.final_price,
-            oi.created_at,
-            p.product_name,
-            p.brand_name
-          FROM eorder_items oi
-          LEFT JOIN eproducts p ON p.product_id = oi.product_id
-          WHERE oi.order_id IN (${placeholders})
-          ORDER BY oi.created_at DESC, oi.order_item_id DESC`,
-          ecommerceOrderIds,
-        );
-        ecommerceItems = rows;
-      }
-
-      const ecommerceItemsByOrderId = ecommerceItems.reduce((acc, item) => {
-        if (!acc[item.order_id]) {
-          acc[item.order_id] = [];
-        }
-        acc[item.order_id].push(item);
-        return acc;
-      }, {});
-
-      const latestEcommerceOrders = ecommerceOrders.map((order) => ({
-        ...order,
-        items: ecommerceItemsByOrderId[order.order_id] || [],
-      }));
-
-      const [serviceOrders] = await db.execute(
-        `SELECT
-          so.id,
-          so.order_ref,
-          so.parent_order_id,
-          so.service_id,
-          so.variant_id,
-          so.bundle_id,
-          so.address_id,
-          so.enquiry_id,
-          so.price,
-          so.payment_id,
-          so.payment_method,
-          so.reward_coins_used,
-          so.payment_status,
-          so.status,
-          so.cancelled_at,
-          so.refund_amount,
-          so.completed_at,
-          so.reward_coins_earned,
-          so.created_at,
-          s.name AS service_name,
-          sv.variant_name,
-          sv.image_url
-        FROM service_orders so
-        LEFT JOIN services s ON s.id = so.service_id
-        LEFT JOIN service_variants sv ON sv.id = so.variant_id
-        WHERE so.user_id = ?
-        ORDER BY so.created_at DESC, so.id DESC
-        LIMIT 5`,
-        [requestedUserId],
-      );
-
-      return res.status(200).json({
-        success: true,
-        data: {
-          user_id: requestedUserId,
-          ecommerce_orders: latestEcommerceOrders,
-          service_orders: serviceOrders,
-        },
-      });
-    } catch (error) {
-      console.error("Get recent orders error:", error);
       return res.status(500).json({
         success: false,
         message: "Internal server error",

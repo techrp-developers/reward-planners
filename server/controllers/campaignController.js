@@ -113,7 +113,26 @@ class CampaignController {
         });
       }
 
-      validateRedirect(redirect_type, redirect_id, redirect_url);
+      const redirectIdNumber = Number(redirect_id);
+      const hasNumericRedirectId =
+        Number.isInteger(redirectIdNumber) && redirectIdNumber > 0;
+      const hasNoRedirectLabel =
+        String(redirect_id || "").trim().toLowerCase() === "no redirect";
+      const normalizedRedirectType = hasNoRedirectLabel
+        ? null
+        : redirect_type || null;
+      const normalizedRedirectId =
+        normalizedRedirectType && normalizedRedirectType !== "external_url" && hasNumericRedirectId
+          ? redirectIdNumber
+          : null;
+      const normalizedRedirectUrl =
+        normalizedRedirectType === "external_url" ? redirect_url : null;
+
+      validateRedirect(
+        normalizedRedirectType,
+        normalizedRedirectId,
+        normalizedRedirectUrl,
+      );
 
       if (display_order !== undefined && Number(display_order) < 0) {
         return res.status(400).json({
@@ -128,9 +147,9 @@ class CampaignController {
         banner_image: null,
         start_at,
         end_at,
-        redirect_type,
-        redirect_id,
-        redirect_url,
+        redirect_type: normalizedRedirectType,
+        redirect_id: normalizedRedirectId,
+        redirect_url: normalizedRedirectUrl,
         display_order,
         status,
       });

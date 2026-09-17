@@ -279,13 +279,19 @@ async function processDueReminders(limit = 100) {
     const payload = buildReminderPayload(reminder, reminder);
 
     try {
+      // The notification inbox is the durable delivery channel. A user may not
+      // have registered an FCM token yet, so persisting the reminder must not
+      // depend on push delivery succeeding.
+      await createInAppNotification(payload);
       const pushResult = await sendPushNotification(payload);
 
-      if (!pushResult.success) {
-        throw new Error(pushResult.reason || pushResult.error?.message || "Push delivery failed");
+      if (!pushResult.success && !pushResult.skipped) {
+        console.warn(
+          `[TodoReminder] Push delivery failed for reminder ${reminder.id}; ` +
+            "the in-app reminder was still created.",
+        );
       }
 
-      await createInAppNotification(payload);
       await markReminderSent(reminder.id);
       console.log(
         `[TodoReminder] Reminder ${reminder.id} sent for Todo ${reminder.todo_id} (${reminder.reminder_type}).`,

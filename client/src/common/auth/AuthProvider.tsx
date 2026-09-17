@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { AxiosError } from "axios";
@@ -28,6 +28,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(false);
   const [initializing, setInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Any explicit auth action invalidates older /auth/me requests. Without
+  // this guard a slow response for the previous account can arrive after a
+  // successful login and replace the newly authenticated user in React state.
+  const authGeneration = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -35,11 +39,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     const restoreSession = async () => {
+      const generation = authGeneration.current;
       try {
-        const { data } = await api.get("/auth/me");
-        if (active && data?.success) setUser(data.data);
+        const { data } = await api.get("/auth/me", {
+          headers: { "Cache-Control": "no-cache" },
+          params: { _session: Date.now() },
+        });
+        if (active && generation === authGeneration.current && data?.success) {
+          setUser(data.data);
+        }
       } catch {
-        if (active) setUser(null);
+        if (active && generation === authGeneration.current) setUser(null);
       } finally {
         if (active) setInitializing(false);
       }
@@ -62,7 +72,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setInitializing(false);
     } else void restoreSession();
 
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
     const expireSession = () => {
+      authGeneration.current += 1;
       setUser(null);
       const path = window.location.pathname.replace(/^\/crm(?=\/|$)/, "") || "/";
       const publicAuthPaths = new Set([
@@ -75,7 +90,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (!publicAuthPaths.has(path)) navigate("/login", { replace: true });
     };
     window.addEventListener("auth:session-expired", expireSession);
-    return () => { active = false; window.removeEventListener("auth:session-expired", expireSession); };
+    return () => { window.removeEventListener("auth:session-expired", expireSession); };
   }, [navigate]);
 
   const resolveRoute = (role: User["role"]) => {
@@ -103,6 +118,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     case "flea_market_manager":
       return "flea_market_manager";
+
+    case "rm":
+      return "rm";
 
     default:
       return "admin";
@@ -135,12 +153,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     case "flea_market_manager":
       return "/flea-market/dashboard";
 
+    case "rm":
+      return "/rm/dashboard";
+
     default:
       return "/";
   }
 };
   const login = async (email: string, password: string) => {
     setError(null);
+    authGeneration.current += 1;
+    // Never allow a previous account's role to influence a new login attempt.
+    setUser(null);
 
     try {
       setLoading(true);
@@ -157,10 +181,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         throw new Error(data?.message || "Login failed");
       }
 
-      const { user } = data.data;
-      setUser(user);
+      const rawLoginUser = data.data?.user as User | undefined;
+      const normalizedRole = String(rawLoginUser?.role || "").trim().toLowerCase() as User["role"];
+      const loginUser = rawLoginUser ? { ...rawLoginUser, role: normalizedRole } : undefined;
+      if (!loginUser) throw new Error("The server did not return the signed-in user.");
 
-      navigate(resolveDashboard(user.role), { replace: true });
+      const dashboard = resolveDashboard(loginUser.role);
+      if (dashboard === "/") {
+        throw new Error(`No portal is configured for the account role: ${loginUser.role || "unknown"}.`);
+      }
+
+      // The login response is authoritative. Session restoration through
+      // /auth/me remains responsible for refreshes and future page loads.
+      setUser(loginUser);
+
+      navigate(dashboard, { replace: true });
     } catch (err: unknown) {
       if (err instanceof AxiosError) {
         const code = err.response?.data?.code;
@@ -181,6 +216,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } else {
         setError("Login failed");
       }
+      throw err;
     } finally {
       setLoading(false);
     }
@@ -284,6 +320,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = async () => {
+    authGeneration.current += 1;
     try { await api.post("/auth/logout"); } catch { /* Clear local UI state even if the server is unavailable. */ }
     setUser(null);
     navigate("/login");

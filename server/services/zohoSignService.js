@@ -51,9 +51,10 @@ function authorization(token) {
 }
 
 function safeReturnUrl(returnUrl) {
-  const allowedOrigins = String(process.env.CLIENT_URL || "http://localhost:5173").split(",").map((value) => value.trim()).filter(Boolean);
+  const allowedAppUrls = String(process.env.CLIENT_APP_URL || "http://localhost:5173/client-onboarding").split(",").map((value) => value.trim().replace(/\/$/, "")).filter(Boolean);
   const parsed = new URL(returnUrl);
-  if (!allowedOrigins.includes(parsed.origin) || parsed.pathname !== "/client-onboarding") throw new Error("Invalid signing return URL");
+  const normalizedReturnUrl = `${parsed.origin}${parsed.pathname}`.replace(/\/$/, "");
+  if (!allowedAppUrls.includes(normalizedReturnUrl)) throw new Error("Invalid signing return URL");
   return parsed;
 }
 
@@ -91,7 +92,9 @@ async function createSigningSession({ recipientName, recipientEmail, companyName
         is_embedded: true,
       }],
       notes: "Reward Planners client onboarding agreement",
-      redirect_pages: redirectPages,
+      // Zoho requires HTTPS redirect URLs. During local HTTP development the
+      // client keeps this page open and polls the request status instead.
+      ...(callback.protocol === "https:" ? { redirect_pages: redirectPages } : {}),
     },
   };
   const createParams = new URLSearchParams({ data: JSON.stringify(payload), is_quicksend: "true" });
@@ -100,7 +103,12 @@ async function createSigningSession({ recipientName, recipientEmail, companyName
   const actionId = created.requests?.actions?.find((action) => action.action_type === "SIGN")?.action_id;
   if (!requestId || !actionId) throw new Error("Zoho did not create a signing request");
 
-  const embedParams = new URLSearchParams({ host: callback.origin });
+  // `host` is required when the signing page is rendered inside an iframe.
+  // This flow uses a top-level redirect, and Zoho rejects an HTTP localhost
+  // value with "Url has invalid scheme". Keep the host restriction for HTTPS
+  // deployments while allowing local top-level signing tests.
+  const embedParams = new URLSearchParams();
+  if (callback.protocol === "https:") embedParams.set("host", callback.origin);
   const embedded = await zohoJson(`${config.signBase}/api/v1/requests/${encodeURIComponent(requestId)}/actions/${encodeURIComponent(actionId)}/embedtoken`, { method: "POST", headers: { ...authorization(token), "Content-Type": "application/x-www-form-urlencoded" }, body: embedParams });
   if (!embedded.sign_url) throw new Error("Zoho did not return a signing URL");
 

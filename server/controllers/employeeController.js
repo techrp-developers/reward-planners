@@ -488,7 +488,7 @@ class EmployeeController {
     if (!req.file) {
       return res.status(400).json({
         success: false,
-        message: "CSV file is required in the file field",
+        message: "CSV or Excel file is required in the file field",
       });
     }
 
@@ -502,11 +502,11 @@ class EmployeeController {
 
     let workbook;
     try {
-      workbook = XLSX.read(req.file.buffer, { type: "buffer", cellDates: false });
+      workbook = XLSX.read(req.file.buffer, { type: "buffer", cellDates: true });
     } catch {
       return res.status(400).json({
         success: false,
-        message: "Unable to read the uploaded CSV file",
+        message: "Unable to read the uploaded CSV or Excel file",
       });
     }
 
@@ -517,7 +517,7 @@ class EmployeeController {
     if (!rows.length) {
       return res.status(400).json({
         success: false,
-        message: "CSV file does not contain employee rows",
+        message: "The uploaded file does not contain employee rows",
       });
     }
     if (rows.length > 1000) {
@@ -580,7 +580,7 @@ class EmployeeController {
       console.error("Bulk employee upload error:", error);
       return res.status(500).json({
         success: false,
-        message: "Unable to process employee CSV",
+        message: "Unable to process the employee file",
       });
     } finally {
       connection.release();

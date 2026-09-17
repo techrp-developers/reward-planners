@@ -1,6 +1,7 @@
 const ServiceOrderDocumentModel = require("../models/serviceOrderDocumentModel");
 const fs = require("fs");
 const path = require("path");
+const db = require("../../../../config/database");
 
 class ServiceOrderDocumentController {
   // service document page
@@ -60,6 +61,26 @@ class ServiceOrderDocumentController {
         return res.status(400).json({
           success: false,
           message: "parentOrderId required",
+        });
+      }
+
+      const [orders] = await db.execute(
+        `SELECT payment_status
+         FROM service_orders
+         WHERE parent_order_id = ? AND user_id = ?`,
+        [parentOrderId, userId],
+      );
+
+      if (!orders.length) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Order not found" });
+      }
+
+      if (orders.some((order) => order.payment_status !== "paid")) {
+        return res.status(403).json({
+          success: false,
+          message: "Complete payment before uploading documents",
         });
       }
 

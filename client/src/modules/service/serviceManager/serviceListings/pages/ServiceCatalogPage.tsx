@@ -6,8 +6,8 @@ import Swal from "sweetalert2";
 import { api } from "../../../../../common/api/api";
 import { routes } from "../../../../../routes";
 
-interface Category { id: number; name: string; icon?: string | null; status?: number; }
-interface Service { id: number; category_id: number; name: string; description?: string; price: number; estimated_days?: number; service_image?: string | null; status?: number; }
+interface Category { id: number; name: string; icon?: string | null; image_url?: string | null; status?: number; }
+interface Service { id: number; category_id: number; name: string; description?: string; price: number; estimated_days?: number; service_image?: string | null; image_url?: string | null; status?: number; }
 interface Variant { id: number; service_id?: number; variant_name: string; title: string; short_description: string; price: number; image_url?: string | null; status?: number; }
 type Entity = Category | Service | Variant;
 type Kind = "category" | "service" | "variant";

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Check, Sparkles } from "lucide-react";
+import { Check } from "lucide-react";
 import logoImage from "../assets/logo.svg";
 
 type AuthShellProps = {

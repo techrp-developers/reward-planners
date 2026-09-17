@@ -2,9 +2,12 @@ const crypto = require("crypto");
 const db = require("../config/database");
 const { generateToken } = require("./jwt");
 
-const ACCESS_COOKIE = "rp_access";
-const REFRESH_COOKIE = "rp_refresh";
-const CSRF_COOKIE = "rp_csrf";
+// Versioned names prevent legacy host/domain cookies from selecting the wrong
+// account after the auth storage migration.
+const ACCESS_COOKIE = "rp_access_v2";
+const REFRESH_COOKIE = "rp_refresh_v2";
+const CSRF_COOKIE = "rp_csrf_v2";
+const LEGACY_COOKIES = ["rp_access", "rp_refresh", "rp_csrf"];
 const REFRESH_DAYS = 7;
 let tableReady;
 
@@ -44,6 +47,8 @@ function cookieOptions(httpOnly, maxAge) {
 }
 
 function setSessionCookies(res, userId, refreshToken) {
+  const legacyBase = { secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/" };
+  for (const name of LEGACY_COOKIES) res.clearCookie(name, { ...legacyBase, httpOnly: name !== "rp_csrf" });
   res.cookie(ACCESS_COOKIE, generateToken({ user_id: userId, type: "access" }), cookieOptions(true, 15 * 60 * 1000));
   res.cookie(REFRESH_COOKIE, refreshToken, cookieOptions(true, REFRESH_DAYS * 24 * 60 * 60 * 1000));
   res.cookie(CSRF_COOKIE, randomToken(), cookieOptions(false, REFRESH_DAYS * 24 * 60 * 60 * 1000));
@@ -54,13 +59,15 @@ function clearSessionCookies(res) {
   res.clearCookie(ACCESS_COOKIE, { ...base, httpOnly: true });
   res.clearCookie(REFRESH_COOKIE, { ...base, httpOnly: true });
   res.clearCookie(CSRF_COOKIE, { ...base, httpOnly: false });
+  for (const name of LEGACY_COOKIES) res.clearCookie(name, { ...base, httpOnly: name !== "rp_csrf" });
 }
 
 function isCsrfValid(req) {
   const cookies = parseCookies(req);
   const header = req.get("x-csrf-token");
-  if (!cookies[CSRF_COOKIE] || !header) return false;
-  const first = Buffer.from(cookies[CSRF_COOKIE]);
+  const csrfCookie = cookies[CSRF_COOKIE] || cookies.rp_csrf;
+  if (!csrfCookie || !header) return false;
+  const first = Buffer.from(csrfCookie);
   const second = Buffer.from(header);
   return first.length === second.length && crypto.timingSafeEqual(first, second);
 }
@@ -78,7 +85,8 @@ async function issueSession(userId, req, res, familyId = crypto.randomUUID()) {
 
 async function rotateSession(req, res) {
   await ensureRefreshTokenTable();
-  const rawToken = parseCookies(req)[REFRESH_COOKIE];
+  const cookies = parseCookies(req);
+  const rawToken = cookies[REFRESH_COOKIE] || cookies.rp_refresh;
   if (!rawToken || !isCsrfValid(req)) return null;
   const tokenHash = hashToken(rawToken);
   const connection = await db.getConnection();
@@ -111,7 +119,8 @@ async function rotateSession(req, res) {
 
 async function revokeSession(req, res) {
   await ensureRefreshTokenTable();
-  const rawToken = parseCookies(req)[REFRESH_COOKIE];
+  const cookies = parseCookies(req);
+  const rawToken = cookies[REFRESH_COOKIE] || cookies.rp_refresh;
   if (rawToken) await db.execute("UPDATE auth_refresh_tokens SET revoked_at = COALESCE(revoked_at, NOW()) WHERE token_hash = ?", [hashToken(rawToken)]);
   clearSessionCookies(res);
 }

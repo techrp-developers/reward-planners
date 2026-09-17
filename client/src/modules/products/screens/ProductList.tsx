@@ -29,6 +29,11 @@ import { AxiosError } from "axios";
 
 // const API_BASEIMAGE_URL = "https://rewardplanners.com/api/crm";
 const R2_BASE_URL = "https://cdn.rewardplanners.com";
+const VENDOR_PRODUCT_LIST_STATE = "rp-vendor-product-list-state";
+const loadVendorListState = () => {
+  try { return JSON.parse(sessionStorage.getItem(VENDOR_PRODUCT_LIST_STATE) || "{}"); }
+  catch { return {}; }
+};
 
 /* ================================
        TYPES
@@ -115,6 +120,12 @@ interface Subcategory {
   subcategory_name: string;
 }
 
+interface SubSubCategory {
+  sub_subcategory_id: number;
+  subcategory_id: number;
+  name: string;
+}
+
 interface BulkUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -122,6 +133,8 @@ interface BulkUploadModalProps {
   setCategoryId: (val: string) => void;
   subcategoryId: string;
   setSubcategoryId: (val: string) => void;
+  subSubCategoryId: string;
+  setSubSubCategoryId: (val: string) => void;
   onFileUpload: (file: File) => Promise<boolean>;
   validating: boolean;
 }
@@ -140,6 +153,7 @@ interface BulkValidationResult {
   invalidRows: BulkInvalidRow[];
   categoryId: number;
   subcategoryId: number;
+  subSubCategoryId: number | null;
 }
 
 const apiErrorMessage = (error: unknown, fallback: string) =>
@@ -475,11 +489,14 @@ const BulkUploadModal = ({
   setCategoryId,
   subcategoryId,
   setSubcategoryId,
+  subSubCategoryId,
+  setSubSubCategoryId,
   onFileUpload,
   validating,
 }: BulkUploadModalProps) => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
+  const [subSubCategories, setSubSubCategories] = useState<SubSubCategory[]>([]);
 
   const [file, setFile] = useState<File | null>(null);
 
@@ -526,12 +543,36 @@ const BulkUploadModal = ({
   }, [categoryId]);
 
   /* ================================
+        FETCH SUB-SUBCATEGORIES
+  ================================= */
+  useEffect(() => {
+    if (!subcategoryId) {
+      setSubSubCategories([]);
+      setSubSubCategoryId("");
+      return;
+    }
+
+    const fetchSubSubCategories = async () => {
+      try {
+        const res = await api.get(`/subsubcategory/${subcategoryId}`);
+        if (res.data.success) setSubSubCategories(res.data.data);
+      } catch (err) {
+        console.error("Failed to fetch sub-subcategories", err);
+      }
+    };
+
+    fetchSubSubCategories();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subcategoryId]);
+
+  /* ================================
         RESET ON CLOSE
   ================================= */
   useEffect(() => {
     if (!isOpen) {
       setFile(null);
       setSubcategories([]);
+      setSubSubCategories([]);
     }
   }, [isOpen]);
 
@@ -553,8 +594,11 @@ const BulkUploadModal = ({
     try {
       setTemplateLoading(true);
 
+      const params = new URLSearchParams({ categoryId, subcategoryId });
+      if (subSubCategoryId) params.set("subSubCategoryId", subSubCategoryId);
+
       const res = await api.get(
-        `/category/attributes-template?categoryId=${categoryId}&subcategoryId=${subcategoryId}`,
+        `/category/attributes-template?${params.toString()}`,
         { responseType: "blob" },
       );
 
@@ -607,12 +651,13 @@ const BulkUploadModal = ({
         {/* CATEGORY + TEMPLATE */}
         <details className="group mb-5 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
         <summary className="cursor-pointer list-none text-sm font-bold text-slate-700">Need to download a new template? <span className="font-normal text-slate-500">Choose its category here</span></summary>
-        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
           <select
             value={categoryId}
             onChange={(e) => {
               setCategoryId(e.target.value);
               setSubcategoryId("");
+              setSubSubCategoryId("");
             }}
             className="border p-3 rounded-lg outline-none focus:ring-2 focus:ring-[#852BAF] cursor-pointer"
           >
@@ -626,7 +671,10 @@ const BulkUploadModal = ({
 
           <select
             value={subcategoryId}
-            onChange={(e) => setSubcategoryId(e.target.value)}
+            onChange={(e) => {
+              setSubcategoryId(e.target.value);
+              setSubSubCategoryId("");
+            }}
             className="border p-3 rounded-lg outline-none focus:ring-2 focus:ring-[#852BAF] cursor-pointer"
             disabled={!categoryId}
           >
@@ -634,6 +682,22 @@ const BulkUploadModal = ({
             {subcategories.map((s) => (
               <option key={s.subcategory_id} value={s.subcategory_id}>
                 {s.subcategory_name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={subSubCategoryId}
+            onChange={(e) => setSubSubCategoryId(e.target.value)}
+            className="border p-3 rounded-lg outline-none focus:ring-2 focus:ring-[#852BAF] cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={!subcategoryId || !subSubCategories.length}
+          >
+            <option value="">
+              {subSubCategories.length ? "Select Type / Sub-type" : "No type / sub-type"}
+            </option>
+            {subSubCategories.map((s) => (
+              <option key={s.sub_subcategory_id} value={s.sub_subcategory_id}>
+                {s.name}
               </option>
             ))}
           </select>
@@ -707,17 +771,18 @@ const BulkUploadModal = ({
        MAIN COMPONENT
 ================================ */
 export default function ProductManagerList() {
+  const [savedListState] = useState(loadVendorListState);
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [tableLoading, setTableLoading] = useState(false);
-  const [searchInput, setSearchInput] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchInput, setSearchInput] = useState(String(savedListState.searchQuery || ""));
+  const [searchQuery, setSearchQuery] = useState(String(savedListState.searchQuery || ""));
 
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [brandInput, setBrandInput] = useState("");
-  const [brandFilter, setBrandFilter] = useState("");
-  const [sortBy, setSortBy] = useState<string>("created_at");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [statusFilter, setStatusFilter] = useState<string>(String(savedListState.statusFilter || "all"));
+  const [brandInput, setBrandInput] = useState(String(savedListState.brandFilter || ""));
+  const [brandFilter, setBrandFilter] = useState(String(savedListState.brandFilter || ""));
+  const [sortBy, setSortBy] = useState<string>(String(savedListState.sortBy || "created_at"));
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">(savedListState.sortOrder === "asc" ? "asc" : "desc");
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [reportDownloading, setReportDownloading] = useState(false);
@@ -726,15 +791,20 @@ export default function ProductManagerList() {
   const [validationResult, setValidationResult] = useState<BulkValidationResult | null>(null);
   const [categoryId, setCategoryId] = useState("");
   const [subcategoryId, setSubcategoryId] = useState("");
+  const [subSubCategoryId, setSubSubCategoryId] = useState("");
   const [validating, setValidating] = useState(false);
   const [bulkUploading, setBulkUploading] = useState(false);
 
   const [pagination, setPagination] = useState({
-    currentPage: 1,
+    currentPage: Math.max(1, Number(savedListState.currentPage) || 1),
     totalPages: 1,
     totalItems: 0,
     itemsPerPage: 10,
   });
+
+  useEffect(() => {
+    sessionStorage.setItem(VENDOR_PRODUCT_LIST_STATE, JSON.stringify({ searchQuery, statusFilter, brandFilter, sortBy, sortOrder, currentPage: pagination.currentPage }));
+  }, [searchQuery, statusFilter, brandFilter, sortBy, sortOrder, pagination.currentPage]);
 
   const [stats, setStats] = useState<Stats>({
     total: 0,
@@ -774,6 +844,7 @@ export default function ProductManagerList() {
       setValidationResult(data);
       setCategoryId(String(data.categoryId));
       setSubcategoryId(String(data.subcategoryId));
+      setSubSubCategoryId(data.subSubCategoryId ? String(data.subSubCategoryId) : "");
 
       Swal.fire({
         icon: "success",
@@ -806,6 +877,7 @@ export default function ProductManagerList() {
       const res = await api.post("/product/bulk-upload", {
         categoryId,
         subcategoryId,
+        subSubCategoryId: subSubCategoryId || null,
         rows: validationResult.validRows,
       });
 
@@ -934,8 +1006,11 @@ export default function ProductManagerList() {
     }
 
     debounceRef.current = window.setTimeout(() => {
-      setPagination((p) => ({ ...p, currentPage: 1 }));
-      setSearchQuery(searchInput.trim());
+      const nextSearch = searchInput.trim();
+      if (nextSearch !== searchQuery) {
+        setPagination((p) => ({ ...p, currentPage: 1 }));
+        setSearchQuery(nextSearch);
+      }
     }, 450);
 
     return () => {
@@ -943,7 +1018,7 @@ export default function ProductManagerList() {
         clearTimeout(debounceRef.current);
       }
     };
-  }, [searchInput]);
+  }, [searchInput, searchQuery]);
 
   useEffect(() => {
     if (brandDebounceRef.current) {
@@ -951,8 +1026,11 @@ export default function ProductManagerList() {
     }
 
     brandDebounceRef.current = window.setTimeout(() => {
-      setPagination((p) => ({ ...p, currentPage: 1 }));
-      setBrandFilter(brandInput.trim());
+      const nextBrand = brandInput.trim();
+      if (nextBrand !== brandFilter) {
+        setPagination((p) => ({ ...p, currentPage: 1 }));
+        setBrandFilter(nextBrand);
+      }
     }, 450);
 
     return () => {
@@ -960,7 +1038,7 @@ export default function ProductManagerList() {
         clearTimeout(brandDebounceRef.current);
       }
     };
-  }, [brandInput]);
+  }, [brandInput, brandFilter]);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -1164,6 +1242,8 @@ export default function ProductManagerList() {
         setCategoryId={setCategoryId}
         subcategoryId={subcategoryId}
         setSubcategoryId={setSubcategoryId}
+        subSubCategoryId={subSubCategoryId}
+        setSubSubCategoryId={setSubSubCategoryId}
         onFileUpload={handleFileUpload}
         validating={validating}
       />

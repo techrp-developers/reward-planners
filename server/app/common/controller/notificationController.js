@@ -1,15 +1,25 @@
 const NotificationModel = require("../models/notificationModel");
 
+function requireUserId(req, res) {
+  const userId = req.user?.user_id;
+  if (!userId) {
+    res.status(401).json({ success: false, message: "Authentication required" });
+    return null;
+  }
+  return userId;
+}
+
 class NotificationController {
   /* ================================
      GET MY NOTIFICATIONS
   ================================= */
   async getMyNotifications(req, res) {
     try {
-      const userId = req.user?.user_id || 1;
+      const userId = requireUserId(req, res);
+      if (!userId) return;
 
       const notifications =
-        await NotificationModel.getByUser(userId);
+        await NotificationModel.getByUser(userId, req.query.limit);
 
       return res.json({
         success: true,
@@ -30,7 +40,8 @@ class NotificationController {
   ================================= */
   async markAsRead(req, res) {
     try {
-      const userId = req.user?.user_id || 1;
+      const userId = requireUserId(req, res);
+      if (!userId) return;
       const { notification_id } = req.params;
 
       const updated =
@@ -65,7 +76,8 @@ class NotificationController {
   ================================= */
   async markAllAsRead(req, res) {
     try {
-      const userId = req.user?.user_id || 1;
+      const userId = requireUserId(req, res);
+      if (!userId) return;
 
       await NotificationModel.markAllAsRead(userId);
 
@@ -88,7 +100,8 @@ class NotificationController {
   ================================= */
   async getUnreadBadge(req, res) {
     try {
-      const userId = req.user?.user_id || 1;
+      const userId = requireUserId(req, res);
+      if (!userId) return;
 
       const count =
         await NotificationModel.getUnreadCount(userId);
@@ -112,7 +125,8 @@ class NotificationController {
   ================================= */
   async deleteNotification(req, res) {
     try {
-      const userId = req.user?.user_id || 1;
+      const userId = requireUserId(req, res);
+      if (!userId) return;
       const { notification_id } = req.params;
 
       const deleted =

@@ -13,7 +13,6 @@ import {
   FiGift,
   FiLock,
   FiUser,
-  FiUserCheck,
   FiBarChart2,
   FiZap,
 } from "react-icons/fi";
@@ -60,12 +59,6 @@ export default function ManagerNavbar() {
       Icon: FiUsers,
       type: "link",
       badgeCount: unreadCountByCategory("vendor_onboarding"),
-    },
-    {
-      label: "Employees",
-      to: routes.manager.employees,
-      Icon: FiUserCheck,
-      type: "link",
     },
     {
       label: "Products",
@@ -121,7 +114,6 @@ export default function ManagerNavbar() {
       Icon: FiBarChart2,
       type: "dropdown",
       children: [
-        { label: "Usage Report", to: routes.manager.reports.usage },
         { label: "Stock Report", to: routes.manager.reports.stock },
         { label: "Order Report", to: routes.manager.reports.orders },
       ],

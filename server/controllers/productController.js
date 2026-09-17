@@ -17,11 +17,19 @@ const BULK_BASE_FIELDS = new Set([
   "delivery_sla_min_days", "delivery_sla_max_days", "shipping_class",
 ]);
 
-async function getBulkUploadContext(executor, categoryId, subcategoryId) {
+async function getBulkUploadContext(executor, categoryId, subcategoryId, subSubCategoryId) {
   const category = Number(categoryId);
   const subcategory = Number(subcategoryId);
   if (!Number.isInteger(category) || !Number.isInteger(subcategory)) {
     const error = new Error("A valid category and subcategory are required");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const isSubSubCategoryBlank = subSubCategoryId === undefined || subSubCategoryId === null || subSubCategoryId === "";
+  const subSubCategory = isSubSubCategoryBlank ? null : Number(subSubCategoryId);
+  if (!isSubSubCategoryBlank && !Number.isInteger(subSubCategory)) {
+    const error = new Error("Sub-subcategory must be a valid selection");
     error.statusCode = 400;
     throw error;
   }
@@ -34,6 +42,18 @@ async function getBulkUploadContext(executor, categoryId, subcategoryId) {
     const error = new Error("The selected subcategory does not belong to the selected category");
     error.statusCode = 400;
     throw error;
+  }
+
+  if (subSubCategory) {
+    const [[subSubMapping]] = await executor.execute(
+      "SELECT sub_subcategory_id FROM sub_sub_categories WHERE sub_subcategory_id = ? AND subcategory_id = ? LIMIT 1",
+      [subSubCategory, subcategory],
+    );
+    if (!subSubMapping) {
+      const error = new Error("The selected sub-subcategory does not belong to the selected subcategory");
+      error.statusCode = 400;
+      throw error;
+    }
   }
 
   const [attributes] = await executor.execute(
@@ -55,7 +75,7 @@ async function getBulkUploadContext(executor, categoryId, subcategoryId) {
       options: attribute.options ? attribute.options.split(",").map((value) => value.trim()) : [],
     },
   ]));
-  return { category, subcategory, attributes, attributeMap };
+  return { category, subcategory, subSubCategory, attributes, attributeMap };
 }
 
 function validateBulkRows(rows, attributeMap) {
@@ -74,7 +94,6 @@ function validateBulkRows(rows, attributeMap) {
     if (isBlank(row.brandName)) errors.push("brandName is required");
 
     if (!isBlank(row.gstSlab) && (!Number.isFinite(Number(row.gstSlab)) || Number(row.gstSlab) < 0 || Number(row.gstSlab) > 100)) errors.push("gstSlab must be a number between 0 and 100");
-    if (!isBlank(row.hsnSacCode) && !/^\d{6,8}$/.test(String(row.hsnSacCode).trim())) errors.push("hsnSacCode must contain 6 to 8 digits");
     if (!isBlank(row.is_discount_eligible) && !isFlag(row.is_discount_eligible)) errors.push("is_discount_eligible must be 0 or 1");
     if (!isBlank(row.is_returnable) && !isFlag(row.is_returnable)) errors.push("is_returnable must be 0 or 1");
     if (!isBlank(row.shipping_class) && !["standard", "bulky", "fragile"].includes(String(row.shipping_class).toLowerCase())) errors.push("shipping_class must be standard, bulky, or fragile");
@@ -316,7 +335,7 @@ class ProductController {
   // validate Bulk upload
   async bulkValidate(req, res) {
     try {
-      let { categoryId, subcategoryId, rows } = req.body;
+      let { categoryId, subcategoryId, subSubCategoryId, rows } = req.body;
 
       if (req.file) {
         const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
@@ -331,6 +350,7 @@ class ProductController {
         const metadata = Object.fromEntries(metadataRows.slice(1).map((row) => [String(row[0]).trim(), row[1]]));
         categoryId = metadata.categoryId;
         subcategoryId = metadata.subcategoryId;
+        subSubCategoryId = metadata.subSubCategoryId || null;
 
         const raw = XLSX.utils.sheet_to_json(dataSheet, { header: 1, defval: "", raw: false });
         const headerRowIndex = raw.findIndex((row) => row.some((cell) => String(cell).trim() === "productName"));
@@ -353,7 +373,7 @@ class ProductController {
       if (!Array.isArray(rows) || rows.length > 500) {
         return res.status(400).json({ success: false, message: "Upload between 1 and 500 product rows" });
       }
-      const context = await getBulkUploadContext(db, categoryId, subcategoryId);
+      const context = await getBulkUploadContext(db, categoryId, subcategoryId, subSubCategoryId);
 
       // 1. Fetch attributes (reuse your query)
       const [attributes] = await db.execute(
@@ -407,10 +427,6 @@ class ProductController {
 
         if (row.gstSlab && (row.gstSlab < 0 || row.gstSlab > 100)) {
           errors.push("gstSlab must be between 0–100");
-        }
-
-        if (row.hsnSacCode && !/^\d{6,8}$/.test(String(row.hsnSacCode).trim())) {
-          errors.push("hsnSacCode must be 6–8 digits");
         }
 
         if (row.is_discount_eligible !== "" && row.is_discount_eligible != null && !["0", "1", 0, 1, false, true, "false", "true"].includes(row.is_discount_eligible)) {
@@ -498,6 +514,7 @@ class ProductController {
         success: true,
         categoryId: Number(categoryId),
         subcategoryId: Number(subcategoryId),
+        subSubCategoryId: context.subSubCategory,
         validCount: checked.validRows.length,
         invalidCount: checked.invalidRows.length,
         validRows: checked.validRows,
@@ -517,7 +534,7 @@ class ProductController {
     const connection = await db.getConnection();
 
     try {
-      const { categoryId, subcategoryId, rows } = req.body;
+      const { categoryId, subcategoryId, subSubCategoryId, rows } = req.body;
       const vendorId = req.user?.vendor_id;
 
       if (!vendorId) {
@@ -531,7 +548,7 @@ class ProductController {
         });
       }
 
-      const context = await getBulkUploadContext(connection, categoryId, subcategoryId);
+      const context = await getBulkUploadContext(connection, categoryId, subcategoryId, subSubCategoryId);
       const checked = validateBulkRows(rows, context.attributeMap);
       if (checked.invalidRows.length) {
         return res.status(422).json({
@@ -614,6 +631,7 @@ class ProductController {
               ...productData,
               category_id: categoryId,
               subcategory_id: subcategoryId,
+              sub_subcategory_id: context.subSubCategory,
             },
           );
 

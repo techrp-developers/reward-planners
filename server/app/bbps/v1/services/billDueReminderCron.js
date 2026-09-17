@@ -26,7 +26,7 @@ async function checkBillDueDates() {
   try {
     const [fetches] = await db.query(
       `
-      SELECT f.id, f.user_id, f.amount, f.provider_response, c.fcm_token
+      SELECT f.id, f.user_id, f.amount, f.provider_response
       FROM bbps_bill_fetches f
       INNER JOIN customer c ON f.user_id = c.user_id
       LEFT JOIN notifications n ON n.user_id = f.user_id 
@@ -36,8 +36,6 @@ async function checkBillDueDates() {
       WHERE f.consumed_at IS NULL
         AND f.expires_at > NOW()
         AND n.notification_id IS NULL
-        AND c.fcm_token IS NOT NULL
-        AND c.fcm_token != ''
       `
     );
 
@@ -91,7 +89,7 @@ async function checkRechargeReminders() {
   try {
     const [recharges] = await db.query(
       `
-      SELECT DISTINCT t.user_id, t.amount, t.utility_acc_no, c.fcm_token, t.id, t.created_at
+      SELECT DISTINCT t.user_id, t.amount, t.utility_acc_no, t.id, t.created_at
       FROM bbps_transactions t
       INNER JOIN customer c ON t.user_id = c.user_id
       LEFT JOIN notifications n ON n.user_id = t.user_id 
@@ -102,8 +100,6 @@ async function checkRechargeReminders() {
         AND t.created_at >= DATE_SUB(CURDATE(), INTERVAL 28 DAY)
         AND t.created_at < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL 28 DAY), INTERVAL 1 DAY)
         AND n.notification_id IS NULL
-        AND c.fcm_token IS NOT NULL
-        AND c.fcm_token != ''
       `
     );
 
