@@ -335,3 +335,43 @@ Activation OTP email failed: Error: Invalid login: 535-5.7.8 Username and Passwo
 [2026-09-16T11:44:30.307Z] [PID: 24900] [32m[NODE-CRON][32m [33m[WARN][0m missed execution at Wed Sep 16 2026 17:00:00 GMT+0530 (India Standard Time)! Possible blocking IO or high CPU user at the same process used by node-cron.
 [2026-09-16T11:44:30.324Z] [PID: 24900] [32m[NODE-CRON][32m [33m[WARN][0m missed execution at Wed Sep 16 2026 17:00:00 GMT+0530 (India Standard Time)! Possible blocking IO or high CPU user at the same process used by node-cron.
 [2026-09-16T11:44:30.346Z] [PID: 24900] [32m[NODE-CRON][32m [33m[WARN][0m missed execution at Wed Sep 16 2026 17:00:00 GMT+0530 (India Standard Time)! Possible blocking IO or high CPU user at the same process used by node-cron.
+[DEV OTP] Generated customer OTP: 265199
+Activation OTP email failed: Error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d2e1a72fcca58-87201d179aesm1196442b3a.50 - gsmtp
+    at SMTPConnection._formatError (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection._actionAUTHComplete (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:1617:34)
+    at SMTPConnection.<anonymous> (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:556:26)
+    at SMTPConnection._processResponse (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+    at TLSSocket.emit (node:events:508:28)
+    at addChunk (node:internal/streams/readable:559:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+    at Readable.push (node:internal/streams/readable:390:5)
+    at TLSWrap.onStreamRead (node:internal/stream_base_commons:189:23) {
+  code: 'EAUTH',
+  response: '535-5.7.8 Username and Password not accepted. For more information, go to\n' +
+    '535 5.7.8  https://support.google.com/mail/?p=BadCredentials d2e1a72fcca58-87201d179aesm1196442b3a.50 - gsmtp',
+  responseCode: 535,
+  command: 'AUTH PLAIN'
+}
+[DEV OTP] Generated customer OTP: 809445
+Activation OTP email failed: Error: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-2dd89eb7c87sm10803175ad.34 - gsmtp
+    at SMTPConnection._formatError (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:809:19)
+    at SMTPConnection._actionAUTHComplete (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:1617:34)
+    at SMTPConnection.<anonymous> (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:556:26)
+    at SMTPConnection._processResponse (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:993:20)
+    at SMTPConnection._onData (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:774:14)
+    at SMTPConnection._onSocketData (C:\xampp\htdocs\rewardReactApp\server\node_modules\nodemailer\lib\smtp-connection\index.js:195:44)
+    at TLSSocket.emit (node:events:508:28)
+    at addChunk (node:internal/streams/readable:559:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+    at Readable.push (node:internal/streams/readable:390:5)
+    at TLSWrap.onStreamRead (node:internal/stream_base_commons:189:23) {
+  code: 'EAUTH',
+  response: '535-5.7.8 Username and Password not accepted. For more information, go to\n' +
+    '535 5.7.8  https://support.google.com/mail/?p=BadCredentials d9443c01a7336-2dd89eb7c87sm10803175ad.34 - gsmtp',
+  responseCode: 535,
+  command: 'AUTH PLAIN'
+}
