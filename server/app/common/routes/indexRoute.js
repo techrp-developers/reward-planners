@@ -12,6 +12,7 @@ const globalRoutes = require("./globalRoute");
 const cmsRoutes = require("./cmsRoute");
 const statusRoutes = require("./statusRoute");
 const pollRoutes = require("./pollRoute");
+const otaRoutes = require("./otaRoute");
 
 router.use("/auth", authRoutes);
 router.use("/global", globalRoutes);
@@ -24,5 +25,6 @@ router.use("/wallet", walletRoutes);
 router.use("/cms", cmsRoutes);
 router.use("/status", statusRoutes);
 router.use("/polls", pollRoutes);
+router.use("/ota", otaRoutes);
 
 module.exports = router;
