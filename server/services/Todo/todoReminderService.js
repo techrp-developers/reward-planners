@@ -45,6 +45,7 @@ function buildReminderPayload(todo, reminder) {
     icon: "clock",
     reference_type: "todo",
     reference_id: String(todo.id),
+    idempotency_key: `todo:reminder:${reminder.id}`,
     action_url: "/todo",
     screen: "TodoList",
     metadata: {
