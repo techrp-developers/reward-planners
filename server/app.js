@@ -77,16 +77,35 @@ const allowedOrigins = (process.env.CLIENT_URL || "http://localhost:5173")
   .filter(Boolean);
 
 function isAllowedOrigin(origin) {
-  if (allowedOrigins.includes(origin)) return true;
+  if (!origin) return true;
 
-  if (process.env.NODE_ENV !== "production") {
-    try {
-      const { hostname } = new URL(origin);
-      return hostname === "localhost" || hostname === "127.0.0.1";
-    } catch {
-      return false;
+  try {
+    const parsed = new URL(origin);
+    // Always allow all localhost and loopback origins on any port for development
+    if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") {
+      return true;
     }
-  }
+
+    // Always allow primary and subdomains of rewardplanners.com
+    if (
+      parsed.hostname === "rewardplanners.com" ||
+      parsed.hostname.endsWith(".rewardplanners.com")
+    ) {
+      return true;
+    }
+
+    const originUrl = parsed.origin;
+    const isMatched = allowedOrigins.some((allowed) => {
+      try {
+        return new URL(allowed).origin === originUrl;
+      } catch {
+        return allowed === origin;
+      }
+    });
+    if (isMatched) return true;
+  } catch {}
+
+  if (allowedOrigins.includes(origin)) return true;
 
   return false;
 }
@@ -191,6 +210,7 @@ app.use("/v1", stepCounterRoute);
 app.use("/v1", commonRoute);
 app.use("/v1", bbpsRoute);
 app.use("/v1", gamesRoute);
+app.use("/v1", require("./app/Insurrence/routes/indexRoute"));
 
 // External App Routes
 app.use("/mps", mpsRoute);
