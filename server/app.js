@@ -49,6 +49,7 @@ const serviceRoute = require("./app/service/v1/routes/indexRoute");
 const stepCounterRoute = require("./app/step-counter/v1/routes/indexRoute");
 const bbpsRoute = require("./app/bbps/v1/routes/indexRoute");
 const gamesRoute = require("./app/games/v1/routes/indexRoute");
+const busBookingRoute = require("./app/busboooking/routes/indexRoute");
 
 //External Routes
 const mpsRoute = require("./mps-connect/common/routes/indexRoute");
@@ -213,6 +214,7 @@ app.use("/v1", commonRoute);
 app.use("/v1", bbpsRoute);
 app.use("/v1", gamesRoute);
 app.use("/v1", require("./app/Insurrence/routes/indexRoute"));
+app.use("/api/busbooking", busBookingRoute);
 
 // External App Routes
 app.use("/mps", mpsRoute);

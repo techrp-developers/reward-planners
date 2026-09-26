@@ -7,4 +7,4 @@ const router = express.Router();
 router.use("/", busBookingRoutes);
 
 module.exports = router;
-;
+
