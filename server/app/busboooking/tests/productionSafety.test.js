@@ -13,6 +13,7 @@ const productionEnv = {
   SRDV_BOOK_URL: "https://bus.example.com/v9/rest/Book",
   SRDV_CANCEL_URL: "https://bus.example.com/v9/rest/Cancel",
   SRDV_BALANCE_URL: "https://bus.example.com/v9/rest/Balance",
+  SRDV_BALANCE_LOG_URL: "https://bus.example.com/v9/rest/BalanceLog",
   SRDV_API_TOKEN: "token",
   SRDV_CLIENT_ID: "client",
   SRDV_USERNAME: "user",

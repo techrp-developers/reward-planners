@@ -97,6 +97,8 @@ const {
 
     getProviderBalance,
 
+    getProviderBalanceLog,
+
 } = require(
     "../controllers/busController"
 );
@@ -246,12 +248,20 @@ router.post(
     cancelBusTicket
 );
 
-router.get(
+router.post(
     "/balance",
     auth,
     adminOnly,
     providerReadLimiter,
     getProviderBalance
+);
+
+router.post(
+    "/balance-log",
+    auth,
+    adminOnly,
+    providerReadLimiter,
+    getProviderBalanceLog
 );
 
 

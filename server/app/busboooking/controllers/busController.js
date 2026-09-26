@@ -4461,6 +4461,84 @@ const getProviderBalance = async (req, res) => {
   }
 };
 
+const getProviderBalanceLog = async (req, res) => {
+  const requiredConfig = [
+    "SRDV_BALANCE_LOG_URL",
+    "SRDV_API_TOKEN",
+    "SRDV_CLIENT_ID",
+    "SRDV_USERNAME",
+    "SRDV_PASSWORD",
+    "SRDV_END_USER_IP",
+  ];
+  const missingConfig = requiredConfig.filter(
+    (key) => !String(process.env[key] || "").trim(),
+  );
+
+  if (missingConfig.length) {
+    console.error("[BusBooking][BalanceLog] Missing configuration", missingConfig);
+    return res.status(500).json({
+      success: false,
+      message: "Balance log provider configuration is missing",
+    });
+  }
+
+  try {
+    const providerResponse = await axios.post(
+      process.env.SRDV_BALANCE_LOG_URL,
+      {
+        EndUserIp: process.env.SRDV_END_USER_IP,
+        ClientId: process.env.SRDV_CLIENT_ID,
+        UserName: process.env.SRDV_USERNAME,
+        Password: process.env.SRDV_PASSWORD,
+      },
+      {
+        headers: {
+          "Api-Token": process.env.SRDV_API_TOKEN,
+          "Content-Type": "application/json",
+        },
+        timeout: 30000,
+      },
+    );
+
+    const apiData = providerResponse.data;
+    const providerErrorCode = Number(apiData?.Error?.ErrorCode ?? 0);
+    const providerErrorMessage = String(apiData?.Error?.ErrorMessage || "");
+
+    if (providerErrorCode !== 0) {
+      return res.status(400).json({
+        success: false,
+        message: providerErrorMessage || "Unable to fetch provider balance log",
+        errorCode: providerErrorCode,
+      });
+    }
+
+    const entries = Array.isArray(apiData?.Result) ? apiData.Result : [];
+    return res.status(200).json({
+      success: true,
+      data: entries.map((entry) => ({
+        id: entry?.ID ?? null,
+        date: entry?.Date ?? null,
+        clientId: entry?.ClientID ?? null,
+        clientName: entry?.ClientName ?? null,
+        detail: entry?.Detail ?? null,
+        debit: entry?.Debit ?? null,
+        credit: entry?.Credit ?? null,
+        balance: entry?.Balance ?? null,
+        module: entry?.Module ?? null,
+        traceId: entry?.TraceID ?? null,
+        refId: entry?.RefID ?? null,
+        updatedBy: entry?.UpdatedBy ?? null,
+      })),
+    });
+  } catch (error) {
+    console.error("[BusBooking][BalanceLog] Error", error.message);
+    return res.status(error.response ? 502 : 500).json({
+      success: false,
+      message: "Unable to fetch provider balance log",
+    });
+  }
+};
+
 const cancelBusTicket = async (req, res) => {
   const userId = req.user.user_id;
   const orderRef = String(req.body?.order_ref || "").trim();
@@ -4750,4 +4828,6 @@ module.exports = {
     cancelBusTicket,
 
     getProviderBalance,
+
+    getProviderBalanceLog,
 };
