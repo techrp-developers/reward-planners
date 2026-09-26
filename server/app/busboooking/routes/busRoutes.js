@@ -32,6 +32,17 @@ const customerOnly = (req, res, next) => {
     return next();
 };
 
+const adminOnly = (req, res, next) => {
+    if (req.user?.auth_source !== "crm" || req.user?.role !== "admin") {
+        return res.status(403).json({
+            success: false,
+            message: "Administrator access required",
+        });
+    }
+
+    return next();
+};
+
 
 /*
 |--------------------------------------------------------------------------
@@ -83,6 +94,8 @@ const {
     bookBusTicket,
 
     cancelBusTicket,
+
+    getProviderBalance,
 
 } = require(
     "../controllers/busController"
@@ -231,6 +244,14 @@ router.post(
     checkoutLimiter,
     drainMode,
     cancelBusTicket
+);
+
+router.get(
+    "/balance",
+    auth,
+    adminOnly,
+    providerReadLimiter,
+    getProviderBalance
 );
 
 

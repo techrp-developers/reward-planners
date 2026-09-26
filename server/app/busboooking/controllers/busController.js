@@ -4394,6 +4394,73 @@ const bookBusTicket = async (
   }
 };
 
+const getProviderBalance = async (req, res) => {
+  const requiredConfig = [
+    "SRDV_BALANCE_URL",
+    "SRDV_API_TOKEN",
+    "SRDV_CLIENT_ID",
+    "SRDV_USERNAME",
+    "SRDV_PASSWORD",
+    "SRDV_END_USER_IP",
+  ];
+  const missingConfig = requiredConfig.filter(
+    (key) => !String(process.env[key] || "").trim(),
+  );
+
+  if (missingConfig.length) {
+    console.error("[BusBooking][Balance] Missing configuration", missingConfig);
+    return res.status(500).json({
+      success: false,
+      message: "Balance provider configuration is missing",
+    });
+  }
+
+  try {
+    const providerResponse = await axios.post(
+      process.env.SRDV_BALANCE_URL,
+      {
+        EndUserIp: process.env.SRDV_END_USER_IP,
+        ClientId: process.env.SRDV_CLIENT_ID,
+        UserName: process.env.SRDV_USERNAME,
+        Password: process.env.SRDV_PASSWORD,
+      },
+      {
+        headers: {
+          "Api-Token": process.env.SRDV_API_TOKEN,
+          "Content-Type": "application/json",
+        },
+        timeout: 15000,
+      },
+    );
+
+    const apiData = providerResponse.data;
+    const providerErrorCode = Number(apiData?.Error?.ErrorCode ?? 0);
+    const providerErrorMessage = String(apiData?.Error?.ErrorMessage || "");
+
+    if (providerErrorCode !== 0) {
+      return res.status(400).json({
+        success: false,
+        message: providerErrorMessage || "Unable to fetch provider balance",
+        errorCode: providerErrorCode,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        balance: apiData?.Balance ?? null,
+        creditLimit: apiData?.CreditLimit ?? null,
+      },
+    });
+  } catch (error) {
+    console.error("[BusBooking][Balance] Error", error.message);
+    return res.status(error.response ? 502 : 500).json({
+      success: false,
+      message: "Unable to fetch provider balance",
+    });
+  }
+};
+
 const cancelBusTicket = async (req, res) => {
   const userId = req.user.user_id;
   const orderRef = String(req.body?.order_ref || "").trim();
@@ -4681,4 +4748,6 @@ module.exports = {
     bookBusTicket,
 
     cancelBusTicket,
+
+    getProviderBalance,
 };
