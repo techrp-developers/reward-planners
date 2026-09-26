@@ -21,6 +21,17 @@ const router =
 const auth =
     require("../middlewares/auth");
 
+const customerOnly = (req, res, next) => {
+    if (req.user?.auth_source !== "customer") {
+        return res.status(403).json({
+            success: false,
+            message: "Customer account required",
+        });
+    }
+
+    return next();
+};
+
 
 /*
 |--------------------------------------------------------------------------
@@ -39,7 +50,9 @@ const drainMode =
 */
 
 const {
-    paymentLimiter
+    paymentLimiter,
+    providerReadLimiter,
+    checkoutLimiter,
 } = require(
     "../../common/middlewares/rateLimiter"
 );
@@ -69,6 +82,8 @@ const {
 
     bookBusTicket,
 
+    cancelBusTicket,
+
 } = require(
     "../controllers/busController"
 );
@@ -94,6 +109,9 @@ router.get(
 
 router.post(
     "/search",
+    auth,
+    customerOnly,
+    providerReadLimiter,
     searchBuses
 );
 
@@ -106,6 +124,9 @@ router.post(
 
 router.post(
     "/seat-layout",
+    auth,
+    customerOnly,
+    providerReadLimiter,
     getSeatLayout
 );
 
@@ -118,52 +139,10 @@ router.post(
 
 router.post(
     "/boarding-dropping-points",
-    getBoardingDroppingPoints
-);
-
-
-/*
-|--------------------------------------------------------------------------
-| Authentication Test
-|--------------------------------------------------------------------------
-|
-| Temporary route.
-|
-| Use it to confirm that the SAME mobile token used by Service is accepted
-| by the local Bus Booking backend.
-|
-|--------------------------------------------------------------------------
-*/
-
-router.get(
-    "/auth-test",
-
     auth,
-
-    (req, res) => {
-
-        return res
-            .status(200)
-            .json({
-
-                success: true,
-
-                message:
-                    "Bus Booking authentication working",
-
-                user: {
-
-                    user_id:
-                        req.user?.user_id,
-
-                    email:
-                        req.user?.email,
-
-                    role:
-                        req.user?.role
-                }
-            });
-    }
+    customerOnly,
+    providerReadLimiter,
+    getBoardingDroppingPoints
 );
 
 
@@ -175,9 +154,10 @@ router.get(
 
 router.post(
     "/block",
-
-    // auth,
-
+    auth,
+    customerOnly,
+    checkoutLimiter,
+    drainMode,
     blockSeat
 );
 
@@ -196,6 +176,8 @@ router.post(
 
 router.post(
     "/create-order",
+    auth,
+    customerOnly,
     paymentLimiter,
 
     drainMode,
@@ -212,6 +194,8 @@ router.post(
 
 router.post(
     "/verify-payment",
+    auth,
+    customerOnly,
     paymentLimiter,
 
     verifyPayment
@@ -233,7 +217,20 @@ router.post(
 
 router.post(
     "/book",
+    auth,
+    customerOnly,
+    checkoutLimiter,
+    drainMode,
     bookBusTicket
+);
+
+router.post(
+    "/cancel",
+    auth,
+    customerOnly,
+    checkoutLimiter,
+    drainMode,
+    cancelBusTicket
 );
 
 
