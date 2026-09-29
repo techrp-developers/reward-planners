@@ -98,7 +98,27 @@ class ChatModel {
        FROM chat_messages m JOIN customer u ON u.user_id = m.sender_id
        WHERE m.conversation_id = ? AND (? IS NULL OR m.message_id < ?)
        ORDER BY m.message_id DESC LIMIT ?`, [conversationId, beforeId, beforeId, limit]);
-    return rows.reverse();
+    rows.reverse();
+    if (!rows.length) return rows;
+    const messageIds = rows.map((row) => row.message_id);
+    const marks = messageIds.map(() => "?").join(",");
+    const [receipts] = await db.execute(
+      `SELECT m.message_id, reader.user_id, reader.name, cm.last_read_message_id
+       FROM chat_messages m
+       JOIN chat_members cm ON cm.conversation_id = m.conversation_id
+         AND cm.user_id <> m.sender_id AND cm.left_at IS NULL AND cm.last_read_message_id >= m.message_id
+       JOIN customer reader ON reader.user_id = cm.user_id
+       WHERE m.message_id IN (${marks})`, messageIds);
+    const byMessage = new Map();
+    for (const receipt of receipts) {
+      if (!byMessage.has(Number(receipt.message_id))) byMessage.set(Number(receipt.message_id), []);
+      byMessage.get(Number(receipt.message_id)).push({ user_id: receipt.user_id, name: receipt.name });
+    }
+    return rows.map((row) => ({
+      ...row,
+      read_by: byMessage.get(Number(row.message_id)) || [],
+      is_read: (byMessage.get(Number(row.message_id)) || []).length > 0,
+    }));
   }
 
   async sendMessage(userId, conversationId, data) {
@@ -115,11 +135,11 @@ class ChatModel {
       await db.execute(`UPDATE chat_conversations SET updated_at = NOW() WHERE conversation_id = ?`, [conversationId]);
       const [rows] = await db.execute(
         `SELECT m.*, u.name AS sender_name, u.user_image AS sender_image FROM chat_messages m JOIN customer u ON u.user_id=m.sender_id WHERE m.message_id=?`, [result.insertId]);
-      return rows[0];
+      return { ...rows[0], read_by: [], is_read: false };
     } catch (error) {
       if (error.code !== "ER_DUP_ENTRY" || !data.clientMessageId) throw error;
       const [rows] = await db.execute(`SELECT m.*, u.name AS sender_name, u.user_image AS sender_image FROM chat_messages m JOIN customer u ON u.user_id=m.sender_id WHERE m.sender_id=? AND m.client_message_id=?`, [userId, data.clientMessageId]);
-      return rows[0];
+      return { ...rows[0], read_by: [], is_read: false };
     }
   }
 
@@ -128,6 +148,25 @@ class ChatModel {
     const [[message]] = await db.execute(`SELECT message_id FROM chat_messages WHERE message_id = ? AND conversation_id = ?`, [messageId, conversationId]);
     if (!message) throw Object.assign(new Error("Message not found"), { status: 404 });
     await db.execute(`UPDATE chat_members SET last_read_message_id = GREATEST(COALESCE(last_read_message_id, 0), ?) WHERE conversation_id = ? AND user_id = ?`, [messageId, conversationId, userId]);
+  }
+
+  async setLastSeen(userId, date = new Date()) {
+    await db.execute(
+      `INSERT INTO chat_presence (user_id, last_seen_at) VALUES (?, ?)
+       ON DUPLICATE KEY UPDATE last_seen_at = VALUES(last_seen_at)`, [userId, date]);
+  }
+
+  async presence(userId, requestedIds) {
+    const me = await this.identity(userId);
+    if (!me || !requestedIds.length) return [];
+    const marks = requestedIds.map(() => "?").join(",");
+    const [rows] = await db.execute(
+      `SELECT c.user_id, p.last_seen_at FROM customer c
+       JOIN company_users cu ON cu.id = c.company_user_id
+       LEFT JOIN chat_presence p ON p.user_id = c.user_id
+       WHERE c.user_id IN (${marks}) AND cu.company_id = ? AND c.status = 1 AND cu.status = 1`,
+      [...requestedIds, me.company_id]);
+    return rows;
   }
 
   async updateGroup(userId, conversationId, data) {

@@ -22,6 +22,11 @@ function setupChatSocket(server, app, isAllowedOrigin) {
   function removeUserFromConversation(userId, conversationId) {
     for (const state of clients.values()) if (Number(state.userId) === Number(userId)) state.conversations.delete(Number(conversationId));
   }
+  function onlineUserIds(companyId = null) {
+    return new Set([...clients.values()]
+      .filter((state) => companyId === null || Number(state.companyId) === Number(companyId))
+      .map((state) => Number(state.userId)));
+  }
 
   server.on("upgrade", async (request, socket, head) => {
     try {
@@ -41,8 +46,9 @@ function setupChatSocket(server, app, isAllowedOrigin) {
   wss.on("connection", async (socket, request) => {
     const userId = request.chatIdentity.user_id;
     const conversations = new Set((await Chat.listConversations(userId)).map((item) => Number(item.conversation_id)));
-    clients.set(socket, { userId, conversations });
-    send(socket, { type: "connected", data: { user_id: userId } });
+    clients.set(socket, { userId, companyId: request.chatIdentity.company_id, conversations });
+    Chat.setLastSeen(userId).catch(() => {});
+    send(socket, { type: "connected", data: { user_id: userId, online_user_ids: [...onlineUserIds(request.chatIdentity.company_id)] } });
     for (const conversationId of conversations) broadcastConversation(conversationId, { type: "presence", data: { user_id: userId, online: true } }, userId);
 
     socket.on("message", async (buffer) => {
@@ -59,7 +65,11 @@ function setupChatSocket(server, app, isAllowedOrigin) {
         } else if (event.type === "message:send") {
           const messageType = event.message_type || "text";
           const body = typeof event.body === "string" ? event.body.trim() : "";
-          if (!["text", "image", "file"].includes(messageType) || (messageType === "text" && (!body || body.length > 5000))) throw Object.assign(new Error("Invalid message"), { code: "VALIDATION_ERROR" });
+          if (!["text", "image", "file"].includes(messageType)
+            || (messageType === "text" && (!body || body.length > 5000))
+            || (messageType !== "text" && !event.attachment_url)) {
+            throw Object.assign(new Error("Invalid message"), { code: "VALIDATION_ERROR" });
+          }
           const message = await Chat.sendMessage(userId, conversationId, {
             messageType, body, attachmentUrl: event.attachment_url, attachmentName: event.attachment_name,
             attachmentMimeType: event.attachment_mime_type, replyTo: event.reply_to_message_id ? Number(event.reply_to_message_id) : null,
@@ -73,7 +83,11 @@ function setupChatSocket(server, app, isAllowedOrigin) {
     socket.on("close", () => {
       const state = clients.get(socket); clients.delete(socket);
       const stillOnline = [...clients.values()].some((client) => Number(client.userId) === Number(userId));
-      if (state && !stillOnline) for (const conversationId of state.conversations) broadcastConversation(conversationId, { type: "presence", data: { user_id: userId, online: false } }, userId);
+      if (state && !stillOnline) {
+        const lastSeenAt = new Date();
+        Chat.setLastSeen(userId, lastSeenAt).catch(() => {});
+        for (const conversationId of state.conversations) broadcastConversation(conversationId, { type: "presence", data: { user_id: userId, online: false, last_seen_at: lastSeenAt.toISOString() } }, userId);
+      }
     });
   });
 
@@ -84,7 +98,7 @@ function setupChatSocket(server, app, isAllowedOrigin) {
   }, 30000);
   wss.on("connection", (socket) => { socket.isAlive = true; socket.on("pong", () => { socket.isAlive = true; }); });
   wss.on("close", () => clearInterval(heartbeat));
-  app.locals.chatSocket = { broadcastConversation, addUsersToConversation, removeUserFromConversation };
+  app.locals.chatSocket = { broadcastConversation, addUsersToConversation, removeUserFromConversation, onlineUserIds };
   return wss;
 }
 

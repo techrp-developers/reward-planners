@@ -1,4 +1,8 @@
 const Chat = require("../models/chatModel");
+const crypto = require("crypto");
+const sharp = require("sharp");
+const { uploadToR2 } = require("../../../utils/r2upload");
+const { getPublicUrl } = require("../../../utils/publicUrl");
 
 const ids = (value) => Array.isArray(value) ? [...new Set(value.map(Number).filter(Number.isSafeInteger).filter((id) => id > 0))] : [];
 const fail = (res, error) => res.status(error.status || 500).json({ success: false, message: error.status ? error.message : "Internal server error" });
@@ -6,6 +10,40 @@ const fail = (res, error) => res.status(error.status || 500).json({ success: fal
 exports.users = async (req, res) => {
   try { res.json({ success: true, data: await Chat.companyUsers(req.user.user_id, String(req.query.search || "").trim().slice(0, 100)) }); }
   catch (error) { fail(res, error); }
+};
+
+exports.presence = async (req, res) => {
+  try {
+    const userIds = ids(String(req.query.user_ids || "").split(","));
+    if (!userIds.length || userIds.length > 100) return res.status(422).json({ success: false, message: "Provide 1-100 user_ids" });
+    const rows = await Chat.presence(req.user.user_id, userIds);
+    const online = req.app.locals.chatSocket?.onlineUserIds() || new Set();
+    res.json({ success: true, data: rows.map((row) => ({
+      user_id: row.user_id,
+      online: online.has(Number(row.user_id)),
+      last_seen_at: row.last_seen_at,
+    })) });
+  } catch (error) { fail(res, error); }
+};
+
+exports.uploadImage = async (req, res) => {
+  try {
+    if (!req.file) return res.status(422).json({ success: false, message: "An image field is required" });
+    const me = await Chat.identity(req.user.user_id);
+    if (!me) return res.status(403).json({ success: false, message: "An active company membership is required" });
+    let output;
+    try {
+      output = await sharp(req.file.buffer, { animated: false, limitInputPixels: 40_000_000 })
+        .rotate().resize({ width: 2400, height: 2400, fit: "inside", withoutEnlargement: true })
+        .webp({ quality: 85 }).toBuffer();
+    } catch { return res.status(422).json({ success: false, message: "The uploaded file is not a valid image" }); }
+    const key = `chat/${me.company_id}/${req.user.user_id}/${crypto.randomUUID()}.webp`;
+    await uploadToR2(output, key, "image/webp");
+    res.status(201).json({ success: true, data: {
+      attachment_url: getPublicUrl(key), attachment_name: req.file.originalname,
+      attachment_mime_type: "image/webp", size: output.length,
+    } });
+  } catch (error) { fail(res, error); }
 };
 
 exports.create = async (req, res) => {

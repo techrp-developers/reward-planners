@@ -10,6 +10,8 @@ Run `migrations/20260929_01_create_chat.sql` against the application database, t
 ## REST API (`/v1/chat`)
 
 - `GET /users?search=` — list active coworkers available to chat.
+- `GET /presence?user_ids=2,3` — online state and persisted `last_seen_at` for coworkers.
+- `POST /uploads/images` — multipart upload with field `image` (JPG/PNG/WebP/GIF, maximum 10 MB). Returns attachment metadata for sending an image message.
 - `GET /conversations` — inbox with members, last message, and unread count.
 - `POST /conversations` — create/reopen a conversation. Body: `{ "type": "direct", "member_ids": [2] }` or `{ "type": "group", "name": "Team", "member_ids": [2,3] }`.
 - `GET /conversations/:id/messages?before_id=&limit=30` — cursor-paginated history.
@@ -21,6 +23,8 @@ Run `migrations/20260929_01_create_chat.sql` against the application database, t
 - `POST /conversations/:id/leave` — leave a conversation.
 
 Messages may include `client_message_id` for idempotent retries, `reply_to_message_id`, and attachment metadata. File upload/storage is intentionally separate; pass the resulting URL in `attachment_url`.
+
+Message history includes `read_by` and `is_read`. A direct-message UI can render `is_read: true` as blue double ticks. In groups, `read_by` identifies every active member who has read through that message.
 
 ## WebSocket (`/ws/chat`)
 
@@ -35,4 +39,4 @@ Client events:
 {"type":"typing:stop","conversation_id":1}
 ```
 
-Server events are `connected`, `conversation:available`, `message:new`, `message:read`, `typing:start`, `typing:stop`, `presence`, and `error`. The server uses ping/pong heartbeats and supports multiple devices per user.
+Server events are `connected`, `conversation:available`, `message:new`, `message:read`, `typing:start`, `typing:stop`, `presence`, and `error`. `connected` contains the company's currently online user IDs; subsequent `presence` events update online/offline state and include `last_seen_at` when a user goes offline. The server uses ping/pong heartbeats and supports multiple devices per user.
