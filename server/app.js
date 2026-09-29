@@ -1,5 +1,6 @@
 // app.js
 const express = require("express");
+const http = require("http");
 const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
@@ -50,6 +51,7 @@ const stepCounterRoute = require("./app/step-counter/v1/routes/indexRoute");
 const bbpsRoute = require("./app/bbps/v1/routes/indexRoute");
 const gamesRoute = require("./app/games/v1/routes/indexRoute");
 const busBookingRoute = require("./app/busboooking/routes/indexRoute");
+const chatRoute = require("./app/chat/routes/indexRoute");
 
 //External Routes
 const mpsRoute = require("./mps-connect/common/routes/indexRoute");
@@ -206,13 +208,14 @@ app.get("/", (req, res) => {
 // Dashboard Routes
 app.use("/", dashboardRoute);
 
-// App Routes
+// App Routes 
 app.use("/v1", ecommerceRoute);
 app.use("/v1", serviceRoute);
 app.use("/v1", stepCounterRoute);
 app.use("/v1", commonRoute);
 app.use("/v1", bbpsRoute);
 app.use("/v1", gamesRoute);
+app.use("/v1/chat", chatRoute);
 app.use("/v1", require("./app/Insurrence/routes/indexRoute"));
 app.use("/api/busbooking", busBookingRoute);
 
@@ -257,8 +260,10 @@ app.use((error, req, res, next) => {
 
 // Start Server
 const PORT = process.env.PORT || 5000;
+const server = http.createServer(app);
+require("./app/chat/socket/chatSocket")(server, app, isAllowedOrigin);
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log("\n=================================");
   console.log("Reward Planners Backend Started!");
   console.log(`🔗 Server URL: http://localhost:${PORT}`);
