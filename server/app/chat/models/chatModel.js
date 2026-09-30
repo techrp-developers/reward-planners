@@ -114,11 +114,88 @@ class ChatModel {
       if (!byMessage.has(Number(receipt.message_id))) byMessage.set(Number(receipt.message_id), []);
       byMessage.get(Number(receipt.message_id)).push({ user_id: receipt.user_id, name: receipt.name });
     }
-    return rows.map((row) => ({
+    const serialized = rows.map((row) => ({
       ...row,
       read_by: byMessage.get(Number(row.message_id)) || [],
       is_read: (byMessage.get(Number(row.message_id)) || []).length > 0,
     }));
+    await this.attachPolls(serialized, userId);
+    return serialized;
+  }
+
+  async attachPolls(messages, userId, conn = db) {
+    const pollMessages = messages.filter((message) => message.message_type === "poll");
+    if (!pollMessages.length) return messages;
+    const marks = pollMessages.map(() => "?").join(",");
+    const [rows] = await conn.execute(
+      `SELECT p.poll_id, p.message_id, p.question, p.allow_multiple, p.closes_at,
+              o.option_id, o.option_text, o.display_order,
+              COUNT(v.user_id) AS vote_count,
+              MAX(CASE WHEN v.user_id = ? THEN 1 ELSE 0 END) AS selected_by_me
+       FROM chat_polls p JOIN chat_poll_options o ON o.poll_id = p.poll_id
+       LEFT JOIN chat_poll_votes v ON v.poll_id = p.poll_id AND v.option_id = o.option_id
+       WHERE p.message_id IN (${marks})
+       GROUP BY p.poll_id, p.message_id, p.question, p.allow_multiple, p.closes_at,
+                o.option_id, o.option_text, o.display_order
+       ORDER BY o.display_order`, [userId, ...pollMessages.map((message) => message.message_id)]);
+    const polls = new Map();
+    for (const row of rows) {
+      if (!polls.has(Number(row.message_id))) polls.set(Number(row.message_id), {
+        poll_id: row.poll_id, question: row.question, allow_multiple: Boolean(row.allow_multiple),
+        closes_at: row.closes_at, options: [],
+      });
+      polls.get(Number(row.message_id)).options.push({
+        option_id: row.option_id, text: row.option_text, vote_count: Number(row.vote_count), selected_by_me: Boolean(row.selected_by_me),
+      });
+    }
+    for (const message of pollMessages) message.poll = polls.get(Number(message.message_id)) || null;
+    return messages;
+  }
+
+  async createPoll(userId, conversationId, data) {
+    const conn = await db.getConnection();
+    try {
+      await conn.beginTransaction();
+      if (!await this.assertMember(userId, conversationId, conn)) throw Object.assign(new Error("Conversation not found"), { status: 404 });
+      const [messageResult] = await conn.execute(
+        `INSERT INTO chat_messages (conversation_id, sender_id, client_message_id, message_type, body)
+         VALUES (?, ?, ?, 'poll', ?)`, [conversationId, userId, data.clientMessageId || null, data.question]);
+      const [pollResult] = await conn.execute(
+        `INSERT INTO chat_polls (message_id, question, allow_multiple, closes_at) VALUES (?, ?, ?, ?)`,
+        [messageResult.insertId, data.question, data.allowMultiple ? 1 : 0, data.closesAt || null]);
+      for (let index = 0; index < data.options.length; index += 1) {
+        await conn.execute(`INSERT INTO chat_poll_options (poll_id, option_text, display_order) VALUES (?, ?, ?)`, [pollResult.insertId, data.options[index], index]);
+      }
+      await conn.execute(`UPDATE chat_conversations SET updated_at = NOW() WHERE conversation_id = ?`, [conversationId]);
+      const [[message]] = await conn.execute(
+        `SELECT m.*, u.name AS sender_name, u.user_image AS sender_image FROM chat_messages m JOIN customer u ON u.user_id=m.sender_id WHERE m.message_id=?`, [messageResult.insertId]);
+      message.read_by = []; message.is_read = false;
+      await this.attachPolls([message], userId, conn);
+      await conn.commit();
+      return message;
+    } catch (error) { await conn.rollback(); throw error; } finally { conn.release(); }
+  }
+
+  async votePoll(userId, pollId, optionIds) {
+    const conn = await db.getConnection();
+    try {
+      await conn.beginTransaction();
+      const [[poll]] = await conn.execute(
+        `SELECT p.poll_id, p.message_id, p.allow_multiple, p.closes_at, m.conversation_id
+         FROM chat_polls p JOIN chat_messages m ON m.message_id = p.message_id WHERE p.poll_id = ? FOR UPDATE`, [pollId]);
+      if (!poll || !await this.assertMember(userId, poll?.conversation_id, conn)) throw Object.assign(new Error("Poll not found"), { status: 404 });
+      if (poll.closes_at && new Date(poll.closes_at).getTime() <= Date.now()) throw Object.assign(new Error("This poll is closed"), { status: 409 });
+      if (!poll.allow_multiple && optionIds.length !== 1) throw Object.assign(new Error("Select exactly one option"), { status: 422 });
+      const marks = optionIds.map(() => "?").join(",");
+      const [valid] = await conn.execute(`SELECT option_id FROM chat_poll_options WHERE poll_id = ? AND option_id IN (${marks})`, [pollId, ...optionIds]);
+      if (valid.length !== optionIds.length) throw Object.assign(new Error("Invalid poll option"), { status: 422 });
+      await conn.execute(`DELETE FROM chat_poll_votes WHERE poll_id = ? AND user_id = ?`, [pollId, userId]);
+      for (const optionId of optionIds) await conn.execute(`INSERT INTO chat_poll_votes (poll_id, option_id, user_id) VALUES (?, ?, ?)`, [pollId, optionId, userId]);
+      const [[message]] = await conn.execute(`SELECT * FROM chat_messages WHERE message_id = ?`, [poll.message_id]);
+      await this.attachPolls([message], userId, conn);
+      await conn.commit();
+      return { conversationId: poll.conversation_id, message };
+    } catch (error) { await conn.rollback(); throw error; } finally { conn.release(); }
   }
 
   async sendMessage(userId, conversationId, data) {

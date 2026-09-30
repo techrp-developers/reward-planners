@@ -12,10 +12,13 @@ Run `migrations/20260929_01_create_chat.sql` against the application database, t
 - `GET /users?search=` — list active coworkers available to chat.
 - `GET /presence?user_ids=2,3` — online state and persisted `last_seen_at` for coworkers.
 - `POST /uploads/images` — multipart upload with field `image` (JPG/PNG/WebP/GIF, maximum 10 MB). Returns attachment metadata for sending an image message.
+- `POST /uploads/documents` — multipart upload with field `document` (PDF, Word, Excel, PowerPoint, TXT, or CSV; maximum 25 MB).
 - `GET /conversations` — inbox with members, last message, and unread count.
 - `POST /conversations` — create/reopen a conversation. Body: `{ "type": "direct", "member_ids": [2] }` or `{ "type": "group", "name": "Team", "member_ids": [2,3] }`.
 - `GET /conversations/:id/messages?before_id=&limit=30` — cursor-paginated history.
 - `POST /conversations/:id/messages` — send a text/image/file message.
+- `POST /conversations/:id/polls` — create a poll with `question`, 2-10 `options`, optional `allow_multiple`, and optional future `closes_at`.
+- `POST /polls/:pollId/votes` — create or change a vote with `{ "option_ids": [1] }`.
 - `POST /conversations/:id/read` — body: `{ "message_id": 123 }`.
 - `PATCH /conversations/:id` — group admin updates `name` and/or `description`.
 - `POST /conversations/:id/members` — group admin body: `{ "member_ids": [4,5] }`.
@@ -39,4 +42,4 @@ Client events:
 {"type":"typing:stop","conversation_id":1}
 ```
 
-Server events are `connected`, `conversation:available`, `message:new`, `message:read`, `typing:start`, `typing:stop`, `presence`, and `error`. `connected` contains the company's currently online user IDs; subsequent `presence` events update online/offline state and include `last_seen_at` when a user goes offline. The server uses ping/pong heartbeats and supports multiple devices per user.
+Server events are `connected`, `conversation:available`, `message:new`, `message:read`, `poll:updated`, `typing:start`, `typing:stop`, `presence`, and `error`. `connected` contains the company's currently online user IDs; subsequent `presence` events update online/offline state and include `last_seen_at` when a user goes offline. The server uses ping/pong heartbeats and supports multiple devices per user.

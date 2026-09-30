@@ -1,5 +1,6 @@
 const Chat = require("../models/chatModel");
 const crypto = require("crypto");
+const path = require("path");
 const sharp = require("sharp");
 const { uploadToR2 } = require("../../../utils/r2upload");
 const { getPublicUrl } = require("../../../utils/publicUrl");
@@ -43,6 +44,62 @@ exports.uploadImage = async (req, res) => {
       attachment_url: getPublicUrl(key), attachment_name: req.file.originalname,
       attachment_mime_type: "image/webp", size: output.length,
     } });
+  } catch (error) { fail(res, error); }
+};
+
+exports.uploadDocument = async (req, res) => {
+  try {
+    if (!req.file) return res.status(422).json({ success: false, message: "A document field is required" });
+    const me = await Chat.identity(req.user.user_id);
+    if (!me) return res.status(403).json({ success: false, message: "An active company membership is required" });
+    const extension = path.extname(req.file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, "").slice(0, 12);
+    const key = `chat/${me.company_id}/${req.user.user_id}/documents/${crypto.randomUUID()}${extension}`;
+    await uploadToR2(req.file.buffer, key, req.file.mimetype);
+    res.status(201).json({ success: true, data: {
+      attachment_url: getPublicUrl(key), attachment_name: path.basename(req.file.originalname).slice(0, 255),
+      attachment_mime_type: req.file.mimetype, size: req.file.size,
+    } });
+  } catch (error) { fail(res, error); }
+};
+
+exports.createPoll = async (req, res) => {
+  try {
+    const question = typeof req.body.question === "string" ? req.body.question.trim() : "";
+    const options = Array.isArray(req.body.options)
+      ? [...new Set(req.body.options.map((option) => String(option).trim()).filter(Boolean))] : [];
+    if (!question || question.length > 500) return res.status(422).json({ success: false, message: "Poll question must contain 1-500 characters" });
+    if (options.length < 2 || options.length > 10 || options.some((option) => option.length > 250)) {
+      return res.status(422).json({ success: false, message: "Provide 2-10 unique options of up to 250 characters" });
+    }
+    let closesAt = null;
+    if (req.body.closes_at) {
+      closesAt = new Date(req.body.closes_at);
+      if (!Number.isFinite(closesAt.getTime()) || closesAt.getTime() <= Date.now()) return res.status(422).json({ success: false, message: "closes_at must be a future date" });
+    }
+    const conversationId = Number(req.params.id);
+    const message = await Chat.createPoll(req.user.user_id, conversationId, {
+      question, options, allowMultiple: req.body.allow_multiple === true,
+      closesAt, clientMessageId: req.body.client_message_id ? String(req.body.client_message_id).slice(0, 64) : null,
+    });
+    req.app.locals.chatSocket?.broadcastConversation(conversationId, { type: "message:new", data: message });
+    res.status(201).json({ success: true, data: message });
+  } catch (error) { fail(res, error); }
+};
+
+exports.votePoll = async (req, res) => {
+  try {
+    const optionIds = ids(req.body.option_ids);
+    if (!optionIds.length || optionIds.length > 10) return res.status(422).json({ success: false, message: "Select at least one valid option" });
+    const result = await Chat.votePoll(req.user.user_id, Number(req.params.pollId), optionIds);
+    const publicPoll = {
+      ...result.message.poll,
+      options: result.message.poll.options.map(({ selected_by_me, ...option }) => option),
+    };
+    req.app.locals.chatSocket?.broadcastConversation(result.conversationId, {
+      type: "poll:updated",
+      data: { message_id: result.message.message_id, poll: publicPoll, voter_id: req.user.user_id, option_ids: optionIds },
+    });
+    res.json({ success: true, data: result.message.poll });
   } catch (error) { fail(res, error); }
 };
 

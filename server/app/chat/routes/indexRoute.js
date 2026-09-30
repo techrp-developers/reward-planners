@@ -2,6 +2,7 @@ const router = require("express").Router();
 const auth = require("../../common/middlewares/auth");
 const controller = require("../controller/chatController");
 const imageUpload = require("../middlewares/imageUpload");
+const documentUpload = require("../middlewares/documentUpload");
 
 router.use(auth);
 router.get("/users", controller.users);
@@ -13,10 +14,19 @@ router.post("/uploads/images", (req, res, next) => {
     return res.status(422).json({ success: false, message });
   });
 }, controller.uploadImage);
+router.post("/uploads/documents", (req, res, next) => {
+  documentUpload.single("document")(req, res, (error) => {
+    if (!error) return next();
+    const message = error.code === "LIMIT_FILE_SIZE" ? "Chat documents cannot exceed 25 MB" : error.message;
+    return res.status(422).json({ success: false, message });
+  });
+}, controller.uploadDocument);
 router.get("/conversations", controller.list);
 router.post("/conversations", controller.create);
 router.get("/conversations/:id/messages", controller.messages);
 router.post("/conversations/:id/messages", controller.send);
+router.post("/conversations/:id/polls", controller.createPoll);
+router.post("/polls/:pollId/votes", controller.votePoll);
 router.post("/conversations/:id/read", controller.read);
 router.patch("/conversations/:id", controller.updateGroup);
 router.post("/conversations/:id/members", controller.addMembers);
