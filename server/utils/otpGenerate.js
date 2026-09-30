@@ -7,7 +7,7 @@ function generateOTP() {
     String(process.env.LOG_OTP_TO_CONSOLE).toLowerCase() === "true";
 
   if (shouldLogOtp) {
-    console.warn(`[DEV OTP] Generated OTP: ${otp}`);
+    console.log(`[DEV OTP] Generated OTP: ${otp}`);
   }
 
   return otp;

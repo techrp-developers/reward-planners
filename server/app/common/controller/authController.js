@@ -42,7 +42,7 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
       String(process.env.LOG_OTP_TO_CONSOLE).toLowerCase() === "true";
 
     if (shouldLogOtp) {
-      console.warn(`[DEV OTP] Generated customer OTP: ${otp}`);
+      console.log(`[DEV OTP] Generated customer OTP: ${otp}`);
     }
 
     return otp;
