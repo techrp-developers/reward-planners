@@ -179,6 +179,7 @@ export const routes = {
     supportTickets: "/rm/support-tickets",
     reports: {
       usage: "/rm/reports/usage",
+      inactiveUsers: "/rm/reports/inactive-users",
     },
   },
   servicePartner: {

@@ -58,6 +58,7 @@ export default function RmSidebar() {
       type: "dropdown",
       children: [
         { label: "Usage Report", to: routes.rm.reports.usage },
+        { label: "Inactive Users", to: routes.rm.reports.inactiveUsers },
       ],
     },
   ];
