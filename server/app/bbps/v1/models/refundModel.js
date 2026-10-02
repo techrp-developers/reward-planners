@@ -18,6 +18,11 @@ class RefundModel {
   }
 
   async getRetryable(limit = 10) {
+    const parsedLimit = Number(limit);
+    const retryLimit = Number.isSafeInteger(parsedLimit) && parsedLimit > 0
+      ? parsedLimit
+      : 10;
+
     const [rows] = await db.execute(
       `SELECT r.*, t.user_id
        FROM bbps_refunds r
@@ -29,7 +34,9 @@ class RefundModel {
          AND r.retry_count < 5
        ORDER BY r.created_at ASC
        LIMIT ?`,
-      [Number(limit)],
+      // mysql2 encodes JS numbers as DOUBLE; MySQL can reject that for LIMIT.
+      // Bind the validated integer as decimal text, keeping the placeholder.
+      [String(retryLimit)],
     );
 
     return rows;

@@ -5,3 +5,9 @@ uploads
 files
 config/firebase-service-account.json
 dist
+
+# Local configuration and Firebase private credentials
+.env.*
+!.env.*.example
+firebase-service-account*.json
+**/*-firebase-adminsdk-*.json

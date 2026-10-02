@@ -209,17 +209,34 @@ async function runOnce() {
   return true;
 }
 
+let stopping = false;
+let wake;
+
+function pause(milliseconds) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => { wake = null; resolve(); }, milliseconds);
+    wake = () => { clearTimeout(timer); wake = null; resolve(); };
+  });
+}
+
 async function start() {
-  while (true) {
-    const did = await runOnce();
-    await new Promise((r) => setTimeout(r, did ? SEND_INTERVAL_MS : 1500));
+  while (!stopping) {
+    try {
+      const did = await runOnce();
+      if (!stopping) await pause(did ? SEND_INTERVAL_MS : 1500);
+    } catch (error) {
+      console.error("WA Worker fatal:", error);
+      if (!stopping) {
+        await pause(3000);
+        if (!stopping) console.log("🔁 Restarting WA Worker...");
+      }
+    }
   }
 }
 
-start().catch((e) => {
-  console.error("WA Worker fatal:", e);
-  setTimeout(() => {
-    console.log("🔁 Restarting WA Worker...");
-    start().catch((err) => console.error("WA Worker restart failed:", err));
-  }, 3000);
-});
+const running = start();
+module.exports.stop = async () => {
+  stopping = true;
+  if (wake) wake();
+  await running;
+};
