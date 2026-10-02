@@ -37,6 +37,14 @@ export const ZONE_IMAGE_SPECS: Record<Zone, ImageZoneSpec> = {
     maxFileSize: 800 * 1024,
     typeLabel: "Portrait banner",
   },
+  brand_promotional_banner: {
+    recommendedWidth: 1080,
+    recommendedHeight: 540,
+    recommendedRatio: 2,
+    recommendedRatioLabel: "2:1",
+    maxFileSize: 800 * 1024,
+    typeLabel: "Brand promotional banner",
+  },
   offers_banner: {
     recommendedWidth: 720,
     recommendedHeight: 900,

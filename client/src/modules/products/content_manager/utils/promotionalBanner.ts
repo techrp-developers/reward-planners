@@ -10,7 +10,7 @@ export function extractPromotionalImages(entry: ContentEntry | null | undefined)
   if (!entry || entry.contentType !== "image") return [];
 
   if (entry.images?.length) {
-    return [...entry.images].sort((a, b) => a.sortOrder - b.sortOrder);
+    return entry.images.filter((image) => image.isActive !== false).sort((a, b) => a.sortOrder - b.sortOrder);
   }
 
   return entry.imageUrl ? [{ imageId: null, imageUrl: entry.imageUrl, sortOrder: 0 }] : [];

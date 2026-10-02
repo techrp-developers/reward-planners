@@ -24,5 +24,5 @@ export const fromApiEntry = (row: ApiContentEntry): ContentEntry => ({
   createdBy: row.created_by_name || "",
   createdAt: row.created_at,
   imageFile: null,
-  images: row.images?.map((image) => ({ imageId: image.image_id, imageUrl: image.image_url, sortOrder: image.sort_order })),
+  images: row.images?.map((image) => ({ imageId: image.image_id, imageUrl: image.image_url, sortOrder: image.sort_order, isActive: !!image.is_active })),
 });

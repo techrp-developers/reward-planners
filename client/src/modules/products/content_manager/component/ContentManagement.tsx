@@ -97,10 +97,10 @@ export default function ContentManagement({ module }: ContentManagementProps) {
           return "Enter a valid HEX color, for example #852BAF.";
         }
       }
-      if (entry.contentType === "image" && entry.zone === "offers_banner" && !(entry.images ?? []).length) {
-        return "Add at least one offer image for this campaign.";
+      if (entry.contentType === "image" && ["offers_banner", "brand_promotional_banner"].includes(entry.zone) && !(entry.images ?? []).length) {
+        return "Add at least one campaign image.";
       }
-      if (entry.contentType === "image" && entry.zone !== "offers_banner" && !entry.imageUrl.trim()) {
+      if (entry.contentType === "image" && !["offers_banner", "brand_promotional_banner"].includes(entry.zone) && !entry.imageUrl.trim()) {
         return "Upload an image for this zone.";
       }
     }
