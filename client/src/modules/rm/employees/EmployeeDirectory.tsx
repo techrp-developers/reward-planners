@@ -130,6 +130,7 @@ export default function EmployeeDirectory() {
   const [importError, setImportError] = useState("");
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [downloadingReport, setDownloadingReport] = useState(false);
+  const [reportCompanyId, setReportCompanyId] = useState("");
   const query = useDebounce(search.trim().toLowerCase(), 250);
 
   async function fetchCompanies() {
@@ -349,11 +350,17 @@ export default function EmployeeDirectory() {
     setDownloadingReport(true);
     setError("");
     try {
-      const response = await api.get("/manager/employee-directory/report", { responseType: "blob" });
+      const reportUrl = reportCompanyId
+        ? `/manager/employee-directory/companies/${encodeURIComponent(reportCompanyId)}/report`
+        : "/manager/employee-directory/report";
+      const response = await api.get(reportUrl, {
+        responseType: "blob",
+        params: { companyId: reportCompanyId || undefined },
+      });
       const url = URL.createObjectURL(response.data);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `employee-activation-report-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      link.download = `employee-activation-report-${reportCompanyId ? `company-${reportCompanyId}-` : ""}${new Date().toISOString().slice(0, 10)}.xlsx`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -378,7 +385,17 @@ export default function EmployeeDirectory() {
             <p className="mt-0.5 text-xs font-medium text-gray-500">View companies and registered customer accounts</p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-3"><span className="rounded-xl bg-purple-50 px-3 py-1.5 text-xs font-bold text-[#852BAF]">{visibleCount} records</span><button type="button" onClick={() => void downloadEmployeeReport()} disabled={downloadingReport} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#C64EFE] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"><FiDownload /> {downloadingReport ? "Downloading..." : "Download Report"}</button></div>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="rounded-xl bg-purple-50 px-3 py-1.5 text-xs font-bold text-[#852BAF]">{visibleCount} records</span>
+          <label className="flex flex-col gap-1 text-xs font-semibold text-gray-500">
+            Report company
+            <select value={reportCompanyId} onChange={(event) => setReportCompanyId(event.target.value)} disabled={loading || downloadingReport} className="max-w-64 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700">
+              <option value="">All companies</option>
+              {companies.map((company) => <option key={company.company_id} value={company.company_id}>{company.company_name}</option>)}
+            </select>
+          </label>
+          <button type="button" onClick={() => void downloadEmployeeReport()} disabled={loading || downloadingReport} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#C64EFE] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"><FiDownload /> {downloadingReport ? "Downloading..." : "Download Report"}</button>
+        </div>
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">

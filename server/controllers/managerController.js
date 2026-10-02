@@ -223,6 +223,11 @@ class ManagerController {
 
   async downloadEmployeeActivationReport(req, res) {
     try {
+      const companyId = req.params.companyId ?? req.query.companyId;
+      const hasCompany = companyId !== undefined && companyId !== "";
+      if (hasCompany && (typeof companyId !== "string" || !/^\d+$/.test(companyId) || !Number.isSafeInteger(Number(companyId)) || Number(companyId) < 1)) {
+        return res.status(400).json({ success: false, message: "Invalid company ID" });
+      }
       const [employees] = await db.execute(`
         SELECT
           cu.id AS employee_id,
@@ -242,8 +247,9 @@ class ManagerController {
         FROM company_users cu
         LEFT JOIN companies co ON co.company_id = cu.company_id
         LEFT JOIN customer c ON c.company_user_id = cu.id
+        ${hasCompany ? "WHERE cu.company_id = ?" : ""}
         ORDER BY co.company_name ASC, cu.name ASC, cu.id ASC
-      `);
+      `, hasCompany ? [Number(companyId)] : []);
 
       const isActivated = (employee) => employee.customer_id && Number(employee.customer_status) === 1;
       const summary = {
