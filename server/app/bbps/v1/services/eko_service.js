@@ -704,6 +704,7 @@ exports.fetchBill = async (body, req) => {
     const payload = {
       operator_id,
       ...dynamicParams,
+      initiator_id: process.env.EKO_INITIATOR_ID,
       user_code: process.env.EKO_USER_CODE,
       client_ref_id: Date.now().toString(),
       hc_channel: "0",
