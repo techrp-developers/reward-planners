@@ -37,6 +37,23 @@ interface Customer {
   device_name: string | null;
 }
 
+interface ReportEmployee {
+  id: number;
+  company_id: number;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  department: string | null;
+  role: string | null;
+  customer_id: number | null;
+  customer_status: number | null;
+  customer_is_verified: number | null;
+  device_platform: string | null;
+  device_name: string | null;
+  last_login_at: string | null;
+  created_at: string | null;
+}
+
 type Tab = "companies" | "employees";
 
 interface CompanyForm {
@@ -350,12 +367,52 @@ export default function EmployeeDirectory() {
     setDownloadingReport(true);
     setError("");
     try {
-      const reportUrl = reportCompanyId
-        ? `/manager/employee-directory/companies/${encodeURIComponent(reportCompanyId)}/report`
-        : "/manager/employee-directory/report";
-      const response = await api.get(reportUrl, {
+      if (reportCompanyId) {
+        // Use the existing company directory endpoint, including on servers
+        // that do not yet have the company-specific report route.
+        const response = await api.get(`/manager/employee-directory/companies/${encodeURIComponent(reportCompanyId)}/employees`);
+        const data = response.data?.data;
+        if (!data?.company || !Array.isArray(data.employees)
+          || Number(data.company.company_id) !== Number(reportCompanyId)
+          || data.employees.some((employee: ReportEmployee) => Number(employee.company_id) !== Number(reportCompanyId))) {
+          throw new Error("Company report response did not match the selected company");
+        }
+        const employees: ReportEmployee[] = data.employees;
+        const activated = (employee: ReportEmployee) => !!employee.customer_id && Number(employee.customer_status) === 1;
+        const detailRows = employees.map((employee) => [
+          employee.id, employee.name, data.company.company_name,
+          employee.email || "", employee.phone || "", employee.department || "", employee.role || "",
+          activated(employee) ? "Activated" : "Not Activated",
+          employee.device_platform === "ios" ? "iOS" : employee.device_platform === "android" ? "Android" : "Unknown",
+          employee.device_name || "", Number(employee.customer_is_verified) === 1 ? "Yes" : "No",
+          employee.last_login_at || "Never", employee.created_at || "",
+        ]);
+        const headers = ["Employee ID", "Employee Name", "Company", "Email", "Phone", "Department", "Role", "Activation Status", "Platform", "Device", "Verified", "Last Login", "Employee Created"];
+        const workbook = XLSX.utils.book_new();
+        const addSheet = (name: string, values: (string | number)[][]) => {
+          const sheet = XLSX.utils.aoa_to_sheet(values);
+          sheet["!cols"] = values[0].map(() => ({ wch: 24 }));
+          if (sheet["!ref"]) sheet["!autofilter"] = { ref: sheet["!ref"] };
+          XLSX.utils.book_append_sheet(workbook, sheet, name);
+        };
+        addSheet("Summary", [
+          ["Metric", "Count"],
+          ["Company", data.company.company_name],
+          ["Total Employees", employees.length],
+          ["Activated", employees.filter(activated).length],
+          ["Not Activated", employees.filter((employee) => !activated(employee)).length],
+          ["Android Users", employees.filter((employee) => activated(employee) && employee.device_platform === "android").length],
+          ["iOS Users", employees.filter((employee) => activated(employee) && employee.device_platform === "ios").length],
+          ["Platform Unknown", employees.filter((employee) => activated(employee) && !["android", "ios"].includes(employee.device_platform || "")).length],
+        ]);
+        addSheet("Employees", [headers, ...detailRows]);
+        addSheet("Activated Employees", [headers, ...detailRows.filter((row) => row[7] === "Activated")]);
+        addSheet("Not Activated Employees", [headers, ...detailRows.filter((row) => row[7] === "Not Activated")]);
+        XLSX.writeFile(workbook, `employee-activation-report-company-${reportCompanyId}-${new Date().toISOString().slice(0, 10)}.xlsx`);
+        return;
+      }
+      const response = await api.get("/manager/employee-directory/report", {
         responseType: "blob",
-        params: { companyId: reportCompanyId || undefined },
       });
       const url = URL.createObjectURL(response.data);
       const link = document.createElement("a");
