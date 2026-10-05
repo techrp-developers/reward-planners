@@ -3,6 +3,18 @@ const fs = require("fs");
 const path = require("path");
 const { sendNewTicketMail } = require("../../../services/mailBuilder/ticketNotification");
 const { notifyUser } = require("../utils/notification");
+const { uploadToR2 } = require("../../../utils/r2upload");
+const { getPublicUrl } = require("../../../utils/publicUrl");
+
+const cleanupUploadedAttachment = (file) => {
+  if (!file?.path) return;
+  fs.promises.unlink(file.path).catch(() => {});
+};
+
+async function getSupportTicketColumnSet() {
+  const [columns] = await db.execute("SHOW COLUMNS FROM support_tickets");
+  return new Set(columns.map((column) => column.Field));
+}
 
 class SupportController {
   async getCategories(req, res) {
@@ -42,13 +54,17 @@ class SupportController {
         subject,
         description,
         category_id,
+        support_module = "general",
+        reference_type = null,
+        reference_id = null,
+        reference_label = null,
         // attachment_url,
       } = req.body;
 
       const attachmentUrls = (req.files || []).map(
         (file) => `/uploads/support/${file.filename}`,
       );
-      const attachmentUrl =
+      const attachmentUrlFromFiles =
         attachmentUrls.length > 1
           ? JSON.stringify(attachmentUrls)
           : attachmentUrls[0] || null;
@@ -188,16 +204,12 @@ class SupportController {
       }
 
       const [result] = await db.execute(
-        `INSERT INTO support_tickets 
-       (user_id, subject, description, category_id, attachment_url)
-       VALUES (?, ?, ?, ?, ?)`,
-        [
-          userId,
-          subject,
-          description,
-          category_id,
-          null
-        ],
+        `INSERT INTO support_tickets
+       (user_id, subject, description, category_id, support_module,
+        reference_type, reference_id, reference_label, attachment_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [userId, ticketSubject, description, category_id, normalizedModule,
+          verifiedReferenceType, verifiedReferenceId, verifiedReferenceLabel, attachmentUrl],
       );
 
       const ticketId = result.insertId;
@@ -316,6 +328,308 @@ class SupportController {
       });
     } catch (error) {
       console.error("Get my tickets error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  }
+  async getRecentOrders(req, res) {
+    try {
+      const loggedInUserId = Number(req.user?.user_id);
+      const requestedUserId = req.query.user_id
+        ? Number(req.query.user_id)
+        : loggedInUserId;
+
+      if (!loggedInUserId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      if (!requestedUserId) {
+        return res.status(400).json({
+          success: false,
+          message: "user_id is required",
+        });
+      }
+
+      if (requestedUserId !== loggedInUserId) {
+        return res.status(403).json({
+          success: false,
+          message: "You can only access your own orders",
+        });
+      }
+
+      const [ecommerceOrders] = await db.execute(
+        `SELECT
+          o.order_id,
+          o.order_ref,
+          o.total_amount,
+          o.product_total,
+          o.reward_discount,
+          o.reward_coins_used,
+          o.reward_earned,
+          o.reward_coins_earned,
+          o.shipping_total,
+          o.status,
+          o.cancellation_status,
+          o.expires_at,
+          o.created_at,
+          o.paid_at
+        FROM eorders o
+        WHERE o.user_id = ?
+        ORDER BY o.created_at DESC, o.order_id DESC
+        LIMIT 5`,
+        [requestedUserId],
+      );
+
+      const ecommerceOrderIds = ecommerceOrders.map((order) => order.order_id);
+      let ecommerceItems = [];
+
+      if (ecommerceOrderIds.length > 0) {
+        const placeholders = ecommerceOrderIds.map(() => "?").join(", ");
+        const [rows] = await db.execute(
+          `SELECT
+            oi.order_item_id,
+            oi.order_id,
+            oi.vendor_order_id,
+            oi.product_id,
+            oi.variant_id,
+            oi.quantity,
+            oi.price,
+            oi.reward_discount,
+            oi.reward_coins_used,
+            oi.reward_earned,
+            oi.reward_coins_earned,
+            oi.final_price,
+            oi.created_at,
+            p.product_name,
+            p.brand_name
+          FROM eorder_items oi
+          LEFT JOIN eproducts p ON p.product_id = oi.product_id
+          WHERE oi.order_id IN (${placeholders})
+          ORDER BY oi.created_at DESC, oi.order_item_id DESC`,
+          ecommerceOrderIds,
+        );
+        ecommerceItems = rows;
+      }
+
+      const ecommerceItemsByOrderId = ecommerceItems.reduce((acc, item) => {
+        if (!acc[item.order_id]) {
+          acc[item.order_id] = [];
+        }
+        acc[item.order_id].push(item);
+        return acc;
+      }, {});
+
+      const latestEcommerceOrders = ecommerceOrders.map((order) => ({
+        ...order,
+        items: ecommerceItemsByOrderId[order.order_id] || [],
+      }));
+
+      const [serviceOrders] = await db.execute(
+        `SELECT
+          so.id,
+          so.order_ref,
+          so.parent_order_id,
+          so.service_id,
+          so.variant_id,
+          so.bundle_id,
+          so.address_id,
+          so.enquiry_id,
+          so.price,
+          so.payment_id,
+          so.payment_method,
+          so.reward_coins_used,
+          so.payment_status,
+          so.status,
+          so.cancelled_at,
+          so.refund_amount,
+          so.completed_at,
+          so.reward_coins_earned,
+          so.created_at,
+          s.name AS service_name,
+          sv.variant_name,
+          sv.image_url
+        FROM service_orders so
+        LEFT JOIN services s ON s.id = so.service_id
+        LEFT JOIN service_variants sv ON sv.id = so.variant_id
+        WHERE so.user_id = ?
+        ORDER BY so.created_at DESC, so.id DESC
+        LIMIT 5`,
+        [requestedUserId],
+      );
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          user_id: requestedUserId,
+          ecommerce_orders: latestEcommerceOrders,
+          service_orders: serviceOrders,
+        },
+      });
+    } catch (error) {
+      console.error("Get recent orders error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  }
+
+  async getAllTickets(req, res) {
+    try {
+      const { status, search } = req.query;
+
+      const conditions = [];
+      const params = [];
+
+      if (status && status !== "all") {
+        conditions.push("st.status = ?");
+        params.push(status);
+      }
+
+      if (search && String(search).trim()) {
+        const like = `%${String(search).trim()}%`;
+        conditions.push("(st.subject LIKE ? OR st.description LIKE ?)");
+        params.push(like, like);
+      }
+
+      const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+      const [tickets] = await db.execute(
+        `SELECT st.*
+        FROM support_tickets st
+        ${whereClause}
+        ORDER BY st.ticket_id DESC`,
+        params,
+      );
+
+      const users = new Map();
+      const categories = new Map();
+      const userIds = [...new Set(tickets.map((ticket) => Number(ticket.user_id)).filter(Number.isInteger))];
+      const categoryIds = [...new Set(tickets.map((ticket) => Number(ticket.category_id)).filter(Number.isInteger))];
+
+      if (userIds.length) {
+        try {
+          const placeholders = userIds.map(() => "?").join(",");
+          const [rows] = await db.execute(
+            `SELECT user_id, name, email, phone FROM customer WHERE user_id IN (${placeholders})`,
+            userIds,
+          );
+          rows.forEach((row) => users.set(Number(row.user_id), row));
+        } catch (enrichmentError) {
+          console.error("Support ticket customer enrichment skipped:", enrichmentError.code);
+        }
+      }
+
+      if (categoryIds.length) {
+        try {
+          const placeholders = categoryIds.map(() => "?").join(",");
+          const [rows] = await db.execute(
+            `SELECT category_id, name FROM support_categories WHERE category_id IN (${placeholders})`,
+            categoryIds,
+          );
+          rows.forEach((row) => categories.set(Number(row.category_id), row.name));
+        } catch (enrichmentError) {
+          console.error("Support ticket category enrichment skipped:", enrichmentError.code);
+        }
+      }
+
+      const formatted = tickets.map((ticket) => ({
+        ...ticket,
+        user_name: users.get(Number(ticket.user_id))?.name || null,
+        user_email: users.get(Number(ticket.user_id))?.email || null,
+        user_phone: users.get(Number(ticket.user_id))?.phone || null,
+        category_name: categories.get(Number(ticket.category_id)) || null,
+        support_module: ticket.support_module || "general",
+        reference_type: ticket.reference_type || null,
+        reference_id: ticket.reference_id || null,
+        reference_label: ticket.reference_label || null,
+        attachment_url: ticket.attachment_url
+          ? getPublicUrl(ticket.attachment_url, ticket.updated_at)
+          : null,
+      }));
+
+      return res.status(200).json({
+        success: true,
+        data: formatted,
+      });
+    } catch (error) {
+      console.error("Get all tickets error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        code: error.code || "SUPPORT_TICKET_LIST_FAILED",
+      });
+    }
+  }
+
+  // change a ticket's status
+  async updateTicketStatus(req, res) {
+    try {
+      const { ticketId } = req.params;
+      const { status } = req.body;
+
+      const allowedStatuses = ["open", "in_progress", "resolved", "closed"];
+      if (!allowedStatuses.includes(status)) {
+        return res.status(400).json({
+          success: false,
+          message: `Status must be one of: ${allowedStatuses.join(", ")}`,
+        });
+      }
+
+      const [[ticket]] = await db.execute(
+        `SELECT ticket_id, user_id, subject
+         FROM support_tickets
+         WHERE ticket_id = ?
+         LIMIT 1`,
+        [ticketId],
+      );
+
+      if (!ticket) {
+        return res.status(404).json({
+          success: false,
+          message: "Ticket not found",
+        });
+      }
+
+      await db.execute(
+        `UPDATE support_tickets SET status = ? WHERE ticket_id = ?`,
+        [status, ticketId],
+      );
+
+      const statusLabels = {
+        open: "reopened",
+        in_progress: "marked in progress",
+        resolved: "resolved",
+        closed: "closed",
+      };
+
+      notifyUser(
+        {
+          userId: ticket.user_id,
+          module: "common",
+          type: "support_ticket_updated",
+          title: "Support ticket updated",
+          message: `Your support ticket #${ticket.ticket_id} (${ticket.subject}) was ${statusLabels[status] || status}.`,
+          icon: "support",
+          reference_type: "support_ticket",
+          reference_id: ticket.ticket_id,
+          action_url: `/support/tickets/${ticket.ticket_id}`,
+          metadata: { status },
+        },
+        "support ticket status update notification",
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: "Ticket status updated",
+      });
+    } catch (error) {
+      console.error("Update ticket status error:", error);
       return res.status(500).json({
         success: false,
         message: "Internal server error",
