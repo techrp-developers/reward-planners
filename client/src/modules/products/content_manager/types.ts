@@ -20,6 +20,8 @@ export interface GradientConfig {
 export interface ContentZoneImage {
   imageId: number | null;
   isActive?: boolean;
+  /** Preview-only layout ratio; never persisted to the CMS API. */
+  displayAspectRatio?: number;
   imageUrl: string;
   sortOrder: number;
 }

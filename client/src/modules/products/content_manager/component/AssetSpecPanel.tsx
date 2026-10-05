@@ -6,7 +6,7 @@ export default function AssetSpecPanel() {
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
       <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Recommended Asset Specifications</p>
-      <div className="mt-2 grid gap-2 sm:grid-cols-3">
+      <div className="mt-2 grid gap-2 sm:grid-cols-2">
         {ZONES.map(({ key, label }) => {
           const spec = ZONE_IMAGE_SPECS[key];
           return (
@@ -16,7 +16,7 @@ export default function AssetSpecPanel() {
                 {spec.recommendedWidth} × {spec.recommendedHeight} px
               </p>
               <p className="text-[11px] text-slate-500">Ratio {spec.recommendedRatioLabel}</p>
-              <p className="text-[11px] text-slate-500">PNG/JPG, max {formatFileSize(spec.maxFileSize)}</p>
+              <p className="text-[11px] text-slate-500">JPG, JPEG, PNG · Recommended max {formatFileSize(spec.maxFileSize)}</p>
             </div>
           );
         })}

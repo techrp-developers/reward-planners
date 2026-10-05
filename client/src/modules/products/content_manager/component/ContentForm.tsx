@@ -236,15 +236,17 @@ export default function ContentForm({ draft, entries, now, module, onChange, onS
         ) : ["offers_banner", "brand_promotional_banner"].includes(draft.zone) ? (
           draft.id ? (
             <OfferImagesManager
+              zone={draft.zone}
               allowActivation={draft.zone === "brand_promotional_banner"}
               contentId={draft.id}
               images={draft.images ?? []}
               onChange={(images: ContentZoneImage[]) => onChange({ images })}
             />
           ) : draft.zone === "brand_promotional_banner" ? (
-            <label className="sm:col-span-2 text-sm font-semibold">
+            <div className="sm:col-span-2 text-sm font-semibold">
               Brand Promotional Images (maximum 10)
-              <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple className="mt-2 block w-full" onChange={async (event) => {
+              <span className="mt-1 block text-xs text-slate-500">Recommended: 1200 × 600 px · Ratio 2:1 · JPG, JPEG, PNG. Other dimensions are allowed.</span>
+              <input type="file" accept="image/jpeg,image/png" multiple className="mt-2 block w-full" onChange={async (event) => {
                 const files = Array.from(event.target.files ?? []);
                 if (files.length > 10) { event.target.setCustomValidity("Select at most 10 images."); event.target.reportValidity(); return; }
                 event.target.setCustomValidity("");
@@ -256,8 +258,9 @@ export default function ContentForm({ draft, entries, now, module, onChange, onS
                 })));
                 onChange({ imageFiles: files, images });
               }} />
+              <div className="mt-2 grid grid-cols-2 gap-2">{draft.images?.map((image, index) => <ImageDimensionInfo key={index} zone={draft.zone} imageUrl={image.imageUrl} file={draft.imageFiles?.[index]} />)}</div>
               <span className="text-xs text-slate-500">Images upload when you save. The live preview uses your selected display mode.</span>
-            </label>
+            </div>
           ) : (
             <div className="sm:col-span-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500">
               Save this campaign as a draft first, then come back to add one or more campaign images.

@@ -52,7 +52,10 @@ export default function PromotionalBanner({ module, entry: entryProp, className 
     return <ColorBanner entry={entry} className={className} />;
   }
 
-  const promotionalImages = extractPromotionalImages(entry);
+  const promotionalImages = extractPromotionalImages(entry).map((image) => ({
+    ...image,
+    displayAspectRatio: entry.zone === "brand_promotional_banner" ? 2 : entry.zone === "offers_banner" ? 4 / 5 : undefined,
+  }));
   if (promotionalImages.length === 0) return null;
 
   // The CMS-selected display_mode is the source of truth - never re-derived from image count.
@@ -99,7 +102,7 @@ function BannerImage({
   className?: string;
 }) {
   const dims = useImageDimensions(image.imageUrl);
-  const aspectRatio = dims ? dims.width / dims.height : fallbackAspectRatio;
+  const aspectRatio = image.displayAspectRatio ?? (dims ? dims.width / dims.height : fallbackAspectRatio);
 
   return (
     <div className={`overflow-hidden rounded-2xl bg-slate-800 ${className}`} style={{ aspectRatio }}>

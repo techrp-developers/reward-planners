@@ -26,7 +26,7 @@ export default function MobileHomePreview({ resolve, moduleIcons, previewModule,
       <div className="shrink-0"><MobileStatusBar /></div>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <MobileNavbarPreview entry={navbar} moduleIcons={moduleIcons} previewModule={previewModule} onSelectModule={onSelectModule} />
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 pb-4">
         <PromotionalBanner entry={promo ?? null} />
         <BrandPromotionalBanner entry={brand ?? null} />
         <MobileOffersPreview entry={offers} />

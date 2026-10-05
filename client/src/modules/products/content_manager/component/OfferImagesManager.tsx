@@ -2,13 +2,13 @@ import { useState } from "react";
 import { FaSpinner } from "react-icons/fa";
 import { FiAlertTriangle, FiArrowLeft, FiArrowRight, FiCheckCircle, FiPlus, FiTrash2 } from "react-icons/fi";
 import { toast } from "sonner";
-import type { ContentZoneImage } from "../types";
+import type { ContentZoneImage, Zone } from "../types";
 import { addEntryImages, deleteEntryImage, reorderEntryImages, setEntryImageActive } from "../api/ContentApi";
 import { aspectRatioLabel, ratioStatus, useImageDimensions, ZONE_IMAGE_SPECS } from "../utils/imageDimensions";
 
-const SPEC = ZONE_IMAGE_SPECS.offers_banner;
 
-function OfferImageThumb({ image, order }: { image: ContentZoneImage; order: number }) {
+function OfferImageThumb({ image, order, zone }: { image: ContentZoneImage; order: number; zone: Zone }) {
+  const SPEC = ZONE_IMAGE_SPECS[zone];
   const dims = useImageDimensions(image.imageUrl);
   const status = dims ? ratioStatus(dims.width / dims.height, SPEC.recommendedRatio) : null;
 
@@ -28,7 +28,7 @@ function OfferImageThumb({ image, order }: { image: ContentZoneImage; order: num
               {status === "match" ? (
                 <span className="flex items-center gap-0.5 text-emerald-600"><FiCheckCircle size={10} /> {aspectRatioLabel(dims.width, dims.height)}</span>
               ) : (
-                <span className="flex items-center gap-0.5 text-amber-600"><FiAlertTriangle size={10} /> Different ratio</span>
+                <span className="flex items-center gap-0.5 text-amber-600"><FiAlertTriangle size={10} /> Ratio differs from {SPEC.recommendedRatioLabel}</span>
               )}
             </p>
           </>
@@ -46,10 +46,12 @@ interface Props {
   images: ContentZoneImage[];
   onChange: (images: ContentZoneImage[]) => void;
   allowActivation?: boolean;
+  zone?: Zone;
 }
 
 /** Offers Banner only - lets the admin add/remove/reorder the campaign's images via their own endpoints. */
-export default function OfferImagesManager({ contentId, images, onChange, allowActivation = false }: Props) {
+export default function OfferImagesManager({ contentId, images, onChange, allowActivation = false, zone = "offers_banner" }: Props) {
+  const SPEC = ZONE_IMAGE_SPECS[zone];
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -121,10 +123,11 @@ export default function OfferImagesManager({ contentId, images, onChange, allowA
       <p className="text-xs font-bold text-slate-500">Offer Images</p>
       <p className="mt-1 text-[11px] text-slate-400">Add one or more images for this campaign - rendered using the selected display mode.</p>
 
+      <p className="mt-1 text-xs text-slate-500">Recommended: {SPEC.recommendedWidth} × {SPEC.recommendedHeight} px · Ratio {SPEC.recommendedRatioLabel} · JPG, JPEG, PNG</p>
       <div className="mt-3 flex flex-wrap gap-3">
         {sorted.map((image, index) => (
           <div key={image.imageId ?? image.imageUrl} className="w-32 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white">
-            <OfferImageThumb image={image} order={index + 1} />
+            <OfferImageThumb image={image} order={index + 1} zone={zone} />
             {allowActivation && <button type="button" disabled={busy || image.imageId == null} className="w-full py-1 text-xs font-semibold" onClick={async () => {
               if (image.imageId == null) return;
               setBusy(true);
@@ -180,7 +183,7 @@ export default function OfferImagesManager({ contentId, images, onChange, allowA
           )}
           <input
             type="file"
-            accept="image/*"
+            accept="image/jpeg,image/png"
             multiple
             className="hidden"
             disabled={uploading}
