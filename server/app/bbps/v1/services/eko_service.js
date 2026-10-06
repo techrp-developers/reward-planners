@@ -676,12 +676,13 @@ exports.getFetchBillReadiness = async (req, operatorId) => {
 };
 
 exports.fetchBill = async (body, req) => {
+  const initiatorId = String(process.env.EKO_INITIATOR_ID || "").trim();
   if (
     !BASE ||
     !process.env.EKO_DEVELOPER_KEY ||
     !process.env.EKO_ACCESS_KEY ||
     !process.env.EKO_USER_CODE ||
-    !process.env.EKO_INITIATOR_ID
+    !initiatorId
   ) {
     const envErr = new Error("Missing BBPS provider environment configuration");
     envErr.statusCode = 500;
@@ -704,7 +705,8 @@ exports.fetchBill = async (body, req) => {
     const payload = {
       operator_id,
       ...dynamicParams,
-      initiator_id: process.env.EKO_INITIATOR_ID,
+      phone_operator_code: String(operator_id || "").trim(),
+      initiator_id: initiatorId,
       user_code: process.env.EKO_USER_CODE,
       client_ref_id: Date.now().toString(),
       hc_channel: "0",
@@ -718,6 +720,9 @@ exports.fetchBill = async (body, req) => {
       dynamicKeys: Object.keys(body || {}).filter(
         (key) => !["operator_id"].includes(key),
       ),
+      queryKeys: Object.keys(payload),
+      initiatorIdPresent: Boolean(payload.initiator_id),
+      phone_operator_code: payload.phone_operator_code,
     });
 
     const fetchBillEndpoint = ekoRechargeUrl("customer/payment/bbps/bill");
