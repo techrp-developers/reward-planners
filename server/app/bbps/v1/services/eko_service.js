@@ -317,13 +317,47 @@ exports.searchOperators = async (keyword = "") => {
 };
 
 // 3. Operator details
+const normalizeOperatorDetails = (response, fallback = {}) => {
+  const record = response?.param_attributes || response?.data?.param_attributes || response;
+  const fields = record?.list_elements ?? record?.data;
+  return {
+    ...fallback,
+    ...record,
+    data: Array.isArray(fields) ? fields : [],
+  };
+};
+
 exports.getOperatorDetails = async (id) => {
   return withCatalogCache(`operator:${id}`, async () => {
     const headers = await headerUtil.fetchHeaders();
     const res = await axios.get(ekoUrl(`billpayments/operators/${id}`), {
       headers,
     });
-    return res.data;
+    const legacy = normalizeOperatorDetails(res.data);
+    if (legacy.data.some((field) => field?.param_name && field?.param_label)) {
+      return legacy;
+    }
+
+    const initiatorId = String(process.env.EKO_INITIATOR_ID || "").trim();
+    if (!initiatorId) {
+      throw new Error("Missing BBPS initiator configuration for operator parameters");
+    }
+    const parameters = await axios.get(
+      ekoRechargeUrl(`customer/payment/bbps/operator/${encodeURIComponent(id)}/parameters`),
+      {
+        headers: await headerUtil.fetchHeaders(),
+        params: { initiator_id: initiatorId },
+        timeout: FETCH_BILL_TIMEOUT_MS,
+      },
+    );
+    if (parameters.data?.status !== undefined && Number(parameters.data.status) !== 0) {
+      throw new Error("Unable to load biller fields from the provider. Please try again.");
+    }
+    const details = normalizeOperatorDetails(parameters.data, legacy);
+    if (!details.data.some((field) => field?.param_name && field?.param_label)) {
+      throw new Error("This biller's input fields are currently unavailable. Please try again later.");
+    }
+    return details;
   });
 };
 
