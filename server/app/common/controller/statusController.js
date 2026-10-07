@@ -10,6 +10,7 @@ const { getPublicUrl } = require("../../../utils/publicUrl");
 
 const VIDEO_MAX_SECONDS = 30;
 const TEXT_MAX_LENGTH = 700;
+const COMMENT_MAX_LENGTH = 1000;
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 const VISIBILITIES = new Set([
   "same_company", "all_companies", "all_except_companies", "custom_people",
@@ -60,9 +61,27 @@ function serialize(row) {
     duration_seconds: row.media_duration_seconds,
     visibility: row.visibility,
     viewed: Boolean(Number(row.viewed || 0)),
+    liked: Boolean(Number(row.liked || 0)),
     view_count: row.view_count === undefined ? undefined : Number(row.view_count),
+    like_count: row.like_count === undefined ? undefined : Number(row.like_count),
+    comment_count: row.comment_count === undefined ? undefined : Number(row.comment_count),
     created_at: row.created_at,
     expires_at: row.expires_at,
+  };
+}
+
+function serializeInteraction(row) {
+  return {
+    id: row.comment_id,
+    status_id: row.status_id,
+    user: {
+      id: row.user_id,
+      name: row.name,
+      image_url: getPublicUrl(row.user_image),
+    },
+    text: row.comment_text,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
   };
 }
 
@@ -242,6 +261,110 @@ exports.views = async (req, res) => {
   } catch (error) {
     console.error("Get status views error:", error);
     return res.status(500).json({ success: false, message: "Failed to fetch status views" });
+  }
+};
+
+exports.toggleLike = async (req, res) => {
+  try {
+    const result = await StatusModel.toggleLike(req.params.status_id, req.user.user_id);
+    if (!result) {
+      return res.status(404).json({ success: false, message: "Status not found or expired" });
+    }
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    console.error("Toggle status like error:", error);
+    return res.status(500).json({ success: false, message: "Failed to update status like" });
+  }
+};
+
+exports.likes = async (req, res) => {
+  try {
+    const rows = await StatusModel.getLikes(req.params.status_id, req.user.user_id);
+    if (!rows) {
+      return res.status(404).json({ success: false, message: "Status not found or expired" });
+    }
+    return res.json({
+      success: true,
+      like_count: rows.length,
+      data: rows.map((row) => ({
+        user: { id: row.user_id, name: row.name, image_url: getPublicUrl(row.user_image) },
+        liked_at: row.created_at,
+      })),
+    });
+  } catch (error) {
+    console.error("Get status likes error:", error);
+    return res.status(500).json({ success: false, message: "Failed to fetch status likes" });
+  }
+};
+
+exports.createComment = async (req, res) => {
+  try {
+    const text = typeof req.body.text === "string" ? req.body.text.trim() : "";
+    if (!text || text.length > COMMENT_MAX_LENGTH) {
+      return res.status(422).json({
+        success: false,
+        message: `Comment must be between 1 and ${COMMENT_MAX_LENGTH} characters`,
+      });
+    }
+    const comment = await StatusModel.createComment(
+      req.params.status_id,
+      req.user.user_id,
+      text,
+    );
+    if (!comment) {
+      return res.status(404).json({ success: false, message: "Status not found or expired" });
+    }
+    return res.status(201).json({ success: true, data: serializeInteraction(comment) });
+  } catch (error) {
+    console.error("Create status comment error:", error);
+    return res.status(500).json({ success: false, message: "Failed to add comment" });
+  }
+};
+
+exports.comments = async (req, res) => {
+  try {
+    const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 50));
+    const parsedBeforeId = Number.parseInt(req.query.before_id, 10);
+    const beforeId = Number.isSafeInteger(parsedBeforeId) && parsedBeforeId > 0
+      ? parsedBeforeId
+      : null;
+    const rows = await StatusModel.getComments(
+      req.params.status_id,
+      req.user.user_id,
+      limit,
+      beforeId,
+    );
+    if (!rows) {
+      return res.status(404).json({ success: false, message: "Status not found or expired" });
+    }
+    return res.json({
+      success: true,
+      data: rows.map(serializeInteraction),
+      pagination: {
+        limit,
+        next_before_id: rows.length === limit ? rows[rows.length - 1].comment_id : null,
+      },
+    });
+  } catch (error) {
+    console.error("Get status comments error:", error);
+    return res.status(500).json({ success: false, message: "Failed to fetch comments" });
+  }
+};
+
+exports.deleteComment = async (req, res) => {
+  try {
+    const deleted = await StatusModel.deleteComment(
+      req.params.status_id,
+      req.params.comment_id,
+      req.user.user_id,
+    );
+    if (!deleted) {
+      return res.status(404).json({ success: false, message: "Comment not found or not permitted" });
+    }
+    return res.json({ success: true, message: "Comment deleted" });
+  } catch (error) {
+    console.error("Delete status comment error:", error);
+    return res.status(500).json({ success: false, message: "Failed to delete comment" });
   }
 };
 

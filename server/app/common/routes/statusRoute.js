@@ -39,6 +39,11 @@ router.get("/audience-options", controller.audienceOptions);
 router.get("/feed", controller.feed);
 router.post("/:status_id/view", controller.view);
 router.get("/:status_id/views", controller.views);
+router.post("/:status_id/like", controller.toggleLike);
+router.get("/:status_id/likes", controller.likes);
+router.post("/:status_id/comments", controller.createComment);
+router.get("/:status_id/comments", controller.comments);
+router.delete("/:status_id/comments/:comment_id", controller.deleteComment);
 router.delete("/:status_id", controller.remove);
 
 module.exports = router;

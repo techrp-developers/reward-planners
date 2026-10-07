@@ -73,7 +73,9 @@ class StatusModel {
   async findActiveById(statusId) {
     const [rows] = await db.execute(
       `SELECT s.*, c.name AS user_name, c.user_image,
-              (SELECT COUNT(*) FROM user_status_views v WHERE v.status_id = s.status_id) AS view_count
+              (SELECT COUNT(*) FROM user_status_views v WHERE v.status_id = s.status_id) AS view_count,
+              (SELECT COUNT(*) FROM user_status_likes l WHERE l.status_id = s.status_id) AS like_count,
+              (SELECT COUNT(*) FROM user_status_comments cm WHERE cm.status_id = s.status_id) AS comment_count
        FROM user_statuses s
        INNER JOIN customer c ON c.user_id = s.user_id
        WHERE s.status_id = ? AND s.deleted_at IS NULL AND s.expires_at > UTC_TIMESTAMP()
@@ -86,12 +88,16 @@ class StatusModel {
   async getMine(userId) {
     const [rows] = await db.execute(
       `SELECT s.*, c.name AS user_name, c.user_image,
-              (SELECT COUNT(*) FROM user_status_views v WHERE v.status_id = s.status_id) AS view_count
+              (SELECT COUNT(*) FROM user_status_views v WHERE v.status_id = s.status_id) AS view_count,
+              (SELECT COUNT(*) FROM user_status_likes l WHERE l.status_id = s.status_id) AS like_count,
+              (SELECT COUNT(*) FROM user_status_comments cm WHERE cm.status_id = s.status_id) AS comment_count,
+              EXISTS(SELECT 1 FROM user_status_likes mine
+                     WHERE mine.status_id = s.status_id AND mine.user_id = ?) AS liked
        FROM user_statuses s
        INNER JOIN customer c ON c.user_id = s.user_id
        WHERE s.user_id = ? AND s.deleted_at IS NULL AND s.expires_at > UTC_TIMESTAMP()
        ORDER BY s.created_at ASC`,
-      [userId],
+      [userId, userId],
     );
     return rows;
   }
@@ -129,7 +135,13 @@ class StatusModel {
       `SELECT s.*, c.name AS user_name, c.user_image,
               IF(s.user_id = viewer.user_id OR v.status_id IS NOT NULL, 1, 0) AS viewed,
               (SELECT COUNT(*) FROM user_status_views status_view
-               WHERE status_view.status_id = s.status_id) AS view_count
+               WHERE status_view.status_id = s.status_id) AS view_count,
+              (SELECT COUNT(*) FROM user_status_likes status_like
+               WHERE status_like.status_id = s.status_id) AS like_count,
+              (SELECT COUNT(*) FROM user_status_comments status_comment
+               WHERE status_comment.status_id = s.status_id) AS comment_count,
+              EXISTS(SELECT 1 FROM user_status_likes my_like
+                     WHERE my_like.status_id = s.status_id AND my_like.user_id = viewer.user_id) AS liked
        FROM user_statuses s
        INNER JOIN customer c ON c.user_id = s.user_id AND c.status = 1
        LEFT JOIN user_status_views v ON v.status_id = s.status_id AND v.viewer_id = ?
@@ -195,6 +207,135 @@ class StatusModel {
     status.viewed = 1;
     status.view_count = Number(viewSummary.view_count);
     return status;
+  }
+
+  async findAccessible(statusId, viewerId, executor = db) {
+    const [rows] = await executor.execute(
+      `SELECT s.status_id, s.user_id
+       FROM user_statuses s
+       LEFT JOIN customer viewer ON viewer.user_id = ?
+       LEFT JOIN company_users viewer_employee ON viewer_employee.id = viewer.company_user_id
+       WHERE s.status_id = ? AND s.deleted_at IS NULL AND s.expires_at > UTC_TIMESTAMP()
+         AND (
+           s.user_id = viewer.user_id
+           OR (s.visibility = 'same_company' AND s.company_id IS NOT NULL
+               AND viewer_employee.company_id = s.company_id)
+           OR (s.visibility = 'all_companies' AND viewer_employee.company_id IS NOT NULL)
+           OR (s.visibility = 'all_except_companies' AND viewer_employee.company_id IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM user_status_excluded_companies e
+                               WHERE e.status_id = s.status_id AND e.company_id = viewer_employee.company_id))
+           OR (s.visibility = 'custom_people' AND EXISTS
+               (SELECT 1 FROM user_status_allowed_users a
+                WHERE a.status_id = s.status_id AND a.user_id = viewer.user_id))
+         ) LIMIT 1`,
+      [viewerId, statusId],
+    );
+    return rows[0] || null;
+  }
+
+  async toggleLike(statusId, userId) {
+    const connection = await db.getConnection();
+    try {
+      await connection.beginTransaction();
+      const status = await this.findAccessible(statusId, userId, connection);
+      if (!status) {
+        await connection.rollback();
+        return null;
+      }
+      const [existing] = await connection.execute(
+        `SELECT user_id FROM user_status_likes
+         WHERE status_id = ? AND user_id = ? FOR UPDATE`,
+        [statusId, userId],
+      );
+      const liked = existing.length === 0;
+      if (liked) {
+        await connection.execute(
+          `INSERT INTO user_status_likes (status_id, user_id) VALUES (?, ?)`,
+          [statusId, userId],
+        );
+      } else {
+        await connection.execute(
+          `DELETE FROM user_status_likes WHERE status_id = ? AND user_id = ?`,
+          [statusId, userId],
+        );
+      }
+      const [[summary]] = await connection.execute(
+        `SELECT COUNT(*) AS like_count FROM user_status_likes WHERE status_id = ?`,
+        [statusId],
+      );
+      await connection.commit();
+      return { liked, like_count: Number(summary.like_count) };
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async getLikes(statusId, viewerId) {
+    if (!(await this.findAccessible(statusId, viewerId))) return null;
+    const [rows] = await db.execute(
+      `SELECT l.user_id, c.name, c.user_image, l.created_at
+       FROM user_status_likes l
+       INNER JOIN customer c ON c.user_id = l.user_id
+       WHERE l.status_id = ? ORDER BY l.created_at DESC`,
+      [statusId],
+    );
+    return rows;
+  }
+
+  async createComment(statusId, userId, commentText) {
+    if (!(await this.findAccessible(statusId, userId))) return null;
+    const [result] = await db.execute(
+      `INSERT INTO user_status_comments (status_id, user_id, comment_text)
+       VALUES (?, ?, ?)`,
+      [statusId, userId, commentText],
+    );
+    const [rows] = await db.execute(
+      `SELECT cm.comment_id, cm.status_id, cm.user_id, cm.comment_text,
+              cm.created_at, cm.updated_at, c.name, c.user_image
+       FROM user_status_comments cm
+       INNER JOIN customer c ON c.user_id = cm.user_id
+       WHERE cm.comment_id = ? LIMIT 1`,
+      [result.insertId],
+    );
+    return rows[0];
+  }
+
+  async getComments(statusId, viewerId, limit = 50, beforeId = null) {
+    if (!(await this.findAccessible(statusId, viewerId))) return null;
+    const params = [statusId];
+    const beforeClause = beforeId ? " AND cm.comment_id < ?" : "";
+    if (beforeId) params.push(beforeId);
+    params.push(limit);
+    const [rows] = await db.execute(
+      `SELECT cm.comment_id, cm.status_id, cm.user_id, cm.comment_text,
+              cm.created_at, cm.updated_at, c.name, c.user_image
+       FROM user_status_comments cm
+       INNER JOIN customer c ON c.user_id = cm.user_id
+       WHERE cm.status_id = ?${beforeClause}
+       ORDER BY cm.comment_id DESC LIMIT ?`,
+      params,
+    );
+    return rows;
+  }
+
+  async deleteComment(statusId, commentId, userId) {
+    const [rows] = await db.execute(
+      `SELECT cm.comment_id
+       FROM user_status_comments cm
+       INNER JOIN user_statuses s ON s.status_id = cm.status_id
+       WHERE cm.comment_id = ? AND cm.status_id = ? AND s.deleted_at IS NULL
+         AND (cm.user_id = ? OR s.user_id = ?) LIMIT 1`,
+      [commentId, statusId, userId, userId],
+    );
+    if (!rows.length) return false;
+    await db.execute(
+      `DELETE FROM user_status_comments WHERE comment_id = ? AND status_id = ?`,
+      [commentId, statusId],
+    );
+    return true;
   }
 
   async getViews(statusId, ownerId) {
