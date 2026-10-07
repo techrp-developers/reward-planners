@@ -2,6 +2,10 @@ const fs = require("fs");
 const path = require("path");
 const ContentZoneModel = require("../models/contentZoneModel");
 const { getContentImageUrl } = require("../utils/contentPublicUrl");
+const { getPublicUrl } = require("../utils/publicUrl");
+const { uploadToR2 } = require("../utils/r2upload");
+const { deleteFromR2 } = require("../utils/r2delete");
+const { copyInR2 } = require("../utils/r2copy");
 
 const UPLOAD_ROOT = path.join(__dirname, "../uploads/content-zone-entries");
 const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
@@ -10,15 +14,48 @@ const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
 // multer maxCount values in routes/contentRoutes.js.
 const MAX_OFFER_IMAGES = 10;
 
+const normalizeTargetIds = (body) => {
+  let raw = body.target_ids;
+  if (typeof raw === "string") {
+    try { raw = JSON.parse(raw); } catch { raw = []; }
+  }
+  const ids = Array.isArray(raw)
+    ? [...new Set(raw.map(Number).filter((id) => Number.isInteger(id) && id > 0))]
+    : [];
+  if (body.target_type === "product" && !ids.length && Number(body.target_id) > 0) ids.push(Number(body.target_id));
+  body.target_ids = body.target_type === "product" ? ids : [];
+  body.target_id = body.target_type ? (ids[0] ?? Number(body.target_id)) : null;
+  return ids;
+};
+
+const normalizeProductOffers = (value) => {
+  let raw = value;
+  if (typeof raw === "string") { try { raw = JSON.parse(raw); } catch { raw = []; } }
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw)) { const error = new Error("product_offers must be an array"); error.statusCode = 400; throw error; }
+  return raw.map((item) => ({ product_id: Number(item.product_id), variant_id: Number(item.variant_id), offer_price: Number(item.offer_price) }));
+};
+
+const validateTargets = async (body) => {
+  const ids = normalizeTargetIds(body);
+  if (body.target_type === "product") {
+    await Promise.all(ids.map((id) => ContentZoneModel.validateTarget("product", id)));
+  } else if (body.target_type) {
+    await ContentZoneModel.validateTarget(body.target_type, body.target_id);
+  }
+};
+
 const cleanupTempFile = (file) => {
-  if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+  // Kept for compatibility with requests already processed by the former disk
+  // uploader during a rolling deployment. New memory uploads have no file.path.
+  if (file?.path && fs.existsSync(file.path)) fs.unlinkSync(file.path);
 };
 
 const cleanupTempFiles = (files) => {
   (files || []).forEach(cleanupTempFile);
 };
 
-// Stored/returned as a relative web path, e.g. /uploads/content-zone-entries/4/content-xxx.jpg
+// Stores only the R2 object key in MySQL; API responses turn it into a CDN URL.
 const uploadEntryImage = async (id, file) => {
   if (!file.mimetype.startsWith("image/")) {
     cleanupTempFile(file);
@@ -32,16 +69,11 @@ const uploadEntryImage = async (id, file) => {
   const extension = ALLOWED_EXTENSIONS.includes(rawExtension) ? rawExtension : ".jpg";
   const filename = `content-${Date.now()}-${Math.random().toString(36).substring(2, 8)}${extension}`;
 
-  const entryDir = path.join(UPLOAD_ROOT, String(id));
-  if (!fs.existsSync(entryDir)) {
-    fs.mkdirSync(entryDir, { recursive: true });
-  }
-
-  const destination = path.join(entryDir, filename);
-  fs.copyFileSync(file.path, destination);
+  const key = `public/content-zone-entries/${id}/${filename}`;
+  const buffer = file.buffer || fs.readFileSync(file.path);
+  await uploadToR2(buffer, key, file.mimetype);
   cleanupTempFile(file);
-
-  return `/uploads/content-zone-entries/${id}/${filename}`;
+  return key;
 };
 
 // Uploads each file for a campaign in order, inserting one content_zone_entry_images
@@ -69,11 +101,15 @@ const assertWithinOfferImageLimit = (existingCount, incomingCount) => {
 
 // Removes a locally stored content image given its stored relative path (e.g. /uploads/content-zone-entries/4/old.jpg).
 // Ignores anything that isn't one of our own local paths (legacy R2 keys, absolute URLs, etc).
-const deleteLocalEntryImage = (relativePath) => {
-  if (!relativePath || !relativePath.startsWith("/uploads/content-zone-entries/")) return;
+const deleteEntryImageAsset = async (storedPath) => {
+  if (!storedPath || /^https?:\/\//i.test(storedPath)) return;
+  if (!storedPath.startsWith("/uploads/content-zone-entries/")) {
+    await deleteFromR2(storedPath);
+    return;
+  }
 
   const uploadsRoot = path.join(__dirname, "../uploads");
-  const absolutePath = path.join(uploadsRoot, relativePath.replace(/^\/uploads[\\/]/, ""));
+  const absolutePath = path.join(uploadsRoot, storedPath.replace(/^\/uploads[\\/]/, ""));
 
   // Guard against path traversal - resolved path must stay inside the content-zone-entries dir.
   if (!absolutePath.startsWith(UPLOAD_ROOT)) return;
@@ -85,33 +121,39 @@ const deleteLocalEntryImage = (relativePath) => {
 
 // Copies a locally stored content image into another campaign's directory (used by duplicateEntry).
 // Returns the new relative path, or null if the source isn't a local file we can find.
-const copyContentImageFile = (sourceRelativePath, targetContentId) => {
-  if (!sourceRelativePath || !sourceRelativePath.startsWith("/uploads/content-zone-entries/")) return null;
+const copyContentImageFile = async (sourceRelativePath, targetContentId) => {
+  if (!sourceRelativePath || /^https?:\/\//i.test(sourceRelativePath)) return null;
+
+  const extension = path.extname(sourceRelativePath) || ".jpg";
+  const filename = `content-${Date.now()}-${Math.random().toString(36).substring(2, 8)}${extension}`;
+
+  if (!sourceRelativePath.startsWith("/uploads/content-zone-entries/")) {
+    const targetKey = `public/content-zone-entries/${targetContentId}/${filename}`;
+    await copyInR2(sourceRelativePath, targetKey);
+    return targetKey;
+  }
 
   const uploadsRoot = path.join(__dirname, "../uploads");
   const sourceAbsolute = path.join(uploadsRoot, sourceRelativePath.replace(/^\/uploads[\\/]/, ""));
 
   if (!sourceAbsolute.startsWith(UPLOAD_ROOT) || !fs.existsSync(sourceAbsolute)) return null;
 
-  const extension = path.extname(sourceAbsolute) || ".jpg";
-  const filename = `content-${Date.now()}-${Math.random().toString(36).substring(2, 8)}${extension}`;
-
-  const targetDir = path.join(UPLOAD_ROOT, String(targetContentId));
-  if (!fs.existsSync(targetDir)) {
-    fs.mkdirSync(targetDir, { recursive: true });
-  }
-
-  fs.copyFileSync(sourceAbsolute, path.join(targetDir, filename));
-
-  return `/uploads/content-zone-entries/${targetContentId}/${filename}`;
+  const targetKey = `public/content-zone-entries/${targetContentId}/${filename}`;
+  const mimeByExtension = { ".png": "image/png", ".gif": "image/gif", ".webp": "image/webp", ".jpeg": "image/jpeg", ".jpg": "image/jpeg" };
+  await uploadToR2(fs.readFileSync(sourceAbsolute), targetKey, mimeByExtension[extension.toLowerCase()] || "image/jpeg");
+  return targetKey;
 };
+
+const getEntryImageUrl = (storedPath) => storedPath?.startsWith("/uploads/")
+  ? getContentImageUrl(storedPath)
+  : getPublicUrl(storedPath);
 
 const withPublicImageUrl = (entry) => {
   if (!entry) return entry;
   if (entry.content_type !== "image" || !entry.image_url) {
     return { ...entry, image_url: entry.content_type === "image" ? entry.image_url : null };
   }
-  return { ...entry, image_url: getContentImageUrl(entry.image_url) };
+  return { ...entry, image_url: getEntryImageUrl(entry.image_url) };
 };
 
 // Only offers_banner campaigns carry multiple images; every other zone keeps
@@ -127,7 +169,7 @@ const withOffersImages = async (entry) => {
     ? rows.map((row) => ({
         image_id: row.image_id,
         content_id: row.content_id,
-        image_url: getContentImageUrl(row.image_url),
+        image_url: getEntryImageUrl(row.image_url),
         sort_order: row.sort_order,
         is_active: row.is_active,
       }))
@@ -146,7 +188,11 @@ const withOffersImageCount = async (entry) => {
   return { ...entry, image_count: rows.length || (entry.image_url ? 1 : 0) };
 };
 
-const hydrateEntry = async (entry) => withOffersImages(withPublicImageUrl(entry));
+const hydrateEntry = async (entry) => {
+  const hydrated = await withOffersImages(withPublicImageUrl(entry));
+  if (!hydrated || hydrated.zone !== "promotional_banner" || hydrated.target_type !== "product") return hydrated;
+  return { ...hydrated, product_offers: await ContentZoneModel.getProductOffers(hydrated.content_id) };
+};
 const hydrateEntryForList = async (entry) => withOffersImageCount(withPublicImageUrl(entry));
 
 class ContentController {
@@ -216,10 +262,11 @@ class ContentController {
 
     try {
       const body = { ...req.body };
+      const productOffers = normalizeProductOffers(body.product_offers) || [];
+      delete body.product_offers;
       body.is_published = body.is_published === "true" || body.is_published === true;
       body.target_type = body.target_type || null;
-      body.target_id = body.target_type ? Number(body.target_id) : null;
-      if (body.target_type) await ContentZoneModel.validateTarget(body.target_type, body.target_id);
+      await validateTargets(body);
 
       if (offerFiles.length && body.zone !== "offers_banner") {
         cleanupTempFile(imageFile);
@@ -251,6 +298,14 @@ class ContentController {
       body.created_by_name = req.user?.email || null;
 
       const entry = await ContentZoneModel.createEntry(body, { hasImageFile: !!imageFile || !!offerFiles.length });
+      if (productOffers.length) {
+        if (body.zone !== "promotional_banner" || body.target_type !== "product") {
+          const error = new Error("Product offer prices are only supported for promotional banners targeting products");
+          error.statusCode = 400;
+          throw error;
+        }
+        await ContentZoneModel.replaceProductOffers(entry.content_id, productOffers);
+      }
 
       let imageUrl = null;
 
@@ -288,10 +343,11 @@ class ContentController {
       const { id } = req.params;
       const existing = await ContentZoneModel.getEntryById(id);
       const body = { ...req.body };
+      const productOffers = normalizeProductOffers(body.product_offers);
+      delete body.product_offers;
       if (body.target_type !== undefined || body.target_id !== undefined) {
         body.target_type = body.target_type || null;
-        body.target_id = body.target_type ? Number(body.target_id) : null;
-        if (body.target_type) await ContentZoneModel.validateTarget(body.target_type, body.target_id);
+        await validateTargets(body);
       }
 
       if (offerFiles.length && existing.zone !== "offers_banner") {
@@ -338,10 +394,20 @@ class ContentController {
       }
 
       const entry = await ContentZoneModel.updateEntry(id, body);
+      if (productOffers !== undefined) {
+        const zone = body.zone || existing.zone;
+        const targetType = body.target_type || existing.target_type;
+        if (productOffers.length && (zone !== "promotional_banner" || targetType !== "product")) {
+          const error = new Error("Product offer prices are only supported for promotional banners targeting products");
+          error.statusCode = 400;
+          throw error;
+        }
+        await ContentZoneModel.replaceProductOffers(id, productOffers);
+      }
 
       if (imageUrl && previousImageKey) {
         try {
-          deleteLocalEntryImage(previousImageKey);
+          await deleteEntryImageAsset(previousImageKey);
         } catch (err) {
           console.error("OLD CONTENT IMAGE DELETE ERROR", err);
         }
@@ -373,18 +439,25 @@ class ContentController {
   async duplicateEntry(req, res) {
     try {
       const original = await ContentZoneModel.getEntryById(req.params.id);
-      const entry = await ContentZoneModel.duplicateEntry(req.params.id);
+      let entry = await ContentZoneModel.duplicateEntry(req.params.id);
+
+      if (original.image_url) {
+        const copiedMainImage = await copyContentImageFile(original.image_url, entry.content_id);
+        if (copiedMainImage) await ContentZoneModel.updateEntryImage(entry.content_id, copiedMainImage);
+      }
 
       if (original.zone === "offers_banner") {
         const originalImages = await ContentZoneModel.getImagesByContentId(original.content_id);
 
         for (const image of originalImages) {
-          const copiedPath = copyContentImageFile(image.image_url, entry.content_id);
+          const copiedPath = await copyContentImageFile(image.image_url, entry.content_id);
           if (copiedPath) {
             await ContentZoneModel.createEntryImage(entry.content_id, copiedPath, image.sort_order);
           }
         }
       }
+
+      entry = await ContentZoneModel.getEntryById(entry.content_id);
 
       return res.status(201).json({
         success: true,
@@ -432,7 +505,7 @@ class ContentController {
 
       if (entry.content_type === "image" && entry.image_url) {
         try {
-          deleteLocalEntryImage(entry.image_url);
+          await deleteEntryImageAsset(entry.image_url);
         } catch (err) {
           console.error("CONTENT IMAGE DELETE ERROR", err);
         }
@@ -440,7 +513,7 @@ class ContentController {
 
       for (const image of childImages) {
         try {
-          deleteLocalEntryImage(image.image_url);
+          await deleteEntryImageAsset(image.image_url);
         } catch (err) {
           console.error("OFFER IMAGE DELETE ERROR", err);
         }
@@ -491,7 +564,7 @@ class ContentController {
       return res.status(201).json({
         success: true,
         message: "Offer images added successfully",
-        data: created.map((image) => ({ ...image, image_url: getContentImageUrl(image.image_url) })),
+        data: created.map((image) => ({ ...image, image_url: getEntryImageUrl(image.image_url) })),
       });
     } catch (err) {
       cleanupTempFiles(files);
@@ -516,7 +589,7 @@ class ContentController {
       await ContentZoneModel.deleteEntryImage(imageId);
 
       try {
-        deleteLocalEntryImage(image.image_url);
+        await deleteEntryImageAsset(image.image_url);
       } catch (err) {
         console.error("OFFER IMAGE DELETE ERROR", err);
       }
@@ -550,7 +623,7 @@ class ContentController {
       return res.json({
         success: true,
         message: "Offer image deactivated successfully",
-        data: { ...updated, image_url: getContentImageUrl(updated.image_url) },
+        data: { ...updated, image_url: getEntryImageUrl(updated.image_url) },
       });
     } catch (err) {
       return res.status(err.statusCode || 500).json({
@@ -576,7 +649,7 @@ class ContentController {
       return res.json({
         success: true,
         message: "Offer image activated successfully",
-        data: { ...updated, image_url: getContentImageUrl(updated.image_url) },
+        data: { ...updated, image_url: getEntryImageUrl(updated.image_url) },
       });
     } catch (err) {
       return res.status(err.statusCode || 500).json({
@@ -603,7 +676,7 @@ class ContentController {
       return res.json({
         success: true,
         message: "Offer images reordered successfully",
-        data: rows.map((row) => ({ ...row, image_url: getContentImageUrl(row.image_url) })),
+        data: rows.map((row) => ({ ...row, image_url: getEntryImageUrl(row.image_url) })),
       });
     } catch (err) {
       return res.status(err.statusCode || 500).json({

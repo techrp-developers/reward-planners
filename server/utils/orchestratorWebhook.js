@@ -3,6 +3,7 @@ const ecommerceWebhook = require("../app/ecommerce/v1/utils/webhook");
 const serviceWebhook = require("../app/service/v1/utils/webhook");
 const mpsServiceWebhook = require("../mps-connect/common/utils/webhook");
 const bbpsWebhook = require("../app/bbps/v1/utils/webhook");
+const busBookingWebhook = require("../app/busboooking/utils/webhook");
 
 async function handleWebhook(req, res) {
   try {
@@ -79,6 +80,8 @@ async function handleWebhook(req, res) {
             ? ecommerceWebhook
             : moduleType === "bbps"
               ? bbpsWebhook
+              : moduleType === "busbooking"
+                ? busBookingWebhook
               : null;
 
     if (!handler) {

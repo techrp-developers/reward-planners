@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { AxiosError } from "axios";
 import { useAuth } from "./useAuth";
@@ -33,6 +33,7 @@ export default function VerifyOtpPage() {
   const [localError, setLocalError] = useState("");
   const [cooldown, setCooldown] = useState(0);
   const [mounted, setMounted] = useState(false);
+  const verificationInFlight = useRef(false);
 
   useEffect(() => {
     const storedEmail =
@@ -44,13 +45,7 @@ export default function VerifyOtpPage() {
     }
 
     setEmail(storedEmail);
-  }, [navigate]);
-
-  useEffect(() => {
-    if (otp.length === 6 && email) {
-      verifyOtp(email, otp);
-    }
-  }, [otp]);
+  }, [location.state, navigate]);
 
   useEffect(() => {
     if (!loading && email) {
@@ -72,13 +67,19 @@ export default function VerifyOtpPage() {
     e.preventDefault();
     setLocalError("");
 
-    if (otp.length !== 6) {
+    const normalizedOtp = otp.trim();
+    if (!email || !/^\d{6}$/.test(normalizedOtp)) {
       setLocalError("Enter valid 6-digit OTP");
       return;
     }
 
+    // The OTP is single-use. Guard against a double-click/Enter submitting it
+    // twice before React has had time to update the shared loading state.
+    if (verificationInFlight.current) return;
+    verificationInFlight.current = true;
+
     try {
-      await verifyOtp(email!, otp.trim());
+      await verifyOtp(email, normalizedOtp);
     } catch (err: unknown) {
       if (err instanceof AxiosError) {
         setLocalError(
@@ -89,6 +90,8 @@ export default function VerifyOtpPage() {
       } else {
         setLocalError("OTP failed");
       }
+    } finally {
+      verificationInFlight.current = false;
     }
   };
 

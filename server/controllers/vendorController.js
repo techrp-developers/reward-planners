@@ -403,10 +403,11 @@ class VendorController {
           throw new Error("Image processing failed");
         }
 
-        //  R2 path
-        const r2Path = `public/category-images/${categoryID}/cover.webp`;
+        // Use a new object key for every replacement so CDN/mobile caches cannot
+        // keep serving an older image stored at the same URL.
+        const r2Path = `public/category-images/${categoryID}/cover-${Date.now()}.webp`;
 
-        // Upload to R2 (overwrites existing file)
+        // Upload to R2
         await uploadToR2(optimizedBuffer, r2Path, "image/webp");
 
         // cleanup temp file
@@ -654,9 +655,9 @@ class VendorController {
           throw new Error("Image processing failed");
         }
 
-        const r2Path = `public/subcategory-images/${id}/cover.webp`;
+        const r2Path = `public/subcategory-images/${id}/cover-${Date.now()}.webp`;
 
-        //  overwrite existing image
+        // Upload the replacement at a new URL to avoid stale CDN/app caches.
         await uploadToR2(optimizedBuffer, r2Path, "image/webp");
 
         fs.unlinkSync(req.file.path);

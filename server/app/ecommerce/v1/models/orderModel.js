@@ -310,7 +310,7 @@ class orderModel {
     if (pageRows.length) {
       const [orderItems] = await db.query(
         `SELECT oi.order_id, oi.order_item_id, oi.product_id, oi.variant_id,
-                oi.quantity, oi.final_price, oi.reward_coins_used,
+                oi.quantity, oi.price, oi.final_price, oi.reward_coins_used,
                 oi.reward_coins_earned, oi.fulfillment_status,
                 p.product_name, p.brand_name,
                 os.shipping_status,
@@ -339,7 +339,8 @@ class orderModel {
           product_name: item.product_name,
           brand_name: item.brand_name,
           quantity: item.quantity,
-          price: Number(item.final_price || 0),
+          price: Number(item.price || 0),
+          item_total: Number(item.final_price || 0),
           status:
             item.fulfillment_status === "cancelled"
               ? "cancelled"

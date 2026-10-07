@@ -42,6 +42,12 @@ const isValidColorValue = (value) => {
 // null/undefined just means "not set", not invalid.
 const isValidTextColor = (value) => value === null || value === undefined || value === "" || HEX_TEXT_COLOR_RE.test(String(value).trim());
 
+const parseTargetIds = (value) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string" || !value.trim()) return [];
+  try { return JSON.parse(value); } catch { return []; }
+};
+
 class ContentZoneModel {
   //   =======================Helper=================================
 
@@ -89,6 +95,10 @@ class ContentZoneModel {
     if (data.target_type !== undefined && data.target_type !== null && data.target_type !== "") {
       if (!TARGET_TYPES.includes(data.target_type)) errors.push(`target_type must be one of: ${TARGET_TYPES.join(", ")}`);
       if (!Number.isInteger(Number(data.target_id)) || Number(data.target_id) <= 0) errors.push("target_id must be a positive integer");
+      const targetIds = parseTargetIds(data.target_ids);
+      if (data.target_type === "product" && targetIds.some((id) => !Number.isInteger(Number(id)) || Number(id) <= 0)) {
+        errors.push("target_ids must contain only positive product IDs");
+      }
     }
 
     if (!isUpdate && (!data.title || !data.title.trim())) {
@@ -324,6 +334,76 @@ class ContentZoneModel {
     }
   }
 
+  /** Product cards linked to a promotional banner, in the same order selected in CMS. */
+  async getContentProducts(contentId) {
+    const entry = await this.getEntryById(contentId);
+    if (entry.target_type !== "product") return [];
+
+    const ids = parseTargetIds(entry.target_ids)
+      .map(Number)
+      .filter((id) => Number.isInteger(id) && id > 0);
+    if (!ids.length && entry.target_id) ids.push(Number(entry.target_id));
+    if (!ids.length) return [];
+
+    const placeholders = ids.map(() => "?").join(", ");
+    const [rows] = await db.query(
+      `SELECT
+        p.product_id, p.product_name, p.brand_name, p.category_id,
+        p.subcategory_id, p.short_description, p.is_discount_eligible,
+        c.category_name, sc.subcategory_name,
+        v.variant_id, v.mrp, v.sale_price, cpo.offer_price,
+        COALESCE(rev.avg_rating, 0) AS rating,
+        COALESCE(rev.total_reviews, 0) AS reviews,
+        pi.image_url, pi.updated_at AS image_updated_at
+      FROM eproducts p
+      LEFT JOIN categories c ON c.category_id = p.category_id
+      LEFT JOIN sub_categories sc ON sc.subcategory_id = p.subcategory_id
+      LEFT JOIN product_variants v ON v.variant_id = (
+        SELECT pv.variant_id FROM product_variants pv
+        WHERE pv.product_id = p.product_id AND pv.is_visible = 1 AND pv.sale_price IS NOT NULL
+        ORDER BY pv.sale_price ASC, pv.variant_id ASC LIMIT 1
+      )
+      LEFT JOIN (
+        SELECT product_id, ROUND(AVG(rating), 1) AS avg_rating, COUNT(*) AS total_reviews
+        FROM product_reviews WHERE status = 'approved' GROUP BY product_id
+      ) rev ON rev.product_id = p.product_id
+      LEFT JOIN product_images pi ON pi.image_id = (
+        SELECT pi2.image_id FROM product_images pi2
+        WHERE pi2.product_id = p.product_id
+        ORDER BY (pi2.type = 'gallery') DESC, pi2.sort_order ASC, pi2.image_id ASC LIMIT 1
+      )
+      LEFT JOIN content_product_offers cpo
+        ON cpo.content_id = ? AND cpo.product_id = p.product_id AND cpo.variant_id = v.variant_id
+      WHERE p.product_id IN (${placeholders})
+        AND p.status = 'approved' AND p.is_visible = 1 AND p.is_deleted = 0
+        AND v.variant_id IS NOT NULL
+      ORDER BY FIELD(p.product_id, ${placeholders})`,
+      [contentId, ...ids, ...ids],
+    );
+    return rows;
+  }
+
+  async getProductOffers(contentId) {
+    const [rows] = await db.query(`SELECT content_id, product_id, variant_id, offer_price FROM content_product_offers WHERE content_id = ? ORDER BY product_id, variant_id`, [contentId]);
+    return rows.map((row) => ({ ...row, offer_price: Number(row.offer_price) }));
+  }
+
+  async replaceProductOffers(contentId, offers = []) {
+    const conn = await db.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.query(`DELETE FROM content_product_offers WHERE content_id = ?`, [contentId]);
+      for (const offer of offers) {
+        const [[variant]] = await conn.query(`SELECT sale_price FROM product_variants WHERE variant_id = ? AND product_id = ?`, [offer.variant_id, offer.product_id]);
+        if (!variant) { const error = new Error(`Variant ${offer.variant_id} does not belong to product ${offer.product_id}`); error.statusCode = 400; throw error; }
+        const price = Number(offer.offer_price);
+        if (!(price > 0) || price > Number(variant.sale_price)) { const error = new Error(`Offer price for variant ${offer.variant_id} must be greater than zero and cannot exceed sale price`); error.statusCode = 400; throw error; }
+        await conn.query(`INSERT INTO content_product_offers (content_id, product_id, variant_id, offer_price) VALUES (?, ?, ?, ?)`, [contentId, offer.product_id, offer.variant_id, price]);
+      }
+      await conn.commit();
+    } catch (error) { await conn.rollback(); throw error; } finally { conn.release(); }
+  }
+
   /** Other published, non-default entries in the same module+zone whose window overlaps. */
   async findConflicts(contentModule, zone, startAt, endAt, excludeId = null) {
     const params = [contentModule, zone, endAt || "9999-12-31 23:59:59", startAt];
@@ -360,9 +440,9 @@ class ContentZoneModel {
       `
       INSERT INTO content_zone_entries (
         module, zone, content_type, display_mode, color_value, text_color, image_url, title, cta_text,
-        redirect_link, target_type, target_id, start_at, end_at, priority, is_default, is_published, created_by_name
+        redirect_link, target_type, target_id, target_ids, start_at, end_at, priority, is_default, is_published, created_by_name
       )
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `,
       [
         data.module,
@@ -377,6 +457,7 @@ class ContentZoneModel {
         data.redirect_link || null,
         data.target_type || null,
         data.target_type ? Number(data.target_id) : null,
+        data.target_type === "product" ? JSON.stringify(parseTargetIds(data.target_ids)) : null,
         startAt,
         data.end_at || null,
         data.priority || 0,
@@ -425,6 +506,7 @@ class ContentZoneModel {
       "redirect_link",
       "target_type",
       "target_id",
+      "target_ids",
       "start_at",
       "end_at",
       "priority",
@@ -436,6 +518,7 @@ class ContentZoneModel {
         fields.push(`${key} = ?`);
         if (key === "is_published") values.push(data[key] ? 1 : 0);
         else if (key === "text_color") values.push(data[key] || null);
+        else if (key === "target_ids") values.push(data.target_type === "product" ? JSON.stringify(parseTargetIds(data[key])) : null);
         else values.push(data[key]);
       }
     }
@@ -468,9 +551,9 @@ class ContentZoneModel {
       `
       INSERT INTO content_zone_entries (
         module, zone, content_type, display_mode, color_value, text_color, image_url, title, cta_text,
-        redirect_link, target_type, target_id, start_at, end_at, priority, is_default, is_published, created_by_name
+        redirect_link, target_type, target_id, target_ids, start_at, end_at, priority, is_default, is_published, created_by_name
       )
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,?)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,?)
       `,
       [
         original.module,
@@ -485,6 +568,7 @@ class ContentZoneModel {
         original.redirect_link,
         original.target_type,
         original.target_id,
+        original.target_type === "product" ? JSON.stringify(parseTargetIds(original.target_ids)) : null,
         original.start_at,
         original.end_at,
         original.priority,

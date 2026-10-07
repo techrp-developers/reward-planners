@@ -5,6 +5,17 @@ const { notifyUserAndWait } = require("../../app/common/utils/notification");
 const DEFAULT_DELIVERY_GAP_MS = 1000;
 const SCHEDULE_TIMEZONE = process.env.SCHEDULE_TIMEZONE || "Asia/Kolkata";
 
+function getDateKey(date = new Date()) {
+  // en-CA produces YYYY-MM-DD. The explicit timezone keeps the idempotency
+  // key on the same calendar day as the cron, regardless of server timezone.
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: SCHEDULE_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
 function getDeliveryGapMs() {
   const configured = Number.parseInt(process.env.FITNESS_PUSH_GAP_MS, 10);
   return Number.isFinite(configured) && configured >= 100
@@ -36,17 +47,18 @@ async function sendIndividually(users, buildPayload, label) {
 cron.schedule("0 14 * * *", async () => {
   console.log("🚶‍♂️ [Cron] Checking daily mid-day step count hooks (2:00 PM)...");
   await checkMidDayGoalHook();
-}, { timezone: SCHEDULE_TIMEZONE });
+}, { timezone: SCHEDULE_TIMEZONE, noOverlap: true, name: "fitness-midday-hook" });
 
 // Almost completed push: daily at 6:00 PM
 cron.schedule("0 18 * * *", async () => {
   console.log("🏁 [Cron] Checking daily step count almost completed hooks (6:00 PM)...");
   await checkAlmostCompletedPush();
-}, { timezone: SCHEDULE_TIMEZONE });
+}, { timezone: SCHEDULE_TIMEZONE, noOverlap: true, name: "fitness-almost-completed" });
 
 // 1. Mid-day Hook: steps < 30% of goal at 2:00 PM
 async function checkMidDayGoalHook() {
   try {
+    const dateKey = getDateKey();
     const [stats] = await db.query(
       `
       SELECT g.user_id, g.daily_steps, s.steps
@@ -71,6 +83,7 @@ async function checkMidDayGoalHook() {
         icon: "footprints",
         reference_type: "fitness_goal",
         reference_id: "midday_hook",
+        idempotency_key: `fitness:midday:${user.user_id}:${dateKey}`,
         action_url: "/fitness",
       }), "fitness mid-day hook");
   } catch (err) {
@@ -81,6 +94,7 @@ async function checkMidDayGoalHook() {
 // 2. Almost Completed: steps >= 80% and < 100% of goal at 6:00 PM
 async function checkAlmostCompletedPush() {
   try {
+    const dateKey = getDateKey();
     const [stats] = await db.query(
       `
       SELECT g.user_id, g.daily_steps, COALESCE(s.steps, 0) AS steps
@@ -107,6 +121,7 @@ async function checkAlmostCompletedPush() {
         icon: "award",
         reference_type: "fitness_goal",
         reference_id: "almost_completed",
+        idempotency_key: `fitness:almost-completed:${user.user_id}:${dateKey}`,
         action_url: "/fitness",
       };
     }, "fitness almost completed push");
@@ -115,4 +130,4 @@ async function checkAlmostCompletedPush() {
   }
 }
 
-module.exports = { checkMidDayGoalHook, checkAlmostCompletedPush };
+module.exports = { checkMidDayGoalHook, checkAlmostCompletedPush, getDateKey };

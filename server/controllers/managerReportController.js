@@ -11,6 +11,23 @@ const dateRange = (req, column, params) => {
 };
 
 class ManagerReportController {
+  async inactiveUsers(req, res) {
+    try {
+      const [rows] = await db.execute(`
+        SELECT cu.id, cu.company_id, cu.name, cu.email, cu.contact AS phone,
+               cu.department, cu.role, co.company_name
+        FROM company_users cu
+        LEFT JOIN companies co ON co.company_id = cu.company_id
+        WHERE COALESCE(cu.status, 0) <> 1
+        ORDER BY co.company_name ASC, cu.name ASC, cu.id ASC
+      `);
+      return res.json({ success: true, rows });
+    } catch (error) {
+      console.error("Inactive users report error:", error);
+      return res.status(500).json({ success: false, message: "Unable to load inactive users report" });
+    }
+  }
+
   async usage(req, res) {
     try {
       const modules = [

@@ -1,6 +1,6 @@
 const cron = require("node-cron");
 const db = require("../../config/database");
-const { notifyUser } = require("../../app/common/utils/notification");
+const { notifyUserAndWait } = require("../../app/common/utils/notification");
 const SCHEDULE_TIMEZONE = process.env.SCHEDULE_TIMEZONE || "Asia/Kolkata";
 
 // Run every day at 9:00 AM: "0 9 * * *"
@@ -8,43 +8,60 @@ const SCHEDULE_TIMEZONE = process.env.SCHEDULE_TIMEZONE || "Asia/Kolkata";
 cron.schedule("0 9 * * *", async () => {
   console.log("[Cron] Checking for employee birthdays today...");
   await sendBirthdayWishes();
-}, { timezone: SCHEDULE_TIMEZONE });
+}, { timezone: SCHEDULE_TIMEZONE, noOverlap: true, name: "company-birthday-wishes" });
 
 async function sendBirthdayWishes() {
   try {
-    const [users] = await db.query(
+    const [recipients] = await db.query(
       `
-      SELECT c.user_id, c.name
-      FROM customer c
-      INNER JOIN company_users e ON c.company_user_id = e.id
-      WHERE MONTH(e.dob) = MONTH(CURDATE())
-        AND DAY(e.dob) = DAY(CURDATE())
-        AND c.status = 1
+      SELECT birthday_customer.user_id AS birthday_user_id,
+             birthday_employee.name AS birthday_name,
+             coworker_customer.user_id AS recipient_user_id,
+             birthday_employee.company_id,
+             DATE_FORMAT(CURDATE(), '%Y-%m-%d') AS notification_day
+      FROM company_users birthday_employee
+      INNER JOIN customer birthday_customer
+              ON birthday_customer.company_user_id = birthday_employee.id
+             AND birthday_customer.status = 1
+      INNER JOIN companies company
+              ON company.company_id = birthday_employee.company_id
+             AND company.status = 1
+      INNER JOIN company_users coworker
+              ON coworker.company_id = birthday_employee.company_id
+             AND coworker.status = 1
+             AND coworker.id <> birthday_employee.id
+      INNER JOIN customer coworker_customer
+              ON coworker_customer.company_user_id = coworker.id
+             AND coworker_customer.status = 1
+      WHERE birthday_employee.status = 1
+        AND MONTH(birthday_employee.dob) = MONTH(CURDATE())
+        AND DAY(birthday_employee.dob) = DAY(CURDATE())
       `
     );
 
-    if (users.length === 0) {
-      console.log("[Cron] No birthdays found today.");
+    if (recipients.length === 0) {
+      console.log("[Cron] No coworker birthday notifications to send today.");
       return;
     }
 
-    console.log(`[Cron] Found ${users.length} user(s) celebrating birthdays today.`);
+    console.log(`[Cron] Found ${recipients.length} coworker birthday notification(s).`);
 
-    for (const user of users) {
-      notifyUser(
+    for (const recipient of recipients) {
+      await notifyUserAndWait(
         {
-          userId: user.user_id,
+          userId: recipient.recipient_user_id,
           module: "birthday",
-          type: "birthday_wish",
-          title: `Happy Birthday, ${user.name}!`,
-          message: "Wishing you a fantastic day filled with joy and success! - Reward Planners",
+          type: "coworker_birthday",
+          title: `It's ${recipient.birthday_name}'s birthday! 🎉`,
+          message: `Wish ${recipient.birthday_name} a happy birthday today!`,
           icon: "gift",
-          reference_type: "birthday",
-          reference_id: String(user.user_id),
-          action_url: "/profile",
+          reference_type: "coworker",
+          reference_id: String(recipient.birthday_user_id),
+          idempotency_key: `birthday:${recipient.company_id}:${recipient.birthday_user_id}:${recipient.recipient_user_id}:${recipient.notification_day}`,
+          action_url: "/dashboard",
           screen: "Dashboard",
         },
-        "birthday wish notification",
+        "coworker birthday notification",
       );
     }
   } catch (error) {

@@ -27,6 +27,7 @@ export interface ApiContentEntry {
   redirect_link: string | null;
   target_type: ContentTargetType | null;
   target_id: number | null;
+  target_ids?: number[] | string | null;
 
   start_at: string | null;
   end_at: string | null;
@@ -159,6 +160,7 @@ export const buildEntryFormData = (
 
   fd.append("target_type", draft.targetType);
   fd.append("target_id", draft.targetType && draft.targetId ? String(draft.targetId) : "");
+  fd.append("target_ids", draft.targetType === "product" ? JSON.stringify(draft.targetIds) : "[]");
 
   if (draft.startAt) {
     fd.append("start_at", draft.startAt);

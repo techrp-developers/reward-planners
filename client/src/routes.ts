@@ -137,7 +137,8 @@ export const routes = {
     profile: "/hr/profile",
     onboarding: "/hr/onboarding",
     employees: "/hr/employees",
-      rewards: "/hr/rewards",
+    rewards: "/hr/rewards",
+    polls: "/hr/polls",
 
   },
   service: {
@@ -178,6 +179,7 @@ export const routes = {
     supportTickets: "/rm/support-tickets",
     reports: {
       usage: "/rm/reports/usage",
+      inactiveUsers: "/rm/reports/inactive-users",
     },
   },
   servicePartner: {

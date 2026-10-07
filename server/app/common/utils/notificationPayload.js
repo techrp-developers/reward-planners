@@ -1,3 +1,5 @@
+const crypto = require("node:crypto");
+
 const SCREEN_BY_MODULE = {
   bbps: "BbpsHome",
   common: "Notifications",
@@ -21,6 +23,30 @@ const IDEMPOTENT_TYPES = new Set([
   "service_order_paid",
   "service_refund_completed",
 ]);
+
+const DEFAULT_DEDUPE_WINDOW_MS = 5 * 60 * 1000;
+
+function buildWindowedIdempotencyKey(payload, now = Date.now()) {
+  if (payload.allow_duplicates === true) return undefined;
+
+  const configuredWindow = Number(payload.dedupe_window_ms);
+  const windowMs = Number.isFinite(configuredWindow) && configuredWindow > 0
+    ? configuredWindow
+    : DEFAULT_DEDUPE_WINDOW_MS;
+  const bucket = Math.floor(now / windowMs);
+  const fingerprint = [
+    payload.userId ?? payload.user_id ?? "",
+    payload.module ?? "",
+    payload.type ?? "",
+    payload.reference_type ?? "",
+    payload.reference_id ?? "",
+    payload.title ?? "",
+    payload.message ?? "",
+    bucket,
+  ].join("|");
+
+  return `window:${crypto.createHash("sha256").update(fingerprint).digest("hex")}`;
+}
 
 function inferScreen(data) {
   if (data.screen) return data.screen;
@@ -46,6 +72,14 @@ function buildNotificationPayload(data) {
   if (!payload.idempotency_key && IDEMPOTENT_TYPES.has(payload.type) &&
       userId && payload.reference_id != null) {
     payload.idempotency_key = [userId, payload.module, payload.type, payload.reference_id].join(":");
+  }
+
+  // Protect every producer from concurrent/retried sends. Event notifications
+  // above retain their permanent key; ordinary notifications can recur after
+  // the short window. Callers with a business-specific cadence should provide
+  // an explicit idempotency_key.
+  if (!payload.idempotency_key) {
+    payload.idempotency_key = buildWindowedIdempotencyKey(payload);
   }
 
   return payload;
@@ -79,4 +113,9 @@ function buildPushMessage(data, fcmToken) {
   };
 }
 
-module.exports = { buildNotificationPayload, buildPushMessage, inferScreen };
+module.exports = {
+  buildNotificationPayload,
+  buildPushMessage,
+  buildWindowedIdempotencyKey,
+  inferScreen,
+};

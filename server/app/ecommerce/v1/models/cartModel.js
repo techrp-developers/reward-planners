@@ -21,6 +21,8 @@ class cartModel {
     SELECT 
       ci.cart_item_id,
       ci.quantity,
+      ci.flash_sale_campaign_id,
+      ci.promotional_content_id,
 
       p.product_id,
       p.product_name,
@@ -36,6 +38,8 @@ class cartModel {
       v.variant_attributes,
       v.mrp,
       v.sale_price,
+      csi.offer_price,
+      pco.offer_price AS promotional_offer_price,
 
       COALESCE(
         (SELECT pvi.image_url FROM product_variant_images pvi
@@ -49,6 +53,27 @@ class cartModel {
     FROM cart_items ci
     JOIN eproducts p ON ci.product_id = p.product_id
     JOIN product_variants v ON ci.variant_id = v.variant_id AND ci.product_id = v.product_id
+    LEFT JOIN campaign_items csi
+      ON csi.campaign_id = ci.flash_sale_campaign_id
+      AND csi.product_id = ci.product_id
+      AND csi.variant_id = ci.variant_id
+      AND EXISTS (
+        SELECT 1 FROM campaigns active_campaign
+        WHERE active_campaign.campaign_id = csi.campaign_id
+          AND active_campaign.campaign_type = 'flash_sale'
+          AND active_campaign.status = 'active'
+          AND NOW() BETWEEN active_campaign.start_at AND active_campaign.end_at
+      )
+    LEFT JOIN campaigns c
+      ON c.campaign_id = csi.campaign_id
+      AND c.campaign_type = 'flash_sale'
+      AND c.status = 'active'
+      AND NOW() BETWEEN c.start_at AND c.end_at
+    LEFT JOIN content_product_offers pco
+      ON pco.content_id = ci.promotional_content_id AND pco.product_id = ci.product_id AND pco.variant_id = ci.variant_id
+      AND EXISTS (SELECT 1 FROM content_zone_entries cze WHERE cze.content_id = pco.content_id
+        AND cze.zone = 'promotional_banner' AND cze.is_published = 1
+        AND (cze.start_at IS NULL OR cze.start_at <= NOW()) AND (cze.end_at IS NULL OR cze.end_at >= NOW()))
 
     WHERE ci.user_id = ?
       AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
@@ -93,7 +118,12 @@ class cartModel {
           return_window: row.return_window_days,
           is_replaceable: row.is_replaceable,
 
-          sale_price: Number(row.sale_price),
+          sale_price: Number(row.offer_price ?? row.promotional_offer_price ?? row.sale_price),
+          original_sale_price: Number(row.sale_price),
+          effective_sale_price: Number(row.offer_price ?? row.promotional_offer_price ?? row.sale_price),
+          flash_sale_campaign_id: row.flash_sale_campaign_id,
+          promotional_content_id: row.promotional_content_id,
+          offer_price: row.offer_price == null && row.promotional_offer_price == null ? null : Number(row.offer_price ?? row.promotional_offer_price),
           mrp: Number(row.mrp),
           quantity: Number(row.quantity),
         };
@@ -118,16 +148,41 @@ class cartModel {
         ci.product_id,
         ci.variant_id,
         ci.quantity,
+        ci.flash_sale_campaign_id,
+        ci.promotional_content_id,
 
         p.category_id,
         p.subcategory_id,
         p.is_discount_eligible,
 
-        pv.sale_price
+        pv.sale_price,
+        csi.offer_price,
+        pco.offer_price AS promotional_offer_price
 
       FROM cart_items ci
       JOIN product_variants pv ON pv.variant_id = ci.variant_id
       JOIN eproducts p ON p.product_id = ci.product_id
+      LEFT JOIN campaign_items csi
+        ON csi.campaign_id = ci.flash_sale_campaign_id
+        AND csi.product_id = ci.product_id
+        AND csi.variant_id = ci.variant_id
+        AND EXISTS (
+          SELECT 1 FROM campaigns active_campaign
+          WHERE active_campaign.campaign_id = csi.campaign_id
+            AND active_campaign.campaign_type = 'flash_sale'
+            AND active_campaign.status = 'active'
+            AND NOW() BETWEEN active_campaign.start_at AND active_campaign.end_at
+        )
+      LEFT JOIN campaigns c
+        ON c.campaign_id = csi.campaign_id
+        AND c.campaign_type = 'flash_sale'
+        AND c.status = 'active'
+        AND NOW() BETWEEN c.start_at AND c.end_at
+      LEFT JOIN content_product_offers pco
+        ON pco.content_id = ci.promotional_content_id AND pco.product_id = ci.product_id AND pco.variant_id = ci.variant_id
+        AND EXISTS (SELECT 1 FROM content_zone_entries cze WHERE cze.content_id = pco.content_id
+          AND cze.zone = 'promotional_banner' AND cze.is_published = 1
+          AND (cze.start_at IS NULL OR cze.start_at <= NOW()) AND (cze.end_at IS NULL OR cze.end_at >= NOW()))
 
       WHERE ci.user_id = ?
         AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
@@ -146,7 +201,8 @@ class cartModel {
     const items = [];
 
     for (let item of cartItems) {
-      const price = Number(item.sale_price || 0);
+      const fixedPrice = item.offer_price !== null || item.promotional_offer_price !== null;
+      const price = Number(item.offer_price ?? item.promotional_offer_price ?? item.sale_price ?? 0);
       const qty = Number(item.quantity || 0);
 
       const itemTotal = price * qty;
@@ -159,7 +215,7 @@ class cartModel {
 
       let rules = rewardCache[key];
 
-      if (!rules) {
+      if (!fixedPrice && !rules) {
         rules = await RewardModel.getProductRewards(
           item.product_id,
           item.variant_id,
@@ -174,15 +230,15 @@ class cartModel {
 
       // earning
       let rewardEarn = 0;
-      if (rules.length) {
+      if (!fixedPrice && rules.length) {
         rewardEarn = calculateReward(itemTotal, rules);
       }
 
       /* ===============================
         REDEMPTION (rule-based, per line item)
         =============================== */
-      const redemption = resolveRedemption(itemTotal, rules);
-      const maxAllowed = calculateRedeemableCoins(itemTotal, redemption);
+      const redemption = fixedPrice ? null : resolveRedemption(itemTotal, rules);
+      const maxAllowed = fixedPrice ? 0 : calculateRedeemableCoins(itemTotal, redemption);
       const canRedeem = maxAllowed > 0;
 
       totalRewardEarn += rewardEarn;
@@ -239,7 +295,7 @@ class cartModel {
   }
 
   // Add to cart
-  async addToCart({ userId, productId, variantId, quantity }) {
+  async addToCart({ userId, productId, variantId, quantity, campaignId = null, contentId = null }) {
     const conn = await db.getConnection();
 
     try {
@@ -258,6 +314,34 @@ class cartModel {
 
       if (!variant) throw new Error("INVALID_VARIANT");
 
+      if (campaignId !== null) {
+        const [[campaignItem]] = await conn.execute(
+          `SELECT ci.offer_price
+           FROM campaign_items ci
+           JOIN campaigns c ON c.campaign_id = ci.campaign_id
+           WHERE ci.campaign_id = ? AND ci.product_id = ? AND ci.variant_id = ?
+             AND c.campaign_type = 'flash_sale'
+             AND c.status = 'active'
+             AND NOW() BETWEEN c.start_at AND c.end_at
+             AND ci.offer_price IS NOT NULL
+           FOR UPDATE`,
+          [campaignId, productId, variantId],
+        );
+        if (!campaignItem) throw new Error("INVALID_FLASH_SALE");
+      }
+      if (contentId !== null) {
+        const [[contentOffer]] = await conn.execute(
+          `SELECT cpo.offer_price FROM content_product_offers cpo
+           JOIN content_zone_entries cze ON cze.content_id = cpo.content_id
+           WHERE cpo.content_id = ? AND cpo.product_id = ? AND cpo.variant_id = ?
+             AND cze.zone = 'promotional_banner' AND cze.is_published = 1
+             AND (cze.start_at IS NULL OR cze.start_at <= NOW())
+             AND (cze.end_at IS NULL OR cze.end_at >= NOW()) FOR UPDATE`,
+          [contentId, productId, variantId],
+        );
+        if (!contentOffer) throw new Error("INVALID_PROMOTIONAL_OFFER");
+      }
+
       const [[existing]] = await conn.execute(
         `SELECT quantity FROM cart_items WHERE user_id = ? AND variant_id = ? FOR UPDATE`,
         [userId, variantId],
@@ -271,11 +355,11 @@ class cartModel {
 
       await conn.execute(
         `
-      INSERT INTO cart_items (user_id, product_id, variant_id, quantity)
-      VALUES (?, ?, ?, ?)
-      ON DUPLICATE KEY UPDATE quantity = ?
+      INSERT INTO cart_items (user_id, product_id, variant_id, flash_sale_campaign_id, promotional_content_id, quantity)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE quantity = ?, flash_sale_campaign_id = VALUES(flash_sale_campaign_id), promotional_content_id = VALUES(promotional_content_id)
       `,
-        [userId, productId, variantId, quantity, newQty],
+        [userId, productId, variantId, campaignId, contentId, quantity, newQty],
       );
 
       await conn.commit();

@@ -11,6 +11,11 @@ const cleanupUploadedAttachment = (file) => {
   fs.promises.unlink(file.path).catch(() => {});
 };
 
+async function getSupportTicketColumnSet() {
+  const [columns] = await db.execute("SHOW COLUMNS FROM support_tickets");
+  return new Set(columns.map((column) => column.Field));
+}
+
 class SupportController {
   async getCategories(req, res) {
     try {
@@ -55,6 +60,14 @@ class SupportController {
         reference_label = null,
         // attachment_url,
       } = req.body;
+
+      const attachmentUrls = (req.files || []).map(
+        (file) => `/uploads/support/${file.filename}`,
+      );
+      let attachmentUrl =
+        attachmentUrls.length > 1
+          ? JSON.stringify(attachmentUrls)
+          : attachmentUrls[0] || null;
 
       // validation
       if (!description || !category_id) {
@@ -156,7 +169,7 @@ class SupportController {
 
       // Store the attachment in R2 (the ticket table keeps the R2 key, not a
       // local path) and drop the multer temp file once it's uploaded.
-      let attachmentUrl = null;
+      attachmentUrl = null;
       if (req.file) {
         const fileBuffer = fs.readFileSync(req.file.path);
         const extension = path.extname(req.file.originalname);
@@ -277,6 +290,17 @@ class SupportController {
         });
       }
 
+      const supportTicketColumns = await getSupportTicketColumnSet();
+      const optionalFields = [];
+
+      if (supportTicketColumns.has("product_id")) {
+        optionalFields.push("st.product_id");
+      }
+
+      if (supportTicketColumns.has("product_name")) {
+        optionalFields.push("st.product_name");
+      }
+
       const [tickets] = await db.execute(
         `SELECT
           st.ticket_id,
@@ -293,6 +317,7 @@ class SupportController {
           st.status,
           st.created_at,
           st.updated_at
+          ${optionalFields.length ? `, ${optionalFields.join(", ")}` : ""}
         FROM support_tickets st
         LEFT JOIN support_categories sc
           ON sc.category_id = st.category_id
