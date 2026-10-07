@@ -13,9 +13,19 @@ const MAX_OFFER_IMAGES = 10;
 const uploadEntryFiles = uploadContentImage.fields([
   { name: "image", maxCount: 1 },
   { name: "images", maxCount: MAX_OFFER_IMAGES },
+  { name: "images[]", maxCount: MAX_OFFER_IMAGES },
 ]);
 
-const uploadOfferImages = uploadContentImage.array("images", MAX_OFFER_IMAGES);
+const uploadOfferImages = (req, res, next) => {
+  uploadContentImage.fields([
+    { name: "images", maxCount: MAX_OFFER_IMAGES },
+    { name: "images[]", maxCount: MAX_OFFER_IMAGES },
+  ])(req, res, (error) => {
+    if (error) return next(error);
+    req.files = [...(req.files?.images || []), ...(req.files?.["images[]"] || [])];
+    next();
+  });
+};
 
 // Module icon replace/activate/dashboard icons are all optional single files.
 const uploadModuleIconFiles = uploadContentImage.fields([

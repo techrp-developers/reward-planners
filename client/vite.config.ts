@@ -7,7 +7,7 @@ export default defineConfig(({ mode }) => {
   // Use the local Express server by default so CRM auth cookies are set on the
   // same browser origin during development. Override this to hit staging/live.
   // Override with VITE_DEV_API_PROXY_TARGET if your local server runs elsewhere.
-  const apiProxyTarget = env.VITE_DEV_API_PROXY_TARGET || "http://localhost:5000";
+  const apiProxyTarget = env.VITE_DEV_API_PROXY_TARGET || "http://localhost:5057";
 
   return {
     base: "/crm/",

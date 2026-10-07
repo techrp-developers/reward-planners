@@ -1,0 +1,39 @@
+{
+  "watch": [
+    "app.js",
+    "package.json",
+    "config",
+    "app",
+    "controllers",
+    "routes",
+    "services",
+    "models",
+    "middleware",
+    "utils",
+    "flea-market",
+    "mps-connect",
+    "mail/templates",
+    "templates",
+    "swagger"
+  ],
+  "ignore": [
+    "node_modules/**",
+    "uploads/**",
+    "files/**",
+    "logs/**",
+    "tmp/**",
+    "temp/**",
+    "public/uploads/**",
+    "dist/**",
+    "build/**",
+    ".git/**",
+    "**/*.log",
+    "**/*.tmp",
+    "**/*.cache",
+    "config/firebase-service-account*.json",
+    "config/*-firebase-adminsdk-*.json"
+  ],
+  "ext": "js,mjs,cjs,json,html,yaml,yml",
+  "delay": 500,
+  "signal": "SIGTERM"
+}

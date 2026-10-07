@@ -1,7 +1,7 @@
 const db = require("../config/database");
 
 const MODULES = ["product", "service", "payment", "dineout", "mobile_dashboard"];
-const ZONES = ["navbar_background", "promotional_banner", "offers_banner"];
+const ZONES = ["navbar_background", "promotional_banner", "offers_banner", "brand_promotional_banner"];
 const CONTENT_TYPES = ["color", "image"];
 const DISPLAY_MODES = ["single", "carousel", "grid_2", "grid_3"];
 const DEFAULT_DISPLAY_MODE = "carousel";
@@ -75,7 +75,7 @@ class ContentZoneModel {
       }
       // offers_banner images are added afterwards via the per-image endpoints, so a
       // main image_url/file isn't required up front the way it is for other zones.
-      if (data.content_type === "image" && !isUpdate && data.zone !== "offers_banner" && !data.image_url && !hasImageFile) {
+      if (data.content_type === "image" && !isUpdate && !["offers_banner", "brand_promotional_banner"].includes(data.zone) && !data.image_url && !hasImageFile) {
         errors.push("image_url is required when content_type is 'image'");
       }
     }

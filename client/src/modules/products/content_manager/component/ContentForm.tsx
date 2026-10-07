@@ -38,7 +38,7 @@ interface Props {
 
 export default function ContentForm({ draft, entries, now, module, onChange, onSaveDraft, onPreview, onPublish, saving }: Props) {
   const showHeaderTextColor = draft.zone === "navbar_background" && module === "mobile_dashboard";
-  const showDisplayMode = draft.contentType === "image" && (draft.zone === "promotional_banner" || draft.zone === "offers_banner");
+  const showDisplayMode = draft.contentType === "image" && (draft.zone === "promotional_banner" || ["offers_banner", "brand_promotional_banner"].includes(draft.zone));
   const headerTextColor = isValidHexColor(draft.textColor) ? draft.textColor : "#FFFFFF";
   const status = computeStatus(draft, now);
   const conflicts = findConflicts(draft, entries);
@@ -233,16 +233,37 @@ export default function ContentForm({ draft, entries, now, module, onChange, onS
               </div>
             )}
           </div>
-        ) : draft.zone === "offers_banner" ? (
+        ) : ["offers_banner", "brand_promotional_banner"].includes(draft.zone) ? (
           draft.id ? (
             <OfferImagesManager
+              zone={draft.zone}
+              allowActivation={draft.zone === "brand_promotional_banner"}
               contentId={draft.id}
               images={draft.images ?? []}
               onChange={(images: ContentZoneImage[]) => onChange({ images })}
             />
+          ) : draft.zone === "brand_promotional_banner" ? (
+            <div className="sm:col-span-2 text-sm font-semibold">
+              Brand Promotional Images (maximum 10)
+              <span className="mt-1 block text-xs text-slate-500">Recommended: 1200 × 600 px · Ratio 2:1 · JPG, JPEG, PNG. Other dimensions are allowed.</span>
+              <input type="file" accept="image/jpeg,image/png" multiple className="mt-2 block w-full" onChange={async (event) => {
+                const files = Array.from(event.target.files ?? []);
+                if (files.length > 10) { event.target.setCustomValidity("Select at most 10 images."); event.target.reportValidity(); return; }
+                event.target.setCustomValidity("");
+                const images = await Promise.all(files.map((file, index) => new Promise<ContentZoneImage>((resolve, reject) => {
+                  const reader = new FileReader();
+                  reader.onload = () => resolve({ imageId: null, imageUrl: String(reader.result), sortOrder: index, isActive: true });
+                  reader.onerror = () => reject(reader.error);
+                  reader.readAsDataURL(file);
+                })));
+                onChange({ imageFiles: files, images });
+              }} />
+              <div className="mt-2 grid grid-cols-2 gap-2">{draft.images?.map((image, index) => <ImageDimensionInfo key={index} zone={draft.zone} imageUrl={image.imageUrl} file={draft.imageFiles?.[index]} />)}</div>
+              <span className="text-xs text-slate-500">Images upload when you save. The live preview uses your selected display mode.</span>
+            </div>
           ) : (
             <div className="sm:col-span-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500">
-              Save this campaign as a draft first, then come back to add one or more offer images.
+              Save this campaign as a draft first, then come back to add one or more campaign images.
             </div>
           )
         ) : (

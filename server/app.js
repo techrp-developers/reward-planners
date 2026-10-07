@@ -1,10 +1,11 @@
 // app.js
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, ".env") });
 const express = require("express");
 const http = require("http");
 const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
-const path = require("path");
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./config/swagger");
 
@@ -165,14 +166,11 @@ app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 // Temporary diagnostic logger — confirms requests are actually reaching the server
-// and shows the request body, which morgan (above) doesn't log. Gated to non-production;
+// without logging request bodies or credentials. Gated to non-production;
 // remove once whatever's being debugged is found.
 if (process.env.NODE_ENV !== "production") {
   app.use((req, res, next) => {
     console.log(`\n[REQUEST] ${new Date().toISOString()} ${req.method} ${req.originalUrl}`);
-    if (req.body && Object.keys(req.body).length) {
-      console.log(`[REQUEST BODY]`, req.body);
-    }
     next();
   });
 }
@@ -279,3 +277,38 @@ server.listen(PORT, () => {
     console.log("✅ WhatsApp worker started (START_WA_WORKER=true)");
   }
 });
+
+// Nodemon uses SIGTERM so each child releases its resources before replacement.
+let shuttingDown = false;
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`Shutting down backend (${signal})...`);
+  const deadline = setTimeout(() => {
+    console.error("Backend shutdown timed out");
+    server.closeAllConnections();
+    process.exit(1);
+  }, 10000);
+  deadline.unref();
+
+  try {
+    const httpClosed = new Promise((resolve, reject) => {
+      server.close((error) => error ? reject(error) : resolve());
+    });
+    server.closeIdleConnections();
+    await Promise.all([...require("node-cron").getTasks().values()].map((task) => task.destroy()));
+    const workerPath = require.resolve("./services/whatsapp/waWorker");
+    const worker = require.cache[workerPath]?.exports;
+    if (worker?.stop) await worker.stop();
+    await httpClosed;
+    await require("./config/database").end();
+    clearTimeout(deadline);
+    console.log("Backend shutdown complete");
+    process.exit(0);
+  } catch (error) {
+    console.error("Backend shutdown failed:", error.code || error.name);
+    process.exit(1);
+  }
+}
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGTERM", () => shutdown("SIGTERM"));

@@ -1,4 +1,4 @@
-export type Zone = "navbar_background" | "promotional_banner" | "offers_banner";
+export type Zone = "navbar_background" | "promotional_banner" | "offers_banner" | "brand_promotional_banner";
 export type ContentKind = "color" | "image";
 export type Status = "default" | "draft" | "scheduled" | "active" | "expired";
 export type ContentDisplayMode = "single" | "carousel" | "grid_2" | "grid_3";
@@ -19,6 +19,9 @@ export interface GradientConfig {
 
 export interface ContentZoneImage {
   imageId: number | null;
+  isActive?: boolean;
+  /** Preview-only layout ratio; never persisted to the CMS API. */
+  displayAspectRatio?: number;
   imageUrl: string;
   sortOrder: number;
 }
@@ -51,6 +54,7 @@ export interface ContentEntry {
   createdAt: string;
   /** Pending upload for the current edit session; never sent to display, cleared after successful save. */
   imageFile?: File | null;
+  imageFiles?: File[];
   /** Offers Banner only - the campaign's ordered set of images, managed via their own endpoints. */
   images?: ContentZoneImage[];
 }
@@ -59,6 +63,7 @@ export const ZONES: { key: Zone; label: string }[] = [
   { key: "navbar_background", label: "Navbar Background" },
   { key: "promotional_banner", label: "Promotional Banner" },
   { key: "offers_banner", label: "Offers Banner" },
+  { key: "brand_promotional_banner", label: "Brand Promotional Banner" },
 ];
 
 export const DISPLAY_MODES: { key: ContentDisplayMode; label: string }[] = [
