@@ -273,16 +273,25 @@ class StatusModel {
     }
   }
 
-  async getLikes(statusId, viewerId) {
+  async getLikes(statusId, viewerId, limit = 50, beforeUserId = null) {
     if (!(await this.findAccessible(statusId, viewerId))) return null;
+    const params = [statusId];
+    const beforeClause = beforeUserId ? " AND l.user_id < ?" : "";
+    if (beforeUserId) params.push(beforeUserId);
+    params.push(limit);
     const [rows] = await db.execute(
       `SELECT l.user_id, c.name, c.user_image, l.created_at
        FROM user_status_likes l
        INNER JOIN customer c ON c.user_id = l.user_id
-       WHERE l.status_id = ? ORDER BY l.created_at DESC`,
+       WHERE l.status_id = ?${beforeClause}
+       ORDER BY l.user_id DESC LIMIT ?`,
+      params,
+    );
+    const [[summary]] = await db.execute(
+      `SELECT COUNT(*) AS like_count FROM user_status_likes WHERE status_id = ?`,
       [statusId],
     );
-    return rows;
+    return { rows, like_count: Number(summary.like_count) };
   }
 
   async createComment(statusId, userId, commentText) {

@@ -279,17 +279,32 @@ exports.toggleLike = async (req, res) => {
 
 exports.likes = async (req, res) => {
   try {
-    const rows = await StatusModel.getLikes(req.params.status_id, req.user.user_id);
-    if (!rows) {
+    const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 50));
+    const parsedBeforeUserId = Number.parseInt(req.query.before_user_id, 10);
+    const beforeUserId = Number.isSafeInteger(parsedBeforeUserId) && parsedBeforeUserId > 0
+      ? parsedBeforeUserId
+      : null;
+    const result = await StatusModel.getLikes(
+      req.params.status_id,
+      req.user.user_id,
+      limit,
+      beforeUserId,
+    );
+    if (!result) {
       return res.status(404).json({ success: false, message: "Status not found or expired" });
     }
+    const { rows, like_count: likeCount } = result;
     return res.json({
       success: true,
-      like_count: rows.length,
+      like_count: likeCount,
       data: rows.map((row) => ({
         user: { id: row.user_id, name: row.name, image_url: getPublicUrl(row.user_image) },
         liked_at: row.created_at,
       })),
+      pagination: {
+        limit,
+        next_before_user_id: rows.length === limit ? rows[rows.length - 1].user_id : null,
+      },
     });
   } catch (error) {
     console.error("Get status likes error:", error);
