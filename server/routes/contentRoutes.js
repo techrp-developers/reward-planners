@@ -2,7 +2,9 @@ const express = require("express");
 const router = express.Router();
 const contentController = require("../controllers/contentController");
 const moduleIconController = require("../controllers/moduleIconController");
+const appIconController = require("../controllers/appIconController");
 const { uploadContentImage } = require("../middleware/mediaUpload/contentUpload");
+const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 
 // Keep in sync with MAX_OFFER_IMAGES in controllers/contentController.js.
 const MAX_OFFER_IMAGES = 10;
@@ -53,6 +55,8 @@ const handleUpload = (middleware) => (req, res, next) => {
     });
   });
 };
+
+const appIconAdmin = [authenticateToken, authorizeRoles("admin", "vendor_manager")];
 
 // ================================= ADMIN ROUTES =================================
 
@@ -147,12 +151,23 @@ router.delete(
   moduleIconController.deleteModule,
 );
 
+// ============================ ADMIN: App icon campaigns ============================
+
+router.get("/app-icons/keys", ...appIconAdmin, appIconController.keys);
+router.get("/app-icons", ...appIconAdmin, appIconController.list);
+router.get("/app-icons/:id", ...appIconAdmin, appIconController.get);
+router.post("/app-icons", ...appIconAdmin, appIconController.create);
+router.put("/app-icons/:id", ...appIconAdmin, appIconController.update);
+router.patch("/app-icons/:id/deactivate", ...appIconAdmin, appIconController.deactivate);
+router.delete("/app-icons/:id", ...appIconAdmin, appIconController.delete);
+
 // ================================= PUBLIC (storefront/app) =================================
 
 router.get("/resolved/navbar", contentController.getResolvedNavbar);
 // Must be registered before the "/resolved/:module" wildcard below, or a request for
 // "modules" would be captured as module="modules" and hit getResolvedZones instead.
 router.get("/resolved/modules", moduleIconController.getResolvedModules);
+router.get("/resolved/app-icon", appIconController.resolve);
 router.get("/resolved/:module", contentController.getResolvedZones);
 
 module.exports = router;

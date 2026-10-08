@@ -44,8 +44,8 @@ try {
 
   console.log("Firebase Admin initialized successfully.");
 } catch (error) {
-  console.error(
-    "Failed to initialize Firebase Admin SDK:",
+  console.warn(
+    "Firebase push notifications are disabled:",
     error.message.startsWith("Missing Firebase credentials.")
       ? error.message
       : "Invalid or unreadable Firebase credentials. Check FIREBASE_SERVICE_ACCOUNT or FIREBASE_SERVICE_ACCOUNT_PATH.",

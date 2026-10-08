@@ -1,22 +1,7 @@
-const nodemailer = require("nodemailer");
-
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASS,
-  },
-});
-
-transporter.verify((err) => {
-  if (err) {
-    console.error("SMTP Error:", err);
-  } else {
-    console.log("SMTP ready");
-  }
-});
+const { transporter, assertMailConfigured } = require("./mailTransport");
 
 async function sendOtpEmail(email, otp) {
+  assertMailConfigured();
   try {
     await transporter.sendMail({
       from: `"Reward Planner" <${process.env.MAIL_USER}>`,
@@ -36,6 +21,7 @@ async function sendOtpEmail(email, otp) {
 }
 
 async function sendPasswordResetEmail(email, link) {
+  assertMailConfigured();
   await transporter.sendMail({
     from: `"Reward Planner" <${process.env.MAIL_USER}>`,
     to: email,
@@ -52,6 +38,7 @@ async function sendPasswordResetEmail(email, link) {
 }
 
 async function sendAdminOnboardedEmail({ email, adminName, companyName }) {
+  assertMailConfigured();
   const safeAdminName = String(adminName || "Administrator").replace(/[\r\n]/g, " ").slice(0, 120);
   const safeCompanyName = String(companyName || "your organization").replace(/[\r\n]/g, " ").slice(0, 160);
   const escapeHtml = (value) => value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);

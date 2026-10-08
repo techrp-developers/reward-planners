@@ -61,6 +61,7 @@ const DocumentCategoryManagement = lazy(() => import("./modules/products/vendorM
 const SubSubCategoryManagement = lazy(() => import("./modules/products/vendorManager/category/Subsubcategories.tsx"));
 const ContentManagement = lazy(() => import("./modules/products/content_manager/component/ContentManagement.tsx"));
 const ModuleIcon = lazy(() => import("./modules/products/content_manager/component/module_icon/ModuleIcon.tsx"));
+const AppIcons = lazy(() => import("./modules/products/content_manager/component/app_icon/AppIcons.tsx"));
 const ProductViewPage = lazy(() => import("./modules/products/vendorManager/ProductViewPage.tsx"));
 const Onboarding = lazy(() => import("./modules/products/vendor/Onboarding.tsx"));
 const ChangePasswordPage = lazy(() => import("./common/auth/changePassword.tsx"));
@@ -360,6 +361,7 @@ export default function App() {
         <Route path={routes.manager.content.payment} element={<ContentManagement module="payment" />} />
         <Route path={routes.manager.content.mobileDashboard} element={<ContentManagement module="mobile_dashboard" />} />
         <Route path={routes.manager.content.moduleIcons} element={<ModuleIcon />} />
+        <Route path={routes.manager.content.appIcons} element={<AppIcons />} />
 
         <Route path={routes.manager.flashSales.list} element={<FlashSaleList />} />
         <Route path={routes.manager.flashSales.create} element={<FlashSaleEditor />} />
@@ -434,6 +436,7 @@ export default function App() {
         <Route path={routes.admin.content.service} element={<ContentManagement module="service" />} />
         <Route path={routes.admin.content.payment} element={<ContentManagement module="payment" />} />
         <Route path={routes.admin.content.mobileDashboard} element={<ContentManagement module="mobile_dashboard" />} />
+        <Route path={routes.admin.content.appIcons} element={<AppIcons />} />
       </Route>
 
       {/* ========== SERVICES ========== */}
