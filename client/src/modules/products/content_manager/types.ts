@@ -26,11 +26,26 @@ export interface ContentZoneImage {
   sortOrder: number;
 }
 
+export const MOTION_EFFECTS = [
+  { value: "none", label: "None" },
+  { value: "falling_petals", label: "Falling Petals" },
+  { value: "twinkle", label: "Twinkling Lights" },
+  { value: "shine_sweep", label: "Shine Sweep" },
+  { value: "glow_pulse", label: "Diya Glow" },
+  { value: "slow_zoom", label: "Slow Zoom" },
+] as const;
+export type MotionEffect = typeof MOTION_EFFECTS[number]["value"];
+export type MotionIntensity = "low" | "medium" | "high";
+export type MotionSpeed = "slow" | "normal" | "fast";
+
 export interface ContentEntry {
   id: number;
   zone: Zone;
   contentType: ContentKind;
   colorValue: string;
+  motionEffect: MotionEffect;
+  motionIntensity: MotionIntensity;
+  motionSpeed: MotionSpeed;
   /** Optional header text color override - currently only surfaced for mobile_dashboard navbar_background. */
   textColor: string;
   /** promotional_banner/offers_banner layout - the CMS selection, never derived from image count. */
@@ -100,6 +115,9 @@ export function blankEntry(zone: Zone): ContentEntry {
     zone,
     contentType: "color",
     colorValue: "#852BAF",
+    motionEffect: "none",
+    motionIntensity: "medium",
+    motionSpeed: "normal",
     textColor: "",
     displayMode: "carousel",
     imageUrl: "",

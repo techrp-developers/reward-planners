@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { FaSpinner } from "react-icons/fa";
 import { FiChevronLeft, FiChevronRight, FiCopy, FiEdit2, FiImage, FiLock, FiPause, FiSearch, FiTrash2 } from "react-icons/fi";
 import type { ContentEntry, Status, Zone } from "../types";
-import { STATUS_META, ZONES } from "../types";
+import { MOTION_EFFECTS, STATUS_META, ZONES } from "../types";
 import { computeStatus } from "../store";
 import { cmsColorToBackground } from "../utils/cmsColor";
 import StatusBadge from "./StatusBadge";
@@ -126,7 +126,7 @@ export default function ContentTable({ entries, now, loading, onEdit, onDuplicat
                       )}
                     </span>
                   </td>
-                  <td className="px-5 py-3 font-bold text-slate-900">{entry.title}{entry.isDefault && <span className="ml-2 text-[10px] font-semibold text-slate-400">(Default)</span>}</td>
+                  <td className="px-5 py-3 font-bold text-slate-900">{entry.title}{entry.zone === "promotional_banner" && <span className="ml-2 inline-block rounded-full bg-purple-50 px-2 py-1 text-[10px] font-semibold text-purple-700">{MOTION_EFFECTS.find(effect => effect.value === entry.motionEffect)?.label ?? "None"}</span>}{entry.isDefault && <span className="ml-2 text-[10px] font-semibold text-slate-400">(Default)</span>}</td>
                   <td className="px-5 py-3 text-xs text-slate-500">{formatDate(entry.startAt)}</td>
                   <td className="px-5 py-3 text-xs text-slate-500">{formatDate(entry.endAt)}</td>
                   <td className="px-5 py-3"><StatusBadge status={status} /></td>

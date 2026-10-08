@@ -1,7 +1,23 @@
 const db = require("../config/database");
+const {
+  motionFields,
+  motionValues,
+  validateMotion,
+} = require("../utils/contentMotion");
 
-const MODULES = ["product", "service", "payment", "dineout", "mobile_dashboard"];
-const ZONES = ["navbar_background", "promotional_banner", "offers_banner", "brand_promotional_banner"];
+const MODULES = [
+  "product",
+  "service",
+  "payment",
+  "dineout",
+  "mobile_dashboard",
+];
+const ZONES = [
+  "navbar_background",
+  "promotional_banner",
+  "offers_banner",
+  "brand_promotional_banner",
+];
 const CONTENT_TYPES = ["color", "image"];
 const DISPLAY_MODES = ["single", "carousel", "grid_2", "grid_3"];
 const DEFAULT_DISPLAY_MODE = "carousel";
@@ -30,7 +46,9 @@ const isValidColorValue = (value) => {
       parsed?.type === "gradient" &&
       Array.isArray(parsed.colors) &&
       parsed.colors.length >= 2 &&
-      parsed.colors.every((color) => typeof color === "string" && HEX_COLOR_RE.test(color)) &&
+      parsed.colors.every(
+        (color) => typeof color === "string" && HEX_COLOR_RE.test(color),
+      ) &&
       GRADIENT_DIRECTIONS.has(parsed.direction)
     );
   } catch {
@@ -40,12 +58,20 @@ const isValidColorValue = (value) => {
 
 // Optional per-entry override for header text color (6-digit HEX, or 8-digit with alpha) -
 // null/undefined just means "not set", not invalid.
-const isValidTextColor = (value) => value === null || value === undefined || value === "" || HEX_TEXT_COLOR_RE.test(String(value).trim());
+const isValidTextColor = (value) =>
+  value === null ||
+  value === undefined ||
+  value === "" ||
+  HEX_TEXT_COLOR_RE.test(String(value).trim());
 
 const parseTargetIds = (value) => {
   if (Array.isArray(value)) return value;
   if (typeof value !== "string" || !value.trim()) return [];
-  try { return JSON.parse(value); } catch { return []; }
+  try {
+    return JSON.parse(value);
+  } catch {
+    return [];
+  }
 };
 
 class ContentZoneModel {
@@ -70,33 +96,65 @@ class ContentZoneModel {
       if (!CONTENT_TYPES.includes(data.content_type)) {
         errors.push(`content_type must be one of: ${CONTENT_TYPES.join(", ")}`);
       }
-      if (data.content_type === "color" && !isValidColorValue(data.color_value)) {
+      if (
+        data.content_type === "color" &&
+        !isValidColorValue(data.color_value)
+      ) {
         errors.push("color_value must be a valid HEX color or gradient JSON");
       }
       // offers_banner images are added afterwards via the per-image endpoints, so a
       // main image_url/file isn't required up front the way it is for other zones.
-      if (data.content_type === "image" && !isUpdate && !["offers_banner", "brand_promotional_banner"].includes(data.zone) && !data.image_url && !hasImageFile) {
+      if (
+        data.content_type === "image" &&
+        !isUpdate &&
+        !["offers_banner", "brand_promotional_banner"].includes(data.zone) &&
+        !data.image_url &&
+        !hasImageFile
+      ) {
         errors.push("image_url is required when content_type is 'image'");
       }
     }
 
-    if (isUpdate && data.color_value !== undefined && !isValidColorValue(data.color_value)) {
+    if (
+      isUpdate &&
+      data.color_value !== undefined &&
+      !isValidColorValue(data.color_value)
+    ) {
       errors.push("color_value must be a valid HEX color or gradient JSON");
     }
 
-    if (data.display_mode !== undefined && data.display_mode !== null && data.display_mode !== "" && !DISPLAY_MODES.includes(data.display_mode)) {
-      errors.push(`Invalid display_mode. Allowed values: ${DISPLAY_MODES.join(", ")}`);
+    if (
+      data.display_mode !== undefined &&
+      data.display_mode !== null &&
+      data.display_mode !== "" &&
+      !DISPLAY_MODES.includes(data.display_mode)
+    ) {
+      errors.push(
+        `Invalid display_mode. Allowed values: ${DISPLAY_MODES.join(", ")}`,
+      );
     }
 
     if (data.text_color !== undefined && !isValidTextColor(data.text_color)) {
       errors.push("text_color must be a valid HEX color, e.g. #FFFFFF");
     }
 
-    if (data.target_type !== undefined && data.target_type !== null && data.target_type !== "") {
-      if (!TARGET_TYPES.includes(data.target_type)) errors.push(`target_type must be one of: ${TARGET_TYPES.join(", ")}`);
-      if (!Number.isInteger(Number(data.target_id)) || Number(data.target_id) <= 0) errors.push("target_id must be a positive integer");
+    if (
+      data.target_type !== undefined &&
+      data.target_type !== null &&
+      data.target_type !== ""
+    ) {
+      if (!TARGET_TYPES.includes(data.target_type))
+        errors.push(`target_type must be one of: ${TARGET_TYPES.join(", ")}`);
+      if (
+        !Number.isInteger(Number(data.target_id)) ||
+        Number(data.target_id) <= 0
+      )
+        errors.push("target_id must be a positive integer");
       const targetIds = parseTargetIds(data.target_ids);
-      if (data.target_type === "product" && targetIds.some((id) => !Number.isInteger(Number(id)) || Number(id) <= 0)) {
+      if (
+        data.target_type === "product" &&
+        targetIds.some((id) => !Number.isInteger(Number(id)) || Number(id) <= 0)
+      ) {
         errors.push("target_ids must contain only positive product IDs");
       }
     }
@@ -135,7 +193,7 @@ class ContentZoneModel {
 
   attachStatus(row) {
     if (!row) return row;
-    return { ...row, status: this.deriveStatus(row) };
+    return { ...row, ...motionValues(row), status: this.deriveStatus(row) };
   }
 
   //   =================================Reads===================================
@@ -168,7 +226,13 @@ class ContentZoneModel {
 
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-    const allowedSort = ["start_at", "end_at", "priority", "created_at", "title"];
+    const allowedSort = [
+      "start_at",
+      "end_at",
+      "priority",
+      "created_at",
+      "title",
+    ];
     const sortCol = allowedSort.includes(sortBy) ? sortBy : "created_at";
     const dir = sortDir === "ASC" ? "ASC" : "DESC";
 
@@ -203,7 +267,12 @@ class ContentZoneModel {
       entries = entries.filter((entry) => entry.status === status);
     }
 
-    return { entries, total: countRows[0].total, page: pageNum, pageSize: size };
+    return {
+      entries,
+      total: countRows[0].total,
+      page: pageNum,
+      pageSize: size,
+    };
   }
 
   async getEntryById(id) {
@@ -246,7 +315,11 @@ class ContentZoneModel {
    * Set allowDefaultFallback to fall back to the zone's Default when nothing is active -
    * only navbar_background does this; promotional_banner/offers_banner resolve to null instead.
    */
-  async resolveActiveEntry(contentModule, zone, { allowDefaultFallback = true } = {}) {
+  async resolveActiveEntry(
+    contentModule,
+    zone,
+    { allowDefaultFallback = true } = {},
+  ) {
     const [rows] = await db.query(
       `
       SELECT *
@@ -265,7 +338,9 @@ class ContentZoneModel {
 
     if (rows.length) return this.attachStatus(rows[0]);
 
-    return allowDefaultFallback ? this.getDefaultEntry(contentModule, zone) : null;
+    return allowDefaultFallback
+      ? this.getDefaultEntry(contentModule, zone)
+      : null;
   }
 
   /**
@@ -277,7 +352,9 @@ class ContentZoneModel {
     const results = {};
 
     for (const zone of ZONES) {
-      results[zone] = await this.resolveActiveEntry(contentModule, zone, { allowDefaultFallback: zone === "navbar_background" });
+      results[zone] = await this.resolveActiveEntry(contentModule, zone, {
+        allowDefaultFallback: zone === "navbar_background",
+      });
     }
 
     return results;
@@ -288,7 +365,10 @@ class ContentZoneModel {
     const result = {};
 
     for (const moduleName of MODULES) {
-      result[moduleName] = await this.resolveActiveEntry(moduleName, "navbar_background");
+      result[moduleName] = await this.resolveActiveEntry(
+        moduleName,
+        "navbar_background",
+      );
     }
 
     return result;
@@ -296,30 +376,63 @@ class ContentZoneModel {
 
   async getTargetOptions(type, search = "", selectedId = null) {
     if (!TARGET_TYPES.includes(type)) {
-      const error = new Error(`type must be one of: ${TARGET_TYPES.join(", ")}`);
+      const error = new Error(
+        `type must be one of: ${TARGET_TYPES.join(", ")}`,
+      );
       error.statusCode = 400;
       throw error;
     }
     const term = `%${String(search).trim()}%`;
     const queries = {
-      product: ["SELECT p.product_id AS id, p.product_name AS label, (SELECT pi.image_url FROM product_images pi WHERE pi.product_id = p.product_id ORDER BY pi.image_id ASC LIMIT 1) AS image_url FROM eproducts p WHERE p.is_deleted = 0 AND p.product_name LIKE ? ORDER BY p.product_name", [term]],
-      category: ["SELECT category_id AS id, category_name AS label FROM categories WHERE category_name LIKE ? ORDER BY category_name", [term]],
-      subcategory: ["SELECT sc.subcategory_id AS id, CONCAT(COALESCE(c.category_name, 'Category'), ' / ', sc.subcategory_name) AS label FROM sub_categories sc LEFT JOIN categories c ON c.category_id = sc.category_id WHERE sc.subcategory_name LIKE ? OR c.category_name LIKE ? ORDER BY c.category_name, sc.subcategory_name", [term, term]],
+      product: [
+        "SELECT p.product_id AS id, p.product_name AS label, (SELECT pi.image_url FROM product_images pi WHERE pi.product_id = p.product_id ORDER BY pi.image_id ASC LIMIT 1) AS image_url FROM eproducts p WHERE p.is_deleted = 0 AND p.product_name LIKE ? ORDER BY p.product_name",
+        [term],
+      ],
+      category: [
+        "SELECT category_id AS id, category_name AS label FROM categories WHERE category_name LIKE ? ORDER BY category_name",
+        [term],
+      ],
+      subcategory: [
+        "SELECT sc.subcategory_id AS id, CONCAT(COALESCE(c.category_name, 'Category'), ' / ', sc.subcategory_name) AS label FROM sub_categories sc LEFT JOIN categories c ON c.category_id = sc.category_id WHERE sc.subcategory_name LIKE ? OR c.category_name LIKE ? ORDER BY c.category_name, sc.subcategory_name",
+        [term, term],
+      ],
     };
     const [sql, params] = queries[type];
     const [rows] = await db.query(sql, params);
-    const result = rows.map((row) => ({ id: Number(row.id), label: row.label, imageUrl: row.image_url || null }));
+    const result = rows.map((row) => ({
+      id: Number(row.id),
+      label: row.label,
+      imageUrl: row.image_url || null,
+    }));
 
     const numericSelectedId = Number(selectedId);
-    if (Number.isInteger(numericSelectedId) && numericSelectedId > 0 && !result.some((row) => row.id === numericSelectedId)) {
+    if (
+      Number.isInteger(numericSelectedId) &&
+      numericSelectedId > 0 &&
+      !result.some((row) => row.id === numericSelectedId)
+    ) {
       const selectedQueries = {
-        product: ["SELECT p.product_id AS id, p.product_name AS label, (SELECT pi.image_url FROM product_images pi WHERE pi.product_id = p.product_id ORDER BY pi.image_id ASC LIMIT 1) AS image_url FROM eproducts p WHERE p.product_id = ? AND p.is_deleted = 0", [numericSelectedId]],
-        category: ["SELECT category_id AS id, category_name AS label FROM categories WHERE category_id = ?", [numericSelectedId]],
-        subcategory: ["SELECT sc.subcategory_id AS id, CONCAT(COALESCE(c.category_name, 'Category'), ' / ', sc.subcategory_name) AS label FROM sub_categories sc LEFT JOIN categories c ON c.category_id = sc.category_id WHERE sc.subcategory_id = ?", [numericSelectedId]],
+        product: [
+          "SELECT p.product_id AS id, p.product_name AS label, (SELECT pi.image_url FROM product_images pi WHERE pi.product_id = p.product_id ORDER BY pi.image_id ASC LIMIT 1) AS image_url FROM eproducts p WHERE p.product_id = ? AND p.is_deleted = 0",
+          [numericSelectedId],
+        ],
+        category: [
+          "SELECT category_id AS id, category_name AS label FROM categories WHERE category_id = ?",
+          [numericSelectedId],
+        ],
+        subcategory: [
+          "SELECT sc.subcategory_id AS id, CONCAT(COALESCE(c.category_name, 'Category'), ' / ', sc.subcategory_name) AS label FROM sub_categories sc LEFT JOIN categories c ON c.category_id = sc.category_id WHERE sc.subcategory_id = ?",
+          [numericSelectedId],
+        ],
       };
       const [selectedSql, selectedParams] = selectedQueries[type];
       const [selectedRows] = await db.query(selectedSql, selectedParams);
-      if (selectedRows[0]) result.unshift({ id: Number(selectedRows[0].id), label: selectedRows[0].label, imageUrl: selectedRows[0].image_url || null });
+      if (selectedRows[0])
+        result.unshift({
+          id: Number(selectedRows[0].id),
+          label: selectedRows[0].label,
+          imageUrl: selectedRows[0].image_url || null,
+        });
     }
     return result;
   }
@@ -384,29 +497,66 @@ class ContentZoneModel {
   }
 
   async getProductOffers(contentId) {
-    const [rows] = await db.query(`SELECT content_id, product_id, variant_id, offer_price FROM content_product_offers WHERE content_id = ? ORDER BY product_id, variant_id`, [contentId]);
-    return rows.map((row) => ({ ...row, offer_price: Number(row.offer_price) }));
+    const [rows] = await db.query(
+      `SELECT content_id, product_id, variant_id, offer_price FROM content_product_offers WHERE content_id = ? ORDER BY product_id, variant_id`,
+      [contentId],
+    );
+    return rows.map((row) => ({
+      ...row,
+      offer_price: Number(row.offer_price),
+    }));
   }
 
   async replaceProductOffers(contentId, offers = []) {
     const conn = await db.getConnection();
     try {
       await conn.beginTransaction();
-      await conn.query(`DELETE FROM content_product_offers WHERE content_id = ?`, [contentId]);
+      await conn.query(
+        `DELETE FROM content_product_offers WHERE content_id = ?`,
+        [contentId],
+      );
       for (const offer of offers) {
-        const [[variant]] = await conn.query(`SELECT sale_price FROM product_variants WHERE variant_id = ? AND product_id = ?`, [offer.variant_id, offer.product_id]);
-        if (!variant) { const error = new Error(`Variant ${offer.variant_id} does not belong to product ${offer.product_id}`); error.statusCode = 400; throw error; }
+        const [[variant]] = await conn.query(
+          `SELECT sale_price FROM product_variants WHERE variant_id = ? AND product_id = ?`,
+          [offer.variant_id, offer.product_id],
+        );
+        if (!variant) {
+          const error = new Error(
+            `Variant ${offer.variant_id} does not belong to product ${offer.product_id}`,
+          );
+          error.statusCode = 400;
+          throw error;
+        }
         const price = Number(offer.offer_price);
-        if (!(price > 0) || price > Number(variant.sale_price)) { const error = new Error(`Offer price for variant ${offer.variant_id} must be greater than zero and cannot exceed sale price`); error.statusCode = 400; throw error; }
-        await conn.query(`INSERT INTO content_product_offers (content_id, product_id, variant_id, offer_price) VALUES (?, ?, ?, ?)`, [contentId, offer.product_id, offer.variant_id, price]);
+        if (!(price > 0) || price > Number(variant.sale_price)) {
+          const error = new Error(
+            `Offer price for variant ${offer.variant_id} must be greater than zero and cannot exceed sale price`,
+          );
+          error.statusCode = 400;
+          throw error;
+        }
+        await conn.query(
+          `INSERT INTO content_product_offers (content_id, product_id, variant_id, offer_price) VALUES (?, ?, ?, ?)`,
+          [contentId, offer.product_id, offer.variant_id, price],
+        );
       }
       await conn.commit();
-    } catch (error) { await conn.rollback(); throw error; } finally { conn.release(); }
+    } catch (error) {
+      await conn.rollback();
+      throw error;
+    } finally {
+      conn.release();
+    }
   }
 
   /** Other published, non-default entries in the same module+zone whose window overlaps. */
   async findConflicts(contentModule, zone, startAt, endAt, excludeId = null) {
-    const params = [contentModule, zone, endAt || "9999-12-31 23:59:59", startAt];
+    const params = [
+      contentModule,
+      zone,
+      endAt || "9999-12-31 23:59:59",
+      startAt,
+    ];
 
     let sql = `
       SELECT *
@@ -432,17 +582,19 @@ class ContentZoneModel {
   //   =================================Writes===================================
 
   async createEntry(data, { hasImageFile = false } = {}) {
+    validateMotion(data, data.zone);
     this.validateEntry(data, { hasImageFile });
 
-    const startAt = data.is_published && !data.start_at ? new Date() : data.start_at || null;
+    const startAt =
+      data.is_published && !data.start_at ? new Date() : data.start_at || null;
 
     const [result] = await db.query(
       `
       INSERT INTO content_zone_entries (
         module, zone, content_type, display_mode, color_value, text_color, image_url, title, cta_text,
-        redirect_link, target_type, target_id, target_ids, start_at, end_at, priority, is_default, is_published, created_by_name
+        redirect_link, target_type, target_id, start_at, end_at, priority, is_default, is_published, created_by_name, motion_effect, motion_intensity, motion_speed
       )
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `,
       [
         data.module,
@@ -457,13 +609,20 @@ class ContentZoneModel {
         data.redirect_link || null,
         data.target_type || null,
         data.target_type ? Number(data.target_id) : null,
-        data.target_type === "product" ? JSON.stringify(parseTargetIds(data.target_ids)) : null,
+        data.target_type === "product"
+          ? JSON.stringify(parseTargetIds(data.target_ids))
+          : null,
         startAt,
         data.end_at || null,
         data.priority || 0,
         0, // is_default is never set via the create endpoint
         data.is_published ? 1 : 0,
         data.created_by_name || null,
+        ...Object.entries(motionFields).map(([name, { fallback }]) =>
+          data.zone === "promotional_banner"
+            ? (data[name] ?? fallback)
+            : fallback,
+        ),
       ],
     );
 
@@ -484,9 +643,13 @@ class ContentZoneModel {
   async updateEntry(id, data) {
     const existing = await this.getEntryById(id);
 
+    validateMotion(data, existing.zone);
     this.validateEntry(data, { isUpdate: true });
 
-    if (existing.is_default && (data.zone !== undefined || data.module !== undefined)) {
+    if (
+      existing.is_default &&
+      (data.zone !== undefined || data.module !== undefined)
+    ) {
       const error = new Error("Default entries cannot change zone or module");
       error.statusCode = 400;
       throw error;
@@ -518,8 +681,27 @@ class ContentZoneModel {
         fields.push(`${key} = ?`);
         if (key === "is_published") values.push(data[key] ? 1 : 0);
         else if (key === "text_color") values.push(data[key] || null);
-        else if (key === "target_ids") values.push(data.target_type === "product" ? JSON.stringify(parseTargetIds(data[key])) : null);
+        else if (key === "target_ids")
+          values.push(
+            data.target_type === "product"
+              ? JSON.stringify(parseTargetIds(data[key]))
+              : null,
+          );
         else values.push(data[key]);
+      }
+    }
+
+    for (const [apiName, { column, fallback }] of Object.entries(
+      motionFields,
+    )) {
+      if (
+        existing.zone !== "promotional_banner" ||
+        data[apiName] !== undefined
+      ) {
+        fields.push(`${column} = ?`);
+        values.push(
+          existing.zone === "promotional_banner" ? data[apiName] : fallback,
+        );
       }
     }
 
@@ -551,9 +733,9 @@ class ContentZoneModel {
       `
       INSERT INTO content_zone_entries (
         module, zone, content_type, display_mode, color_value, text_color, image_url, title, cta_text,
-        redirect_link, target_type, target_id, target_ids, start_at, end_at, priority, is_default, is_published, created_by_name
+        redirect_link, target_type, target_id, start_at, end_at, priority, is_default, is_published, created_by_name, motion_effect, motion_intensity, motion_speed
       )
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,?)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,?,?,?,?)
       `,
       [
         original.module,
@@ -568,11 +750,14 @@ class ContentZoneModel {
         original.redirect_link,
         original.target_type,
         original.target_id,
-        original.target_type === "product" ? JSON.stringify(parseTargetIds(original.target_ids)) : null,
+        original.target_type === "product"
+          ? JSON.stringify(parseTargetIds(original.target_ids))
+          : null,
         original.start_at,
         original.end_at,
         original.priority,
         original.created_by_name,
+        ...Object.values(motionValues(original)),
       ],
     );
 
@@ -681,14 +866,26 @@ class ContentZoneModel {
       [contentId, imageUrl, sortOrder],
     );
 
-    return { image_id: result.insertId, content_id: Number(contentId), image_url: imageUrl, sort_order: sortOrder, is_active: 1 };
+    return {
+      image_id: result.insertId,
+      content_id: Number(contentId),
+      image_url: imageUrl,
+      sort_order: sortOrder,
+      is_active: 1,
+    };
   }
 
   /** images: [{ image_url, sort_order }] - inserted in order so sort_order matches upload order. */
   async createEntryImages(contentId, images) {
     const created = [];
     for (const image of images) {
-      created.push(await this.createEntryImage(contentId, image.image_url, image.sort_order));
+      created.push(
+        await this.createEntryImage(
+          contentId,
+          image.image_url,
+          image.sort_order,
+        ),
+      );
     }
     return created;
   }
@@ -733,9 +930,13 @@ class ContentZoneModel {
     const existing = await this.getAllImagesByContentId(contentId);
     const existingIds = new Set(existing.map((row) => row.image_id));
 
-    const invalid = images.filter((img) => !existingIds.has(Number(img.image_id)));
+    const invalid = images.filter(
+      (img) => !existingIds.has(Number(img.image_id)),
+    );
     if (invalid.length) {
-      const error = new Error("One or more images do not belong to this content entry");
+      const error = new Error(
+        "One or more images do not belong to this content entry",
+      );
       error.statusCode = 400;
       throw error;
     }

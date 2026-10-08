@@ -1,0 +1,21 @@
+.cms-motion-preview { position: relative; aspect-ratio: 2048 / 1008; overflow: hidden; }
+.cms-motion-preview > img { width: 100%; height: 100%; object-fit: contain; }
+.cms-motion-overlay { position: absolute; inset: 0; pointer-events: none; }
+.cms-motion-overlay span { position: absolute; }
+.cms-motion-petal { width: 10px; height: 14px; border-radius: 70% 10% 70% 30%; animation: cms-petals var(--motion-duration) linear infinite; }
+.cms-motion-star { color: #fff6c9; text-shadow: 0 0 8px #ffd36a; font-size: 18px; animation: cms-twinkle calc(var(--motion-duration) / 3) ease-in-out infinite; }
+.cms-motion-shine { top: -30%; left: -45%; width: 25%; height: 160%; background: linear-gradient(90deg, transparent, #ffffff80, transparent); animation: cms-shine var(--motion-duration) ease-in-out infinite; }
+.cms-motion-glow { left: 10%; bottom: -30%; width: 80%; height: 100%; background: radial-gradient(ellipse, #ffd36aaa, #ff8a0033 40%, transparent 70%); animation: cms-glow calc(var(--motion-duration) / 2) ease-in-out infinite alternate; }
+.cms-motion-preview[data-effect="slow_zoom"] > img { animation: cms-zoom calc(var(--motion-duration) * 2) ease-in-out infinite alternate; }
+/* Inherit after animation shorthands so visibility pauses every effect. */
+.cms-motion-preview *, .cms-motion-preview > img { animation-play-state: inherit; }
+@keyframes cms-petals { 0% { transform: translate(0, 0) rotate(0); opacity: 0; } 10% { opacity: .9; } 85% { opacity: .9; } 100% { transform: translate(24px, 55cqw) rotate(360deg); opacity: 0; } }
+.cms-motion-preview { container-type: inline-size; }
+@keyframes cms-twinkle { 0%, 100% { opacity: 0; transform: scale(.6); } 50% { opacity: 1; transform: scale(1.2); } }
+@keyframes cms-shine { 0%, 15% { transform: translateX(0) rotate(20deg); opacity: 0; } 20% { opacity: 1; } 55% { transform: translateX(650%) rotate(20deg); opacity: 1; } 60%, 100% { transform: translateX(650%) rotate(20deg); opacity: 0; } }
+@keyframes cms-glow { from { transform: scale(.85); } to { transform: scale(1.15); } }
+@keyframes cms-zoom { from { transform: scale(1); } to { transform: scale(1.06); } }
+@media (prefers-reduced-motion: reduce) {
+  .cms-motion-preview *, .cms-motion-preview > img { animation: none !important; }
+  .cms-motion-overlay { display: none; }
+}

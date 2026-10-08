@@ -1,5 +1,5 @@
 import { api } from "../../../../common/api/api";
-import type { ContentDisplayMode, ContentEntry, ContentTargetType, Zone } from "../types";
+import type { ContentDisplayMode, ContentEntry, ContentTargetType, MotionEffect, MotionIntensity, MotionSpeed, Zone } from "../types";
 
 const BASE = "/content";
 const MODULE = "product";
@@ -13,6 +13,9 @@ export interface ApiContentZoneImage {
 }
 
 export interface ApiContentEntry {
+  motionEffect?: MotionEffect;
+  motionIntensity?: MotionIntensity;
+  motionSpeed?: MotionSpeed;
   content_id: number;
   module: string;
   zone: Zone;
@@ -140,6 +143,11 @@ export const buildEntryFormData = (
   fd.append("zone", draft.zone);
   fd.append("content_type", draft.contentType);
   fd.append("display_mode", draft.displayMode);
+  if (draft.zone === "promotional_banner") {
+    fd.append("motionEffect", draft.motionEffect);
+    fd.append("motionIntensity", draft.motionIntensity);
+    fd.append("motionSpeed", draft.motionSpeed);
+  }
   if (draft.zone === "brand_promotional_banner" && draft.contentType === "image") {
     draft.imageFiles?.forEach((file) => fd.append("images[]", file));
   }

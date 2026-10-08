@@ -1,3 +1,4 @@
+const { motionValues } = require('../../../utils/contentMotion');
 const db = require('../../../config/database');
 const ContentZoneModel = require('../../../models/contentZoneModel');
 const ModuleIconModel = require('../../../models/moduleIconModel');
@@ -60,6 +61,7 @@ const publicContentEntry = async (entry) => {
 
   const response = {
     contentId: entry.content_id,
+    ...motionValues(entry),
     displayMode: entry.display_mode || 'carousel',
     module: entry.module,
     zone: entry.zone,

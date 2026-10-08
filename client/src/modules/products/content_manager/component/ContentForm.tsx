@@ -19,6 +19,7 @@ import StatusBadge from "./StatusBadge";
 import OfferImagesManager from "./OfferImagesManager";
 import ImageDimensionInfo from "./ImageDimensionInfo";
 import AssetSpecPanel from "./AssetSpecPanel";
+import MotionEffectFields from "./MotionEffectFields";
 import ContentTargetSelector from "./ContentTargetSelector";
 
 const inputClass = "mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100";
@@ -276,6 +277,10 @@ export default function ContentForm({ draft, entries, now, module, onChange, onS
               onSelectFile={handleImageUpload}
             />
           </div>
+        )}
+
+        {draft.zone === "promotional_banner" && (
+          <MotionEffectFields draft={draft} onChange={onChange} />
         )}
 
         {draft.contentType === "image" && (
