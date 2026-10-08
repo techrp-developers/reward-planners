@@ -82,7 +82,11 @@ class ChatModel {
        WHERE m.user_id = ? AND m.left_at IS NULL ORDER BY COALESCE(lm.created_at, c.created_at) DESC`, [userId, userId]);
     for (const row of rows) {
       const [members] = await db.execute(
-        `SELECT u.user_id, u.name, u.user_image, cm.role FROM chat_members cm JOIN customer u ON u.user_id = cm.user_id
+        `SELECT u.user_id, u.name, u.user_image, cm.role,
+                cu.department, cu.role AS job_role
+         FROM chat_members cm
+         JOIN customer u ON u.user_id = cm.user_id
+         JOIN company_users cu ON cu.id = u.company_user_id
          WHERE cm.conversation_id = ? AND cm.left_at IS NULL`, [row.conversation_id]);
       row.members = members;
     }
