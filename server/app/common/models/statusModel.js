@@ -313,8 +313,13 @@ class StatusModel {
   }
 
   async getComments(statusId, viewerId, limit = 50, beforeId = null) {
-    if (!(await this.findAccessible(statusId, viewerId))) return null;
+    const status = await this.findAccessible(statusId, viewerId);
+    if (!status) return null;
     const params = [statusId];
+    const privacyClause = Number(status.user_id) === Number(viewerId)
+      ? ""
+      : " AND cm.user_id = ?";
+    if (privacyClause) params.push(viewerId);
     const beforeClause = beforeId ? " AND cm.comment_id < ?" : "";
     if (beforeId) params.push(beforeId);
     params.push(limit);
@@ -323,7 +328,7 @@ class StatusModel {
               cm.created_at, cm.updated_at, c.name, c.user_image
        FROM user_status_comments cm
        INNER JOIN customer c ON c.user_id = cm.user_id
-       WHERE cm.status_id = ?${beforeClause}
+       WHERE cm.status_id = ?${privacyClause}${beforeClause}
        ORDER BY cm.comment_id DESC LIMIT ?`,
       params,
     );
