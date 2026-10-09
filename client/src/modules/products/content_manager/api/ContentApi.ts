@@ -3,6 +3,7 @@ import type { ContentDisplayMode, ContentEntry, ContentTargetType, MotionEffect,
 
 const BASE = "/content";
 const MODULE = "product";
+const IMAGE_GALLERY_ZONES: Zone[] = ["offers_banner", "promotional_banner", "brand_promotional_banner"];
 
 export interface ApiContentZoneImage {
   image_id: number | null;
@@ -148,7 +149,7 @@ export const buildEntryFormData = (
     fd.append("motionIntensity", draft.motionIntensity);
     fd.append("motionSpeed", draft.motionSpeed);
   }
-  if (draft.zone === "brand_promotional_banner" && draft.contentType === "image") {
+  if (IMAGE_GALLERY_ZONES.includes(draft.zone) && draft.contentType === "image") {
     draft.imageFiles?.forEach((file) => fd.append("images[]", file));
   }
 

@@ -9,8 +9,8 @@ const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 // Keep in sync with MAX_OFFER_IMAGES in controllers/contentController.js.
 const MAX_OFFER_IMAGES = 10;
 
-// navbar_background/promotional_banner send a single "image" field; offers_banner
-// sends one or more files under "images". Both are optional so the same upload
+// navbar_background sends a single "image" field; banner galleries send one or
+// more files under "images". Both are optional so the same upload
 // step covers a color-content save too (no files at all).
 const uploadEntryFiles = uploadContentImage.fields([
   { name: "image", maxCount: 1 },

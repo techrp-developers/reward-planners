@@ -5,6 +5,7 @@ let nextId;
 const dbPath = require.resolve('../config/database');
 const db = {
   async query(sql, params = []) {
+    if (sql.includes('FROM content_zone_entry_images')) return [[]];
     if (sql.includes('INSERT INTO content_zone_entries')) {
       const columns = sql.match(/content_zone_entries\s*\(([^)]+)\)/)[1].split(',').map(value => value.trim());
       const tokens = sql.match(/VALUES\s*\(([^)]+)\)/)[1].split(',').map(value => value.trim());

@@ -24,6 +24,7 @@ const parseConfig = (value) => {
 };
 
 const MOBILE_CONTENT_MODULES = ['mobile_dashboard', 'product', 'service', 'payment', 'dineout'];
+const IMAGE_GALLERY_ZONES = ['offers_banner', 'promotional_banner', 'brand_promotional_banner'];
 const contentAssetUrl = (path) => path?.startsWith('/uploads/') ? getContentImageUrl(path) : getPublicUrl(path);
 
 const targetIds = (entry) => {
@@ -80,7 +81,7 @@ const publicContentEntry = async (entry) => {
     endAt: entry.end_at,
   };
 
-  if (['offers_banner', 'brand_promotional_banner'].includes(entry.zone) && entry.content_type === 'image') {
+  if (IMAGE_GALLERY_ZONES.includes(entry.zone) && entry.content_type === 'image') {
     const allBrandImages = entry.zone === 'brand_promotional_banner'
       ? await ContentZoneModel.getAllImagesByContentId(entry.content_id)
       : null;

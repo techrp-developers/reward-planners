@@ -18,6 +18,11 @@ const ZONES = [
   "offers_banner",
   "brand_promotional_banner",
 ];
+const IMAGE_GALLERY_ZONES = [
+  "offers_banner",
+  "promotional_banner",
+  "brand_promotional_banner",
+];
 const CONTENT_TYPES = ["color", "image"];
 const DISPLAY_MODES = ["single", "carousel", "grid_2", "grid_3"];
 const DEFAULT_DISPLAY_MODE = "carousel";
@@ -102,12 +107,12 @@ class ContentZoneModel {
       ) {
         errors.push("color_value must be a valid HEX color or gradient JSON");
       }
-      // offers_banner images are added afterwards via the per-image endpoints, so a
+      // Gallery images are added afterwards via the per-image endpoints, so a
       // main image_url/file isn't required up front the way it is for other zones.
       if (
         data.content_type === "image" &&
         !isUpdate &&
-        !["offers_banner", "brand_promotional_banner"].includes(data.zone) &&
+        !IMAGE_GALLERY_ZONES.includes(data.zone) &&
         !data.image_url &&
         !hasImageFile
       ) {
@@ -592,9 +597,9 @@ class ContentZoneModel {
       `
       INSERT INTO content_zone_entries (
         module, zone, content_type, display_mode, color_value, text_color, image_url, title, cta_text,
-        redirect_link, target_type, target_id, start_at, end_at, priority, is_default, is_published, created_by_name, motion_effect, motion_intensity, motion_speed
+        redirect_link, target_type, target_id, target_ids, start_at, end_at, priority, is_default, is_published, created_by_name, motion_effect, motion_intensity, motion_speed
       )
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `,
       [
         data.module,
@@ -733,9 +738,9 @@ class ContentZoneModel {
       `
       INSERT INTO content_zone_entries (
         module, zone, content_type, display_mode, color_value, text_color, image_url, title, cta_text,
-        redirect_link, target_type, target_id, start_at, end_at, priority, is_default, is_published, created_by_name, motion_effect, motion_intensity, motion_speed
+        redirect_link, target_type, target_id, target_ids, start_at, end_at, priority, is_default, is_published, created_by_name, motion_effect, motion_intensity, motion_speed
       )
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,?,?,?,?)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,?,?,?,?)
       `,
       [
         original.module,

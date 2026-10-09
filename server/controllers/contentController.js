@@ -14,6 +14,14 @@ const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
 // Server-side cap on images per Offers Banner campaign - keep in sync with the
 // multer maxCount values in routes/contentRoutes.js.
 const MAX_OFFER_IMAGES = 10;
+const IMAGE_GALLERY_ZONES = [
+  "offers_banner",
+  "promotional_banner",
+  "brand_promotional_banner",
+];
+
+const supportsImageGallery = (zone) => IMAGE_GALLERY_ZONES.includes(zone);
+const getEntryImageUrl = getContentImageUrl;
 
 const cleanupTempFile = (file) => {
   // Kept for compatibility with requests already processed by the former disk
@@ -74,6 +82,58 @@ const assertWithinOfferImageLimit = (existingCount, incomingCount) => {
   }
 };
 
+const parseTargetIds = (value) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string" || !value.trim()) return [];
+  try {
+    return JSON.parse(value);
+  } catch {
+    return [];
+  }
+};
+
+const validateTargets = async (body) => {
+  if (!body.target_type) return;
+
+  if (body.target_type === "product") {
+    const ids = parseTargetIds(body.target_ids);
+    if (ids.length) {
+      await Promise.all(
+        ids.map((id) => ContentZoneModel.validateTarget(body.target_type, id)),
+      );
+      return;
+    }
+  }
+
+  await ContentZoneModel.validateTarget(body.target_type, body.target_id);
+};
+
+const appendBannerImages = async (entry, files) => {
+  const rows = await ContentZoneModel.getAllImagesByContentId(entry.content_id);
+  const preserveSingleImage =
+    entry.zone === "promotional_banner" && !rows.length && entry.image_url;
+
+  assertWithinOfferImageLimit(
+    rows.length + (preserveSingleImage ? 1 : 0),
+    files.length,
+  );
+
+  let nextOrder = rows.reduce(
+    (next, row) => Math.max(next, Number(row.sort_order) + 1),
+    0,
+  );
+
+  if (preserveSingleImage) {
+    await ContentZoneModel.createEntryImage(
+      entry.content_id,
+      entry.image_url,
+      nextOrder++,
+    );
+  }
+
+  return saveOfferImages(entry.content_id, files, nextOrder);
+};
+
 // Removes a locally stored content image given its stored relative path (e.g. /uploads/content-zone-entries/4/old.jpg).
 // Ignores anything that isn't one of our own local paths (legacy R2 keys, absolute URLs, etc).
 const deleteEntryImageAsset = async (storedPath) => {
@@ -86,7 +146,7 @@ const deleteEntryImageAsset = async (storedPath) => {
   const uploadsRoot = path.join(__dirname, "../uploads");
   const absolutePath = path.join(
     uploadsRoot,
-    relativePath.replace(/^\/uploads[\\/]/, ""),
+    storedPath.replace(/^\/uploads[\\/]/, ""),
   );
 
   // Guard against path traversal - resolved path must stay inside the content-zone-entries dir.
@@ -139,24 +199,24 @@ const withPublicImageUrl = (entry) => {
   return { ...entry, image_url: getEntryImageUrl(entry.image_url) };
 };
 
-// Offers and brand promotional campaigns carry multiple images; other zones keep
+// Gallery campaigns carry multiple images; other zones keep
 // using image_url alone and is returned untouched. Falls back to wrapping the
 // single image_url in a one-item array for campaigns created before this
 // feature existed, so old records keep rendering without a backfill.
 const withOffersImages = async (entry, { includeInactive = false } = {}) => {
   if (
     !entry ||
-    !["offers_banner", "brand_promotional_banner"].includes(entry.zone) ||
+    !supportsImageGallery(entry.zone) ||
     entry.content_type !== "image"
   )
     return entry;
 
-  const allBrandImages =
-    entry.zone === "brand_promotional_banner"
+  const allImages =
+    includeInactive || entry.zone === "brand_promotional_banner"
       ? await ContentZoneModel.getAllImagesByContentId(entry.content_id)
       : null;
-  const rows = allBrandImages
-    ? allBrandImages
+  const rows = allImages
+    ? allImages
         .filter((row) => includeInactive || Number(row.is_active) === 1)
         .sort((a, b) => a.sort_order - b.sort_order || a.image_id - b.image_id)
     : await ContentZoneModel.getImagesByContentId(entry.content_id);
@@ -169,7 +229,7 @@ const withOffersImages = async (entry, { includeInactive = false } = {}) => {
         sort_order: row.sort_order,
         is_active: row.is_active,
       }))
-    : entry.image_url && !allBrandImages?.length
+    : entry.image_url && !allImages?.length
       ? [
           {
             image_id: null,
@@ -184,7 +244,7 @@ const withOffersImages = async (entry, { includeInactive = false } = {}) => {
   return {
     ...entry,
     image_url:
-      allBrandImages?.length && !rows.length && !includeInactive
+      allImages?.length && !rows.length && !includeInactive
         ? null
         : entry.image_url,
     images,
@@ -195,7 +255,7 @@ const withOffersImages = async (entry, { includeInactive = false } = {}) => {
 const withOffersImageCount = async (entry) => {
   if (
     !entry ||
-    !["offers_banner", "brand_promotional_banner"].includes(entry.zone) ||
+    !supportsImageGallery(entry.zone) ||
     entry.content_type !== "image"
   )
     return entry;
@@ -305,18 +365,16 @@ class ContentController {
 
       if (
         offerFiles.length &&
-        !["offers_banner", "brand_promotional_banner"].includes(body.zone)
+        !supportsImageGallery(body.zone)
       ) {
         cleanupTempFile(imageFile);
         cleanupTempFiles(offerFiles);
         return res.status(400).json({
           success: false,
           message:
-            "Multiple images are only supported for Offers Banner and Brand Promotional Banner zones",
+            "Multiple images are only supported for promotional and offers banners",
         });
       }
-
-      assertWithinOfferImageLimit(0, offerFiles.length);
 
       // Conflict check only matters for a published (scheduled/active) entry.
       if (body.is_published) {
@@ -354,7 +412,10 @@ class ContentController {
       }
 
       if (offerFiles.length) {
-        await saveOfferImages(entry.content_id, offerFiles, 0);
+        await appendBannerImages(
+          { ...entry, image_url: imageUrl || entry.image_url },
+          offerFiles,
+        );
       }
 
       return res.status(201).json({
@@ -398,24 +459,15 @@ class ContentController {
 
       if (
         offerFiles.length &&
-        !["offers_banner", "brand_promotional_banner"].includes(existing.zone)
+        !supportsImageGallery(existing.zone)
       ) {
         cleanupTempFile(imageFile);
         cleanupTempFiles(offerFiles);
         return res.status(400).json({
           success: false,
           message:
-            "Multiple images are only supported for Offers Banner and Brand Promotional Banner zones",
+            "Multiple images are only supported for promotional and offers banners",
         });
-      }
-
-      if (offerFiles.length) {
-        const existingCount = (
-          await (existing.zone === "brand_promotional_banner"
-            ? ContentZoneModel.getAllImagesByContentId(id)
-            : ContentZoneModel.getImagesByContentId(id))
-        ).length;
-        assertWithinOfferImageLimit(existingCount, offerFiles.length);
       }
 
       if (body.is_published !== undefined) {
@@ -468,9 +520,7 @@ class ContentController {
 
       // Additive - existing offer images are left untouched, new ones are appended after them.
       if (offerFiles.length) {
-        const nextSortOrder = (await ContentZoneModel.getImagesByContentId(id))
-          .length;
-        await saveOfferImages(id, offerFiles, nextSortOrder);
+        await appendBannerImages(entry, offerFiles);
       }
 
       return res.json({
@@ -493,7 +543,7 @@ class ContentController {
   async duplicateEntry(req, res) {
     try {
       const original = await ContentZoneModel.getEntryById(req.params.id);
-      const entry = await ContentZoneModel.duplicateEntry(req.params.id);
+      let entry = await ContentZoneModel.duplicateEntry(req.params.id);
 
       if (original.image_url) {
         const copiedMainImage = await copyContentImageFile(
@@ -507,9 +557,7 @@ class ContentController {
           );
       }
 
-      if (
-        ["offers_banner", "brand_promotional_banner"].includes(original.zone)
-      ) {
+      if (supportsImageGallery(original.zone)) {
         const originalImages = await ContentZoneModel.getImagesByContentId(
           original.content_id,
         );
@@ -571,10 +619,7 @@ class ContentController {
 
       // Fetch (and remove) every child image row up front - ON DELETE CASCADE would
       // also clear them, but we need the rows in hand to delete their physical files.
-      const childImages = [
-        "offers_banner",
-        "brand_promotional_banner",
-      ].includes(entry.zone)
+      const childImages = supportsImageGallery(entry.zone)
         ? await ContentZoneModel.deleteImagesByContentId(entry.content_id)
         : [];
 
@@ -618,12 +663,12 @@ class ContentController {
       const { id } = req.params;
       const entry = await ContentZoneModel.getEntryById(id);
 
-      if (!["offers_banner", "brand_promotional_banner"].includes(entry.zone)) {
+      if (!supportsImageGallery(entry.zone)) {
         cleanupTempFiles(files);
         return res.status(400).json({
           success: false,
           message:
-            "Multiple images are only supported for Offers Banner and Brand Promotional Banner zones",
+            "Multiple images are only supported for promotional and offers banners",
         });
       }
 
@@ -634,14 +679,7 @@ class ContentController {
         });
       }
 
-      const existingCount = (
-        await (entry.zone === "brand_promotional_banner"
-          ? ContentZoneModel.getAllImagesByContentId(id)
-          : ContentZoneModel.getImagesByContentId(id))
-      ).length;
-      assertWithinOfferImageLimit(existingCount, files.length);
-
-      const created = await saveOfferImages(id, files, existingCount);
+      const created = await appendBannerImages(entry, files);
 
       return res.status(201).json({
         success: true,

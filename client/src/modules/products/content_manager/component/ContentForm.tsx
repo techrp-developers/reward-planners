@@ -24,6 +24,7 @@ import ContentTargetSelector from "./ContentTargetSelector";
 
 const inputClass = "mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100";
 const labelClass = "text-xs font-bold text-slate-500";
+const IMAGE_GALLERY_ZONES: Zone[] = ["offers_banner", "promotional_banner", "brand_promotional_banner"];
 
 interface Props {
   draft: ContentEntry;
@@ -39,7 +40,7 @@ interface Props {
 
 export default function ContentForm({ draft, entries, now, module, onChange, onSaveDraft, onPreview, onPublish, saving }: Props) {
   const showHeaderTextColor = draft.zone === "navbar_background" && module === "mobile_dashboard";
-  const showDisplayMode = draft.contentType === "image" && (draft.zone === "promotional_banner" || ["offers_banner", "brand_promotional_banner"].includes(draft.zone));
+  const showDisplayMode = draft.contentType === "image" && IMAGE_GALLERY_ZONES.includes(draft.zone);
   const headerTextColor = isValidHexColor(draft.textColor) ? draft.textColor : "#FFFFFF";
   const status = computeStatus(draft, now);
   const conflicts = findConflicts(draft, entries);
@@ -234,7 +235,7 @@ export default function ContentForm({ draft, entries, now, module, onChange, onS
               </div>
             )}
           </div>
-        ) : ["offers_banner", "brand_promotional_banner"].includes(draft.zone) ? (
+        ) : IMAGE_GALLERY_ZONES.includes(draft.zone) ? (
           draft.id ? (
             <OfferImagesManager
               zone={draft.zone}
@@ -243,9 +244,9 @@ export default function ContentForm({ draft, entries, now, module, onChange, onS
               images={draft.images ?? []}
               onChange={(images: ContentZoneImage[]) => onChange({ images })}
             />
-          ) : draft.zone === "brand_promotional_banner" ? (
+          ) : draft.zone === "brand_promotional_banner" || draft.zone === "promotional_banner" ? (
             <div className="sm:col-span-2 text-sm font-semibold">
-              Brand Promotional Images (maximum 10)
+              {draft.zone === "brand_promotional_banner" ? "Brand Promotional Images" : "Promotional Images"} (maximum 10)
               <span className="mt-1 block text-xs text-slate-500">Recommended: 1200 × 600 px · Ratio 2:1 · JPG, JPEG, PNG. Other dimensions are allowed.</span>
               <input type="file" accept="image/jpeg,image/png" multiple className="mt-2 block w-full" onChange={async (event) => {
                 const files = Array.from(event.target.files ?? []);

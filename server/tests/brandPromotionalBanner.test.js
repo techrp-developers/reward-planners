@@ -13,7 +13,7 @@ test('brand zone accepts all modules and display modes; existing zone validation
     }
   }
   assert.throws(() => model.validateEntry({ ...base, module: 'product', display_mode: 'invalid' }), /Invalid display_mode/);
-  assert.throws(() => model.validateEntry({ ...base, module: 'product', zone: 'promotional_banner' }), /image_url is required/);
+  assert.doesNotThrow(() => model.validateEntry({ ...base, module: 'product', zone: 'promotional_banner' }));
   assert.doesNotThrow(() => model.validateEntry({ ...base, module: 'product', zone: 'offers_banner' }));
   assert.doesNotThrow(() => model.validateEntry({ ...base, module: 'product', content_type: 'color', color_value: '#852BAF' }));
 });
