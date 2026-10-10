@@ -8,8 +8,9 @@ const MAX_RETRY = Number(process.env.WA_MAX_RETRY || 3);
 const RETRY_DELAY_MINUTES = Number(process.env.WA_RETRY_DELAY_MINUTES || 2);
 const SEND_INTERVAL_MS = Math.max(
   500,
-  Number(process.env.WA_SEND_INTERVAL_MS || 1200),
+  Number(process.env.WA_SEND_INTERVAL_MS || 3000),
 );
+let rateLimitedUntil = 0;
 
 function safeJsonParse(value, fallback) {
   if (value == null) return fallback;
@@ -59,9 +60,15 @@ function getRetryDelayMinutes(error, retryCount) {
     return RETRY_DELAY_MINUTES;
   }
 
+  const retryAfter = error?.response?.headers?.["retry-after"];
+  const seconds = Number(retryAfter);
+  const retryAfterMinutes = retryAfter == null ? 0 : Number.isFinite(seconds)
+    ? Math.ceil(Math.max(0, seconds) / 60)
+    : Math.ceil(Math.max(0, Date.parse(retryAfter) - Date.now()) / 60000) || 0;
   return Math.max(
+    retryAfterMinutes,
     RETRY_DELAY_MINUTES,
-    Math.ceil(RETRY_DELAY_MINUTES * 2 ** Math.max(0, retryCount - 1)),
+    Math.ceil(RETRY_DELAY_MINUTES * 2 ** Math.min(6, Math.max(0, retryCount - 1))),
   );
 }
 
@@ -95,6 +102,7 @@ async function pickJob() {
 }
 
 async function runOnce() {
+  if (Date.now() < rateLimitedUntil) return false;
   const job = await pickJob();
   if (!job) return false;
 
@@ -174,7 +182,25 @@ async function runOnce() {
       [job.id]
     );
 
-    const retryCount = (curRows[0]?.retry_count ?? 0) + 1;
+    const retryCount = Number(curRows[0]?.retry_count ?? 0) + 1;
+
+    if (e?.response?.status === 429) {
+      const delay = getRetryDelayMinutes(e, retryCount);
+      rateLimitedUntil = Date.now() + delay * 60000;
+      // Persist the cooldown for queued work, including across worker restarts.
+      await pool.query(
+        `UPDATE wa_queue SET status='PENDING', retry_count=?, last_error=?,
+         scheduled_at=DATE_ADD(NOW(), INTERVAL ? MINUTE), locked_at=NULL WHERE id=?`,
+        [retryCount, msg, delay, job.id],
+      );
+      await pool.query(
+        `UPDATE wa_queue SET scheduled_at=GREATEST(COALESCE(scheduled_at, NOW()), DATE_ADD(NOW(), INTERVAL ? MINUTE))
+         WHERE status='PENDING'`,
+        [delay],
+      );
+      console.warn(`[WA Worker] Rate limited; pausing sends for ${delay} minutes. Job ${job.id} remains pending.`);
+      return true;
+    }
 
     if (isPermanentFailure(e) || retryCount >= MAX_RETRY) {
       await pool.query(
