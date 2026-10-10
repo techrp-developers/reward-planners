@@ -111,7 +111,7 @@ async function enqueueWhatsApp({ eventName, ctx }) {
     const buttonValues = buildButtonValuesFromConfig(tpl.button_config, ctx);
 
     // 4) Create Unique Key for Idempotency (prevents double send)
-    const idem_key = `${ctx.company_id || "GLOBAL"}|${eventName}|${
+    const idem_key = ctx.idempotency_key || `${ctx.company_id || "GLOBAL"}|${eventName}|${
       picked.template_key
     }|${phone_full}|${ctx.order_id || Date.now()}`;
 
@@ -240,6 +240,8 @@ function buildBodyValues(templateKey, ctx) {
 
     case "reward_planners_ios_launch":
     case "flea_market_inamdar":
+    case "rp_community_invitation":
+    case "rp_community_invitation_marathi":
       return [name];
 
     case "create_account_notification":
