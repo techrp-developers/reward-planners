@@ -1,3 +1,4 @@
+import EmployeeContactActions from "../../../common/components/EmployeeContactActions";
 import { useEffect, useMemo, useState } from "react";
 import { FiBriefcase, FiDownload, FiEdit2, FiEye, FiPlus, FiSearch, FiTrash2, FiUploadCloud, FiUsers, FiX } from "react-icons/fi";
 import { Link } from "react-router-dom";
@@ -500,7 +501,7 @@ export default function EmployeeDirectory() {
               <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="px-5 py-3">Employee</th><th className="px-5 py-3">Company</th><th className="px-5 py-3">Role / Department</th><th className="px-5 py-3">Platform</th><th className="px-5 py-3">Account</th><th className="px-5 py-3">Last login</th></tr></thead>
               <tbody className="divide-y divide-gray-100">
                 {filteredCustomers.map((customer) => <tr key={customer.user_id} className="hover:bg-purple-50/30">
-                  <td className="px-5 py-4"><p className="font-bold text-gray-900">{customer.name}</p><p className="text-xs text-gray-500">{customer.email || "No email"}</p><p className="text-xs text-gray-400">{customer.phone || "No phone"}</p></td>
+                  <td className="px-5 py-4"><div className="flex items-center gap-2"><p className="font-bold text-gray-900">{customer.name}</p><EmployeeContactActions name={customer.name} email={customer.email} activated={Number(customer.status) === 1} endpoint={customer.company_id && customer.company_user_id ? `/manager/employee-directory/companies/${customer.company_id}/employees/${customer.company_user_id}/activation-email` : undefined} /></div><p className="text-xs text-gray-500">{customer.email || "No email"}</p><p className="text-xs text-gray-400">{customer.phone || "No phone"}</p></td>
                   <td className="px-5 py-4"><p className="font-semibold text-gray-700">{customer.company_name || "Unassigned"}</p><p className="text-xs text-gray-400">Customer #{customer.user_id}</p></td>
                   <td className="px-5 py-4"><p className="text-gray-700">{customer.company_role || "—"}</p><p className="text-xs text-gray-400">{customer.department || "No department"}</p></td>
                   <td className="px-5 py-4"><PlatformBadge platform={customer.device_platform} />{customer.device_name && <p className="mt-1 max-w-32 truncate text-[11px] text-gray-400" title={customer.device_name}>{customer.device_name}</p>}</td>
