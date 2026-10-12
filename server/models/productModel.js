@@ -5,7 +5,7 @@ const path = require("path");
 const { compressVideo } = require("../utils/videoCompression");
 const { uploadToR2 } = require("../utils/r2upload");
 const { deleteFromR2 } = require("../utils/r2delete");
-const sharp = require("sharp");
+const { optimizeProductImage } = require("../utils/productCoverImage");
 
 // generate SKU
 function generateSKU(productId) {
@@ -726,10 +726,7 @@ class ProductModel {
           let optimizedBuffer;
 
           try {
-            optimizedBuffer = await sharp(inputBuffer)
-              .resize({ width: 1920, withoutEnlargement: true })
-              .webp({ quality: 70 })
-              .toBuffer();
+            optimizedBuffer = await optimizeProductImage(inputBuffer);
           } catch (err) {
             throw new Error("Image processing failed");
           }
