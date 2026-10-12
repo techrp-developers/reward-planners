@@ -38,11 +38,12 @@ export default function LivePreviewPanel({ entries, draft, now, module, moduleIc
 
   const navbar = resolve("navbar_background");
   const promo = resolve("promotional_banner");
+  const brand = resolve("brand_promotional_banner");
   const offers = resolve("offers_banner");
 
   return (
-    <div className="sticky top-6 space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="min-w-0 self-start space-y-4 lg:sticky lg:top-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="text-sm font-black text-slate-900">Live Mobile Preview</h3>
           <span className="text-[11px] font-semibold text-slate-400">Reward Planner Home</span>
@@ -68,7 +69,7 @@ export default function LivePreviewPanel({ entries, draft, now, module, moduleIc
         )}
       </div>
 
-      <div className="flex items-center justify-center gap-1.5">
+      <div className="flex flex-wrap items-center justify-center gap-1.5">
         <span className="text-[11px] font-semibold text-slate-400">Preview width:</span>
         {DEVICE_WIDTHS.map((width) => (
           <button
@@ -87,7 +88,7 @@ export default function LivePreviewPanel({ entries, draft, now, module, moduleIc
       </PhoneFrame>
 
       <div className="space-y-1.5 rounded-2xl border border-slate-100 bg-white p-3">
-        {([["Navbar", navbar], ["Promo Banner", promo], ["Offers Banner", offers]] as const).map(([label, entry]) => (
+        {([["Navbar", navbar], ["Promo Banner", promo], ["Brand Promotional Banner", brand], ["Offers Banner", offers]] as const).map(([label, entry]) => (
           <div key={label} className="flex items-center justify-between text-[11px]">
             <span className="font-bold text-slate-500">{label}</span>
             <span className="font-semibold text-slate-700">{entry?.isDefault ? "Default" : entry?.title || "—"}</span>

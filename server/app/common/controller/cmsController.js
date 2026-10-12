@@ -1,3 +1,4 @@
+const { motionValues } = require('../../../utils/contentMotion');
 const db = require('../../../config/database');
 const ContentZoneModel = require('../../../models/contentZoneModel');
 const ModuleIconModel = require('../../../models/moduleIconModel');
@@ -23,6 +24,7 @@ const parseConfig = (value) => {
 };
 
 const MOBILE_CONTENT_MODULES = ['mobile_dashboard', 'product', 'service', 'payment', 'dineout'];
+const IMAGE_GALLERY_ZONES = ['offers_banner', 'promotional_banner', 'brand_promotional_banner'];
 const contentAssetUrl = (path) => path?.startsWith('/uploads/') ? getContentImageUrl(path) : getPublicUrl(path);
 
 const targetIds = (entry) => {
@@ -60,6 +62,8 @@ const publicContentEntry = async (entry) => {
 
   const response = {
     contentId: entry.content_id,
+    ...motionValues(entry),
+    displayMode: entry.display_mode || 'carousel',
     module: entry.module,
     zone: entry.zone,
     type: entry.content_type,
@@ -77,8 +81,14 @@ const publicContentEntry = async (entry) => {
     endAt: entry.end_at,
   };
 
-  if (entry.zone === 'offers_banner' && entry.content_type === 'image') {
-    const images = await ContentZoneModel.getImagesByContentId(entry.content_id);
+  if (IMAGE_GALLERY_ZONES.includes(entry.zone) && entry.content_type === 'image') {
+    const allBrandImages = entry.zone === 'brand_promotional_banner'
+      ? await ContentZoneModel.getAllImagesByContentId(entry.content_id)
+      : null;
+    const images = allBrandImages
+      ? allBrandImages.filter(image => Number(image.is_active) === 1).sort((a, b) => a.sort_order - b.sort_order)
+      : await ContentZoneModel.getImagesByContentId(entry.content_id);
+    if (allBrandImages?.length && !images.length) response.imageUrl = null;
     response.images = images.length ? images.map(publicImage) : response.imageUrl ? [{
       imageId: null,
       imageUrl: response.imageUrl,
@@ -185,7 +195,7 @@ class CmsController {
       const content = {};
       for (const [moduleKey, zones] of zoneResults) {
         content[moduleKey] = {};
-        for (const zone of ['navbar_background', 'promotional_banner', 'offers_banner']) {
+        for (const zone of ['navbar_background', 'promotional_banner', 'offers_banner', 'brand_promotional_banner']) {
           content[moduleKey][zone] = await publicContentEntry(zones[zone]);
         }
       }

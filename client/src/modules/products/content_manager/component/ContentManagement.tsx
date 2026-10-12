@@ -26,6 +26,7 @@ interface ApiErrorBody {
 
 const asApiError = (err: unknown) => err as AxiosError<ApiErrorBody>;
 const errorMessage = (err: unknown, fallback: string) => asApiError(err).response?.data?.message || fallback;
+const IMAGE_GALLERY_ZONES = ["offers_banner", "promotional_banner", "brand_promotional_banner"];
 
 const MODULE_LABELS: Record<ContentModule, string> = {
   product: "Product",
@@ -97,10 +98,10 @@ export default function ContentManagement({ module }: ContentManagementProps) {
           return "Enter a valid HEX color, for example #852BAF.";
         }
       }
-      if (entry.contentType === "image" && entry.zone === "offers_banner" && !(entry.images ?? []).length) {
-        return "Add at least one offer image for this campaign.";
+      if (entry.contentType === "image" && IMAGE_GALLERY_ZONES.includes(entry.zone) && !(entry.images ?? []).length) {
+        return "Add at least one campaign image.";
       }
-      if (entry.contentType === "image" && entry.zone !== "offers_banner" && !entry.imageUrl.trim()) {
+      if (entry.contentType === "image" && !IMAGE_GALLERY_ZONES.includes(entry.zone) && !entry.imageUrl.trim()) {
         return "Upload an image for this zone.";
       }
     }

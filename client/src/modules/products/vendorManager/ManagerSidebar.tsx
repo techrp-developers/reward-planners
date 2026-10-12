@@ -42,7 +42,9 @@ export default function ManagerNavbar() {
   const { user, logout } = useAuth();
   const { unreadCountByCategory } = useNotification();
 
-  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [openDropdown, setOpenDropdown] = useState<string | null>(
+    pathname.startsWith("/manager/content/") ? "Content" : null,
+  );
   const [isProfileOpen, setIsProfileOpen] = useState(true);
 
   const isActive = (to: string) => pathname === to;
@@ -102,6 +104,7 @@ export default function ManagerNavbar() {
         { label: "Payment", to: routes.manager.content.payment },
         { label: "Mobile Dashboard", to: routes.manager.content.mobileDashboard },
         { label: "Module Icons", to: routes.manager.content.moduleIcons },
+        { label: "App Icons", to: routes.manager.content.appIcons },
       ],
     },
     {
@@ -258,10 +261,15 @@ export default function ManagerNavbar() {
                   </button>
 
                   <div
+                    style={{
+                      maxHeight: isDropdownOpen
+                        ? `${(item.children?.length ?? 0) * 48}px`
+                        : 0,
+                    }}
                     className={`overflow-hidden transition-all duration-300 ease-in-out ${
                       isDropdownOpen
-                        ? "max-h-52 opacity-100 mt-1"
-                        : "max-h-0 opacity-0"
+                        ? "opacity-100 mt-1"
+                        : "opacity-0"
                     }`}
                   >
                     <div

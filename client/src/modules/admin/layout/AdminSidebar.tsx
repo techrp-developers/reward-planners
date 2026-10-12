@@ -74,6 +74,7 @@ export default function AdminNavbar() {
         { label: "Service", to: routes.admin.content.service },
         { label: "Payment", to: routes.admin.content.payment },
         { label: "Mobile Dashboard", to: routes.admin.content.mobileDashboard },
+        { label: "App Icons", to: routes.admin.content.appIcons },
       ],
     },
 

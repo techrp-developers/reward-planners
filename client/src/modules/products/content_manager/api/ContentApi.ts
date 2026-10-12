@@ -1,8 +1,9 @@
 import { api } from "../../../../common/api/api";
-import type { ContentDisplayMode, ContentEntry, ContentTargetType, Zone } from "../types";
+import type { ContentDisplayMode, ContentEntry, ContentTargetType, MotionEffect, MotionIntensity, MotionSpeed, Zone } from "../types";
 
 const BASE = "/content";
 const MODULE = "product";
+const IMAGE_GALLERY_ZONES: Zone[] = ["offers_banner", "promotional_banner", "brand_promotional_banner"];
 
 export interface ApiContentZoneImage {
   image_id: number | null;
@@ -13,6 +14,9 @@ export interface ApiContentZoneImage {
 }
 
 export interface ApiContentEntry {
+  motionEffect?: MotionEffect;
+  motionIntensity?: MotionIntensity;
+  motionSpeed?: MotionSpeed;
   content_id: number;
   module: string;
   zone: Zone;
@@ -68,6 +72,7 @@ export interface ResolvedZonesResult {
   navbar_background: ApiContentEntry | null;
   promotional_banner: ApiContentEntry | null;
   offers_banner: ApiContentEntry | null;
+  brand_promotional_banner: ApiContentEntry | null;
 }
 
 export type ContentModule = "product" | "service" | "payment" | "dineout" | "mobile_dashboard";
@@ -139,6 +144,14 @@ export const buildEntryFormData = (
   fd.append("zone", draft.zone);
   fd.append("content_type", draft.contentType);
   fd.append("display_mode", draft.displayMode);
+  if (draft.zone === "promotional_banner") {
+    fd.append("motionEffect", draft.motionEffect);
+    fd.append("motionIntensity", draft.motionIntensity);
+    fd.append("motionSpeed", draft.motionSpeed);
+  }
+  if (IMAGE_GALLERY_ZONES.includes(draft.zone) && draft.contentType === "image") {
+    draft.imageFiles?.forEach((file) => fd.append("images[]", file));
+  }
 
   if (draft.contentType === "color") {
     fd.append("color_value", draft.colorValue);
@@ -354,4 +367,8 @@ export const listContentTargetOptions = async (
     params: { type, search, selected_id: selectedId || undefined },
   });
   return data.data;
+};
+
+export const setEntryImageActive = async (id: number, imageId: number, active: boolean): Promise<void> => {
+  await api.patch(`${BASE}/entries/${id}/images/${imageId}/${active ? "activate" : "deactivate"}`);
 };

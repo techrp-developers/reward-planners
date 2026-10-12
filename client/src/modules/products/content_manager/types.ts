@@ -1,4 +1,4 @@
-export type Zone = "navbar_background" | "promotional_banner" | "offers_banner";
+export type Zone = "navbar_background" | "promotional_banner" | "offers_banner" | "brand_promotional_banner";
 export type ContentKind = "color" | "image";
 export type Status = "default" | "draft" | "scheduled" | "active" | "expired";
 export type ContentDisplayMode = "single" | "carousel" | "grid_2" | "grid_3";
@@ -19,15 +19,33 @@ export interface GradientConfig {
 
 export interface ContentZoneImage {
   imageId: number | null;
+  isActive?: boolean;
+  /** Preview-only layout ratio; never persisted to the CMS API. */
+  displayAspectRatio?: number;
   imageUrl: string;
   sortOrder: number;
 }
+
+export const MOTION_EFFECTS = [
+  { value: "none", label: "None" },
+  { value: "falling_petals", label: "Falling Petals" },
+  { value: "twinkle", label: "Twinkling Lights" },
+  { value: "shine_sweep", label: "Shine Sweep" },
+  { value: "glow_pulse", label: "Diya Glow" },
+  { value: "slow_zoom", label: "Slow Zoom" },
+] as const;
+export type MotionEffect = typeof MOTION_EFFECTS[number]["value"];
+export type MotionIntensity = "low" | "medium" | "high";
+export type MotionSpeed = "slow" | "normal" | "fast";
 
 export interface ContentEntry {
   id: number;
   zone: Zone;
   contentType: ContentKind;
   colorValue: string;
+  motionEffect: MotionEffect;
+  motionIntensity: MotionIntensity;
+  motionSpeed: MotionSpeed;
   /** Optional header text color override - currently only surfaced for mobile_dashboard navbar_background. */
   textColor: string;
   /** promotional_banner/offers_banner layout - the CMS selection, never derived from image count. */
@@ -51,6 +69,7 @@ export interface ContentEntry {
   createdAt: string;
   /** Pending upload for the current edit session; never sent to display, cleared after successful save. */
   imageFile?: File | null;
+  imageFiles?: File[];
   /** Offers Banner only - the campaign's ordered set of images, managed via their own endpoints. */
   images?: ContentZoneImage[];
 }
@@ -59,6 +78,7 @@ export const ZONES: { key: Zone; label: string }[] = [
   { key: "navbar_background", label: "Navbar Background" },
   { key: "promotional_banner", label: "Promotional Banner" },
   { key: "offers_banner", label: "Offers Banner" },
+  { key: "brand_promotional_banner", label: "Brand Promotional Banner" },
 ];
 
 export const DISPLAY_MODES: { key: ContentDisplayMode; label: string }[] = [
@@ -95,6 +115,9 @@ export function blankEntry(zone: Zone): ContentEntry {
     zone,
     contentType: "color",
     colorValue: "#852BAF",
+    motionEffect: "none",
+    motionIntensity: "medium",
+    motionSpeed: "normal",
     textColor: "",
     displayMode: "carousel",
     imageUrl: "",

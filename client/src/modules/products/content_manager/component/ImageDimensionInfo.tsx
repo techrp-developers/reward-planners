@@ -17,7 +17,7 @@ interface Props {
   imageUrl: string;
   /** Set only right after a fresh file selection, so we can read its real byte size. Cleared once saved. */
   file?: File | null;
-  onSelectFile: (file: File) => void;
+  onSelectFile?: (file: File) => void;
 }
 
 export default function ImageDimensionInfo({ zone, imageUrl, file, onSelectFile }: Props) {
@@ -36,7 +36,7 @@ export default function ImageDimensionInfo({ zone, imageUrl, file, onSelectFile 
   const handlePick = (picked: File | undefined) => {
     if (!picked) return;
     setBrokenUrl(null);
-    onSelectFile(picked);
+    onSelectFile?.(picked);
   };
 
   if (!imageUrl || imageUrl === brokenUrl) {
@@ -50,10 +50,10 @@ export default function ImageDimensionInfo({ zone, imageUrl, file, onSelectFile 
             <FiUploadCloud className="text-xl" />
             Choose an image
           </span>
-          <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={(event) => handlePick(event.target.files?.[0])} />
+          <input ref={inputRef} type="file" accept="image/jpeg,image/png" className="hidden" onChange={(event) => handlePick(event.target.files?.[0])} />
         </label>
         <p className="mt-2 text-[11px] text-slate-400">
-          Recommended: {spec.recommendedWidth} × {spec.recommendedHeight} px · Ratio {spec.recommendedRatioLabel} · {spec.typeLabel}
+          Recommended: {spec.recommendedWidth} × {spec.recommendedHeight} px · Ratio {spec.recommendedRatioLabel} · JPG, JPEG, PNG · {spec.typeLabel}
         </p>
       </div>
     );
@@ -81,7 +81,7 @@ export default function ImageDimensionInfo({ zone, imageUrl, file, onSelectFile 
               </p>
             ) : (
               <p className="flex items-center gap-1.5 font-semibold text-amber-600">
-                <FiAlertTriangle /> Different aspect ratio from the recommended {spec.recommendedRatioLabel} - you can still continue
+                <FiAlertTriangle /> Image ratio differs from the recommended {spec.recommendedRatioLabel} ratio. You can still continue.
               </p>
             )}
 
@@ -103,17 +103,17 @@ export default function ImageDimensionInfo({ zone, imageUrl, file, onSelectFile 
         )}
 
         <p className="text-slate-400">
-          Recommended: {spec.recommendedWidth} × {spec.recommendedHeight} px · Preferred ratio {spec.recommendedRatioLabel}
+          Recommended: {spec.recommendedWidth} × {spec.recommendedHeight} px · Preferred ratio {spec.recommendedRatioLabel} · JPG, JPEG, PNG
         </p>
 
-        <button
+        {onSelectFile && <button
           type="button"
           onClick={() => inputRef.current?.click()}
           className="mt-1 rounded-lg bg-purple-50 px-3 py-1.5 text-[11px] font-bold text-[#852BAF] hover:bg-purple-100"
         >
           Choose another image
-        </button>
-        <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={(event) => handlePick(event.target.files?.[0])} />
+        </button>}
+        <input ref={inputRef} type="file" accept="image/jpeg,image/png" className="hidden" onChange={(event) => handlePick(event.target.files?.[0])} />
       </div>
     </div>
   );

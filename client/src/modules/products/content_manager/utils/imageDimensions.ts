@@ -22,20 +22,28 @@ export type ImageZoneSpec = {
 // pixels. See ratioStatus() below for the actual (tolerant) validation.
 export const ZONE_IMAGE_SPECS: Record<Zone, ImageZoneSpec> = {
   navbar_background: {
-    recommendedWidth: 1080,
-    recommendedHeight: 1920,
-    recommendedRatio: 9 / 16,
-    recommendedRatioLabel: "9:16",
+    recommendedWidth: 1317,
+    recommendedHeight: 551,
+    recommendedRatio: 1317 / 551,
+    recommendedRatioLabel: "2.39:1",
     maxFileSize: 500 * 1024,
-    typeLabel: "Portrait / full-screen background",
+    typeLabel: "Header background · cover cropping may occur",
   },
   promotional_banner: {
-    recommendedWidth: 1080,
-    recommendedHeight: 1350,
-    recommendedRatio: 4 / 5,
-    recommendedRatioLabel: "4:5",
+    recommendedWidth: 2048,
+    recommendedHeight: 1008,
+    recommendedRatio: 2048 / 1008,
+    recommendedRatioLabel: "2.03:1",
     maxFileSize: 800 * 1024,
-    typeLabel: "Portrait banner",
+    typeLabel: "Full campaign image · original aspect ratio",
+  },
+  brand_promotional_banner: {
+    recommendedWidth: 1200,
+    recommendedHeight: 600,
+    recommendedRatio: 2,
+    recommendedRatioLabel: "2:1",
+    maxFileSize: 800 * 1024,
+    typeLabel: "Brand promotional banner",
   },
   offers_banner: {
     recommendedWidth: 720,

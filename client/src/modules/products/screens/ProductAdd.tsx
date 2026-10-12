@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import type { ComponentType } from "react";
 import { api } from "../../../common/api/api";
 import QuillEditor from "../components/QuillEditor";
 import CustomAttributeBuilder, { type CustomAttributeRow } from "../components/CustomAttributeBuilder";
+import ManualCoverEditor from "../components/ManualCoverEditor";
 import Swal from "sweetalert2";
+import { validateCoverFile, coverImageError, hasExhaustedCoverCredits } from "../utils/coverImage";
 
 type IconComp = ComponentType<any>;
 
@@ -207,6 +209,85 @@ export default function ProductListingDynamic() {
   const [isCustomSubcategory, setIsCustomSubcategory] = useState(false);
   const [isCustomSubSubcategory, setIsCustomSubSubcategory] = useState(false);
   const [imageError, setImageError] = useState("");
+  const [isCoverProcessing, setIsCoverProcessing] = useState(false);
+  const [retryCoverFile, setRetryCoverFile] = useState<File | null>(null);
+  const [coverMode, setCoverMode] = useState<"ai" | "manual">("ai");
+  const [manualOriginal, setManualOriginal] = useState<File | null>(null);
+  const [coverNotice, setCoverNotice] = useState("");
+  const [preparedManually, setPreparedManually] = useState(false);
+  const retryPrepared = useRef(false);
+  const coverRequest = useRef(0);
+  const coverAbort = useRef<AbortController | null>(null);
+  const coverBusy = useRef(false);
+  const coverPreview = useRef<string | null>(null);
+  const coverInput = useRef<HTMLInputElement>(null);
+
+  useEffect(() => () => {
+    coverRequest.current++;
+    coverAbort.current?.abort();
+    if (coverPreview.current) URL.revokeObjectURL(coverPreview.current);
+  }, []);
+
+  const clearCoverPreview = () => {
+    if (coverPreview.current) URL.revokeObjectURL(coverPreview.current);
+    coverPreview.current = null;
+    setProduct((prev) => ({ ...prev, productImages: [] }));
+  };
+
+  const processCover = async (file: File, prepare = false) => {
+    if (isSubmitting) return;
+    const identity = ++coverRequest.current;
+    coverAbort.current?.abort();
+    const controller = new AbortController();
+    coverAbort.current = controller;
+    coverBusy.current = true;
+    setIsCoverProcessing(true);
+    setImageError("");
+    setRetryCoverFile(null);
+    clearCoverPreview();
+    if (!prepare) setManualOriginal(null);
+    let validated = false;
+    try {
+      await validateCoverFile(file);
+      if (identity !== coverRequest.current) return;
+      validated = true;
+      if (coverMode === "manual" && !prepare) { setManualOriginal(file); return; }
+      const form = new FormData();
+      form.append("images", file);
+      const response = await api.post<Blob>(prepare ? "/product/prepare-cover-image" : "/product/process-cover-image", form, {
+        responseType: "blob", signal: controller.signal, timeout: 75_000,
+      });
+      if (identity !== coverRequest.current) return;
+      if (!(response.data instanceof Blob) || response.data.type.split(";")[0] !== "image/webp" || !response.data.size) {
+        throw new Error("Image processing returned an invalid image. Please try again.");
+      }
+      const processed = new File([response.data], `product-cover-${Date.now()}.webp`, { type: "image/webp" });
+      const url = URL.createObjectURL(processed);
+      coverPreview.current = url;
+      setPreparedManually(prepare);
+      setManualOriginal(null);
+      setProduct((prev) => ({ ...prev, productImages: [{ file: processed, url }] }));
+    } catch (error) {
+      if (identity !== coverRequest.current || controller.signal.aborted) return;
+      const exhausted = !prepare && await hasExhaustedCoverCredits(error);
+      if (identity !== coverRequest.current || controller.signal.aborted) return;
+      if (exhausted) {
+        setCoverMode("manual"); setManualOriginal(file);
+        setCoverNotice("AI image credits are exhausted. Continue for free: erase the background below, or choose an already transparent PNG/WebP.");
+        return;
+      }
+      const message = await coverImageError(error);
+      if (identity !== coverRequest.current || controller.signal.aborted) return;
+      setImageError(message);
+      if (validated) { setRetryCoverFile(file); retryPrepared.current = prepare; }
+    } finally {
+      if (identity === coverRequest.current) {
+        coverBusy.current = false;
+        coverAbort.current = null;
+        setIsCoverProcessing(false);
+      }
+    }
+  };
   const [videoError, setVideoError] = useState("");
   const [custom_category, setCustomCategory] = useState("");
   const [custom_subcategory, setCustomSubCategory] = useState("");
@@ -238,19 +319,10 @@ export default function ProductListingDynamic() {
   };
 
   const handleMainImages = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files) return;
-    const file = e.target.files[0];
-    if (!file.type.startsWith("image/")) {
-      setImageError("Only image files are allowed.");
-      return;
-    }
-    const preview = { file, url: URL.createObjectURL(file) };
-    setProduct((prev) => {
-      prev.productImages.forEach((img) => URL.revokeObjectURL(img.url));
-      return { ...prev, productImages: [preview] };
-    });
-    setImageError("");
+    const file = e.target.files?.[0];
     e.target.value = "";
+    if (!file || coverBusy.current || isSubmitting) return;
+    void processCover(file);
   };
 
   const handleProductVideo = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -380,13 +452,17 @@ export default function ProductListingDynamic() {
     }
   };
 
-  const removeMainImage = (index: number) => {
-    setProduct((prev) => {
-      const updatedImages = [...prev.productImages];
-      URL.revokeObjectURL(updatedImages[index].url);
-      updatedImages.splice(index, 1);
-      return { ...prev, productImages: updatedImages };
-    });
+  const removeMainImage = () => {
+    coverRequest.current++;
+    coverAbort.current?.abort();
+    coverAbort.current = null;
+    coverBusy.current = false;
+    setIsCoverProcessing(false);
+    setRetryCoverFile(null);
+    setImageError("");
+    setManualOriginal(null);
+    setPreparedManually(false);
+    clearCoverPreview();
   };
 
   const onDocInputChange = (
@@ -399,6 +475,11 @@ export default function ProductListingDynamic() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    if (coverBusy.current || !coverPreview.current || !product.productImages.length || imageError) {
+      setError(coverBusy.current ? "Please wait until cover image processing finishes." : "Please upload and successfully process a cover image.");
+      return;
+    }
 
     const selectedVariantAttributes = categoryAttributes.filter((attribute) => attribute.is_variant === 1);
     let combinations = selectedVariantAttributes.reduce((count, attribute) => {
@@ -558,10 +639,15 @@ export default function ProductListingDynamic() {
         confirmButtonColor: "#852BAF",
       });
 
+      if (coverPreview.current) URL.revokeObjectURL(coverPreview.current);
+      coverPreview.current = null;
+      setRetryCoverFile(null);
+      setImageError("");
+      setManualOriginal(null);
+      setPreparedManually(false);
       setProduct(initialProductData);
       setDocFiles({});
       setRequiredDocs([]);
-      product.productImages.forEach((img) => URL.revokeObjectURL(img.url));
       if (product.productVideo) URL.revokeObjectURL(product.productVideo.url);
     } catch (err: any) {
       console.error("Submit error:", err);
@@ -1370,71 +1456,68 @@ export default function ProductListingDynamic() {
             description="Single cover image for product listing"
           />
 
-          <div
-            className="flex items-center gap-4 p-4 rounded-2xl border-2 border-dashed"
-            style={{
-              borderColor: "rgba(133,43,175,0.2)",
-              background: "rgba(133,43,175,0.02)",
-            }}
-          >
+          <div className="flex flex-wrap gap-2 mb-3">
+            <button type="button" disabled={isCoverProcessing || isSubmitting || !!manualOriginal}
+              aria-pressed={coverMode === "ai"} onClick={() => { setCoverMode("ai"); setCoverNotice(""); }}
+              className={`px-3 py-2 text-xs font-semibold rounded-lg border text-[#852BAF] disabled:opacity-40 ${coverMode === "ai" ? "bg-purple-50" : ""}`}>AI Mode</button>
+            <button type="button" disabled={isCoverProcessing || isSubmitting}
+              aria-pressed={coverMode === "manual"} onClick={() => setCoverMode("manual")}
+              className={`px-3 py-2 text-xs font-semibold rounded-lg border text-[#852BAF] disabled:opacity-40 ${coverMode === "manual" ? "bg-purple-50" : ""}`}>Manual Mode • Free</button>
+          </div>
+          {coverNotice && <p role="status" className="mb-3 text-xs text-amber-700">{coverNotice}</p>}
+          <div className="flex items-center gap-4 p-4 rounded-2xl border-2 border-dashed"
+            style={{ borderColor: "rgba(133,43,175,0.2)", background: "rgba(133,43,175,0.02)" }}>
+            <FaImages className="text-[#852BAF] shrink-0" aria-hidden="true" />
             <div className="flex-1">
               <p className="text-sm font-medium text-gray-700">
-                {product.productImages.length === 0
-                  ? "No cover image chosen"
-                  : "1 cover image selected"}
+                {product.productImages.length ? "Product cover image ready" : "Upload Product Cover Image"}
               </p>
-              <p className="text-xs text-gray-400 mt-0.5">
-                JPG, PNG, WEBP · High quality recommended
-              </p>
+              <p className="text-xs text-gray-400 mt-0.5">JPG, PNG, WebP • Maximum 10 MB</p>
             </div>
-
-            <label
-              className={`cursor-pointer px-4 py-2 text-xs font-semibold rounded-xl text-white transition-all active:scale-95 ${
-                product.productImages.length >= 1
-                  ? "opacity-40 cursor-not-allowed"
-                  : "hover:opacity-90"
-              }`}
-              style={{
-                background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
-              }}
-            >
-              Choose Image
-              <input
-                type="file"
-                hidden
-                disabled={product.productImages.length >= 1}
-                accept="image/*"
-                onChange={handleMainImages}
-              />
-            </label>
+            <button type="button" disabled={isCoverProcessing || isSubmitting}
+              onClick={() => coverInput.current?.click()}
+              className="cursor-pointer px-4 py-2 text-xs font-semibold rounded-xl text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }}>
+              {product.productImages.length ? "Replace Image" : "Choose Image"}
+            </button>
+            <input ref={coverInput} type="file" hidden accept="image/jpeg,image/png,image/webp"
+              disabled={isCoverProcessing || isSubmitting} onChange={handleMainImages} />
           </div>
 
-          {imageError && (
-            <p className="mt-2 text-xs text-red-500">{imageError}</p>
+          {isCoverProcessing && (
+            <div role="status" className="flex items-center gap-3 mt-4 text-[#852BAF]">
+              <FaSpinner className="animate-spin shrink-0" aria-hidden="true" />
+              <div>
+                <p className="text-sm font-medium">{coverMode === "manual" ? "Preparing your image..." : "Removing background and preparing image..."}</p>
+                <p className="text-xs text-gray-500 mt-1">Creating your 1800 × 1800 product image</p>
+              </div>
+            </div>
           )}
-
+          {imageError && (
+            <div role="alert" className="mt-3">
+              <p className="text-xs text-red-500">{imageError}</p>
+              {retryCoverFile && <button type="button" disabled={isCoverProcessing || isSubmitting}
+                className="mt-2 text-xs font-semibold text-[#852BAF] cursor-pointer disabled:opacity-40"
+                onClick={() => { if (!coverBusy.current) void processCover(retryCoverFile, retryPrepared.current); }}>Retry Image</button>}
+            </div>
+          )}
+          {manualOriginal && <ManualCoverEditor file={manualOriginal} disabled={isCoverProcessing || isSubmitting}
+            onApply={file => { if (!coverBusy.current) void processCover(file, true); }} onCancel={removeMainImage} />}
           {product.productImages.length > 0 && (
-            <div className="mt-4 flex gap-3 flex-wrap">
-              {product.productImages.map((img, index) => (
-                <div
-                  key={index}
-                  className="relative w-24 h-24 rounded-xl overflow-hidden border-2 group"
-                  style={{ borderColor: "rgba(133,43,175,0.2)" }}
-                >
-                  <img
-                    src={img.url}
-                    alt={`Preview ${index + 1}`}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeMainImage(index)}
-                    className="absolute top-1 right-1 bg-black/70 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition cursor-pointer hover:bg-red-600"
-                  >
-                    <FaTrash size={9} />
-                  </button>
-                </div>
-              ))}
+            <div className="mt-4">
+              <div className="relative w-56 max-w-full aspect-square rounded-xl overflow-hidden border-2"
+                style={{ borderColor: "rgba(133,43,175,0.2)", backgroundColor: "#fff",
+                  backgroundImage: "conic-gradient(#eef0f3 25%, #fff 0 50%, #eef0f3 0 75%, #fff 0)", backgroundSize: "20px 20px" }}>
+                <img src={product.productImages[0].url} alt="Processed product cover"
+                  className="w-full h-full object-contain" />
+                <button type="button" disabled={isSubmitting} onClick={removeMainImage}
+                  aria-label="Remove cover image"
+                  className="absolute top-2 right-2 bg-black/70 text-white rounded-full p-2 cursor-pointer hover:bg-red-600 disabled:opacity-40">
+                  <FaTrash size={12} />
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-gray-500">1800 × 1800 px • WebP</p>
+              <p role="status" className="mt-1 text-xs text-green-600">{preparedManually ? "Image prepared manually • Check the preview before submitting" : "Background removed successfully"}</p>
             </div>
           )}
         </section>
@@ -1519,7 +1602,7 @@ export default function ProductListingDynamic() {
         <div className="pt-2 pb-6">
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || isCoverProcessing || !product.productImages.length || !!imageError}
             className="flex items-center justify-center w-full px-6 py-4 text-base font-bold text-white rounded-2xl transition-all duration-300 cursor-pointer hover:opacity-90 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
             style={{
               background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",

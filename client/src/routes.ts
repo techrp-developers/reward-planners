@@ -89,6 +89,7 @@ export const routes = {
       payment: "/manager/content/payment",
       mobileDashboard: "/manager/content/mobile-dashboard",
       moduleIcons: "/manager/content/module-icons",
+      appIcons: "/manager/content/app-icons",
     },
   },
   admin: {
@@ -105,6 +106,7 @@ export const routes = {
       service: "/admin/content/service",
       payment: "/admin/content/payment",
       mobileDashboard: "/admin/content/mobile-dashboard",
+      appIcons: "/admin/content/app-icons",
     },
   
   },

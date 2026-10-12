@@ -10,7 +10,7 @@ export function extractPromotionalImages(entry: ContentEntry | null | undefined)
   if (!entry || entry.contentType !== "image") return [];
 
   if (entry.images?.length) {
-    return [...entry.images].sort((a, b) => a.sortOrder - b.sortOrder);
+    return entry.images.filter((image) => image.isActive !== false).sort((a, b) => a.sortOrder - b.sortOrder);
   }
 
   return entry.imageUrl ? [{ imageId: null, imageUrl: entry.imageUrl, sortOrder: 0 }] : [];
@@ -31,5 +31,5 @@ export function resolveDisplayMode(displayMode: ContentDisplayMode | null | unde
 // Fallback aspect ratios, used only until an image's real dimensions are measured
 // client-side via useImageDimensions() - tune here if design guidance changes.
 // See ZONE_IMAGE_SPECS.promotional_banner (imageDimensions.ts) for the CMS upload guidance.
-export const DEFAULT_BANNER_ASPECT_RATIO = 16 / 7; // single banner & carousel slides (full content width)
+export const DEFAULT_BANNER_ASPECT_RATIO = 2048 / 1008; // single banner & carousel slides (full content width)
 export const DEFAULT_GRID_ASPECT_RATIO = 1; // each tile in a grid_2/grid_3 row (roughly a column width, more square)

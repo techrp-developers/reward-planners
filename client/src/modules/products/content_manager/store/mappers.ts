@@ -17,6 +17,9 @@ export const fromApiEntry = (row: ApiContentEntry): ContentEntry => ({
   zone: row.zone,
   contentType: row.content_type,
   colorValue: row.color_value || "#852BAF",
+  motionEffect: row.motionEffect || "none",
+  motionIntensity: row.motionIntensity || "medium",
+  motionSpeed: row.motionSpeed || "normal",
   textColor: row.text_color || "",
   // Legacy rows may still be NULL - fall back to the same "carousel" default the backend uses for new rows.
   displayMode: row.display_mode || "carousel",
@@ -35,5 +38,5 @@ export const fromApiEntry = (row: ApiContentEntry): ContentEntry => ({
   createdBy: row.created_by_name || "",
   createdAt: row.created_at,
   imageFile: null,
-  images: row.images?.map((image) => ({ imageId: image.image_id, imageUrl: image.image_url, sortOrder: image.sort_order })),
+  images: row.images?.map((image) => ({ imageId: image.image_id, imageUrl: image.image_url, sortOrder: image.sort_order, isActive: !!image.is_active })),
 });
