@@ -49,6 +49,8 @@ async function handleWebhook(req, res) {
         await serviceWebhook.processEvent(req);
       } else if (refundModule === "bbps") {
         await bbpsWebhook.processEvent(req);
+      } else if (refundModule === "busbooking") {
+        await busBookingWebhook.processEvent(req);
       } else {
         await Promise.all([
           serviceWebhook.processEvent(req),

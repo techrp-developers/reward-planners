@@ -95,6 +95,10 @@ const {
 
     cancelBusTicket,
 
+    resolveBookingReview,
+
+    resolveCancellationReview,
+
     getProviderBalance,
 
     getProviderBalanceLog,
@@ -246,6 +250,22 @@ router.post(
     checkoutLimiter,
     drainMode,
     cancelBusTicket
+);
+
+router.post(
+    "/admin/resolve-booking",
+    auth,
+    adminOnly,
+    checkoutLimiter,
+    resolveBookingReview
+);
+
+router.post(
+    "/admin/resolve-cancellation",
+    auth,
+    adminOnly,
+    checkoutLimiter,
+    resolveCancellationReview
 );
 
 router.post(

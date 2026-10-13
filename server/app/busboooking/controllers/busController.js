@@ -10,9 +10,20 @@ const BusBookingOrderModel =
     "../models/busBookingOrderModel"
   );
 const {
-  getBookingDecision,
   isExpectedCapturedPayment,
+  getBlockTtlMinutes,
+  isBlockExpired,
+  isAmbiguousProviderError,
 } = require("../utils/workflowPolicy");
+const {
+  bookOrder,
+  waitForBookingResult,
+  resolveReviewedBooking,
+  applyCancellationSuccess,
+  resolveCancellation,
+} = require("../services/bookingService");
+const { processRefund } = require("../services/refundService");
+const { sendOpsAlert } = require("../../../services/alertService");
 /*
 |--------------------------------------------------------------------------
 | GET CITIES
@@ -2234,51 +2245,6 @@ const blockSeat =
       }
 
 
-      /*
-      |--------------------------------------------------------------------------
-      | Last Fallback From Passenger Seat Price
-      |--------------------------------------------------------------------------
-      */
-
-      if (
-        totalAmount <= 0
-      ) {
-
-        totalAmount =
-          normalizedPassengers.reduce(
-            (
-              total,
-              passenger
-            ) => {
-
-              const fare =
-                Number(
-                  passenger
-                    ?.Seat
-                    ?.Price
-                    ?.PublishedFare ||
-                  passenger
-                    ?.Seat
-                    ?.Price
-                    ?.OfferedFare ||
-                  passenger
-                    ?.Seat
-                    ?.SeatFare ||
-                  0
-                );
-
-
-              return (
-                total +
-                fare
-              );
-            },
-
-            0
-          );
-      }
-
-
       if (
         !Number.isFinite(
           totalAmount
@@ -2832,7 +2798,9 @@ const createPaymentOrder =
 
               status,
 
-              payment_status
+              payment_status,
+
+              TIMESTAMPDIFF(SECOND, created_at, NOW()) AS age_seconds
 
             FROM busbooking_orders
 
@@ -2910,6 +2878,56 @@ const createPaymentOrder =
 
       /*
       |--------------------------------------------------------------------------
+      | Seat Hold Still Valid
+      |--------------------------------------------------------------------------
+      |
+      | The provider only holds blocked seats for a short time. Taking money
+      | after that would charge the customer for seats that are gone.
+      |
+      |--------------------------------------------------------------------------
+      */
+
+      if (
+        isBlockExpired(
+          order.age_seconds,
+          getBlockTtlMinutes()
+        )
+      ) {
+
+        await connection
+          .execute(
+            `
+            UPDATE busbooking_orders
+            SET status = 'expired'
+            WHERE id = ?
+            `,
+            [
+              order.id,
+            ]
+          );
+
+        await connection
+          .commit();
+
+
+        return res
+          .status(410)
+          .json({
+
+            success:
+              false,
+
+            code:
+              "SEAT_HOLD_EXPIRED",
+
+            message:
+              "Your seat hold has expired. Please select your seats again.",
+          });
+      }
+
+
+      /*
+      |--------------------------------------------------------------------------
       | Server Side Amount
       |--------------------------------------------------------------------------
       */
@@ -2981,7 +2999,6 @@ const createPaymentOrder =
 
             WHERE ref_id = ?
               AND module = 'busbooking'
-              AND client_id = ?
               AND status IN (
                 'created',
                 'pending'
@@ -2993,7 +3010,6 @@ const createPaymentOrder =
             `,
             [
               cleanOrderRef,
-              userId,
             ]
           );
 
@@ -3118,8 +3134,6 @@ const createPaymentOrder =
           `
           INSERT INTO razorpay_orders
           (
-            client_id,
-
             razorpay_order_id,
 
             order_source,
@@ -3138,7 +3152,7 @@ const createPaymentOrder =
           )
           VALUES
           (
-            ?, ?, ?, ?, ?,
+            ?, ?, ?, ?,
             'created',
             ?,
             'busbooking',
@@ -3146,8 +3160,6 @@ const createPaymentOrder =
           )
           `,
           [
-            userId,
-
             razorpayOrder.id,
 
             "internal",
@@ -3374,15 +3386,17 @@ const verifyPayment =
         await db.execute(
           `
           SELECT
-            ref_id,
-            module,
-            amount,
-            client_id,
-            status,
-            razorpay_payment_id
-          FROM razorpay_orders
-          WHERE razorpay_order_id = ?
-            AND client_id = ?
+            rp.ref_id,
+            rp.module,
+            rp.amount,
+            rp.status,
+            rp.razorpay_payment_id
+          FROM razorpay_orders rp
+          JOIN busbooking_orders bo
+            ON bo.order_ref = rp.ref_id
+          WHERE rp.razorpay_order_id = ?
+            AND rp.module = 'busbooking'
+            AND bo.user_id = ?
           LIMIT 1
           `,
           [
@@ -3692,707 +3706,103 @@ await connection
   };
 
 
-const bookBusTicket = async (
-  req,
-  res
-) => {
+/*
+|--------------------------------------------------------------------------
+| BOOK BUS TICKET
+|--------------------------------------------------------------------------
+|
+| POST /api/busbooking/book   { "order_ref": "BB-ORD-1001" }
+|
+| The provider call itself lives in bookingService so the app, the cron and
+| a retry all go through the same single-attempt path. This handler only
+| reports where the order ended up.
+|
+|--------------------------------------------------------------------------
+*/
 
-  let connection;
+const bookBusTicket = async (req, res) => {
+  const orderRef = String(req.body?.order_ref || "").trim();
+
+  if (!orderRef) {
+    return res.status(400).json({
+      success: false,
+      message: "order_ref is required",
+    });
+  }
 
   try {
+    const existing = await BusBookingOrderModel.findByOrderRef(
+      orderRef,
+      req.user.user_id,
+    );
 
-    /*
-    |--------------------------------------------------------------------------
-    | Receive Data From Frontend
-    |--------------------------------------------------------------------------
-    */
-
-    const orderRef =
-      String(
-        req.body?.order_ref ||
-        ""
-      ).trim();
-
-    if (!orderRef) {
-      return res.status(400).json({
-        success: false,
-        message: "order_ref is required",
-      });
-    }
-
-    connection =
-      await db.getConnection();
-
-    await connection.beginTransaction();
-
-    const [orderRows] =
-      await connection.execute(
-        `
-        SELECT
-          id,
-          order_ref,
-          trace_id,
-          srdv_index,
-          result_index,
-          status,
-          payment_status,
-          provider_booking_id,
-          ticket_no,
-          travel_operator_pnr
-        FROM busbooking_orders
-        WHERE order_ref = ?
-          AND user_id = ?
-        LIMIT 1
-        FOR UPDATE
-        `,
-        [orderRef, req.user.user_id]
-      );
-
-    const order =
-      orderRows[0];
-
-    const bookingDecision =
-      getBookingDecision(order);
-
-    if (bookingDecision === "not_found") {
-      await connection.rollback();
+    if (!existing) {
       return res.status(404).json({
         success: false,
         message: "Booking order not found",
       });
     }
 
-    if (bookingDecision === "already_confirmed") {
-      await connection.commit();
+    let result = await bookOrder(existing.id);
+    if (result.decision === "in_progress") {
+      result = await waitForBookingResult(existing.id);
+    }
+
+    const { decision, order } = result;
+
+    if (decision === "already_confirmed") {
       return res.status(200).json({
         success: true,
-        reused: true,
-        message: "Bus ticket already booked",
+        reused: !result.attempted,
+        message: result.attempted
+          ? "Bus ticket booked successfully"
+          : "Bus ticket already booked",
         orderRef: order.order_ref,
+        traceId: String(order.trace_id),
+        srdvIndex: String(order.srdv_index),
+        resultIndex: String(order.result_index),
         bookingId: order.provider_booking_id,
+        bookingStatus: "Success",
         ticketNo: order.ticket_no,
         travelOperatorPNR: order.travel_operator_pnr,
       });
     }
 
-    if (bookingDecision !== "book") {
-      await connection.rollback();
-      return res.status(409).json({
+    if (decision === "failed") {
+      return res.status(400).json({
         success: false,
-        message: "A captured payment is required before booking",
-      });
-    }
-
-    const traceId = order.trace_id;
-    const srdvIndex = order.srdv_index;
-    const resultIndex = order.result_index;
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Validate TraceId
-    |--------------------------------------------------------------------------
-    */
-
-    if (
-      traceId === undefined ||
-      traceId === null ||
-      String(
-        traceId
-      ).trim() === ""
-    ) {
-
-      return res
-        .status(400)
-        .json({
-
-          success: false,
-
-          message:
-            "traceId is required",
-        });
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Validate SrdvIndex
-    |--------------------------------------------------------------------------
-    */
-
-    if (
-      srdvIndex === undefined ||
-      srdvIndex === null ||
-      String(
-        srdvIndex
-      ).trim() === ""
-    ) {
-
-      return res
-        .status(400)
-        .json({
-
-          success: false,
-
-          message:
-            "srdvIndex is required",
-        });
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Validate ResultIndex
-    |--------------------------------------------------------------------------
-    */
-
-    if (
-      resultIndex === undefined ||
-      resultIndex === null ||
-      String(
-        resultIndex
-      ).trim() === ""
-    ) {
-
-      return res
-        .status(400)
-        .json({
-
-          success: false,
-
-          message:
-            "resultIndex is required",
-        });
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Validate Provider Configuration
-    |--------------------------------------------------------------------------
-    */
-
-    const requiredConfig = [
-      "SRDV_BOOK_URL",
-      "SRDV_API_TOKEN",
-      "SRDV_CLIENT_ID",
-      "SRDV_USERNAME",
-      "SRDV_PASSWORD",
-    ];
-
-
-    const missingConfig =
-      requiredConfig.filter(
-        key =>
-          !process.env[key] ||
-          !String(
-            process.env[key]
-          ).trim()
-      );
-
-
-    if (
-      missingConfig.length >
-      0
-    ) {
-
-      console.error(
-        "[BusBooking][Book] Missing configuration",
-        missingConfig
-      );
-
-
-      return res
-        .status(500)
-        .json({
-
-          success: false,
-
-          message:
-            "Book API provider configuration is missing",
-
-          missingConfig,
-        });
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Build Exact Provider Request Body
-    |--------------------------------------------------------------------------
-    |
-    | Important:
-    |
-    | This body matches the Book API request you tested successfully.
-    |
-    |--------------------------------------------------------------------------
-    */
-
-    const requestBody = {
-
-      ClientId:
-        process.env
-          .SRDV_CLIENT_ID,
-
-      UserName:
-        process.env
-          .SRDV_USERNAME,
-
-      Password:
-        process.env
-          .SRDV_PASSWORD,
-
-      TraceId:
-        String(
-          traceId
-        ).trim(),
-
-      SrdvIndex:
-        String(
-          srdvIndex
-        ).trim(),
-
-      ResultIndex:
-        String(
-          resultIndex
-        ).trim(),
-    };
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Safe Log
-    |--------------------------------------------------------------------------
-    |
-    | Do NOT print ClientId/UserName/Password.
-    |
-    |--------------------------------------------------------------------------
-    */
-
-    console.log(
-      "[BusBooking][Book] Provider Request",
-      {
-
-        TraceId:
-          requestBody
-            .TraceId,
-
-        SrdvIndex:
-          requestBody
-            .SrdvIndex,
-
-        ResultIndex:
-          requestBody
-            .ResultIndex,
-      }
-    );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Provider Headers
-    |--------------------------------------------------------------------------
-    */
-
-    const headers = {
-
-      "Content-Type":
-        "application/json",
-
-      "Api-Token":
-        process.env
-          .SRDV_API_TOKEN,
-    };
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Call Provider Book API
-    |--------------------------------------------------------------------------
-    */
-
-    const providerResponse =
-      await axios.post(
-
-        process.env
-          .SRDV_BOOK_URL,
-
-        requestBody,
-
-        {
-          headers,
-
-          timeout:
-            30000,
-        }
-      );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Provider Response
-    |--------------------------------------------------------------------------
-    */
-
-    const apiData =
-      providerResponse
-        .data;
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Check Provider Error
-    |--------------------------------------------------------------------------
-    */
-
-    const providerErrorCode =
-      Number(
-        apiData
-          ?.Error
-          ?.ErrorCode ??
-        0
-      );
-
-
-    const providerErrorMessage =
-      String(
-        apiData
-          ?.Error
-          ?.ErrorMessage ||
-        ""
-      );
-
-
-    if (
-      providerErrorCode !==
-      0
-    ) {
-
-      await connection.rollback();
-
-      console.log(
-        "[BusBooking][Book] Provider Error",
-        {
-          providerErrorCode,
-          providerErrorMessage,
-          traceId:
-            apiData
-              ?.TraceId,
-        }
-      );
-
-
-      return res
-        .status(400)
-        .json({
-
-          success: false,
-
-          message:
-            providerErrorMessage ||
-            "Unable to book bus ticket",
-
-          errorCode:
-            providerErrorCode,
-
-          traceId:
-            apiData
-              ?.TraceId ||
-            String(
-              traceId
-            ),
-
-        });
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Extract Booking Result
-    |--------------------------------------------------------------------------
-    */
-
-    const bookingId =
-      apiData
-        ?.BookingId ??
-      null;
-
-
-    const bookingStatus =
-      apiData
-        ?.Result
-        ?.BusBookingStatus ||
-      null;
-
-
-    const ticketNo =
-      apiData
-        ?.Result
-        ?.TicketNo ||
-      null;
-
-
-    const travelOperatorPNR =
-      apiData
-        ?.Result
-        ?.TravelOperatorPNR ||
-      null;
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Validate Successful Booking
-    |--------------------------------------------------------------------------
-    */
-
-    if (
-      !bookingId
-    ) {
-
-      await connection.rollback();
-
-      console.error(
-        "[BusBooking][Book] BookingId missing",
-        { traceId }
-      );
-
-
-      return res
-        .status(400)
-        .json({
-
-          success: false,
-
-          message:
-            "Provider did not return BookingId",
-
-        });
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Validate Booking Status
-    |--------------------------------------------------------------------------
-    */
-
-    if (
-      String(
-        bookingStatus ||
-        ""
-      ).toLowerCase() !==
-      "success"
-    ) {
-
-      await connection.rollback();
-
-      console.error(
-        "[BusBooking][Book] Booking status was not successful",
-        {
-          bookingId,
-          bookingStatus,
-          ticketNo,
-        }
-      );
-
-
-      return res
-        .status(400)
-        .json({
-
-          success: false,
-
-          message:
-            "Bus booking was not successful",
-
-          bookingId,
-
-          bookingStatus,
-
-        });
-    }
-
-
-    await connection.execute(
-      `
-      UPDATE busbooking_orders
-      SET
-        status = 'confirmed',
-        provider_booking_id = ?,
-        ticket_no = ?,
-        travel_operator_pnr = ?,
-        raw_book_response = ?
-      WHERE id = ?
-        AND payment_status = 'paid'
-      `,
-      [
-        String(bookingId),
-        ticketNo,
-        travelOperatorPNR,
-        JSON.stringify(apiData),
-        order.id,
-      ]
-    );
-
-    await connection.commit();
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Return Clean Response To React Native
-    |--------------------------------------------------------------------------
-    */
-
-    return res
-      .status(200)
-      .json({
-
-        success: true,
-
+        code: "BOOKING_FAILED",
         message:
-          "Bus ticket booked successfully",
-
-        orderRef,
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | Booking Session
-        |--------------------------------------------------------------------------
-        */
-
-        traceId:
-          String(
-            apiData
-              ?.TraceId ||
-            traceId
-          ),
-
-        srdvIndex:
-          String(
-            apiData
-              ?.SrdvIndex ||
-            srdvIndex
-          ),
-
-        resultIndex:
-          String(
-            apiData
-              ?.ResultIndex ||
-            resultIndex
-          ),
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | Final Booking Details
-        |--------------------------------------------------------------------------
-        */
-
-        bookingId,
-
-        bookingStatus,
-
-        ticketNo,
-
-        travelOperatorPNR,
+          "Bus booking could not be completed. Your payment will be refunded to the original payment method.",
+        orderRef: order.order_ref,
+        refundInitiated: true,
       });
-
-
-  } catch (
-    error
-  ) {
-
-    if (connection) {
-      try {
-        await connection.rollback();
-      } catch (rollbackError) {
-        console.error(
-          "[BusBooking][Book] Rollback failed",
-          rollbackError.message
-        );
-      }
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | Provider HTTP Error
-    |--------------------------------------------------------------------------
-    */
-
-    if (
-      error.response
-    ) {
-
-      console.error(
-        "[BusBooking][Book] Provider HTTP Error",
-        {
-
-          status:
-            error.response
-              .status,
-
-        }
-      );
-
-
-      const providerData =
-        error.response
-          .data;
-
-
-      return res
-        .status(
-          error.response
-            .status ||
-          500
-        )
-        .json({
-
-          success: false,
-
-          message:
-            providerData
-              ?.Error
-              ?.ErrorMessage ||
-
-            providerData
-              ?.message ||
-
-            "Book provider API error",
-
-        });
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Network / Internal Error
-    |--------------------------------------------------------------------------
-    */
-
-    console.error(
-      "[BusBooking][Book] Error",
-      error.message
-    );
-
-
-    return res
-      .status(500)
-      .json({
-
+    if (decision === "in_progress" || decision === "under_review") {
+      return res.status(202).json({
         success: false,
-
+        pending: true,
+        code: "BOOKING_PENDING",
         message:
-          "Unable to book bus ticket",
-
+          "Your payment is safe. We are confirming your ticket with the operator.",
+        orderRef: order.order_ref,
       });
-  } finally {
-    if (connection) {
-      connection.release();
     }
+
+    return res.status(409).json({
+      success: false,
+      message: "A captured payment is required before booking",
+    });
+  } catch (error) {
+    console.error("[BusBooking][Book] Error", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Unable to book bus ticket",
+    });
   }
 };
+
 
 const getProviderBalance = async (req, res) => {
   const requiredConfig = [
@@ -4580,13 +3990,17 @@ const cancelBusTicket = async (req, res) => {
   let connection;
   let cancellationId;
   let order;
+  // Once the provider has been asked, the seat may be cancelled whatever
+  // happens next, so the request must never be written off as "failed".
+  let providerCalled = false;
 
   try {
     connection = await db.getConnection();
     await connection.beginTransaction();
 
     const [orderRows] = await connection.execute(
-      `SELECT id, trace_id, seat_count, status, payment_status
+      `SELECT id, user_id, order_ref, trace_id, seat_count, total_amount,
+              reward_coins_used, status, payment_status
          FROM busbooking_orders
         WHERE order_ref = ? AND user_id = ?
         LIMIT 1
@@ -4624,7 +4038,7 @@ const cancelBusTicket = async (req, res) => {
     }
 
     const [[existing]] = await connection.execute(
-      `SELECT id, status, refund_status, raw_response
+      `SELECT id, status, refund_status, refund_amount
          FROM busbooking_cancellations
         WHERE busbooking_order_id = ? AND seat_name = ?
         LIMIT 1
@@ -4641,6 +4055,7 @@ const cancelBusTicket = async (req, res) => {
         data: {
           order_ref: orderRef,
           seatName,
+          refundAmount: Number(existing.refund_amount),
           refundStatus: existing.refund_status,
         },
       });
@@ -4677,26 +4092,72 @@ const cancelBusTicket = async (req, res) => {
     connection.release();
     connection = null;
 
-    const providerResponse = await axios.post(
-      process.env.SRDV_CANCEL_URL,
-      {
-        ClientId: process.env.SRDV_CLIENT_ID,
-        UserName: process.env.SRDV_USERNAME,
-        Password: process.env.SRDV_PASSWORD,
-        TraceId: String(order.trace_id),
-        SeatName: seatName,
-        Remark: remarks,
-      },
-      {
-        headers: {
-          "Api-Token": process.env.SRDV_API_TOKEN,
-          "Content-Type": "application/json",
+    let apiData;
+    providerCalled = true;
+    try {
+      const providerResponse = await axios.post(
+        process.env.SRDV_CANCEL_URL,
+        {
+          ClientId: process.env.SRDV_CLIENT_ID,
+          UserName: process.env.SRDV_USERNAME,
+          Password: process.env.SRDV_PASSWORD,
+          TraceId: String(order.trace_id),
+          SeatName: seatName,
+          Remark: remarks,
         },
-        timeout: 30000,
-      },
-    );
+        {
+          headers: {
+            "Api-Token": process.env.SRDV_API_TOKEN,
+            "Content-Type": "application/json",
+          },
+          timeout: 30000,
+        },
+      );
+      apiData = providerResponse.data;
+    } catch (providerError) {
+      console.error("[BusBooking][Cancel] Provider request failed", providerError.message);
 
-    const apiData = providerResponse.data;
+      if (!isAmbiguousProviderError(providerError)) {
+        await db.execute(
+          `UPDATE busbooking_cancellations
+              SET status = 'failed', provider_error_message = ?
+            WHERE id = ?`,
+          [
+            `Provider rejected the cancel request (HTTP ${providerError.response.status})`,
+            cancellationId,
+          ],
+        );
+        return res.status(502).json({
+          success: false,
+          message: "Unable to cancel bus seat",
+        });
+      }
+
+      await db.execute(
+        `UPDATE busbooking_cancellations
+            SET provider_error_message = ?
+          WHERE id = ?`,
+        ["Cancel request outcome is unknown", cancellationId],
+      );
+      await sendOpsAlert({
+        level: "critical",
+        category: "busbooking_review",
+        message: `Bus cancellation for ${orderRef} seat ${seatName} has an unknown provider outcome`,
+        meta: { orderId: order.id, cancellationId },
+      });
+      return res.status(202).json({
+        success: true,
+        message: "Bus cancellation is being processed",
+        data: {
+          order_ref: orderRef,
+          seatName,
+          status: "processing",
+          refundAmount: 0,
+          refundStatus: "not_requested",
+        },
+      });
+    }
+
     const providerErrorCode = Number(apiData?.Error?.ErrorCode ?? 0);
     const providerErrorMessage = String(apiData?.Error?.ErrorMessage || "");
 
@@ -4720,49 +4181,62 @@ const cancelBusTicket = async (req, res) => {
       });
     }
 
-    const refundAmount = Number(
+    const providerRefundAmount = Number(
       apiData?.RefundAmount ?? apiData?.Result?.RefundAmount ?? 0,
     );
-    const refundStatus = refundAmount > 0 ? "pending" : "not_requested";
     const providerStatus = String(apiData?.Status || "").trim();
     const providerCancelId = apiData?.CancelId ?? null;
     const isFinalSuccess = ["success", "cancelled", "canceled"].includes(
       providerStatus.toLowerCase(),
     );
 
+    let refundId = null;
+    let refundAmount = 0;
+
     connection = await db.getConnection();
     await connection.beginTransaction();
-    await connection.execute(
-      `UPDATE busbooking_cancellations
-          SET status = ?, refund_status = ?, provider_cancel_id = ?,
-              provider_status = ?, raw_response = ?
-        WHERE id = ?`,
-      [
-        isFinalSuccess ? "succeeded" : "processing",
-        refundStatus,
-        providerCancelId === null ? null : String(providerCancelId),
-        providerStatus || null,
-        JSON.stringify(apiData),
-        cancellationId,
-      ],
-    );
 
     if (isFinalSuccess) {
-      const [[cancellationCount]] = await connection.execute(
-        `SELECT COUNT(*) AS count
-           FROM busbooking_cancellations
-          WHERE busbooking_order_id = ? AND status = 'succeeded'`,
-        [order.id],
+      ({ refundId, refundAmount } = await applyCancellationSuccess(connection, {
+        order,
+        cancellationId,
+        providerRefundAmount,
+        providerCancelId,
+        providerStatus,
+        rawResponse: apiData,
+      }));
+    } else {
+      await connection.execute(
+        `UPDATE busbooking_cancellations
+            SET provider_cancel_id = ?, provider_status = ?, raw_response = ?
+          WHERE id = ?`,
+        [
+          providerCancelId === null ? null : String(providerCancelId),
+          providerStatus || null,
+          JSON.stringify(apiData),
+          cancellationId,
+        ],
       );
-
-      if (Number(cancellationCount.count) >= Number(order.seat_count)) {
-        await connection.execute(
-          `UPDATE busbooking_orders SET status = 'cancelled' WHERE id = ?`,
-          [order.id],
-        );
-      }
     }
+
     await connection.commit();
+    connection.release();
+    connection = null;
+
+    let refundStatus = "not_requested";
+    if (refundId) {
+      const refund = await processRefund(refundId);
+      refundStatus = refund.status === "processed" ? "processed" : "pending";
+    }
+
+    if (!isFinalSuccess) {
+      await sendOpsAlert({
+        level: "error",
+        category: "busbooking_review",
+        message: `Bus cancellation for ${orderRef} seat ${seatName} returned non-final status "${providerStatus}"`,
+        meta: { orderId: order.id, cancellationId },
+      });
+    }
 
     return res.status(isFinalSuccess ? 200 : 202).json({
       success: true,
@@ -4785,21 +4259,28 @@ const cancelBusTicket = async (req, res) => {
       } catch {}
     }
 
-    if (cancellationId) {
+    if (cancellationId && !providerCalled) {
       try {
         await db.execute(
           `UPDATE busbooking_cancellations
               SET status = 'failed', provider_error_message = ?
             WHERE id = ? AND status = 'processing'`,
-          ["Cancellation provider request failed", cancellationId],
+          ["Cancellation could not be started", cancellationId],
         );
       } catch (updateError) {
         console.error("[BusBooking][Cancel] Failed to record failure", updateError.message);
       }
+    } else if (cancellationId) {
+      await sendOpsAlert({
+        level: "critical",
+        category: "busbooking_review",
+        message: `Bus cancellation for ${orderRef} seat ${seatName}: provider result could not be recorded`,
+        meta: { cancellationId, error: error.message },
+      });
     }
 
     console.error("[BusBooking][Cancel] Error", error.message);
-    return res.status(error.response ? 502 : 500).json({
+    return res.status(500).json({
       success: false,
       message: "Unable to cancel bus seat",
     });
@@ -4807,6 +4288,119 @@ const cancelBusTicket = async (req, res) => {
     if (connection) connection.release();
   }
 };
+
+/*
+|--------------------------------------------------------------------------
+| Admin review
+|--------------------------------------------------------------------------
+|
+| A booking or cancellation whose provider outcome could not be determined is
+| parked for staff, who check the provider and record what really happened.
+|
+|--------------------------------------------------------------------------
+*/
+
+const resolveBookingReview = async (req, res) => {
+  const orderRef = String(req.body?.order_ref || "").trim();
+  const outcome = String(req.body?.outcome || "").trim();
+  const bookingId = String(req.body?.bookingId || "").trim();
+
+  if (!orderRef || !["confirmed", "failed"].includes(outcome)) {
+    return res.status(400).json({
+      success: false,
+      message: "order_ref and outcome (confirmed or failed) are required",
+    });
+  }
+
+  if (outcome === "confirmed" && !bookingId) {
+    return res.status(400).json({
+      success: false,
+      message: "bookingId is required to confirm a booking",
+    });
+  }
+
+  try {
+    const result = await resolveReviewedBooking(orderRef, {
+      outcome,
+      bookingId,
+      ticketNo: String(req.body?.ticketNo || "").trim() || null,
+      travelOperatorPNR: String(req.body?.travelOperatorPNR || "").trim() || null,
+      note: String(req.body?.note || "").trim() || null,
+    });
+
+    if (!result.ok) {
+      return res.status(result.status).json({ success: false, message: result.message });
+    }
+
+    console.info("[BusBooking][Review] Booking resolved", {
+      orderRef,
+      outcome,
+      resolvedBy: req.user.user_id,
+    });
+    return res.status(200).json({
+      success: true,
+      data: {
+        order_ref: orderRef,
+        status: result.order.status,
+        paymentStatus: result.order.payment_status,
+      },
+    });
+  } catch (error) {
+    console.error("[BusBooking][Review] Booking resolve failed", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Unable to resolve booking",
+    });
+  }
+};
+
+const resolveCancellationReview = async (req, res) => {
+  const orderRef = String(req.body?.order_ref || "").trim();
+  const seatName = String(req.body?.seatName || "").trim();
+  const outcome = String(req.body?.outcome || "").trim();
+  const refundAmount = Number(req.body?.refundAmount ?? 0);
+
+  if (!orderRef || !seatName || !["succeeded", "failed"].includes(outcome)) {
+    return res.status(400).json({
+      success: false,
+      message: "order_ref, seatName and outcome (succeeded or failed) are required",
+    });
+  }
+
+  if (!Number.isFinite(refundAmount) || refundAmount < 0) {
+    return res.status(400).json({
+      success: false,
+      message: "refundAmount must be zero or a positive number",
+    });
+  }
+
+  try {
+    const result = await resolveCancellation(orderRef, seatName, {
+      outcome,
+      refundAmount,
+      note: String(req.body?.note || "").trim() || null,
+    });
+
+    if (!result.ok) {
+      return res.status(result.status).json({ success: false, message: result.message });
+    }
+
+    console.info("[BusBooking][Review] Cancellation resolved", {
+      orderRef,
+      seatName,
+      outcome,
+      resolvedBy: req.user.user_id,
+    });
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("[BusBooking][Review] Cancellation resolve failed", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Unable to resolve cancellation",
+    });
+  }
+};
+
 module.exports = {
 
     getCities,
@@ -4818,7 +4412,7 @@ module.exports = {
     getBoardingDroppingPoints,
 
     blockSeat,
-    
+
     createPaymentOrder,
 
     verifyPayment,
@@ -4826,6 +4420,10 @@ module.exports = {
     bookBusTicket,
 
     cancelBusTicket,
+
+    resolveBookingReview,
+
+    resolveCancellationReview,
 
     getProviderBalance,
 

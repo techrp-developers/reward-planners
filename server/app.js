@@ -27,6 +27,7 @@ require("./services/Bbps/refundCron");
 require("./services/Razorpay/retryCron");
 require("./services/Maintenance/maintenanceCron");
 require("./services/Razorpay/orderExpiryCron");
+require("./services/BusBooking/reconcileCron");
 require("./services/Todo/todoReminderCron");
 require("./services/Todo/birthdayReminderCron");
 require("./services/Ecommerce/cartRecoveryCron");
