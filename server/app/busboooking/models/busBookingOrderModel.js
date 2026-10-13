@@ -4,6 +4,19 @@ const db =
   );
 
 
+// What a customer may see of their own order. Provider payloads, block keys
+// and internal error text stay server-side.
+const CUSTOMER_ORDER_COLUMNS = `
+  o.id, o.order_ref, o.operator_name, o.bus_type,
+  o.source_city, o.destination_city,
+  o.journey_date, o.departure_time, o.arrival_time,
+  o.boarding_point_name, o.dropping_point_name,
+  o.seat_count, o.total_amount, o.reward_coins_used,
+  o.status, o.payment_status,
+  o.ticket_no, o.travel_operator_pnr,
+  o.created_at`;
+
+
 const BusBookingOrderModel = {
 
   /*
@@ -345,6 +358,211 @@ const BusBookingOrderModel = {
     return (
       rows[0] ||
       null
+    );
+  },
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | Customer Bookings
+  |--------------------------------------------------------------------------
+  |
+  | Only orders the customer has actually paid for are listed: an abandoned
+  | or expired seat hold is not a booking.
+  |
+  |--------------------------------------------------------------------------
+  */
+
+  async listForUser(
+    userId,
+    { limit = 20, offset = 0 } = {},
+    conn = db
+  ) {
+
+    const [
+      rows
+    ] =
+      await conn.query(
+        `
+        SELECT ${CUSTOMER_ORDER_COLUMNS},
+               (
+                 SELECT GROUP_CONCAT(p.seat_name ORDER BY p.id SEPARATOR ',')
+                   FROM busbooking_passengers p
+                  WHERE p.busbooking_order_id = o.id
+               ) AS seat_names
+
+        FROM busbooking_orders o
+
+        WHERE o.user_id = ?
+          AND o.payment_status IN ('paid', 'refunded')
+
+        ORDER BY o.id DESC
+
+        LIMIT ? OFFSET ?
+        `,
+        [
+          userId,
+          Number(limit),
+          Number(offset),
+        ]
+      );
+
+
+    return rows;
+  },
+
+
+  async findDetailForUser(
+    orderRef,
+    userId,
+    conn = db
+  ) {
+
+    const [
+      [order]
+    ] =
+      await conn.execute(
+        `
+        SELECT ${CUSTOMER_ORDER_COLUMNS},
+               o.raw_block_response
+
+        FROM busbooking_orders o
+
+        WHERE o.order_ref = ?
+          AND o.user_id = ?
+          AND o.payment_status IN ('paid', 'refunded')
+
+        LIMIT 1
+        `,
+        [
+          orderRef,
+          userId,
+        ]
+      );
+
+
+    if (!order) {
+      return null;
+    }
+
+
+    const [
+      passengers
+    ] =
+      await conn.execute(
+        `
+        SELECT p.title, p.first_name, p.last_name, p.gender, p.age,
+               p.seat_name, p.lead_passenger,
+               c.status AS cancellation_status,
+               c.refund_status,
+               c.refund_amount
+
+        FROM busbooking_passengers p
+
+        LEFT JOIN busbooking_cancellations c
+          ON c.busbooking_order_id = p.busbooking_order_id
+         AND c.seat_name = p.seat_name
+
+        WHERE p.busbooking_order_id = ?
+
+        ORDER BY p.id ASC
+        `,
+        [
+          order.id,
+        ]
+      );
+
+
+    const [
+      refunds
+    ] =
+      await conn.execute(
+        `
+        SELECT reason, amount, status, updated_at
+
+        FROM busbooking_refunds
+
+        WHERE busbooking_order_id = ?
+
+        ORDER BY id ASC
+        `,
+        [
+          order.id,
+        ]
+      );
+
+
+    return {
+      order,
+      passengers,
+      refunds,
+    };
+  },
+
+
+  /*
+  |--------------------------------------------------------------------------
+  | Popular Routes
+  |--------------------------------------------------------------------------
+  |
+  | The routes customers have actually booked most over the last 90 days,
+  | resolved back to city codes so the app can search them directly.
+  |
+  |--------------------------------------------------------------------------
+  */
+
+  async getPopularRoutes(
+    limit = 6,
+    conn = db
+  ) {
+
+    const [
+      rows
+    ] =
+      await conn.query(
+        `
+        SELECT r.source_city,
+               r.destination_city,
+               r.bookings,
+               r.min_fare,
+               (
+                 SELECT c.cico_id FROM city_codes c
+                  WHERE UPPER(c.cico_type) = 'CITY'
+                    AND LOWER(TRIM(c.cico_city_name)) = LOWER(TRIM(r.source_city))
+                  ORDER BY c.cico_id ASC LIMIT 1
+               ) AS source_city_code,
+               (
+                 SELECT c.cico_id FROM city_codes c
+                  WHERE UPPER(c.cico_type) = 'CITY'
+                    AND LOWER(TRIM(c.cico_city_name)) = LOWER(TRIM(r.destination_city))
+                  ORDER BY c.cico_id ASC LIMIT 1
+               ) AS destination_city_code
+
+        FROM (
+          SELECT source_city,
+                 destination_city,
+                 COUNT(*) AS bookings,
+                 MIN(total_amount / GREATEST(seat_count, 1)) AS min_fare
+            FROM busbooking_orders
+           WHERE status IN ('confirmed', 'cancelled')
+             AND source_city IS NOT NULL
+             AND destination_city IS NOT NULL
+             AND created_at >= NOW() - INTERVAL 90 DAY
+           GROUP BY source_city, destination_city
+           ORDER BY bookings DESC, MAX(id) DESC
+           LIMIT ?
+        ) r
+        `,
+        [
+          Number(limit),
+        ]
+      );
+
+
+    return rows.filter(
+      (row) =>
+        row.source_city_code &&
+        row.destination_city_code
     );
   },
 };

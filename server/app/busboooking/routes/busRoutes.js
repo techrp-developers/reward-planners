@@ -107,6 +107,14 @@ const {
     "../controllers/busController"
 );
 
+const {
+    getMyBookings,
+    getBookingDetail,
+    getPopularRoutes,
+} = require(
+    "../controllers/busOrderController"
+);
+
 
 /*
 |--------------------------------------------------------------------------
@@ -117,6 +125,39 @@ const {
 router.get(
     "/cities",
     getCities
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| Popular Routes
+|--------------------------------------------------------------------------
+*/
+
+router.get(
+    "/popular-routes",
+    getPopularRoutes
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| Customer Bookings
+|--------------------------------------------------------------------------
+*/
+
+router.get(
+    "/orders",
+    auth,
+    customerOnly,
+    getMyBookings
+);
+
+router.get(
+    "/orders/:orderRef",
+    auth,
+    customerOnly,
+    getBookingDetail
 );
 
 
