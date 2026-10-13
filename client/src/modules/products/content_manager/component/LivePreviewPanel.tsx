@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import type { ContentEntry, Zone } from "../types";
-import type { ContentModule } from "../api/ContentApi";
+import { getResolvedZones, type ContentModule } from "../api/ContentApi";
+import { fromApiEntry } from "../store/mappers";
 import type { ResolvedModuleIcon } from "../api/ModuleIconApi";
 import { resolveZoneEntry } from "../store";
 import PhoneFrame from "./PhoneFrame";
@@ -23,6 +25,11 @@ export default function LivePreviewPanel({ entries, draft, now, module, moduleIc
   const [mode, setMode] = useState<PreviewMode>("campaign");
   const [previewModule, setPreviewModule] = useState<string>(module);
   const [deviceWidth, setDeviceWidth] = useState<(typeof DEVICE_WIDTHS)[number]>(390);
+  const { data: resolvedZones } = useQuery({
+    queryKey: ["content", "preview-zones", module],
+    queryFn: () => getResolvedZones(module),
+    refetchInterval: 30_000,
+  });
 
   useEffect(() => {
     setPreviewModule(module);
@@ -32,6 +39,10 @@ export default function LivePreviewPanel({ entries, draft, now, module, moduleIc
     if (zone === draft.zone) {
       if (mode === "default") return entries.find((entry) => entry.zone === zone && entry.isDefault);
       return draft;
+    }
+    if (resolvedZones) {
+      const entry = resolvedZones[zone];
+      return entry ? fromApiEntry(entry) : undefined;
     }
     return resolveZoneEntry(zone, entries, now);
   };

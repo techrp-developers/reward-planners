@@ -25,7 +25,7 @@ const parseConfig = (value) => {
 
 const MOBILE_CONTENT_MODULES = ['mobile_dashboard', 'product', 'service', 'payment', 'dineout'];
 const IMAGE_GALLERY_ZONES = ['offers_banner', 'promotional_banner', 'brand_promotional_banner'];
-const contentAssetUrl = (path) => path?.startsWith('/uploads/') ? getContentImageUrl(path) : getPublicUrl(path);
+const contentAssetUrl = (path) => /^\/?uploads\//i.test(path || '') ? getContentImageUrl(path) : getPublicUrl(path);
 
 const targetIds = (entry) => {
   let ids = entry.target_ids;
