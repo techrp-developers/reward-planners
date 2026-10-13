@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { isAxiosError } from "axios";
 import { FaSpinner } from "react-icons/fa";
 import { FiAlertTriangle, FiArrowLeft, FiArrowRight, FiCheckCircle, FiPlus, FiTrash2 } from "react-icons/fi";
 import { toast } from "sonner";
@@ -59,6 +60,10 @@ export default function OfferImagesManager({ contentId, images, onChange, allowA
 
   const handleAdd = async (fileList: FileList | null) => {
     if (!fileList || !fileList.length) return;
+    if (images.length + fileList.length > 10) {
+      toast.error(`This campaign has ${images.length} of 10 images. Remove images before adding ${fileList.length} more.`);
+      return;
+    }
     setUploading(true);
     try {
       const added = await addEntryImages(contentId, Array.from(fileList));
@@ -67,8 +72,9 @@ export default function OfferImagesManager({ contentId, images, onChange, allowA
         ...added.map((image) => ({ imageId: image.image_id, imageUrl: image.image_url, sortOrder: image.sort_order, isActive: !!image.is_active })),
       ]);
       toast.success(added.length > 1 ? "Images added" : "Image added");
-    } catch {
-      toast.error("Failed to add image(s)");
+    } catch (error) {
+      const message = isAxiosError(error) ? error.response?.data?.message : undefined;
+      toast.error(typeof message === "string" && message ? message : "Failed to add image(s)");
     } finally {
       setUploading(false);
     }
@@ -120,7 +126,7 @@ export default function OfferImagesManager({ contentId, images, onChange, allowA
 
   return (
     <div className="sm:col-span-2">
-      <p className="text-xs font-bold text-slate-500">Offer Images</p>
+      <p className="text-xs font-bold text-slate-500">Offer Images ({images.length}/10)</p>
       <p className="mt-1 text-[11px] text-slate-400">Add one or more images for this campaign - rendered using the selected display mode.</p>
 
       <p className="mt-1 text-xs text-slate-500">Recommended: {SPEC.recommendedWidth} × {SPEC.recommendedHeight} px · Ratio {SPEC.recommendedRatioLabel} · JPG, JPEG, PNG</p>
@@ -128,6 +134,7 @@ export default function OfferImagesManager({ contentId, images, onChange, allowA
         {sorted.map((image, index) => (
           <div key={image.imageId ?? image.imageUrl} className="w-32 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white">
             <OfferImageThumb image={image} order={index + 1} zone={zone} />
+            {image.isActive === false && <p className="text-center text-xs text-slate-500">Inactive</p>}
             {allowActivation && <button type="button" disabled={busy || image.imageId == null} className="w-full py-1 text-xs font-semibold" onClick={async () => {
               if (image.imageId == null) return;
               setBusy(true);
