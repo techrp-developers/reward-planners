@@ -939,12 +939,16 @@ const getSeatLayout = async (req, res) => {
         |--------------------------------------------------------------------------
         */
 
+        // The provider sends rows as an array, or as an object keyed by row
+        // number when rows are skipped (aisles), so accept both.
         const seatLayout =
             Array.isArray(
                 apiData.Result
             )
                 ? apiData.Result
-                : [];
+                : Object.values(
+                    apiData.Result || {}
+                );
 
 
         /*
