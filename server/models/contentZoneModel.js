@@ -686,6 +686,13 @@ class ContentZoneModel {
         fields.push(`${key} = ?`);
         if (key === "is_published") values.push(data[key] ? 1 : 0);
         else if (key === "text_color") values.push(data[key] || null);
+        else if (key === "target_type") values.push(data[key] || null);
+        else if (key === "target_id")
+          values.push(
+            (data.target_type === undefined ? existing.target_type : data.target_type)
+              ? Number(data[key])
+              : null,
+          );
         else if (key === "target_ids")
           values.push(
             data.target_type === "product"
