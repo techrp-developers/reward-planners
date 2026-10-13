@@ -991,7 +991,9 @@ const getSeatLayout = async (req, res) => {
 
                     return (
                         seat.SeatStatus === true ||
-                        seat.SeatStatus === "true"
+                        seat.SeatStatus === "true" ||
+                        seat.SeatStatus === 1 ||
+                        seat.SeatStatus === "1"
                     );
                 }
             );
