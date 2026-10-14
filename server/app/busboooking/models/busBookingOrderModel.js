@@ -461,7 +461,8 @@ const BusBookingOrderModel = {
 
         LEFT JOIN busbooking_cancellations c
           ON c.busbooking_order_id = p.busbooking_order_id
-         AND c.seat_name = p.seat_name
+         -- The two tables may be created with different collations.
+         AND c.seat_name = p.seat_name COLLATE utf8mb4_general_ci
 
         WHERE p.busbooking_order_id = ?
 
