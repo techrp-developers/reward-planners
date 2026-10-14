@@ -1,7 +1,6 @@
 const { WebSocketServer, WebSocket } = require("ws");
 const jwt = require("jsonwebtoken");
 const Chat = require("../models/chatModel");
-const { notifyMessageRecipients } = require("../services/messageNotification");
 
 function setupChatSocket(server, app, isAllowedOrigin) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
@@ -81,7 +80,6 @@ function setupChatSocket(server, app, isAllowedOrigin) {
             clientMessageId: event.client_message_id ? String(event.client_message_id).slice(0, 64) : null,
           });
           broadcastConversation(conversationId, { type: "message:new", data: message });
-          notifyMessageRecipients(message).catch((error) => console.error("[Chat] Notification failed:", error.message));
         } else throw Object.assign(new Error("Unsupported event type"), { code: "UNSUPPORTED_EVENT" });
       } catch (error) { send(socket, { type: "error", data: { code: error.code || "BAD_EVENT", message: error.message || "Invalid event" } }); }
     });

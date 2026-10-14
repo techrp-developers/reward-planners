@@ -1,5 +1,4 @@
 const Chat = require("../models/chatModel");
-const { notifyMessageRecipients } = require("../services/messageNotification");
 const crypto = require("crypto");
 const path = require("path");
 const sharp = require("sharp");
@@ -84,7 +83,6 @@ exports.createPoll = async (req, res) => {
       closesAt, clientMessageId: req.body.client_message_id ? String(req.body.client_message_id).slice(0, 64) : null,
     });
     req.app.locals.chatSocket?.broadcastConversation(conversationId, { type: "message:new", data: message });
-    notifyMessageRecipients(message).catch((error) => console.error("[Chat] Notification failed:", error.message));
     res.status(201).json({ success: true, data: message });
   } catch (error) { fail(res, error); }
 };
@@ -145,7 +143,6 @@ exports.send = async (req, res) => {
       clientMessageId: req.body.client_message_id ? String(req.body.client_message_id).slice(0, 64) : null,
     });
     req.app.locals.chatSocket?.broadcastConversation(Number(req.params.id), { type: "message:new", data: message });
-    notifyMessageRecipients(message).catch((error) => console.error("[Chat] Notification failed:", error.message));
     res.status(201).json({ success: true, data: message });
   } catch (error) { fail(res, error); }
 };
