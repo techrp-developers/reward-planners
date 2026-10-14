@@ -30,6 +30,14 @@ router.post("/conversations/:id/polls", controller.createPoll);
 router.post("/polls/:pollId/votes", controller.votePoll);
 router.post("/conversations/:id/read", controller.read);
 router.patch("/conversations/:id", controller.updateGroup);
+router.post("/conversations/:id/image", (req, res, next) => {
+  imageUpload.single("image")(req, res, (error) => {
+    if (!error) return next();
+    const message = error.code === "LIMIT_FILE_SIZE" ? "Group photos cannot exceed 10 MB" : error.message;
+    return res.status(422).json({ success: false, message });
+  });
+}, controller.uploadGroupImage);
+router.delete("/conversations/:id/image", controller.removeGroupImage);
 router.post("/conversations/:id/members", controller.addMembers);
 router.delete("/conversations/:id/members/:userId", controller.removeMember);
 router.post("/conversations/:id/leave", controller.leave);

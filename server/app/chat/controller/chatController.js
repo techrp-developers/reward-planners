@@ -4,6 +4,7 @@ const crypto = require("crypto");
 const path = require("path");
 const sharp = require("sharp");
 const { uploadToR2 } = require("../../../utils/r2upload");
+const { deleteFromR2 } = require("../../../utils/r2delete");
 const { getPublicUrl } = require("../../../utils/publicUrl");
 
 const ids = (value) => Array.isArray(value) ? [...new Set(value.map(Number).filter(Number.isSafeInteger).filter((id) => id > 0))] : [];
@@ -167,6 +168,38 @@ exports.deleteMessage = async (req, res) => {
     req.app.locals.chatSocket?.broadcastConversation(conversationId, { type: "message:deleted", data: deleted });
     res.json({ success: true, data: deleted });
   } catch (error) { fail(res, error); }
+};
+
+async function replaceGroupImage(req, imageKey) {
+  const conversationId = Number(req.params.id);
+  const { previousKey, image_url } = await Chat.setGroupImage(req.user.user_id, conversationId, imageKey);
+  if (previousKey && previousKey !== imageKey) {
+    deleteFromR2(previousKey).catch((error) => console.error("[Chat] Old group image cleanup failed:", error.message));
+  }
+  const data = { conversation_id: conversationId, image_url };
+  req.app.locals.chatSocket?.broadcastConversation(conversationId, { type: "conversation:updated", data });
+  return data;
+}
+
+exports.uploadGroupImage = async (req, res) => {
+  try {
+    if (!req.file) return res.status(422).json({ success: false, message: "An image field is required" });
+    const conversationId = Number(req.params.id);
+    const member = await Chat.assertGroupMember(req.user.user_id, conversationId);
+    let output;
+    try {
+      output = await sharp(req.file.buffer, { animated: false, limitInputPixels: 40_000_000 })
+        .rotate().resize({ width: 512, height: 512, fit: "cover" })
+        .webp({ quality: 85 }).toBuffer();
+    } catch { return res.status(422).json({ success: false, message: "The uploaded file is not a valid image" }); }
+    const key = `chat/${member.company_id}/groups/${conversationId}/${crypto.randomUUID()}.webp`;
+    await uploadToR2(output, key, "image/webp");
+    res.json({ success: true, data: await replaceGroupImage(req, key) });
+  } catch (error) { fail(res, error); }
+};
+
+exports.removeGroupImage = async (req, res) => {
+  try { res.json({ success: true, data: await replaceGroupImage(req, null) }); } catch (error) { fail(res, error); }
 };
 
 exports.updateGroup = async (req, res) => {

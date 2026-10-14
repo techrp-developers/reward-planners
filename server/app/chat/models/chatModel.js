@@ -1,4 +1,14 @@
 const db = require("../../../config/database");
+const { getPublicUrl } = require("../../../utils/publicUrl");
+
+// customer.user_image holds an R2 key; clients need the public CDN URL. The
+// version (customer.updated_at) busts caches when the user changes their photo.
+function resolveImage(row, field = "user_image", versionField = `${field}_updated_at`) {
+  if (!row) return row;
+  row[field] = getPublicUrl(row[field], row[versionField]);
+  delete row[versionField];
+  return row;
+}
 
 class ChatModel {
   async identity(userId, conn = db) {
@@ -14,12 +24,12 @@ class ChatModel {
     if (!me) return [];
     const term = `%${search}%`;
     const [rows] = await db.execute(
-      `SELECT c.user_id, c.name, c.user_image, cu.department, cu.role
+      `SELECT c.user_id, c.name, c.user_image, c.updated_at AS user_image_updated_at, cu.department, cu.role
        FROM customer c JOIN company_users cu ON cu.id = c.company_user_id
        WHERE cu.company_id = ? AND c.status = 1 AND cu.status = 1 AND c.user_id <> ?
          AND (? = '%%' OR c.name LIKE ?)
        ORDER BY c.name LIMIT 100`, [me.company_id, userId, term, term]);
-    return rows;
+    return rows.map((row) => resolveImage(row));
   }
 
   async assertMember(userId, conversationId, conn = db) {
@@ -72,7 +82,7 @@ class ChatModel {
 
   async listConversations(userId) {
     const [rows] = await db.execute(
-      `SELECT c.conversation_id, c.type, c.name, c.description, c.updated_at, m.role,
+      `SELECT c.conversation_id, c.type, c.name, c.description, c.image_url, c.updated_at, m.role,
               lm.message_id AS last_message_id,
               CASE WHEN lm.deleted_at IS NOT NULL THEN 'This message was deleted' ELSE lm.body END AS last_message,
               CASE WHEN lm.deleted_at IS NOT NULL THEN 'text' ELSE lm.message_type END AS last_message_type,
@@ -84,9 +94,10 @@ class ChatModel {
        WHERE m.user_id = ? AND m.left_at IS NULL ORDER BY COALESCE(lm.created_at, c.created_at) DESC`, [userId, userId]);
     for (const row of rows) {
       const [members] = await db.execute(
-        `SELECT u.user_id, u.name, u.user_image, cm.role FROM chat_members cm JOIN customer u ON u.user_id = cm.user_id
+        `SELECT u.user_id, u.name, u.user_image, u.updated_at AS user_image_updated_at, cm.role FROM chat_members cm JOIN customer u ON u.user_id = cm.user_id
          WHERE cm.conversation_id = ? AND cm.left_at IS NULL`, [row.conversation_id]);
-      row.members = members;
+      row.image_url = getPublicUrl(row.image_url);
+      row.members = members.map((member) => resolveImage(member));
     }
     return rows;
   }
@@ -94,7 +105,7 @@ class ChatModel {
   async messages(userId, conversationId, beforeId, limit) {
     if (!await this.assertMember(userId, conversationId)) throw Object.assign(new Error("Conversation not found"), { status: 404 });
     const [rows] = await db.execute(
-      `SELECT m.message_id, m.conversation_id, m.sender_id, u.name AS sender_name, u.user_image AS sender_image,
+      `SELECT m.message_id, m.conversation_id, m.sender_id, u.name AS sender_name, u.user_image AS sender_image, u.updated_at AS sender_image_updated_at,
               m.client_message_id, m.message_type, m.body, m.attachment_url, m.attachment_name,
               m.attachment_mime_type, m.reply_to_message_id, m.edited_at, m.deleted_at, m.created_at
        FROM chat_messages m JOIN customer u ON u.user_id = m.sender_id
@@ -117,7 +128,7 @@ class ChatModel {
       byMessage.get(Number(receipt.message_id)).push({ user_id: receipt.user_id, name: receipt.name });
     }
     const serialized = rows.map((row) => ({
-      ...row,
+      ...resolveImage(row, "sender_image"),
       read_by: byMessage.get(Number(row.message_id)) || [],
       is_read: (byMessage.get(Number(row.message_id)) || []).length > 0,
     }));
@@ -170,7 +181,8 @@ class ChatModel {
       }
       await conn.execute(`UPDATE chat_conversations SET updated_at = NOW() WHERE conversation_id = ?`, [conversationId]);
       const [[message]] = await conn.execute(
-        `SELECT m.*, u.name AS sender_name, u.user_image AS sender_image FROM chat_messages m JOIN customer u ON u.user_id=m.sender_id WHERE m.message_id=?`, [messageResult.insertId]);
+        `SELECT m.*, u.name AS sender_name, u.user_image AS sender_image, u.updated_at AS sender_image_updated_at FROM chat_messages m JOIN customer u ON u.user_id=m.sender_id WHERE m.message_id=?`, [messageResult.insertId]);
+      resolveImage(message, "sender_image");
       message.read_by = []; message.is_read = false;
       await this.attachPolls([message], userId, conn);
       await conn.commit();
@@ -213,12 +225,12 @@ class ChatModel {
         [conversationId, userId, data.clientMessageId || null, data.messageType, data.body || null, data.attachmentUrl || null, data.attachmentName || null, data.attachmentMimeType || null, data.replyTo || null]);
       await db.execute(`UPDATE chat_conversations SET updated_at = NOW() WHERE conversation_id = ?`, [conversationId]);
       const [rows] = await db.execute(
-        `SELECT m.*, u.name AS sender_name, u.user_image AS sender_image FROM chat_messages m JOIN customer u ON u.user_id=m.sender_id WHERE m.message_id=?`, [result.insertId]);
-      return { ...rows[0], read_by: [], is_read: false };
+        `SELECT m.*, u.name AS sender_name, u.user_image AS sender_image, u.updated_at AS sender_image_updated_at FROM chat_messages m JOIN customer u ON u.user_id=m.sender_id WHERE m.message_id=?`, [result.insertId]);
+      return { ...resolveImage(rows[0], "sender_image"), read_by: [], is_read: false };
     } catch (error) {
       if (error.code !== "ER_DUP_ENTRY" || !data.clientMessageId) throw error;
-      const [rows] = await db.execute(`SELECT m.*, u.name AS sender_name, u.user_image AS sender_image FROM chat_messages m JOIN customer u ON u.user_id=m.sender_id WHERE m.sender_id=? AND m.client_message_id=?`, [userId, data.clientMessageId]);
-      return { ...rows[0], read_by: [], is_read: false };
+      const [rows] = await db.execute(`SELECT m.*, u.name AS sender_name, u.user_image AS sender_image, u.updated_at AS sender_image_updated_at FROM chat_messages m JOIN customer u ON u.user_id=m.sender_id WHERE m.sender_id=? AND m.client_message_id=?`, [userId, data.clientMessageId]);
+      return { ...resolveImage(rows[0], "sender_image"), read_by: [], is_read: false };
     }
   }
 
@@ -263,6 +275,20 @@ class ChatModel {
        WHERE c.user_id IN (${marks}) AND cu.company_id = ? AND c.status = 1 AND cu.status = 1`,
       [...requestedIds, me.company_id]);
     return rows;
+  }
+
+  async assertGroupMember(userId, conversationId) {
+    const member = await this.assertMember(userId, conversationId);
+    if (!member || member.type !== "group") throw Object.assign(new Error("Group not found"), { status: 404 });
+    return member;
+  }
+
+  // Any group member may change the photo. Returns the previous key so the caller can remove it from storage.
+  async setGroupImage(userId, conversationId, imageKey) {
+    await this.assertGroupMember(userId, conversationId);
+    const [[current]] = await db.execute(`SELECT image_url FROM chat_conversations WHERE conversation_id = ?`, [conversationId]);
+    await db.execute(`UPDATE chat_conversations SET image_url = ? WHERE conversation_id = ?`, [imageKey, conversationId]);
+    return { previousKey: current?.image_url || null, image_url: getPublicUrl(imageKey) };
   }
 
   async updateGroup(userId, conversationId, data) {
