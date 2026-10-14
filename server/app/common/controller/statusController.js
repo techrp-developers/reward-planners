@@ -51,7 +51,7 @@ function serialize(row) {
   if (!row) return row;
   return {
     id: row.status_id,
-    user: { id: row.user_id, name: row.user_name, image_url: getPublicUrl(row.user_image) },
+    user: { id: row.user_id, name: row.user_name, image_url: getPublicUrl(row.user_image, row.user_image_updated_at) },
     type: row.type,
     text: row.text_content,
     background_color: row.background_color,
@@ -77,7 +77,7 @@ function serializeInteraction(row) {
     user: {
       id: row.user_id,
       name: row.name,
-      image_url: getPublicUrl(row.user_image),
+      image_url: getPublicUrl(row.user_image, row.user_image_updated_at),
     },
     text: row.comment_text,
     created_at: row.created_at,
@@ -192,7 +192,7 @@ exports.audienceOptions = async (req, res) => {
         people: data.people.map((person) => ({
           id: person.id,
           name: person.name,
-          image_url: getPublicUrl(person.user_image),
+          image_url: getPublicUrl(person.user_image, person.user_image_updated_at),
           company: { id: person.company_id, name: person.company_name },
         })),
       },
@@ -254,7 +254,7 @@ exports.views = async (req, res) => {
       view_count: rows.length,
       data: rows.map((row) => ({
         ...row,
-        image_url: getPublicUrl(row.user_image),
+        image_url: getPublicUrl(row.user_image, row.user_image_updated_at),
         user_image: undefined,
       })),
     });
@@ -298,7 +298,7 @@ exports.likes = async (req, res) => {
       success: true,
       like_count: likeCount,
       data: rows.map((row) => ({
-        user: { id: row.user_id, name: row.name, image_url: getPublicUrl(row.user_image) },
+        user: { id: row.user_id, name: row.name, image_url: getPublicUrl(row.user_image, row.user_image_updated_at) },
         liked_at: row.created_at,
       })),
       pagination: {

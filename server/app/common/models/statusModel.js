@@ -72,7 +72,7 @@ class StatusModel {
 
   async findActiveById(statusId) {
     const [rows] = await db.execute(
-      `SELECT s.*, c.name AS user_name, c.user_image,
+      `SELECT s.*, c.name AS user_name, c.user_image, c.updated_at AS user_image_updated_at,
               (SELECT COUNT(*) FROM user_status_views v WHERE v.status_id = s.status_id) AS view_count,
               (SELECT COUNT(*) FROM user_status_likes l WHERE l.status_id = s.status_id) AS like_count,
               (SELECT COUNT(*) FROM user_status_comments cm WHERE cm.status_id = s.status_id) AS comment_count
@@ -87,7 +87,7 @@ class StatusModel {
 
   async getMine(userId) {
     const [rows] = await db.execute(
-      `SELECT s.*, c.name AS user_name, c.user_image,
+      `SELECT s.*, c.name AS user_name, c.user_image, c.updated_at AS user_image_updated_at,
               (SELECT COUNT(*) FROM user_status_views v WHERE v.status_id = s.status_id) AS view_count,
               (SELECT COUNT(*) FROM user_status_likes l WHERE l.status_id = s.status_id) AS like_count,
               (SELECT COUNT(*) FROM user_status_comments cm WHERE cm.status_id = s.status_id) AS comment_count,
@@ -112,7 +112,7 @@ class StatusModel {
       [like],
     );
     const [people] = await db.execute(
-      `SELECT c.user_id AS id, c.name, c.user_image, cu.company_id, co.company_name
+      `SELECT c.user_id AS id, c.name, c.user_image, c.updated_at AS user_image_updated_at, cu.company_id, co.company_name
        FROM customer c
        INNER JOIN company_users cu ON cu.id = c.company_user_id AND cu.status = 1
        INNER JOIN companies co ON co.company_id = cu.company_id AND co.status = 1
@@ -132,7 +132,7 @@ class StatusModel {
       params.push(...userIds);
     }
     const [rows] = await db.execute(
-      `SELECT s.*, c.name AS user_name, c.user_image,
+      `SELECT s.*, c.name AS user_name, c.user_image, c.updated_at AS user_image_updated_at,
               IF(s.user_id = viewer.user_id OR v.status_id IS NOT NULL, 1, 0) AS viewed,
               (SELECT COUNT(*) FROM user_status_views status_view
                WHERE status_view.status_id = s.status_id) AS view_count,
@@ -172,7 +172,7 @@ class StatusModel {
 
   async markViewed(statusId, viewerId) {
     const [rows] = await db.execute(
-      `SELECT s.*, c.name AS user_name, c.user_image
+      `SELECT s.*, c.name AS user_name, c.user_image, c.updated_at AS user_image_updated_at
        FROM user_statuses s
        INNER JOIN customer c ON c.user_id = s.user_id
        LEFT JOIN customer viewer ON viewer.user_id = ?
@@ -280,7 +280,7 @@ class StatusModel {
     if (beforeUserId) params.push(beforeUserId);
     params.push(limit);
     const [rows] = await db.execute(
-      `SELECT l.user_id, c.name, c.user_image, l.created_at
+      `SELECT l.user_id, c.name, c.user_image, c.updated_at AS user_image_updated_at, l.created_at
        FROM user_status_likes l
        INNER JOIN customer c ON c.user_id = l.user_id
        WHERE l.status_id = ?${beforeClause}
@@ -303,7 +303,7 @@ class StatusModel {
     );
     const [rows] = await db.execute(
       `SELECT cm.comment_id, cm.status_id, cm.user_id, cm.comment_text,
-              cm.created_at, cm.updated_at, c.name, c.user_image
+              cm.created_at, cm.updated_at, c.name, c.user_image, c.updated_at AS user_image_updated_at
        FROM user_status_comments cm
        INNER JOIN customer c ON c.user_id = cm.user_id
        WHERE cm.comment_id = ? LIMIT 1`,
@@ -325,7 +325,7 @@ class StatusModel {
     params.push(limit);
     const [rows] = await db.execute(
       `SELECT cm.comment_id, cm.status_id, cm.user_id, cm.comment_text,
-              cm.created_at, cm.updated_at, c.name, c.user_image
+              cm.created_at, cm.updated_at, c.name, c.user_image, c.updated_at AS user_image_updated_at
        FROM user_status_comments cm
        INNER JOIN customer c ON c.user_id = cm.user_id
        WHERE cm.status_id = ?${privacyClause}${beforeClause}
@@ -359,7 +359,7 @@ class StatusModel {
     );
     if (!owned.length) return null;
     const [rows] = await db.execute(
-      `SELECT v.viewer_id AS user_id, c.name, c.user_image, v.viewed_at
+      `SELECT v.viewer_id AS user_id, c.name, c.user_image, c.updated_at AS user_image_updated_at, v.viewed_at
        FROM user_status_views v INNER JOIN customer c ON c.user_id = v.viewer_id
        WHERE v.status_id = ? ORDER BY v.viewed_at DESC`,
       [statusId],
