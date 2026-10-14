@@ -109,6 +109,7 @@ function buildPushMessage(data, fcmToken) {
         vibrateTimingsMillis: [0, 1000, 500, 1000, 500],
       },
     },
+    apns: { payload: { aps: { sound: "default" } } },
     token: fcmToken,
   };
 }
