@@ -32,8 +32,12 @@ function setupChatSocket(server, app, isAllowedOrigin) {
   server.on("upgrade", async (request, socket, head) => {
     try {
       const url = new URL(request.url, "http://localhost");
-      if (url.pathname !== "/ws/chat") return;
-      if (request.headers.origin && !isAllowedOrigin(request.headers.origin)) throw new Error("Origin not allowed");
+      // Production clients connect via the /api/crm proxy, which may or may not strip its prefix.
+      if (url.pathname !== "/ws/chat" && url.pathname !== "/api/crm/ws/chat") return;
+      // React Native on Android sends its own server URL as Origin (e.g. http://10.0.2.2:5000 in dev).
+      const origin = request.headers.origin;
+      const sameHost = origin && (() => { try { return new URL(origin).host === request.headers.host; } catch { return false; } })();
+      if (origin && !sameHost && !isAllowedOrigin(origin)) throw new Error("Origin not allowed");
       const authHeader = request.headers.authorization || "";
       const token = url.searchParams.get("token") || (authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "");
       const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);

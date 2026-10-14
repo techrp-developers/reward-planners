@@ -72,8 +72,10 @@ class ChatModel {
 
   async listConversations(userId) {
     const [rows] = await db.execute(
-      `SELECT c.conversation_id, c.type, c.name, c.description, c.theme_key, c.updated_at, m.role,
-              lm.message_id AS last_message_id, lm.body AS last_message, lm.message_type AS last_message_type,
+      `SELECT c.conversation_id, c.type, c.name, c.description, c.updated_at, m.role,
+              lm.message_id AS last_message_id,
+              CASE WHEN lm.deleted_at IS NOT NULL THEN 'This message was deleted' ELSE lm.body END AS last_message,
+              CASE WHEN lm.deleted_at IS NOT NULL THEN 'text' ELSE lm.message_type END AS last_message_type,
               lm.created_at AS last_message_at, lm.sender_id AS last_sender_id,
               (SELECT COUNT(*) FROM chat_messages um WHERE um.conversation_id = c.conversation_id
                  AND um.message_id > COALESCE(m.last_read_message_id, 0) AND um.sender_id <> ?) AS unread_count
@@ -82,11 +84,7 @@ class ChatModel {
        WHERE m.user_id = ? AND m.left_at IS NULL ORDER BY COALESCE(lm.created_at, c.created_at) DESC`, [userId, userId]);
     for (const row of rows) {
       const [members] = await db.execute(
-        `SELECT u.user_id, u.name, u.user_image, cm.role,
-                cu.department, cu.role AS job_role
-         FROM chat_members cm
-         JOIN customer u ON u.user_id = cm.user_id
-         JOIN company_users cu ON cu.id = u.company_user_id
+        `SELECT u.user_id, u.name, u.user_image, cm.role FROM chat_members cm JOIN customer u ON u.user_id = cm.user_id
          WHERE cm.conversation_id = ? AND cm.left_at IS NULL`, [row.conversation_id]);
       row.members = members;
     }
@@ -224,6 +222,23 @@ class ChatModel {
     }
   }
 
+  // Deletes for everyone: the row stays as a "This message was deleted" placeholder,
+  // but its content is wiped so it can never be returned again.
+  async deleteMessage(userId, conversationId, messageId) {
+    if (!await this.assertMember(userId, conversationId)) throw Object.assign(new Error("Conversation not found"), { status: 404 });
+    const [[message]] = await db.execute(
+      `SELECT message_id, sender_id, deleted_at FROM chat_messages WHERE message_id = ? AND conversation_id = ?`, [messageId, conversationId]);
+    if (!message) throw Object.assign(new Error("Message not found"), { status: 404 });
+    if (Number(message.sender_id) !== Number(userId)) throw Object.assign(new Error("You can only delete your own messages"), { status: 403 });
+    if (!message.deleted_at) {
+      await db.execute(
+        `UPDATE chat_messages SET deleted_at = NOW(), body = NULL, attachment_url = NULL, attachment_name = NULL, attachment_mime_type = NULL
+         WHERE message_id = ?`, [messageId]);
+    }
+    const [[deleted]] = await db.execute(`SELECT message_id, conversation_id, deleted_at FROM chat_messages WHERE message_id = ?`, [messageId]);
+    return deleted;
+  }
+
   async markRead(userId, conversationId, messageId) {
     if (!await this.assertMember(userId, conversationId)) throw Object.assign(new Error("Conversation not found"), { status: 404 });
     const [[message]] = await db.execute(`SELECT message_id FROM chat_messages WHERE message_id = ? AND conversation_id = ?`, [messageId, conversationId]);
@@ -255,17 +270,6 @@ class ChatModel {
     if (!member || member.type !== "group") throw Object.assign(new Error("Group not found"), { status: 404 });
     if (member.role !== "admin") throw Object.assign(new Error("Group admin permission required"), { status: 403 });
     await db.execute(`UPDATE chat_conversations SET name = COALESCE(?, name), description = COALESCE(?, description) WHERE conversation_id = ?`, [data.name ?? null, data.description ?? null, conversationId]);
-  }
-
-  async setTheme(userId, conversationId, themeKey) {
-    if (!await this.assertMember(userId, conversationId)) {
-      throw Object.assign(new Error("Conversation not found"), { status: 404 });
-    }
-    await db.execute(
-      `UPDATE chat_conversations SET theme_key = ?, updated_at = NOW() WHERE conversation_id = ?`,
-      [themeKey, conversationId],
-    );
-    return { conversation_id: conversationId, theme_key: themeKey, updated_by: userId };
   }
 
   async addMembers(userId, conversationId, memberIds) {

@@ -159,24 +159,18 @@ exports.read = async (req, res) => {
   } catch (error) { fail(res, error); }
 };
 
+exports.deleteMessage = async (req, res) => {
+  try {
+    const conversationId = Number(req.params.id), messageId = Number(req.params.messageId);
+    if (!Number.isSafeInteger(messageId) || messageId < 1) return res.status(422).json({ success: false, message: "Invalid message id" });
+    const deleted = await Chat.deleteMessage(req.user.user_id, conversationId, messageId);
+    req.app.locals.chatSocket?.broadcastConversation(conversationId, { type: "message:deleted", data: deleted });
+    res.json({ success: true, data: deleted });
+  } catch (error) { fail(res, error); }
+};
+
 exports.updateGroup = async (req, res) => {
   try { await Chat.updateGroup(req.user.user_id, Number(req.params.id), req.body); res.json({ success: true }); } catch (error) { fail(res, error); }
-};
-exports.updateTheme = async (req, res) => {
-  try {
-    const themes = new Set(["default", "violet", "ocean", "forest", "sunset"]);
-    const themeKey = String(req.body.theme_key || "").trim().toLowerCase();
-    if (!themes.has(themeKey)) {
-      return res.status(422).json({ success: false, message: "Invalid chat theme" });
-    }
-    const conversationId = Number(req.params.id);
-    const data = await Chat.setTheme(req.user.user_id, conversationId, themeKey);
-    req.app.locals.chatSocket?.broadcastConversation(conversationId, {
-      type: "conversation:theme",
-      data,
-    });
-    res.json({ success: true, data });
-  } catch (error) { fail(res, error); }
 };
 exports.addMembers = async (req, res) => {
   try {
