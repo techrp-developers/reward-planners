@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { FiAlertTriangle, FiX } from "react-icons/fi";
 import { toast } from "sonner";
 import { appIconError, getAppIconKeys, saveAppIconCampaign, type AppIconCampaign, type AppIconPlatform } from "../../api/AppIconApi";
-import { ANDROID_KEYS_WITH_ARTWORK, appIconLocalInput, overlappingAppIcons } from "../../utils/appIcons";
+import { appIconLocalInput, overlappingAppIcons } from "../../utils/appIcons";
 
 const field = "mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100";
 interface Props { campaign?: AppIconCampaign; campaigns: AppIconCampaign[]; onClose: () => void; onSaved: () => void }
@@ -24,10 +24,10 @@ export default function AppIconForm({ campaign, campaigns, onClose, onSaved }: P
   const iosKeys = useQuery({ queryKey: ["content", "app-icon-keys", "ios"], queryFn: () => getAppIconKeys("ios"), staleTime: 0, retry: false, enabled: platform === "ios" || platform === "both" });
   const androidKeys = useQuery({ queryKey: ["content", "app-icon-keys", "android"], queryFn: () => getAppIconKeys("android"), staleTime: 0, retry: false, enabled: platform === "android" || platform === "both" });
   const choices = (() => {
-    if (platform === "android") return (androidKeys.data?.icon_keys ?? []).filter((key) => ANDROID_KEYS_WITH_ARTWORK.includes(key));
+    if (platform === "android") return androidKeys.data?.icon_keys ?? [];
     if (platform === "both") {
-      const androidArtwork = new Set((androidKeys.data?.icon_keys ?? []).filter((key) => ANDROID_KEYS_WITH_ARTWORK.includes(key)));
-      return (iosKeys.data?.icon_keys ?? []).filter((key) => androidArtwork.has(key));
+      const androidChoices = new Set(androidKeys.data?.icon_keys ?? []);
+      return (iosKeys.data?.icon_keys ?? []).filter((key) => androidChoices.has(key));
     }
     return iosKeys.data?.icon_keys ?? [];
   })();
