@@ -15,6 +15,7 @@ class SettingController {
             company_email, company_phone,
             created_at, updated_at
         FROM app_settings
+        ORDER BY id ASC
         LIMIT 1`,
       );
 
@@ -58,6 +59,15 @@ class SettingController {
 
       for (const field of ["android_version", "ios_version"]) {
         if (field in updates) {
+          // Public iOS release versions must remain numeric dotted strings,
+          // compatible with DeviceInfo.getVersion(); never infer from Xcode.
+          if (field === "ios_version" && (
+            typeof updates[field] !== "string" ||
+            updates[field].trim().length > 20 ||
+            !/^\d+(?:\.\d+){0,2}$/.test(updates[field].trim())
+          )) {
+            return res.status(400).json({ success: false, message: "ios_version must be a numeric version string such as 6.2 or 6.2.1" });
+          }
           const value = updates[field] === null ? null : String(updates[field]).trim();
           if (value !== null && (!value || value.length > 20 || !/^\d+(?:\.\d+){0,3}(?:[-+][0-9A-Za-z.-]+)?$/.test(value))) {
             return res.status(400).json({ success: false, message: `${field} must be a valid version such as 1.2.3` });
@@ -68,9 +78,13 @@ class SettingController {
 
       for (const field of ["android_version_code", "ios_version_code"]) {
         if (field in updates) {
+          const raw = updates[field];
           const value = Number(updates[field]);
-          if (!Number.isInteger(value) || value < 1) {
-            return res.status(400).json({ success: false, message: `${field} must be a positive integer` });
+          if (
+            !(typeof raw === "number" || (typeof raw === "string" && /^\d+$/.test(raw))) ||
+            !Number.isSafeInteger(value) || value < 1 || value > 2147483647
+          ) {
+            return res.status(400).json({ success: false, message: `${field} must be an integer between 1 and 2147483647` });
           }
           updates[field] = value;
         }
