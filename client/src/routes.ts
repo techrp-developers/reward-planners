@@ -42,6 +42,7 @@ export const routes = {
     addDocument:"/manager/document/DocumentAdd",
     linkDocument:"/manager/document/DocumentCategory",
     attributes: "/manager/attributes",
+    bbpsLogos: "/manager/bbps-logos",
     flashSales: {
       list: "/manager/flash-sales",
       create: "/manager/flash-sales/create",
@@ -82,6 +83,14 @@ export const routes = {
       onboard: "/manager/partner-managers/onboard",
       edit: "/manager/partner-managers/edit/:id",
     },
+    content: {
+      product: "/manager/content/product",
+      service: "/manager/content/service",
+      payment: "/manager/content/payment",
+      mobileDashboard: "/manager/content/mobile-dashboard",
+      moduleIcons: "/manager/content/module-icons",
+      appIcons: "/manager/content/app-icons",
+    },
   },
   admin: {
     dashboard: "/admin/dashboard",
@@ -92,6 +101,13 @@ export const routes = {
     services: "/admin/services",
     productView: "/admin/product/:id",
     vendorReview: "/admin/vendor-review/:id",
+    content: {
+      product: "/admin/content/product",
+      service: "/admin/content/service",
+      payment: "/admin/content/payment",
+      mobileDashboard: "/admin/content/mobile-dashboard",
+      appIcons: "/admin/content/app-icons",
+    },
   
   },
   warehouse: {
@@ -123,7 +139,8 @@ export const routes = {
     profile: "/hr/profile",
     onboarding: "/hr/onboarding",
     employees: "/hr/employees",
-      rewards: "/hr/rewards",
+    rewards: "/hr/rewards",
+    polls: "/hr/polls",
 
   },
   service: {
@@ -159,10 +176,12 @@ export const routes = {
     changePassword: "/rm/change-password",
     profile: "/rm/profile",
     employees: "/rm/employees",
+    clientApprovals: "/rm/client-approvals",
     companyEmployees: "/rm/companies/:companyId/employees",
     supportTickets: "/rm/support-tickets",
     reports: {
       usage: "/rm/reports/usage",
+      inactiveUsers: "/rm/reports/inactive-users",
     },
   },
   servicePartner: {

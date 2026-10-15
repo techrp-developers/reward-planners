@@ -66,6 +66,17 @@ exports.authenticateToken = async (req, res, next) => {
     }
 
     if (user.role === "hr") {
+      const [[approval]] = await db.execute(
+        `SELECT status FROM hr_account_approvals WHERE user_id = ? LIMIT 1`,
+        [user.user_id],
+      );
+      if (approval && approval.status !== "approved") {
+        return res.status(403).json({
+          success: false,
+          code: approval.status === "rejected" ? "HR_APPROVAL_REJECTED" : "HR_APPROVAL_PENDING",
+          message: "HR portal access is awaiting approval from Reward Planners.",
+        });
+      }
       const [[companyUser]] = await db.execute(
         `SELECT
            cu.id AS company_user_id,

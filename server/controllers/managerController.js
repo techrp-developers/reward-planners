@@ -2,6 +2,8 @@ const ManagerModel = require("../models/managerModel");
 const db = require("../config/database");
 const ExcelJS = require("exceljs");
 const EmployeeModel = require("../models/employeeModel");
+const { runNonBlocking } = require("../utils/nonBlocking");
+const { notifyProductStatusChange } = require("../services/mailBuilder/productNotificationService");
 
 const COMPANY_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -175,6 +177,175 @@ class ManagerController {
     }
   }
 
+  async updateCompanyEmployee(req, res) {
+    try {
+      const companyId = Number(req.params.companyId);
+      const employeeId = Number(req.params.employeeId);
+      if (!Number.isInteger(companyId) || companyId < 1 || !Number.isInteger(employeeId) || employeeId < 1) {
+        return res.status(400).json({ success: false, message: "Invalid company or employee ID" });
+      }
+      if (!(await EmployeeModel.findById(employeeId, companyId))) {
+        return res.status(404).json({ success: false, message: "Employee not found" });
+      }
+      const employee = {
+        company_id: companyId,
+        name: String(req.body.name || "").trim(),
+        email: String(req.body.email || "").trim().toLowerCase(),
+        phone: String(req.body.phone || req.body.contact || "").trim(),
+        department: String(req.body.department || "").trim() || null,
+        role: String(req.body.role || "").trim() || null,
+        date_of_joining: req.body.date_of_joining || null,
+        dob: req.body.dob || null,
+        address1: String(req.body.address1 || "").trim() || null,
+        address2: String(req.body.address2 || "").trim() || null,
+        reporting_manager: String(req.body.reporting_manager || "").trim() || null,
+        ctc: req.body.ctc === "" || req.body.ctc == null ? null : Number(req.body.ctc),
+      };
+      if (!employee.name) return res.status(400).json({ success: false, message: "Employee name is required" });
+      if (!employee.email || !COMPANY_EMAIL_PATTERN.test(employee.email)) return res.status(400).json({ success: false, message: "A valid employee email is required" });
+      if (!employee.phone) return res.status(400).json({ success: false, message: "Employee phone is required" });
+      if (!employee.dob) return res.status(400).json({ success: false, message: "Date of birth is required" });
+      const dateOfBirth = new Date(`${employee.dob}T00:00:00Z`);
+      if (Number.isNaN(dateOfBirth.getTime()) || dateOfBirth.toISOString().slice(0, 10) !== employee.dob || dateOfBirth > new Date()) {
+        return res.status(400).json({ success: false, message: "Date of birth must be a valid past date" });
+      }
+      if (employee.ctc !== null && (!Number.isFinite(employee.ctc) || employee.ctc < 0)) return res.status(400).json({ success: false, message: "CTC must be a non-negative number" });
+      const duplicate = await EmployeeModel.findDuplicate({ ...employee, excludeId: employeeId });
+      if (duplicate) return res.status(409).json({ success: false, message: "Another employee with this email or phone already exists" });
+      await EmployeeModel.update(employeeId, companyId, employee);
+      if (req.body.status !== undefined) await EmployeeModel.setStatus(employeeId, companyId, Number(req.body.status) === 1);
+      return res.json({ success: true, message: "Employee updated successfully", data: await EmployeeModel.findById(employeeId, companyId) });
+    } catch (error) {
+      console.error("Update company employee error:", error);
+      return res.status(500).json({ success: false, message: "Failed to update employee" });
+    }
+  }
+
+  async downloadEmployeeActivationReport(req, res) {
+    try {
+      const companyId = req.params.companyId ?? req.query.companyId;
+      const hasCompany = companyId !== undefined && companyId !== "";
+      if (hasCompany && (typeof companyId !== "string" || !/^\d+$/.test(companyId) || !Number.isSafeInteger(Number(companyId)) || Number(companyId) < 1)) {
+        return res.status(400).json({ success: false, message: "Invalid company ID" });
+      }
+      const [employees] = await db.execute(`
+        SELECT
+          cu.id AS employee_id,
+          cu.name,
+          cu.email,
+          cu.contact AS phone,
+          cu.department,
+          cu.role,
+          cu.created_at,
+          co.company_name,
+          c.user_id AS customer_id,
+          c.status AS customer_status,
+          c.is_verified,
+          c.last_login_at,
+          c.device_name,
+          ${RESOLVED_DEVICE_PLATFORM_SQL} AS device_platform
+        FROM company_users cu
+        LEFT JOIN companies co ON co.company_id = cu.company_id
+        LEFT JOIN customer c ON c.company_user_id = cu.id
+        ${hasCompany ? "WHERE cu.company_id = ?" : ""}
+        ORDER BY co.company_name ASC, cu.name ASC, cu.id ASC
+      `, hasCompany ? [Number(companyId)] : []);
+
+      const isActivated = (employee) => employee.customer_id && Number(employee.customer_status) === 1;
+      const summary = {
+        total: employees.length,
+        activated: employees.filter(isActivated).length,
+        notActivated: employees.filter((employee) => !isActivated(employee)).length,
+        android: employees.filter((employee) => isActivated(employee) && employee.device_platform === "android").length,
+        ios: employees.filter((employee) => isActivated(employee) && employee.device_platform === "ios").length,
+        unknown: employees.filter((employee) => isActivated(employee) && !employee.device_platform).length,
+      };
+
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = "Reward Planners";
+      workbook.created = new Date();
+
+      const summarySheet = workbook.addWorksheet("Summary");
+      summarySheet.columns = [{ header: "Metric", key: "metric", width: 28 }, { header: "Count", key: "count", width: 14 }];
+      summarySheet.addRows([
+        { metric: "Total Employees", count: summary.total },
+        { metric: "Activated", count: summary.activated },
+        { metric: "Not Activated", count: summary.notActivated },
+        { metric: "Android Users", count: summary.android },
+        { metric: "iOS Users", count: summary.ios },
+        { metric: "Platform Unknown", count: summary.unknown },
+      ]);
+
+      const employeeSheet = workbook.addWorksheet("Employees");
+      employeeSheet.columns = [
+        { header: "Employee ID", key: "employeeId", width: 14 },
+        { header: "Employee Name", key: "name", width: 28 },
+        { header: "Company", key: "company", width: 28 },
+        { header: "Email", key: "email", width: 32 },
+        { header: "Phone", key: "phone", width: 18 },
+        { header: "Department", key: "department", width: 20 },
+        { header: "Role", key: "role", width: 20 },
+        { header: "Activation Status", key: "activationStatus", width: 20 },
+        { header: "Platform", key: "platform", width: 14 },
+        { header: "Device", key: "device", width: 24 },
+        { header: "Verified", key: "verified", width: 14 },
+        { header: "Last Login", key: "lastLogin", width: 22 },
+        { header: "Employee Created", key: "createdAt", width: 22 },
+      ];
+      const detailRows = employees.map((employee) => ({
+        employeeId: employee.employee_id,
+        name: employee.name,
+        company: employee.company_name || "Unassigned",
+        email: employee.email || "",
+        phone: employee.phone || "",
+        department: employee.department || "",
+        role: employee.role || "",
+        activationStatus: isActivated(employee) ? "Activated" : "Not Activated",
+        platform: employee.device_platform === "ios" ? "iOS" : employee.device_platform === "android" ? "Android" : "Unknown",
+        device: employee.device_name || "",
+        verified: Number(employee.is_verified) === 1 ? "Yes" : "No",
+        lastLogin: employee.last_login_at || "Never",
+        createdAt: employee.created_at,
+      }));
+      employeeSheet.addRows(detailRows);
+
+      const contactColumns = [
+        { header: "Employee Name", key: "name", width: 30 },
+        { header: "Email", key: "email", width: 34 },
+        { header: "Contact", key: "phone", width: 20 },
+        { header: "Company", key: "company", width: 28 },
+        { header: "Department", key: "department", width: 20 },
+        { header: "Role", key: "role", width: 20 },
+        { header: "Platform", key: "platform", width: 14 },
+        { header: "Last Login", key: "lastLogin", width: 22 },
+      ];
+      const activatedSheet = workbook.addWorksheet("Activated Employees");
+      activatedSheet.columns = contactColumns;
+      activatedSheet.addRows(detailRows.filter((employee) => employee.activationStatus === "Activated"));
+
+      const notActivatedSheet = workbook.addWorksheet("Not Activated Employees");
+      notActivatedSheet.columns = contactColumns;
+      notActivatedSheet.addRows(detailRows.filter((employee) => employee.activationStatus === "Not Activated"));
+
+      for (const sheet of [summarySheet, employeeSheet, activatedSheet, notActivatedSheet]) {
+        sheet.views = [{ state: "frozen", ySplit: 1 }];
+        sheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+        sheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF852BAF" } };
+        sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: sheet.columnCount } };
+      }
+
+      const date = new Date().toISOString().slice(0, 10);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="employee-activation-report-${date}.xlsx"`);
+      await workbook.xlsx.write(res);
+      return res.end();
+    } catch (error) {
+      console.error("Employee activation report error:", error);
+      if (!res.headersSent) return res.status(500).json({ success: false, message: "Failed to generate employee report" });
+      return res.end();
+    }
+  }
+
   async companyEmployees(req, res) {
     try {
       const companyId = Number(req.params.companyId);
@@ -204,6 +375,8 @@ class ManagerController {
            cu.role,
            cu.date_of_joining,
            cu.dob,
+           cu.address1,
+           cu.address2,
            cu.reporting_manager,
            cu.ctc,
            cu.status,
@@ -317,7 +490,7 @@ class ManagerController {
     try {
       const { status = "", fromDate, toDate, search = "" } = req.query;
 
-      const allowedStatuses = ["", "sent_for_approval", "approved", "rejected", "deleted"];
+      const allowedStatuses = ["", "sent_for_approval", "approved", "rejected", "resubmission", "deleted"];
       if (!allowedStatuses.includes(status)) {
         return res.status(400).json({ success: false, message: "Invalid vendor status" });
       }
@@ -415,6 +588,10 @@ class ManagerController {
          WHERE product_id = ?`,
           [product.product_id],
         );
+        runNonBlocking(
+          () => notifyProductStatusChange(product.product_id, "approved"),
+          "product approved email",
+        );
       }
 
       return res.json({
@@ -462,6 +639,10 @@ class ManagerController {
          WHERE product_id = ?`,
           [reason, product.product_id],
         );
+        runNonBlocking(
+          () => notifyProductStatusChange(product.product_id, "rejected", reason),
+          "product rejected email",
+        );
       }
 
       return res.json({
@@ -508,6 +689,10 @@ class ManagerController {
          SET status = 'resubmission',rejection_reason = ?
          WHERE product_id = ?`,
           [reason, product.product_id],
+        );
+        runNonBlocking(
+          () => notifyProductStatusChange(product.product_id, "resubmission", reason),
+          "product resubmission email",
         );
       }
 

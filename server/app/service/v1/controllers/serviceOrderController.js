@@ -35,6 +35,11 @@ const {
 } = require("../../../../services/rewards/serviceWalletService");
 const { runNonBlocking } = require("../../../../utils/nonBlocking");
 const {
+  sendServiceOrderStatusEmail,
+  sendServiceParentStatusEmail,
+  sendServiceCancellationRequestedEmails,
+} = require("../../../../services/mailBuilder/serviceOrderNotification");
+const {
   notifyWhatsAppAdmins,
   notifyNewServiceOrder,
 } = require("../../../../services/whatsapp/adminNotificationService");
@@ -1178,6 +1183,11 @@ class ServiceOrderController {
         "service documents submitted notification",
       );
 
+      runNonBlocking(
+        () => sendServiceParentStatusEmail(parentOrderId, "documents_uploaded"),
+        "service documents uploaded email",
+      );
+
       return res.json({
         success: true,
         message: "Documents submitted successfully",
@@ -1316,6 +1326,11 @@ class ServiceOrderController {
           metadata: { status, service_order_id: id },
         },
         "service order status notification",
+      );
+
+      runNonBlocking(
+        () => sendServiceOrderStatusEmail(id, status),
+        `service ${status} email`,
       );
 
       res.json({
@@ -1882,6 +1897,11 @@ class ServiceOrderController {
           action_url: `/service-orders/${service_order_id}`,
         },
         "service cancellation notification",
+      );
+
+      runNonBlocking(
+        () => sendServiceCancellationRequestedEmails(service_order_id),
+        "service cancellation request emails",
       );
 
       res.json({

@@ -199,11 +199,74 @@ paths:
           description: Successful response
         '401':
           description: Authentication required or token invalid
-  "/v1/auth/activate-account":
+  "/v1/auth/check":
     post:
       tags:
         - "Mobile App / Common / Auth"
-      summary: "Create or submit /v1/auth/activate-account"
+      summary: "Create or submit /v1/auth/check"
+      description: "Source route: app/common/routes/authRoute.js"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: true
+      security: []
+      responses:
+        '200':
+          description: Successful response
+  "/v1/auth/send-otp":
+    post:
+      tags:
+        - "Mobile App / Common / Auth"
+      summary: "Create or submit /v1/auth/send-otp"
+      description: "Source route: app/common/routes/authRoute.js"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: true
+      security: []
+      responses:
+        '200':
+          description: Successful response
+  "/v1/auth/verify-otp":
+    post:
+      tags:
+        - "Mobile App / Common / Auth"
+      summary: "Create or submit /v1/auth/verify-otp"
+      description: "Source route: app/common/routes/authRoute.js"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: true
+      security: []
+      responses:
+        '200':
+          description: Successful response
+  "/v1/auth/refresh-token":
+    post:
+      tags:
+        - "Mobile App / Common / Auth"
+      summary: "Create or submit /v1/auth/refresh-token"
       description: "Source route: app/common/routes/authRoute.js"
       requestBody:
         required: false
@@ -311,30 +374,6 @@ paths:
           description: Successful response
         '401':
           description: Authentication required or token invalid
-  "/v1/auth/change-password":
-    put:
-      tags:
-        - "Mobile App / Common / Auth"
-      summary: "Update /v1/auth/change-password"
-      description: "Source route: app/common/routes/authRoute.js"
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-          multipart/form-data:
-            schema:
-              type: object
-              additionalProperties: true
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Successful response
-        '401':
-          description: Authentication required or token invalid
   "/v1/auth/countries":
     get:
       tags:
@@ -358,48 +397,6 @@ paths:
           description: Successful response
         '401':
           description: Authentication required or token invalid
-  "/v1/auth/forgot-password":
-    post:
-      tags:
-        - "Mobile App / Common / Auth"
-      summary: "Create or submit /v1/auth/forgot-password"
-      description: "Source route: app/common/routes/authRoute.js"
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-          multipart/form-data:
-            schema:
-              type: object
-              additionalProperties: true
-      security: []
-      responses:
-        '200':
-          description: Successful response
-  "/v1/auth/login":
-    post:
-      tags:
-        - "Mobile App / Common / Auth"
-      summary: "Create or submit /v1/auth/login"
-      description: "Source route: app/common/routes/authRoute.js"
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-          multipart/form-data:
-            schema:
-              type: object
-              additionalProperties: true
-      security: []
-      responses:
-        '200':
-          description: Successful response
   "/v1/auth/logout":
     post:
       tags:
@@ -448,111 +445,6 @@ paths:
           description: Successful response
         '401':
           description: Authentication required or token invalid
-  "/v1/auth/refresh":
-    post:
-      tags:
-        - "Mobile App / Common / Auth"
-      summary: "Create or submit /v1/auth/refresh"
-      description: "Source route: app/common/routes/authRoute.js"
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-          multipart/form-data:
-            schema:
-              type: object
-              additionalProperties: true
-      security: []
-      responses:
-        '200':
-          description: Successful response
-  "/v1/auth/resend-activation-otp":
-    post:
-      tags:
-        - "Mobile App / Common / Auth"
-      summary: "Create or submit /v1/auth/resend-activation-otp"
-      description: "Source route: app/common/routes/authRoute.js"
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-          multipart/form-data:
-            schema:
-              type: object
-              additionalProperties: true
-      security: []
-      responses:
-        '200':
-          description: Successful response
-  "/v1/auth/resend-otp":
-    post:
-      tags:
-        - "Mobile App / Common / Auth"
-      summary: "Create or submit /v1/auth/resend-otp"
-      description: "Source route: app/common/routes/authRoute.js"
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-          multipart/form-data:
-            schema:
-              type: object
-              additionalProperties: true
-      security: []
-      responses:
-        '200':
-          description: Successful response
-  "/v1/auth/reset-password":
-    post:
-      tags:
-        - "Mobile App / Common / Auth"
-      summary: "Create or submit /v1/auth/reset-password"
-      description: "Source route: app/common/routes/authRoute.js"
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-          multipart/form-data:
-            schema:
-              type: object
-              additionalProperties: true
-      security: []
-      responses:
-        '200':
-          description: Successful response
-  "/v1/auth/set-password":
-    post:
-      tags:
-        - "Mobile App / Common / Auth"
-      summary: "Create or submit /v1/auth/set-password"
-      description: "Source route: app/common/routes/authRoute.js"
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-          multipart/form-data:
-            schema:
-              type: object
-              additionalProperties: true
-      security: []
-      responses:
-        '200':
-          description: Successful response
   "/v1/auth/states":
     get:
       tags:
@@ -616,48 +508,6 @@ paths:
           description: Successful response
         '401':
           description: Authentication required or token invalid
-  "/v1/auth/verify-activation-otp":
-    post:
-      tags:
-        - "Mobile App / Common / Auth"
-      summary: "Create or submit /v1/auth/verify-activation-otp"
-      description: "Source route: app/common/routes/authRoute.js"
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-          multipart/form-data:
-            schema:
-              type: object
-              additionalProperties: true
-      security: []
-      responses:
-        '200':
-          description: Successful response
-  "/v1/auth/verify-forgot-password-otp":
-    post:
-      tags:
-        - "Mobile App / Common / Auth"
-      summary: "Create or submit /v1/auth/verify-forgot-password-otp"
-      description: "Source route: app/common/routes/authRoute.js"
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-          multipart/form-data:
-            schema:
-              type: object
-              additionalProperties: true
-      security: []
-      responses:
-        '200':
-          description: Successful response
   "/v1/global/app-status":
     get:
       tags:

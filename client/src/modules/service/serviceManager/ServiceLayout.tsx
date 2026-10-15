@@ -9,5 +9,11 @@ export default function ServiceLayout() {
   if (loading) return null;
   if (!user || user.role !== "service_manager") return <Navigate to="/login" replace />;
 
-  return <PremiumPortalShell sidebar={<ServiceNavbar />} roleLabel="Service manager workspace" userLabel={user.name || user.email}><Outlet /></PremiumPortalShell>;
+  return (
+    <PremiumPortalShell sidebar={<ServiceNavbar />} roleLabel="Service manager workspace" userLabel={user.name || user.email}>
+      <div className="service-manager-ui">
+        <Outlet />
+      </div>
+    </PremiumPortalShell>
+  );
 }

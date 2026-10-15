@@ -76,6 +76,44 @@ const authLimiter = rateLimit({
   },
 });
 
+// Client onboarding has multi-step OTP and provider polling traffic. Keep its
+// counters separate from login/register so one workflow cannot lock the other.
+const onboardingOtpLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 12,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: makeKeyGenerator(),
+  handler: (req, res) => res.status(429).json({
+    success: false,
+    message: "Too many verification attempts. Please wait before requesting or checking another code.",
+  }),
+});
+
+const onboardingStatusLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 240,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: makeKeyGenerator(),
+  handler: (req, res) => res.status(429).json({
+    success: false,
+    message: "Signing status was checked too frequently. Please wait a moment and try again.",
+  }),
+});
+
+const onboardingSubmitLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: makeKeyGenerator(),
+  handler: (req, res) => res.status(429).json({
+    success: false,
+    message: "Too many onboarding submissions. Please review the form and try again shortly.",
+  }),
+});
+
 // ==========================
 // GENERAL API — loose
 // 100 per 15 min
@@ -129,6 +167,9 @@ module.exports = {
   paymentLimiter,
   checkoutLimiter,
   authLimiter,
+  onboardingOtpLimiter,
+  onboardingStatusLimiter,
+  onboardingSubmitLimiter,
   generalLimiter,
   providerReadLimiter,
   stepSyncLimiter,

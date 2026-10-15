@@ -6,9 +6,11 @@ const { moveFile } = require("../utils/moveFile");
 const { compressVideo } = require("../utils/videoCompression");
 const ExcelJS = require("exceljs");
 const { uploadToR2 } = require("../utils/r2upload");
-const sharp = require("sharp");
+const { optimizeProductImage } = require("../utils/productCoverImage");
 const XLSX = require("xlsx");
 const xpressService = require("../services/ExpressBees/xpressbees_service");
+const { runNonBlocking } = require("../utils/nonBlocking");
+const { notifyProductSubmitted } = require("../services/mailBuilder/productNotificationService");
 
 const BULK_BASE_FIELDS = new Set([
   "productName", "brandName", "manufacturer", "gstSlab", "hsnSacCode",
@@ -207,10 +209,7 @@ class ProductController {
               .toString(36)
               .substring(2, 8)}.webp`;
 
-            const optimizedBuffer = await sharp(inputBuffer)
-              .resize({ width: 1920, withoutEnlargement: true })
-              .webp({ quality: 70 })
-              .toBuffer();
+            const optimizedBuffer = await optimizeProductImage(inputBuffer);
 
             file.finalPath = `public/products/${vendorId}/${productId}/images/${webpFilename}`;
 
@@ -1331,6 +1330,10 @@ class ProductController {
          SET status = 'sent_for_approval'
          WHERE product_id = ?`,
         [product.product_id],
+      );
+      runNonBlocking(
+        () => notifyProductSubmitted(product.product_id),
+        "product submission emails",
       );
     }
 

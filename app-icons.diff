@@ -1,0 +1,374 @@
+diff --git a/client/src/App.tsx b/client/src/App.tsx
+index 0adae1a..d48c195 100644
+--- a/client/src/App.tsx
++++ b/client/src/App.tsx
+@@ -61,6 +61,7 @@ const DocumentCategoryManagement = lazy(() => import("./modules/products/vendorM
+ const SubSubCategoryManagement = lazy(() => import("./modules/products/vendorManager/category/Subsubcategories.tsx"));
+ const ContentManagement = lazy(() => import("./modules/products/content_manager/component/ContentManagement.tsx"));
+ const ModuleIcon = lazy(() => import("./modules/products/content_manager/component/module_icon/ModuleIcon.tsx"));
++const AppIcons = lazy(() => import("./modules/products/content_manager/component/app_icon/AppIcons.tsx"));
+ const ProductViewPage = lazy(() => import("./modules/products/vendorManager/ProductViewPage.tsx"));
+ const Onboarding = lazy(() => import("./modules/products/vendor/Onboarding.tsx"));
+ const ChangePasswordPage = lazy(() => import("./common/auth/changePassword.tsx"));
+@@ -434,6 +435,7 @@ export default function App() {
+         <Route path={routes.admin.content.service} element={<ContentManagement module="service" />} />
+         <Route path={routes.admin.content.payment} element={<ContentManagement module="payment" />} />
+         <Route path={routes.admin.content.mobileDashboard} element={<ContentManagement module="mobile_dashboard" />} />
++        <Route path={routes.admin.content.appIcons} element={<AppIcons />} />
+       </Route>
+ 
+       {/* ========== SERVICES ========== */}
+diff --git a/client/src/modules/admin/layout/AdminSidebar.tsx b/client/src/modules/admin/layout/AdminSidebar.tsx
+index 8cce0c8..ebcd8ba 100644
+--- a/client/src/modules/admin/layout/AdminSidebar.tsx
++++ b/client/src/modules/admin/layout/AdminSidebar.tsx
+@@ -74,6 +74,7 @@ export default function AdminNavbar() {
+         { label: "Service", to: routes.admin.content.service },
+         { label: "Payment", to: routes.admin.content.payment },
+         { label: "Mobile Dashboard", to: routes.admin.content.mobileDashboard },
++        { label: "App Icons", to: routes.admin.content.appIcons },
+       ],
+     },
+ 
+diff --git a/client/src/routes.ts b/client/src/routes.ts
+index c4d0fda..fd94ed1 100644
+--- a/client/src/routes.ts
++++ b/client/src/routes.ts
+@@ -105,6 +105,7 @@ export const routes = {
+       service: "/admin/content/service",
+       payment: "/admin/content/payment",
+       mobileDashboard: "/admin/content/mobile-dashboard",
++      appIcons: "/admin/content/app-icons",
+     },
+   
+   },
+
+diff --git a/client/src/modules/products/content_manager/api/AppIconApi.ts b/client/src/modules/products/content_manager/api/AppIconApi.ts
+new file mode 100644
+index 0000000..e4cfd9a
+--- /dev/null
++++ b/client/src/modules/products/content_manager/api/AppIconApi.ts
+@@ -0,0 +1,51 @@
++import { isAxiosError } from "axios";
++import { api } from "../../../../common/api/api";
++
++export type AppIconPlatform = "ios" | "android";
++export interface AppIconCampaign {
++  id: number;
++  platform: AppIconPlatform;
++  icon_key: string;
++  starts_at: string;
++  ends_at: string;
++  priority: number;
++  is_active: boolean | 0 | 1;
++}
++export type AppIconCampaignBody = Omit<AppIconCampaign, "id" | "is_active"> & { is_active: boolean };
++interface ApiResponse<T> { success: boolean; data: T; message?: string }
++
++function unwrap<T>(response: ApiResponse<T>): T {
++  if (!response.success) throw new Error(response.message || "App icon request failed");
++  return response.data;
++}
++
++export function appIconError(error: unknown): string {
++  if (isAxiosError<{ message?: string }>(error)) return error.response?.data?.message || error.message;
++  return error instanceof Error ? error.message : "App icon request failed";
++}
++
++const BASE = "/content/app-icons";
++export async function getAppIconKeys(platform: AppIconPlatform) {
++  return unwrap((await api.get<ApiResponse<{ platform: AppIconPlatform; icon_keys: string[] }>>(`${BASE}/keys`, { params: { platform } })).data);
++}
++export async function listAppIconCampaigns(platform?: AppIconPlatform) {
++  return unwrap((await api.get<ApiResponse<AppIconCampaign[]>>(BASE, { params: { platform } })).data);
++}
++export async function getAppIconCampaign(id: number) {
++  return unwrap((await api.get<ApiResponse<AppIconCampaign>>(`${BASE}/${id}`)).data);
++}
++export async function saveAppIconCampaign(body: AppIconCampaignBody, id?: number) {
++  const response = id === undefined
++    ? await api.post<ApiResponse<AppIconCampaign>>(BASE, body)
++    : await api.put<ApiResponse<AppIconCampaign>>(`${BASE}/${id}`, body);
++  return unwrap(response.data);
++}
++export async function deactivateAppIconCampaign(id: number) {
++  return unwrap((await api.patch<ApiResponse<AppIconCampaign>>(`${BASE}/${id}/deactivate`)).data);
++}
++export async function deleteAppIconCampaign(id: number) {
++  return unwrap((await api.delete<ApiResponse<{ id: number }>>(`${BASE}/${id}`)).data);
++}
++export async function resolveAppIcon(platform: AppIconPlatform) {
++  return unwrap((await api.get<ApiResponse<{ platform: AppIconPlatform; icon_key: string }>>("/content/resolved/app-icon", { params: { platform } })).data);
++}
+
+diff --git a/client/src/modules/products/content_manager/utils/appIcons.ts b/client/src/modules/products/content_manager/utils/appIcons.ts
+new file mode 100644
+index 0000000..bc93f9a
+--- /dev/null
++++ b/client/src/modules/products/content_manager/utils/appIcons.ts
+@@ -0,0 +1,30 @@
++import type { AppIconCampaign } from "../api/AppIconApi";
++
++export const ANDROID_KEYS_WITH_ARTWORK: readonly string[] = ["default", "diwali", "navratri", "dasera"];
++
++export function parseAppIconDate(value: string): Date {
++  const iso = value.replace(" ", "T");
++  return new Date(/(?:Z|[+-]\d{2}:\d{2})$/i.test(iso) ? iso : `${iso}Z`);
++}
++
++export function appIconLocalInput(value: string): string {
++  const date = parseAppIconDate(value);
++  if (!Number.isFinite(date.getTime())) return "";
++  const pad = (number: number, length = 2) => String(number).padStart(length, "0");
++  return `${pad(date.getFullYear(), 4)}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`;
++}
++
++export function appIconStatus(campaign: AppIconCampaign, now: number): string {
++  if (!campaign.is_active) return "Disabled";
++  if (parseAppIconDate(campaign.starts_at).getTime() > now) return "Scheduled";
++  if (parseAppIconDate(campaign.ends_at).getTime() < now) return "Expired";
++  return "Active now";
++}
++
++export function overlappingAppIcons(campaigns: AppIconCampaign[], platform: string, start: string, end: string, id?: number) {
++  const from = new Date(start).getTime();
++  const to = new Date(end).getTime();
++  if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) return [];
++  return campaigns.filter((campaign) => campaign.id !== id && campaign.platform === platform && campaign.is_active
++    && parseAppIconDate(campaign.starts_at).getTime() <= to && parseAppIconDate(campaign.ends_at).getTime() >= from);
++}
+
+diff --git a/client/src/modules/products/content_manager/component/app_icon/AppIconForm.tsx b/client/src/modules/products/content_manager/component/app_icon/AppIconForm.tsx
+new file mode 100644
+index 0000000..2ee1d71
+--- /dev/null
++++ b/client/src/modules/products/content_manager/component/app_icon/AppIconForm.tsx
+@@ -0,0 +1,92 @@
++import { useEffect, useRef, useState, type FormEvent } from "react";
++import { useQuery } from "@tanstack/react-query";
++import { FiAlertTriangle, FiX } from "react-icons/fi";
++import { toast } from "sonner";
++import { appIconError, getAppIconKeys, saveAppIconCampaign, type AppIconCampaign, type AppIconPlatform } from "../../api/AppIconApi";
++import { ANDROID_KEYS_WITH_ARTWORK, appIconLocalInput, overlappingAppIcons } from "../../utils/appIcons";
++
++const field = "mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100";
++interface Props { campaign?: AppIconCampaign; campaigns: AppIconCampaign[]; onClose: () => void; onSaved: () => void }
++
++export default function AppIconForm({ campaign, campaigns, onClose, onSaved }: Props) {
++  const dialog = useRef<HTMLDialogElement>(null);
++  const [platform, setPlatform] = useState<AppIconPlatform>(campaign?.platform ?? "ios");
++  const [iconKey, setIconKey] = useState(campaign?.icon_key ?? "");
++  const [start, setStart] = useState(campaign ? appIconLocalInput(campaign.starts_at) : "");
++  const [end, setEnd] = useState(campaign ? appIconLocalInput(campaign.ends_at) : "");
++  const [priority, setPriority] = useState(String(campaign?.priority ?? 0));
++  const [active, setActive] = useState(campaign ? Boolean(campaign.is_active) : true);
++  const [saving, setSaving] = useState(false);
++  const [error, setError] = useState("");
++  const keys = useQuery({ queryKey: ["content", "app-icon-keys", platform], queryFn: () => getAppIconKeys(platform), staleTime: 0, retry: false });
++  const choices = (keys.data?.icon_keys ?? []).filter((key) => platform !== "android" || ANDROID_KEYS_WITH_ARTWORK.includes(key));
++  const overlaps = active ? overlappingAppIcons(campaigns, platform, start, end, campaign?.id) : [];
++
++  useEffect(() => { dialog.current?.showModal(); }, []);
++  useEffect(() => { if (keys.error) toast.error(appIconError(keys.error)); }, [keys.error]);
++
++  async function submit(event: FormEvent<HTMLFormElement>) {
++    event.preventDefault();
++    const starts = new Date(start);
++    const ends = new Date(end);
++    const number = Number(priority);
++    if (!iconKey || !choices.includes(iconKey) || !start || !end || !priority.trim()) {
++      setError("All fields are required. Select an available icon key."); return;
++    }
++    if (!Number.isFinite(starts.getTime()) || !Number.isFinite(ends.getTime()) || ends <= starts) {
++      setError("End must be after start."); return;
++    }
++    if (!Number.isInteger(number) || number < -2147483648 || number > 2147483647) {
++      setError("Priority must be a 32-bit integer."); return;
++    }
++    setError(""); setSaving(true);
++    try {
++      await saveAppIconCampaign({ platform, icon_key: iconKey, starts_at: starts.toISOString(), ends_at: ends.toISOString(), priority: number, is_active: active }, campaign?.id);
++      toast.success(campaign ? "Campaign updated" : "Campaign created");
++      onSaved(); onClose();
++    } catch (err) { const message = appIconError(err); setError(message); toast.error(message); }
++    finally { setSaving(false); }
++  }
++
++  return (
++    <dialog ref={dialog} onCancel={(event) => { event.preventDefault(); if (!saving) onClose(); }} aria-labelledby="app-icon-form-title" className="fixed inset-0 m-auto max-h-[90dvh] w-[540px] max-w-[92vw] overflow-y-auto rounded-lg bg-white p-6 shadow-2xl backdrop:bg-black/40">
++      <div className="flex items-center justify-between gap-3">
++        <h2 id="app-icon-form-title" className="text-xl font-bold text-slate-900">{campaign ? "Edit campaign" : "New campaign"}</h2>
++        <button type="button" onClick={onClose} disabled={saving} title="Close" aria-label="Close" className="p-2 text-slate-500 disabled:opacity-50"><FiX size={20} /></button>
++      </div>
++      <form onSubmit={submit} className="mt-5 space-y-4">
++        <fieldset disabled={saving} className="grid min-w-0 gap-4 sm:grid-cols-2">
++          <label className="text-xs font-semibold text-slate-600">Platform
++            <select required value={platform} onChange={(event) => { setPlatform(event.target.value as AppIconPlatform); setIconKey(""); }} className={field}>
++              <option value="ios">iOS</option><option value="android">Android</option>
++            </select>
++          </label>
++          <label className="text-xs font-semibold text-slate-600">Icon key
++            <select required value={choices.includes(iconKey) ? iconKey : ""} onChange={(event) => setIconKey(event.target.value)} disabled={keys.isFetching || keys.isError} className={field}>
++              <option value="">{keys.isFetching ? "Loading..." : "Select icon"}</option>
++              {choices.map((key) => <option key={key} value={key}>{key}</option>)}
++            </select>
++          </label>
++          {keys.isError && <button type="button" onClick={() => void keys.refetch()} className="text-left text-sm text-red-700 sm:col-span-2">Unable to load icon keys. Retry</button>}
++          <label className="min-w-0 text-xs font-semibold text-slate-600">Start
++            <input required type="datetime-local" step="0.001" value={start} onChange={(event) => setStart(event.target.value)} className={field} />
++          </label>
++          <label className="min-w-0 text-xs font-semibold text-slate-600">End
++            <input required type="datetime-local" step="0.001" value={end} onChange={(event) => setEnd(event.target.value)} className={field} />
++          </label>
++          <p className="text-xs text-slate-500 sm:col-span-2">Times are in your local timezone.</p>
++          <label className="text-xs font-semibold text-slate-600">Priority
++            <input required type="number" step="1" min="-2147483648" max="2147483647" value={priority} onChange={(event) => setPriority(event.target.value)} className={field} />
++          </label>
++          <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" role="switch" checked={active} onChange={(event) => setActive(event.target.checked)} className="h-4 w-4 accent-[#852BAF]" />Active</label>
++        </fieldset>
++        {overlaps.length > 0 && <div role="status" className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><FiAlertTriangle className="mt-0.5 shrink-0" /><p>Overlaps {overlaps.length} enabled campaign{overlaps.length === 1 ? "" : "s"} on this platform. The higher priority wins; ties use the later start, then the newest campaign.</p></div>}
++        {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
++        <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
++          <button type="button" disabled={saving} onClick={onClose} className="rounded-lg border border-slate-200 px-4 py-2 text-sm disabled:opacity-50">Cancel</button>
++          <button type="submit" disabled={saving || keys.isFetching || keys.isError} className="rounded-lg bg-[#852BAF] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Saving..." : "Save campaign"}</button>
++        </div>
++      </form>
++    </dialog>
++  );
++}
+
+diff --git a/client/src/modules/products/content_manager/component/app_icon/AppIcons.tsx b/client/src/modules/products/content_manager/component/app_icon/AppIcons.tsx
+new file mode 100644
+index 0000000..4722cd6
+--- /dev/null
++++ b/client/src/modules/products/content_manager/component/app_icon/AppIcons.tsx
+@@ -0,0 +1,72 @@
++import { useEffect, useState } from "react";
++import { useQuery, useQueryClient } from "@tanstack/react-query";
++import { FiEdit2, FiPause, FiPlus, FiRefreshCw, FiSmartphone, FiTrash2 } from "react-icons/fi";
++import { toast } from "sonner";
++import Swal from "sweetalert2";
++import { appIconError, deactivateAppIconCampaign, deleteAppIconCampaign, getAppIconCampaign, listAppIconCampaigns, resolveAppIcon, type AppIconCampaign, type AppIconPlatform } from "../../api/AppIconApi";
++import { appIconStatus, parseAppIconDate } from "../../utils/appIcons";
++import AppIconForm from "./AppIconForm";
++
++const platformLabel = (platform: AppIconPlatform) => platform === "ios" ? "iOS" : "Android";
++const dateLabel = (value: string) => parseAppIconDate(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
++const statusStyle: Record<string, string> = { "Active now": "bg-emerald-50 text-emerald-700", Scheduled: "bg-sky-50 text-sky-700", Expired: "bg-amber-50 text-amber-800", Disabled: "bg-slate-100 text-slate-600" };
++
++function LiveIcon({ platform }: { platform: AppIconPlatform }) {
++  const query = useQuery({ queryKey: ["content", "resolved-app-icon", platform], queryFn: () => resolveAppIcon(platform), refetchInterval: 30000, retry: false });
++  useEffect(() => { if (query.error) toast.error(appIconError(query.error)); }, [query.error]);
++  return <article className="rounded-lg border border-slate-200 bg-white p-4">
++    <div className="flex items-center justify-between gap-3"><p className="flex items-center gap-2 text-sm font-semibold text-slate-700"><FiSmartphone />{platformLabel(platform)}</p><button title={`Refresh ${platformLabel(platform)} live icon`} aria-label={`Refresh ${platformLabel(platform)} live icon`} onClick={() => void query.refetch()} disabled={query.isFetching} className="p-2 text-slate-500 disabled:opacity-50"><FiRefreshCw /></button></div>
++    <p className="mt-2 break-all text-lg font-bold text-slate-900">{query.isError ? "Unavailable" : query.data?.icon_key ?? "Loading..."}</p>
++  </article>;
++}
++
++export default function AppIcons() {
++  const client = useQueryClient();
++  const [filter, setFilter] = useState<AppIconPlatform | "">("");
++  const [form, setForm] = useState<{ campaign?: AppIconCampaign } | null>(null);
++  const [busy, setBusy] = useState<number | null>(null);
++  const [now, setNow] = useState(Date.now());
++  const campaigns = useQuery({ queryKey: ["content", "app-icons"], queryFn: () => listAppIconCampaigns(), retry: false, refetchInterval: 30000 });
++  useEffect(() => { if (campaigns.error) toast.error(appIconError(campaigns.error)); }, [campaigns.error]);
++  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
++  const refresh = () => {
++    void client.invalidateQueries({ queryKey: ["content", "app-icons"] });
++    void client.invalidateQueries({ queryKey: ["content", "resolved-app-icon"] });
++  };
++  async function action(campaign: AppIconCampaign, type: "edit" | "deactivate" | "delete") {
++    if (busy !== null) return;
++    setBusy(campaign.id);
++    try {
++      if (type === "edit") { setForm({ campaign: await getAppIconCampaign(campaign.id) }); return; }
++      if (type === "delete") {
++        const result = await Swal.fire({ title: "Delete campaign?", text: `Delete ${campaign.icon_key} for ${platformLabel(campaign.platform)}?`, icon: "warning", showCancelButton: true, confirmButtonText: "Delete", confirmButtonColor: "#dc2626" });
++        if (!result.isConfirmed) return;
++        await deleteAppIconCampaign(campaign.id);
++      } else { await deactivateAppIconCampaign(campaign.id); }
++      toast.success(type === "delete" ? "Campaign deleted" : "Campaign deactivated"); refresh();
++    } catch (error) { toast.error(appIconError(error)); }
++    finally { setBusy(null); }
++  }
++  const rows = (campaigns.data ?? []).filter((campaign) => !filter || campaign.platform === filter);
++
++  return <main className="space-y-6">
++    <header className="flex flex-wrap items-center justify-between gap-4 border-b border-purple-100 pb-5">
++      <div><p className="text-xs font-semibold text-[#852BAF]">Content management</p><h1 className="mt-1 text-3xl font-bold text-slate-900">App Icons</h1></div>
++      <button onClick={() => setForm({})} disabled={campaigns.isPending || campaigns.isError || busy !== null} className="inline-flex items-center gap-2 rounded-lg bg-[#852BAF] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"><FiPlus />New campaign</button>
++    </header>
++    <section aria-labelledby="live-icons-title"><h2 id="live-icons-title" className="mb-3 text-base font-semibold text-slate-800">Currently live</h2><div className="grid gap-4 sm:grid-cols-2"><LiveIcon platform="ios" /><LiveIcon platform="android" /></div></section>
++    <p className="text-sm text-slate-500">Icons change when users next open the app. Bundled artwork only; images are not uploaded here.</p>
++    <section aria-labelledby="campaigns-title">
++      <div className="mb-3 flex flex-wrap items-center justify-between gap-3"><h2 id="campaigns-title" className="text-base font-semibold text-slate-800">Campaigns</h2><div className="flex items-center gap-2"><label htmlFor="app-icon-platform-filter" className="text-sm text-slate-600">Platform</label><select id="app-icon-platform-filter" value={filter} onChange={(event) => setFilter(event.target.value as AppIconPlatform | "")} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"><option value="">All platforms</option><option value="ios">iOS</option><option value="android">Android</option></select><button title="Refresh campaigns" aria-label="Refresh campaigns" onClick={() => void campaigns.refetch()} disabled={campaigns.isFetching} className="p-2 text-slate-500 disabled:opacity-50"><FiRefreshCw /></button></div></div>
++      {campaigns.isPending ? <p className="py-12 text-center text-sm text-slate-500">Loading campaigns...</p> : campaigns.isError ? <div role="alert" className="py-12 text-center text-sm text-red-700"><p>{appIconError(campaigns.error)}</p><button onClick={() => void campaigns.refetch()} className="mt-3 font-semibold">Retry</button></div> : <div className="overflow-x-auto border-y border-slate-200 bg-white">
++        <table className="w-full text-left text-sm"><thead className="bg-slate-50 text-xs text-slate-500"><tr>{["Platform", "Icon key", "Start", "End", "Priority", "Status", "Actions"].map((label) => <th key={label} scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">{label}</th>)}</tr></thead>
++          <tbody>{rows.map((campaign) => { const status = appIconStatus(campaign, now); return <tr key={campaign.id} className="border-t border-slate-100">
++            <td className="px-4 py-3">{platformLabel(campaign.platform)}</td><td className="px-4 py-3 font-medium">{campaign.icon_key}</td><td className="whitespace-nowrap px-4 py-3">{dateLabel(campaign.starts_at)}</td><td className="whitespace-nowrap px-4 py-3">{dateLabel(campaign.ends_at)}</td><td className="px-4 py-3 tabular-nums">{campaign.priority}</td><td className="px-4 py-3"><span className={`inline-block whitespace-nowrap rounded px-2 py-1 text-xs font-semibold ${statusStyle[status]}`}>{status}</span></td>
++            <td className="px-4 py-3"><div className="flex gap-1">{([['edit', FiEdit2, 'Edit'], ['deactivate', FiPause, 'Deactivate'], ['delete', FiTrash2, 'Delete']] as const).map(([type, Icon, label]) => <button key={type} title={label} aria-label={`${label} ${campaign.icon_key} campaign ${campaign.id}`} disabled={busy !== null || (type === "deactivate" && !campaign.is_active)} onClick={() => void action(campaign, type)} className={`rounded p-2 hover:bg-slate-100 disabled:opacity-30 ${type === "delete" ? "text-red-600" : "text-slate-600"}`}><Icon size={16} /></button>)}</div></td>
++          </tr>; })}{rows.length === 0 && <tr><td colSpan={7} className="px-4 py-12 text-center text-slate-500">No campaigns found.</td></tr>}</tbody>
++        </table>
++      </div>}
++    </section>
++    {form && <AppIconForm campaign={form.campaign} campaigns={campaigns.data ?? []} onClose={() => setForm(null)} onSaved={refresh} />}
++  </main>;
++}
+
+diff --git a/client/tests/app-icons.test.cjs b/client/tests/app-icons.test.cjs
+new file mode 100644
+index 0000000..c04de2a
+--- /dev/null
++++ b/client/tests/app-icons.test.cjs
+@@ -0,0 +1,49 @@
++const { readFileSync } = require("node:fs");
++const path = require("node:path");
++const { runInNewContext } = require("node:vm");
++const assert = require("node:assert/strict");
++const { test } = require("node:test");
++const ts = require("typescript");
++
++process.env.TZ = "Asia/Kolkata";
++const source = readFileSync(path.join(__dirname, "../src/modules/products/content_manager/utils/appIcons.ts"), "utf8");
++const helpers = {};
++runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { exports: helpers, Date });
++const campaign = {
++  id: 1, platform: "ios", icon_key: "default", priority: 0, is_active: 1,
++  starts_at: "2026-10-08 00:00:00.123", ends_at: "2026-10-09 00:00:00.123",
++};
++
++test("UTC database timestamps round-trip through local IST form values", () => {
++  assert.equal(helpers.parseAppIconDate(campaign.starts_at).toISOString(), "2026-10-08T00:00:00.123Z");
++  assert.equal(helpers.appIconLocalInput(campaign.starts_at), "2026-10-08T05:30:00.123");
++  assert.equal(new Date(helpers.appIconLocalInput(campaign.starts_at)).toISOString(), "2026-10-08T00:00:00.123Z");
++  assert.equal(helpers.parseAppIconDate("2026-10-08T05:30:00.123+05:30").toISOString(), "2026-10-08T00:00:00.123Z");
++});
++
++test("status follows enabled state and inclusive backend schedule boundaries", () => {
++  const from = helpers.parseAppIconDate(campaign.starts_at).getTime();
++  const to = helpers.parseAppIconDate(campaign.ends_at).getTime();
++  assert.equal(helpers.appIconStatus(campaign, from - 1), "Scheduled");
++  assert.equal(helpers.appIconStatus(campaign, from), "Active now");
++  assert.equal(helpers.appIconStatus(campaign, to), "Active now");
++  assert.equal(helpers.appIconStatus(campaign, to + 1), "Expired");
++  assert.equal(helpers.appIconStatus({ ...campaign, is_active: 0 }, from), "Disabled");
++});
++
++test("overlap excludes other platforms, disabled campaigns, and the edited row", () => {
++  const from = "2026-10-08T06:00:00";
++  const to = "2026-10-08T07:00:00";
++  assert.equal(helpers.overlappingAppIcons([campaign], "ios", from, to).length, 1);
++  assert.equal(helpers.overlappingAppIcons([campaign], "android", from, to).length, 0);
++  assert.equal(helpers.overlappingAppIcons([campaign], "ios", from, to, campaign.id).length, 0);
++  assert.equal(helpers.overlappingAppIcons([{ ...campaign, is_active: 0 }], "ios", from, to).length, 0);
++  assert.equal(helpers.overlappingAppIcons([campaign], "ios", to, from).length, 0);
++  assert.equal(helpers.overlappingAppIcons([campaign], "ios", "", to).length, 0);
++  assert.equal(helpers.overlappingAppIcons([campaign], "ios", "2026-10-09T05:30:00.123", "2026-10-09T06:00:00").length, 1);
++});
++
++test("Android artwork gates keys that are not bundled yet", () => {
++  for (const key of ["default", "diwali", "navratri", "dasera"]) assert.ok(helpers.ANDROID_KEYS_WITH_ARTWORK.includes(key));
++  for (const key of ["eid", "christmas", "holi", "independence_day"]) assert.ok(!helpers.ANDROID_KEYS_WITH_ARTWORK.includes(key));
++});
+

@@ -64,3 +64,18 @@ export async function fetchAllProductsFilterOptions(): Promise<{ vendors: AllPro
   const { data } = await fleaMarketClient.get<AllProductsFilterOptionsResponse>("/products/all/filter-options");
   return data.data;
 }
+
+// Matches fleaMarketClient's baseURL — opened directly via window.open (the
+// response is a CSV file, not JSON), same convention as
+// fleaMarketLabelsApi's print URLs. Respects the same (q, vendorId) filter
+// as the on-screen list, so the export matches exactly what's currently
+// displayed/searched, not the whole catalog regardless of filters.
+const BASE = "/api/flea-market";
+
+export function getExportCsvUrl(filters: { q?: string; vendorId?: number | null }): string {
+  const params = new URLSearchParams();
+  if (filters.q) params.set("q", filters.q);
+  if (filters.vendorId) params.set("vendor_id", String(filters.vendorId));
+  const query = params.toString();
+  return `${BASE}/products/export${query ? `?${query}` : ""}`;
+}

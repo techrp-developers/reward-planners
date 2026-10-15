@@ -1,5 +1,5 @@
 const productModel = require("../models/productModel");
-const { computeEligibility, computeEarnPoints } = require("./rewardEligibilityService");
+const { computeEligibilityAndEarnBatch } = require("./rewardEligibilityService");
 
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 50;
@@ -16,12 +16,11 @@ function toVariantLike(row) {
 }
 
 class AllProductsService {
-  // Reward eligibility/earn are resolved per row via the exact same
-  // rewardEligibilityService functions checkout and the reward-eligibility
-  // endpoint already use — no second copy of that resolution logic. This is
-  // never a "loop N HTTP calls" hot path: it's N in-process DB lookups
-  // bounded by the page size (max 50), run in parallel within a single
-  // request, not per-row round trips from the client.
+  // Reward eligibility/earn are resolved for the WHOLE page in a single
+  // batched query (RewardModel.getProductRewardsBatch, via
+  // computeEligibilityAndEarnBatch) instead of one query per row per side —
+  // was previously up to limit×2 individual DB round trips per page load.
+  // Same resolveRedemption/calculateReward math either way, just fetched once.
   async list({ q, vendorId, page, limit }) {
     const pageNum = Math.max(1, Number(page) || 1);
     const limitNum = Math.min(MAX_LIMIT, Math.max(1, Number(limit) || DEFAULT_LIMIT));
@@ -32,36 +31,31 @@ class AllProductsService {
       productModel.countAllForOverview({ query: q, vendorId }),
     ]);
 
-    const data = await Promise.all(
-      rows.map(async (row) => {
-        const variantLike = toVariantLike(row);
-        const [eligibility, earnRewardPoints] = await Promise.all([
-          computeEligibility(variantLike),
-          computeEarnPoints(variantLike),
-        ]);
+    const eligibilityResults = await computeEligibilityAndEarnBatch(rows.map(toVariantLike));
 
-        const sellingPrice = Number(row.sale_price);
-        // No discount applied when the product isn't redeem-eligible — RP
-        // Price then equals Selling Price exactly, not some partial figure.
-        const rpPrice = eligibility.canRedeem ? sellingPrice - eligibility.maxRedeemablePoints : sellingPrice;
+    const data = rows.map((row, index) => {
+      const eligibility = eligibilityResults[index];
+      const sellingPrice = Number(row.sale_price);
+      // No discount applied when the product isn't redeem-eligible — RP
+      // Price then equals Selling Price exactly, not some partial figure.
+      const rpPrice = eligibility.canRedeem ? sellingPrice - eligibility.maxRedeemablePoints : sellingPrice;
 
-        return {
-          productId: row.product_id,
-          variantId: row.variant_id,
-          brandName: row.brand_name,
-          productName: row.product_name,
-          sku: row.sku,
-          heroImage: row.hero_image,
-          mrp: Number(row.mrp),
-          sellingPrice,
-          currentStock: Number(row.current_stock),
-          earnRewardPoints,
-          redeemRewardPoints: eligibility.canRedeem ? eligibility.maxRedeemablePoints : 0,
-          canRedeem: eligibility.canRedeem,
-          rpPrice,
-        };
-      }),
-    );
+      return {
+        productId: row.product_id,
+        variantId: row.variant_id,
+        brandName: row.brand_name,
+        productName: row.product_name,
+        sku: row.sku,
+        heroImage: row.hero_image,
+        mrp: Number(row.mrp),
+        sellingPrice,
+        currentStock: Number(row.current_stock),
+        earnRewardPoints: eligibility.earnPoints,
+        redeemRewardPoints: eligibility.canRedeem ? eligibility.maxRedeemablePoints : 0,
+        canRedeem: eligibility.canRedeem,
+        rpPrice,
+      };
+    });
 
     return {
       data,

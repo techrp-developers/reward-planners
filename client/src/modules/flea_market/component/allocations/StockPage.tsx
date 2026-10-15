@@ -58,6 +58,11 @@ function StockPage() {
   const poolsQuery = useQuery({
     queryKey: ["flea-market", "vendor-stock"],
     queryFn: () => listVendorStockPools(),
+    // "Currently in Pool" figures drive live top-up decisions — a stale
+    // cached read here (global default is 10s) could show room that's
+    // already sold. Every mutation that touches a pool also invalidates
+    // this key, so staleTime:0 is cheap: it only matters on a fresh mount.
+    staleTime: 0,
   });
 
   const vendorSearchQuery = useQuery({
@@ -68,8 +73,14 @@ function StockPage() {
 
   const step: StockFlowStep = !selectedVendor ? "select-vendor" : "select-products";
 
+  // Stock changes here are visible on three separate surfaces: this page's
+  // own pool table, billing's product search, and the All Products overview
+  // — all three must go stale together, or one of them shows pre-top-up
+  // numbers until its own staleTime happens to lapse.
   const invalidatePools = () => {
     void queryClient.invalidateQueries({ queryKey: ["flea-market", "vendor-stock"] });
+    void queryClient.invalidateQueries({ queryKey: ["flea-market", "products", "search"] });
+    void queryClient.invalidateQueries({ queryKey: ["flea-market", "all-products"] });
   };
 
   const handleToggleProduct = (product: FleaMarketProduct) => {

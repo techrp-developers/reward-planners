@@ -1,0 +1,42 @@
+import type { ApiContentEntry } from "../api/ContentApi";
+import type { ContentEntry } from "../types";
+
+// Backend always returns a complete, ready-to-use URL for image_url (or null) - see contentController.js buildContentImageUrl.
+const targetIdsFromApi = (row: ApiContentEntry): number[] => {
+  let values: unknown = row.target_ids;
+  if (typeof values === "string") {
+    try { values = JSON.parse(values); } catch { values = []; }
+  }
+  const ids = Array.isArray(values) ? values.map(Number).filter((id) => Number.isInteger(id) && id > 0) : [];
+  if (!ids.length && row.target_id != null) ids.push(Number(row.target_id));
+  return [...new Set(ids)];
+};
+
+export const fromApiEntry = (row: ApiContentEntry): ContentEntry => ({
+  id: row.content_id,
+  zone: row.zone,
+  contentType: row.content_type,
+  colorValue: row.color_value || "#852BAF",
+  motionEffect: row.motionEffect || "none",
+  motionIntensity: row.motionIntensity || "medium",
+  motionSpeed: row.motionSpeed || "normal",
+  textColor: row.text_color || "",
+  // Legacy rows may still be NULL - fall back to the same "carousel" default the backend uses for new rows.
+  displayMode: row.display_mode || "carousel",
+  imageUrl: row.image_url || "",
+  title: row.title,
+  ctaText: row.cta_text || "",
+  redirectLink: row.redirect_link || "",
+  targetType: row.target_type || "",
+  targetId: row.target_id == null ? null : Number(row.target_id),
+  targetIds: targetIdsFromApi(row),
+  startAt: row.start_at ? row.start_at.slice(0, 16) : "",
+  endAt: row.end_at ? row.end_at.slice(0, 16) : "",
+  priority: row.priority,
+  isDefault: !!row.is_default,
+  isPublished: !!row.is_published,
+  createdBy: row.created_by_name || "",
+  createdAt: row.created_at,
+  imageFile: null,
+  images: row.images?.map((image) => ({ imageId: image.image_id, imageUrl: image.image_url, sortOrder: image.sort_order, isActive: !!image.is_active })),
+});

@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { FiPlusCircle, FiX } from "react-icons/fi";
+import { FiCheck, FiPlusCircle, FiX } from "react-icons/fi";
 import Drawer from "../ui/Drawer";
 import { ErrorState } from "../ui/EmptyState";
 import { createProduct, type CreatedProduct } from "../../api/fleaMarketProductsApi";
@@ -59,13 +59,17 @@ function ProductQuickCreateDrawer({ open, vendorId, onClose, onCreated }: Produc
   const [brandName, setBrandName] = useState("");
   const [variantRows, setVariantRows] = useState<VariantRowState[]>([makeEmptyRow()]);
   const [rewardRuleId, setRewardRuleId] = useState("");
+  const queryClient = useQueryClient();
 
   // Set only once a multi-variant submission succeeds — while this is
   // non-null the drawer shows the variant picker instead of the form, and
   // hasn't called onCreated/reset/onClose yet (the single-variant case
   // never sets this at all, so its flow is byte-for-byte what it was before).
   const [multiVariantResult, setMultiVariantResult] = useState<CreatedProduct | null>(null);
-  const [pickedVariantId, setPickedVariantId] = useState<number | null>(null);
+  // Multi-select, defaulting to every variant checked — a manager who just
+  // created 2+ variants usually wants all of them in this top-up batch, not
+  // just one.
+  const [pickedVariantIds, setPickedVariantIds] = useState<Set<number>>(new Set());
 
   // Same rules the vendor-manager's Reward Mapping screen offers, fetched
   // through a flea-market-scoped endpoint since this module has no real JWT
@@ -142,6 +146,15 @@ function ProductQuickCreateDrawer({ open, vendorId, onClose, onCreated }: Produc
         })),
       });
     },
+    onSuccess: () => {
+      // ProductPicker's vendor-scoped catalog list, the master All Products
+      // overview, and the Vendor Sales Report's cross-vendor product search
+      // all list catalog products — a newly created one must appear in all
+      // three without a manual re-search.
+      void queryClient.invalidateQueries({ queryKey: ["flea-market", "vendor-catalog"] });
+      void queryClient.invalidateQueries({ queryKey: ["flea-market", "all-products"] });
+      void queryClient.invalidateQueries({ queryKey: ["flea-market", "report-product-search"] });
+    },
   });
 
   const reset = () => {
@@ -150,7 +163,7 @@ function ProductQuickCreateDrawer({ open, vendorId, onClose, onCreated }: Produc
     setVariantRows([makeEmptyRow()]);
     setRewardRuleId("");
     setMultiVariantResult(null);
-    setPickedVariantId(null);
+    setPickedVariantIds(new Set());
     mutation.reset();
   };
 
@@ -168,12 +181,12 @@ function ProductQuickCreateDrawer({ open, vendorId, onClose, onCreated }: Produc
           toast.warning("Product created, but the reward rule mapping failed — set it from Reward Mapping instead.");
         }
 
-        // More than one variant: let the manager choose which one this
-        // batch's top-up is for, instead of guessing — the others stay in
-        // the catalog to allocate separately afterwards.
+        // More than one variant: let the manager choose which ones this
+        // batch's top-up is for (all pre-selected) instead of guessing —
+        // anything left unchecked stays in the catalog to allocate later.
         if (product.variants.length > 1) {
           setMultiVariantResult(product);
-          setPickedVariantId(product.variants[0].variantId);
+          setPickedVariantIds(new Set(product.variants.map((variant) => variant.variantId)));
           return;
         }
 
@@ -184,19 +197,38 @@ function ProductQuickCreateDrawer({ open, vendorId, onClose, onCreated }: Produc
     });
   };
 
-  const handleConfirmVariantPick = () => {
-    if (!multiVariantResult || pickedVariantId == null) return;
-    const chosen = multiVariantResult.variants.find((variant) => variant.variantId === pickedVariantId);
-    if (!chosen) return;
-
-    onCreated({
-      ...multiVariantResult,
-      variantId: chosen.variantId,
-      sku: chosen.sku,
-      mrp: chosen.mrp,
-      salePrice: chosen.salePrice,
-      stock: chosen.stock,
+  const toggleVariantPick = (variantId: number) => {
+    setPickedVariantIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(variantId)) next.delete(variantId);
+      else next.add(variantId);
+      return next;
     });
+  };
+
+  const handleSelectAllVariants = () => {
+    if (!multiVariantResult) return;
+    setPickedVariantIds(new Set(multiVariantResult.variants.map((variant) => variant.variantId)));
+  };
+
+  // onCreated adds exactly one row per call (see StockPage.tsx: it appends
+  // via a functional setSelectedRows update) — calling it once per checked
+  // variant here queues one row each, no signature change needed anywhere
+  // up the chain.
+  const handleAddSelectedVariants = () => {
+    if (!multiVariantResult || pickedVariantIds.size === 0) return;
+
+    for (const variant of multiVariantResult.variants) {
+      if (!pickedVariantIds.has(variant.variantId)) continue;
+      onCreated({
+        ...multiVariantResult,
+        variantId: variant.variantId,
+        sku: variant.sku,
+        mrp: variant.mrp,
+        salePrice: variant.salePrice,
+        stock: variant.stock,
+      });
+    }
     reset();
     onClose();
   };
@@ -212,26 +244,48 @@ function ProductQuickCreateDrawer({ open, vendorId, onClose, onCreated }: Produc
               "{multiVariantResult.productName}" created with {multiVariantResult.variants.length} variants.
             </p>
             <p className="mt-1 text-xs">
-              Pick which one to add to this top-up batch — the others stay in the catalog to allocate separately.
+              All are checked by default — uncheck any you don't want in this top-up batch. Anything left unchecked
+              stays in the catalog to allocate separately.
             </p>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-semibold text-slate-700">Variants to add</label>
+            <button
+              type="button"
+              onClick={handleSelectAllVariants}
+              className="text-[11px] font-bold text-purple-600 hover:text-purple-800"
+            >
+              Select All
+            </button>
           </div>
 
           <div className="flex flex-wrap gap-2">
             {multiVariantResult.variants.map((variant, index) => {
-              const isPicked = pickedVariantId === variant.variantId;
+              const isPicked = pickedVariantIds.has(variant.variantId);
               return (
                 <button
                   key={variant.variantId}
                   type="button"
-                  onClick={() => setPickedVariantId(variant.variantId)}
+                  aria-pressed={isPicked}
+                  onClick={() => toggleVariantPick(variant.variantId)}
                   className={`px-3 py-2 text-left text-xs font-bold rounded-xl border transition-all ${
                     isPicked
                       ? "border-purple-500 bg-purple-50 text-purple-800 ring-2 ring-purple-200"
-                      : "border-slate-200 text-slate-600 hover:border-slate-300"
+                      : "border-slate-200 text-slate-500 hover:border-slate-300"
                   }`}
                 >
-                  {variant.label || `Variant ${index + 1}`}
-                  <span className="block font-normal text-gray-400">
+                  <span className="flex items-center gap-1.5">
+                    <span
+                      className={`flex items-center justify-center w-3.5 h-3.5 rounded border ${
+                        isPicked ? "bg-purple-600 border-purple-600 text-white" : "border-slate-300"
+                      }`}
+                    >
+                      {isPicked && <FiCheck className="w-2.5 h-2.5" />}
+                    </span>
+                    {variant.label || `Variant ${index + 1}`}
+                  </span>
+                  <span className="block pl-5 font-normal text-gray-400">
                     ₹{variant.salePrice.toLocaleString()} · {variant.stock.toLocaleString()} in stock
                   </span>
                 </button>
@@ -241,10 +295,13 @@ function ProductQuickCreateDrawer({ open, vendorId, onClose, onCreated }: Produc
 
           <button
             type="button"
-            onClick={handleConfirmVariantPick}
-            className="w-full py-2.5 text-sm font-bold text-white rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] hover:from-[#9B3DCF] hover:to-[#FD4F88] shadow-md shadow-purple-500/20 transition-all"
+            onClick={handleAddSelectedVariants}
+            disabled={pickedVariantIds.size === 0}
+            className="w-full py-2.5 text-sm font-bold text-white rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] hover:from-[#9B3DCF] hover:to-[#FD4F88] shadow-md shadow-purple-500/20 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            Add Selected Variant to Top-Up
+            {pickedVariantIds.size === 0
+              ? "Select at least one variant"
+              : `Add ${pickedVariantIds.size} Variant${pickedVariantIds.size > 1 ? "s" : ""} to Top-Up`}
           </button>
         </div>
       ) : (

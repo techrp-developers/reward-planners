@@ -9,6 +9,21 @@ const BusBookingOrderModel =
   require(
     "../models/busBookingOrderModel"
   );
+const {
+  isExpectedCapturedPayment,
+  getBlockTtlMinutes,
+  isBlockExpired,
+  isAmbiguousProviderError,
+} = require("../utils/workflowPolicy");
+const {
+  bookOrder,
+  waitForBookingResult,
+  resolveReviewedBooking,
+  applyCancellationSuccess,
+  resolveCancellation,
+} = require("../services/bookingService");
+const { processRefund } = require("../services/refundService");
+const { sendOpsAlert } = require("../../../services/alertService");
 /*
 |--------------------------------------------------------------------------
 | GET CITIES
@@ -134,8 +149,7 @@ const getMissingSearchConfig = () => {
         "SRDV_API_TOKEN",
         "SRDV_CLIENT_ID",
         "SRDV_USERNAME",
-        "SRDV_PASSWORD",
-        "SRDV_END_USER_IP"
+        "SRDV_PASSWORD"
     ];
 
     return requiredEnvKeys.filter((key) => {
@@ -354,10 +368,7 @@ const searchBuses = async (req, res) => {
                 process.env.SRDV_USERNAME,
 
             Password:
-                process.env.SRDV_PASSWORD,
-
-            EndUserIp:
-                process.env.SRDV_END_USER_IP
+                process.env.SRDV_PASSWORD
         };
 
 
@@ -582,8 +593,6 @@ const searchBuses = async (req, res) => {
                     message:
                         "Bus provider API error",
 
-                    providerResponse:
-                        error.response.data
                 });
         }
 
@@ -715,6 +724,7 @@ const getSeatLayout = async (req, res) => {
 
         const requiredConfig = [
             "SRDV_SEAT_LAYOUT_URL",
+            "SRDV_API_TOKEN",
             "SRDV_CLIENT_ID",
             "SRDV_USERNAME",
             "SRDV_PASSWORD"
@@ -929,12 +939,16 @@ const getSeatLayout = async (req, res) => {
         |--------------------------------------------------------------------------
         */
 
+        // The provider sends rows as an array, or as an object keyed by row
+        // number when rows are skipped (aisles), so accept both.
         const seatLayout =
             Array.isArray(
                 apiData.Result
             )
                 ? apiData.Result
-                : [];
+                : Object.values(
+                    apiData.Result || {}
+                );
 
 
         /*
@@ -977,7 +991,9 @@ const getSeatLayout = async (req, res) => {
 
                     return (
                         seat.SeatStatus === true ||
-                        seat.SeatStatus === "true"
+                        seat.SeatStatus === "true" ||
+                        seat.SeatStatus === 1 ||
+                        seat.SeatStatus === "1"
                     );
                 }
             );
@@ -1081,8 +1097,6 @@ const getSeatLayout = async (req, res) => {
                     message:
                         "Seat layout provider API error",
 
-                    providerResponse:
-                        error.response.data
                 });
         }
 
@@ -1414,16 +1428,6 @@ const getBoardingDroppingPoints = async (
       providerResponse.data;
 
 
-    console.log(
-      "[BusBooking][BoardingDropping] Provider Response",
-      JSON.stringify(
-        apiData,
-        null,
-        2
-      )
-    );
-
-
     /*
     |--------------------------------------------------------------------------
     | Check Provider Error
@@ -1585,9 +1589,6 @@ const getBoardingDroppingPoints = async (
 
             "Boarding/dropping provider API error",
 
-          providerResponse:
-            error.response
-              .data,
         });
     }
 
@@ -1684,7 +1685,7 @@ const blockSeat =
       |--------------------------------------------------------------------------
       */
 
-      const userId = 37;
+      const userId =
         req.user?.user_id;
 
 
@@ -2061,16 +2062,6 @@ const blockSeat =
         providerResponse.data;
 
 
-      console.log(
-        "[BusBooking][Block] Provider Response",
-        JSON.stringify(
-          apiData,
-          null,
-          2
-        )
-      );
-
-
       /*
       |--------------------------------------------------------------------------
       | Provider Error
@@ -2104,9 +2095,6 @@ const blockSeat =
                 ?.ErrorMessage ||
               "Unable to block bus seat",
 
-            providerError:
-              apiData
-                ?.Error,
           });
       }
 
@@ -2263,51 +2251,6 @@ const blockSeat =
       }
 
 
-      /*
-      |--------------------------------------------------------------------------
-      | Last Fallback From Passenger Seat Price
-      |--------------------------------------------------------------------------
-      */
-
-      if (
-        totalAmount <= 0
-      ) {
-
-        totalAmount =
-          normalizedPassengers.reduce(
-            (
-              total,
-              passenger
-            ) => {
-
-              const fare =
-                Number(
-                  passenger
-                    ?.Seat
-                    ?.Price
-                    ?.PublishedFare ||
-                  passenger
-                    ?.Seat
-                    ?.Price
-                    ?.OfferedFare ||
-                  passenger
-                    ?.Seat
-                    ?.SeatFare ||
-                  0
-                );
-
-
-              return (
-                total +
-                fare
-              );
-            },
-
-            0
-          );
-      }
-
-
       if (
         !Number.isFinite(
           totalAmount
@@ -2317,9 +2260,7 @@ const blockSeat =
 
         console.error(
           "[BusBooking][Block] Could not calculate provider amount",
-          {
-            apiData,
-          }
+          { traceId }
         );
 
 
@@ -2657,8 +2598,6 @@ const blockSeat =
             message:
               "Seat blocked but local booking order could not be saved",
 
-            error:
-              dbError.message,
           });
 
 
@@ -2679,8 +2618,7 @@ const blockSeat =
 
       console.error(
         "[BusBooking][Block] Error",
-        error?.response?.data ||
-        error
+        error.message
       );
 
 
@@ -2711,10 +2649,7 @@ const blockSeat =
 
               "Block provider API error",
 
-            providerResponse:
-              error.response
-                .data,
-          });
+        });
       }
 
 
@@ -2726,7 +2661,6 @@ const blockSeat =
             false,
 
           message:
-            error.message ||
             "Unable to block selected seat",
         });
     }
@@ -2870,11 +2804,14 @@ const createPaymentOrder =
 
               status,
 
-              payment_status
+              payment_status,
+
+              TIMESTAMPDIFF(SECOND, created_at, NOW()) AS age_seconds
 
             FROM busbooking_orders
 
             WHERE order_ref = ?
+              AND user_id = ?
 
             LIMIT 1
 
@@ -2882,6 +2819,7 @@ const createPaymentOrder =
             `,
             [
               cleanOrderRef,
+              userId,
             ]
           );
 
@@ -2940,6 +2878,56 @@ const createPaymentOrder =
 
             message:
               "Order is not payable",
+          });
+      }
+
+
+      /*
+      |--------------------------------------------------------------------------
+      | Seat Hold Still Valid
+      |--------------------------------------------------------------------------
+      |
+      | The provider only holds blocked seats for a short time. Taking money
+      | after that would charge the customer for seats that are gone.
+      |
+      |--------------------------------------------------------------------------
+      */
+
+      if (
+        isBlockExpired(
+          order.age_seconds,
+          getBlockTtlMinutes()
+        )
+      ) {
+
+        await connection
+          .execute(
+            `
+            UPDATE busbooking_orders
+            SET status = 'expired'
+            WHERE id = ?
+            `,
+            [
+              order.id,
+            ]
+          );
+
+        await connection
+          .commit();
+
+
+        return res
+          .status(410)
+          .json({
+
+            success:
+              false,
+
+            code:
+              "SEAT_HOLD_EXPIRED",
+
+            message:
+              "Your seat hold has expired. Please select your seats again.",
           });
       }
 
@@ -3152,8 +3140,6 @@ const createPaymentOrder =
           `
           INSERT INTO razorpay_orders
           (
-            client_id,
-
             razorpay_order_id,
 
             order_source,
@@ -3172,7 +3158,7 @@ const createPaymentOrder =
           )
           VALUES
           (
-            ?, ?, ?, ?, ?,
+            ?, ?, ?, ?,
             'created',
             ?,
             'busbooking',
@@ -3180,8 +3166,6 @@ const createPaymentOrder =
           )
           `,
           [
-            userId,
-
             razorpayOrder.id,
 
             "internal",
@@ -3318,6 +3302,9 @@ const verifyPayment =
 
     try {
 
+      const userId =
+        req.user.user_id;
+
       const {
         razorpay_order_id,
         razorpay_payment_id,
@@ -3405,14 +3392,22 @@ const verifyPayment =
         await db.execute(
           `
           SELECT
-            ref_id,
-            module
-          FROM razorpay_orders
-          WHERE razorpay_order_id = ?
+            rp.ref_id,
+            rp.module,
+            rp.amount,
+            rp.status,
+            rp.razorpay_payment_id
+          FROM razorpay_orders rp
+          JOIN busbooking_orders bo
+            ON bo.order_ref = rp.ref_id
+          WHERE rp.razorpay_order_id = ?
+            AND rp.module = 'busbooking'
+            AND bo.user_id = ?
           LIMIT 1
           `,
           [
             razorpay_order_id,
+            userId,
           ]
         );
 
@@ -3440,11 +3435,52 @@ const verifyPayment =
       }
 
 
+      const providerPayment =
+        await razorpay.payments.fetch(
+          razorpay_payment_id
+        );
+
+      const expectedAmountPaise =
+        Math.round(
+          Number(rpOrder.amount) * 100
+        );
+
+      if (!isExpectedCapturedPayment(providerPayment, {
+        orderId: razorpay_order_id,
+        amountPaise: expectedAmountPaise,
+      })) {
+        return res.status(400).json({
+          success: false,
+          message: "Payment has not been captured for the expected order amount",
+        });
+      }
+
+
       const orderRef =
         String(
           rpOrder.ref_id ||
           ""
         ).trim();
+
+      if (rpOrder.status === "success") {
+        if (rpOrder.razorpay_payment_id !== razorpay_payment_id) {
+          return res.status(409).json({
+            success: false,
+            message: "Payment order was already completed with another payment",
+          });
+        }
+
+        return res.status(200).json({
+          success: true,
+          reused: true,
+          message: "Payment already verified",
+          data: {
+            order_ref: orderRef,
+            razorpay_order_id,
+            razorpay_payment_id,
+          },
+        });
+      }
 
 
       const [
@@ -3460,10 +3496,12 @@ const verifyPayment =
             user_id
           FROM busbooking_orders
           WHERE order_ref = ?
+            AND user_id = ?
           LIMIT 1
           `,
           [
             orderRef,
+            userId,
           ]
         );
 
@@ -3509,11 +3547,13 @@ const verifyPayment =
             status
           FROM busbooking_orders
           WHERE order_ref = ?
+            AND user_id = ?
           LIMIT 1
           FOR UPDATE
           `,
           [
             orderRef,
+            userId,
           ]
         );
 
@@ -3582,7 +3622,13 @@ await connection
             razorpay_payment_id,
 
             JSON.stringify(
-                req.body
+                {
+                  id: providerPayment.id,
+                  order_id: providerPayment.order_id,
+                  amount: providerPayment.amount,
+                  currency: providerPayment.currency,
+                  status: providerPayment.status,
+                }
             ),
 
             razorpay_order_id,
@@ -3651,7 +3697,6 @@ await connection
             false,
 
           message:
-            error.message ||
             "Unable to verify payment",
         });
     } finally {
@@ -3667,696 +3712,701 @@ await connection
   };
 
 
-const bookBusTicket = async (
-  req,
-  res
-) => {
+/*
+|--------------------------------------------------------------------------
+| BOOK BUS TICKET
+|--------------------------------------------------------------------------
+|
+| POST /api/busbooking/book   { "order_ref": "BB-ORD-1001" }
+|
+| The provider call itself lives in bookingService so the app, the cron and
+| a retry all go through the same single-attempt path. This handler only
+| reports where the order ended up.
+|
+|--------------------------------------------------------------------------
+*/
+
+const bookBusTicket = async (req, res) => {
+  const orderRef = String(req.body?.order_ref || "").trim();
+
+  if (!orderRef) {
+    return res.status(400).json({
+      success: false,
+      message: "order_ref is required",
+    });
+  }
 
   try {
-
-    /*
-    |--------------------------------------------------------------------------
-    | Receive Data From Frontend
-    |--------------------------------------------------------------------------
-    */
-
-    const {
-      traceId,
-      srdvIndex,
-      resultIndex,
-    } = req.body;
-
-
-    console.log(
-      "======================================"
+    const existing = await BusBookingOrderModel.findByOrderRef(
+      orderRef,
+      req.user.user_id,
     );
 
-    console.log(
-      "[BusBooking][Book] REQUEST RECEIVED"
-    );
-
-    console.log(
-      "TraceId:",
-      traceId
-    );
-
-    console.log(
-      "SrdvIndex:",
-      srdvIndex
-    );
-
-    console.log(
-      "ResultIndex:",
-      resultIndex
-    );
-
-    console.log(
-      "======================================"
-    );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Validate TraceId
-    |--------------------------------------------------------------------------
-    */
-
-    if (
-      traceId === undefined ||
-      traceId === null ||
-      String(
-        traceId
-      ).trim() === ""
-    ) {
-
-      return res
-        .status(400)
-        .json({
-
-          success: false,
-
-          message:
-            "traceId is required",
-        });
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Validate SrdvIndex
-    |--------------------------------------------------------------------------
-    */
-
-    if (
-      srdvIndex === undefined ||
-      srdvIndex === null ||
-      String(
-        srdvIndex
-      ).trim() === ""
-    ) {
-
-      return res
-        .status(400)
-        .json({
-
-          success: false,
-
-          message:
-            "srdvIndex is required",
-        });
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Validate ResultIndex
-    |--------------------------------------------------------------------------
-    */
-
-    if (
-      resultIndex === undefined ||
-      resultIndex === null ||
-      String(
-        resultIndex
-      ).trim() === ""
-    ) {
-
-      return res
-        .status(400)
-        .json({
-
-          success: false,
-
-          message:
-            "resultIndex is required",
-        });
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Validate Provider Configuration
-    |--------------------------------------------------------------------------
-    */
-
-    const requiredConfig = [
-      "SRDV_BOOK_URL",
-      "SRDV_CLIENT_ID",
-      "SRDV_USERNAME",
-      "SRDV_PASSWORD",
-    ];
-
-
-    const missingConfig =
-      requiredConfig.filter(
-        key =>
-          !process.env[key] ||
-          !String(
-            process.env[key]
-          ).trim()
-      );
-
-
-    if (
-      missingConfig.length >
-      0
-    ) {
-
-      console.error(
-        "[BusBooking][Book] Missing configuration",
-        missingConfig
-      );
-
-
-      return res
-        .status(500)
-        .json({
-
-          success: false,
-
-          message:
-            "Book API provider configuration is missing",
-
-          missingConfig,
-        });
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Build Exact Provider Request Body
-    |--------------------------------------------------------------------------
-    |
-    | Important:
-    |
-    | This body matches the Book API request you tested successfully.
-    |
-    |--------------------------------------------------------------------------
-    */
-
-    const requestBody = {
-
-      ClientId:
-        process.env
-          .SRDV_CLIENT_ID,
-
-      UserName:
-        process.env
-          .SRDV_USERNAME,
-
-      Password:
-        process.env
-          .SRDV_PASSWORD,
-
-      TraceId:
-        String(
-          traceId
-        ).trim(),
-
-      SrdvIndex:
-        String(
-          srdvIndex
-        ).trim(),
-
-      ResultIndex:
-        String(
-          resultIndex
-        ).trim(),
-    };
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Safe Log
-    |--------------------------------------------------------------------------
-    |
-    | Do NOT print ClientId/UserName/Password.
-    |
-    |--------------------------------------------------------------------------
-    */
-
-    console.log(
-      "[BusBooking][Book] Provider Request",
-      {
-
-        TraceId:
-          requestBody
-            .TraceId,
-
-        SrdvIndex:
-          requestBody
-            .SrdvIndex,
-
-        ResultIndex:
-          requestBody
-            .ResultIndex,
-      }
-    );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Provider Headers
-    |--------------------------------------------------------------------------
-    */
-
-    const headers = {
-
-      "Content-Type":
-        "application/json",
-    };
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Api-Token
-    |--------------------------------------------------------------------------
-    |
-    | Your other SRDV APIs use Api-Token.
-    |
-    | If your working Book Postman request uses Api-Token,
-    | it will be included here.
-    |
-    |--------------------------------------------------------------------------
-    */
-
-    if (
-      process.env
-        .SRDV_API_TOKEN
-    ) {
-
-      headers[
-        "Api-Token"
-      ] =
-        process.env
-          .SRDV_API_TOKEN;
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Call Provider Book API
-    |--------------------------------------------------------------------------
-    */
-
-    const providerResponse =
-      await axios.post(
-
-        process.env
-          .SRDV_BOOK_URL,
-
-        requestBody,
-
-        {
-          headers,
-
-          timeout:
-            30000,
-        }
-      );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Provider Response
-    |--------------------------------------------------------------------------
-    */
-
-    const apiData =
-      providerResponse
-        .data;
-
-
-    console.log(
-      "[BusBooking][Book] Provider Response",
-      JSON.stringify(
-        apiData,
-        null,
-        2
-      )
-    );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Check Provider Error
-    |--------------------------------------------------------------------------
-    */
-
-    const providerErrorCode =
-      Number(
-        apiData
-          ?.Error
-          ?.ErrorCode ??
-        0
-      );
-
-
-    const providerErrorMessage =
-      String(
-        apiData
-          ?.Error
-          ?.ErrorMessage ||
-        ""
-      );
-
-
-    if (
-      providerErrorCode !==
-      0
-    ) {
-
-      console.log(
-        "[BusBooking][Book] Provider Error",
-        {
-          providerErrorCode,
-          providerErrorMessage,
-          traceId:
-            apiData
-              ?.TraceId,
-        }
-      );
-
-
-      return res
-        .status(400)
-        .json({
-
-          success: false,
-
-          message:
-            providerErrorMessage ||
-            "Unable to book bus ticket",
-
-          errorCode:
-            providerErrorCode,
-
-          traceId:
-            apiData
-              ?.TraceId ||
-            String(
-              traceId
-            ),
-
-          providerError:
-            apiData
-              ?.Error,
-        });
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Extract Booking Result
-    |--------------------------------------------------------------------------
-    */
-
-    const bookingId =
-      apiData
-        ?.BookingId ??
-      null;
-
-
-    const bookingStatus =
-      apiData
-        ?.Result
-        ?.BusBookingStatus ||
-      null;
-
-
-    const ticketNo =
-      apiData
-        ?.Result
-        ?.TicketNo ||
-      null;
-
-
-    const travelOperatorPNR =
-      apiData
-        ?.Result
-        ?.TravelOperatorPNR ||
-      null;
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Validate Successful Booking
-    |--------------------------------------------------------------------------
-    */
-
-    if (
-      !bookingId
-    ) {
-
-      console.error(
-        "[BusBooking][Book] BookingId missing",
-        apiData
-      );
-
-
-      return res
-        .status(400)
-        .json({
-
-          success: false,
-
-          message:
-            "Provider did not return BookingId",
-
-          providerResponse:
-            apiData,
-        });
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Validate Booking Status
-    |--------------------------------------------------------------------------
-    */
-
-    if (
-      String(
-        bookingStatus ||
-        ""
-      ).toLowerCase() !==
-      "success"
-    ) {
-
-      console.error(
-        "[BusBooking][Book] Booking status was not successful",
-        {
-          bookingId,
-          bookingStatus,
-          ticketNo,
-        }
-      );
-
-
-      return res
-        .status(400)
-        .json({
-
-          success: false,
-
-          message:
-            "Bus booking was not successful",
-
-          bookingId,
-
-          bookingStatus,
-
-          providerResponse:
-            apiData,
-        });
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Successful Booking
-    |--------------------------------------------------------------------------
-    */
-
-    console.log(
-      "======================================"
-    );
-
-    console.log(
-      "[BusBooking][Book] BOOKING SUCCESS"
-    );
-
-    console.log(
-      "BookingId:",
-      bookingId
-    );
-
-    console.log(
-      "BookingStatus:",
-      bookingStatus
-    );
-
-    console.log(
-      "TicketNo:",
-      ticketNo
-    );
-
-    console.log(
-      "TravelOperatorPNR:",
-      travelOperatorPNR
-    );
-
-    console.log(
-      "======================================"
-    );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Return Clean Response To React Native
-    |--------------------------------------------------------------------------
-    */
-
-    return res
-      .status(200)
-      .json({
-
-        success: true,
-
-        message:
-          "Bus ticket booked successfully",
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | Booking Session
-        |--------------------------------------------------------------------------
-        */
-
-        traceId:
-          String(
-            apiData
-              ?.TraceId ||
-            traceId
-          ),
-
-        srdvIndex:
-          String(
-            apiData
-              ?.SrdvIndex ||
-            srdvIndex
-          ),
-
-        resultIndex:
-          String(
-            apiData
-              ?.ResultIndex ||
-            resultIndex
-          ),
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | Final Booking Details
-        |--------------------------------------------------------------------------
-        */
-
-        bookingId,
-
-        bookingStatus,
-
-        ticketNo,
-
-        travelOperatorPNR,
-      });
-
-
-  } catch (
-    error
-  ) {
-
-    /*
-    |--------------------------------------------------------------------------
-    | Provider HTTP Error
-    |--------------------------------------------------------------------------
-    */
-
-    if (
-      error.response
-    ) {
-
-      console.error(
-        "[BusBooking][Book] Provider HTTP Error",
-        {
-
-          status:
-            error.response
-              .status,
-
-          data:
-            error.response
-              .data,
-        }
-      );
-
-
-      const providerData =
-        error.response
-          .data;
-
-
-      return res
-        .status(
-          error.response
-            .status ||
-          500
-        )
-        .json({
-
-          success: false,
-
-          message:
-            providerData
-              ?.Error
-              ?.ErrorMessage ||
-
-            providerData
-              ?.message ||
-
-            "Book provider API error",
-
-          providerResponse:
-            providerData,
-        });
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Network / Internal Error
-    |--------------------------------------------------------------------------
-    */
-
-    console.error(
-      "[BusBooking][Book] Error",
-      error.message
-    );
-
-
-    return res
-      .status(500)
-      .json({
-
+    if (!existing) {
+      return res.status(404).json({
         success: false,
-
-        message:
-          "Unable to book bus ticket",
-
-        error:
-          error.message,
+        message: "Booking order not found",
       });
+    }
+
+    let result = await bookOrder(existing.id);
+    if (result.decision === "in_progress") {
+      result = await waitForBookingResult(existing.id);
+    }
+
+    const { decision, order } = result;
+
+    if (decision === "already_confirmed") {
+      return res.status(200).json({
+        success: true,
+        reused: !result.attempted,
+        message: result.attempted
+          ? "Bus ticket booked successfully"
+          : "Bus ticket already booked",
+        orderRef: order.order_ref,
+        traceId: String(order.trace_id),
+        srdvIndex: String(order.srdv_index),
+        resultIndex: String(order.result_index),
+        bookingId: order.provider_booking_id,
+        bookingStatus: "Success",
+        ticketNo: order.ticket_no,
+        travelOperatorPNR: order.travel_operator_pnr,
+      });
+    }
+
+    if (decision === "failed") {
+      return res.status(400).json({
+        success: false,
+        code: "BOOKING_FAILED",
+        message:
+          "Bus booking could not be completed. Your payment will be refunded to the original payment method.",
+        orderRef: order.order_ref,
+        refundInitiated: true,
+      });
+    }
+
+    if (decision === "in_progress" || decision === "under_review") {
+      return res.status(202).json({
+        success: false,
+        pending: true,
+        code: "BOOKING_PENDING",
+        message:
+          "Your payment is safe. We are confirming your ticket with the operator.",
+        orderRef: order.order_ref,
+      });
+    }
+
+    return res.status(409).json({
+      success: false,
+      message: "A captured payment is required before booking",
+    });
+  } catch (error) {
+    console.error("[BusBooking][Book] Error", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Unable to book bus ticket",
+    });
   }
 };
+
+
+const getProviderBalance = async (req, res) => {
+  const requiredConfig = [
+    "SRDV_BALANCE_URL",
+    "SRDV_API_TOKEN",
+    "SRDV_CLIENT_ID",
+    "SRDV_USERNAME",
+    "SRDV_PASSWORD",
+    "SRDV_END_USER_IP",
+  ];
+  const missingConfig = requiredConfig.filter(
+    (key) => !String(process.env[key] || "").trim(),
+  );
+
+  if (missingConfig.length) {
+    console.error("[BusBooking][Balance] Missing configuration", missingConfig);
+    return res.status(500).json({
+      success: false,
+      message: "Balance provider configuration is missing",
+    });
+  }
+
+  try {
+    const providerResponse = await axios.post(
+      process.env.SRDV_BALANCE_URL,
+      {
+        EndUserIp: process.env.SRDV_END_USER_IP,
+        ClientId: process.env.SRDV_CLIENT_ID,
+        UserName: process.env.SRDV_USERNAME,
+        Password: process.env.SRDV_PASSWORD,
+      },
+      {
+        headers: {
+          "Api-Token": process.env.SRDV_API_TOKEN,
+          "Content-Type": "application/json",
+        },
+        timeout: 15000,
+      },
+    );
+
+    const apiData = providerResponse.data;
+    const providerErrorCode = Number(apiData?.Error?.ErrorCode ?? 0);
+    const providerErrorMessage = String(apiData?.Error?.ErrorMessage || "");
+
+    if (providerErrorCode !== 0) {
+      return res.status(400).json({
+        success: false,
+        message: providerErrorMessage || "Unable to fetch provider balance",
+        errorCode: providerErrorCode,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        balance: apiData?.Balance ?? null,
+        creditLimit: apiData?.CreditLimit ?? null,
+      },
+    });
+  } catch (error) {
+    console.error("[BusBooking][Balance] Error", error.message);
+    return res.status(error.response ? 502 : 500).json({
+      success: false,
+      message: "Unable to fetch provider balance",
+    });
+  }
+};
+
+const getProviderBalanceLog = async (req, res) => {
+  const requiredConfig = [
+    "SRDV_BALANCE_LOG_URL",
+    "SRDV_API_TOKEN",
+    "SRDV_CLIENT_ID",
+    "SRDV_USERNAME",
+    "SRDV_PASSWORD",
+    "SRDV_END_USER_IP",
+  ];
+  const missingConfig = requiredConfig.filter(
+    (key) => !String(process.env[key] || "").trim(),
+  );
+
+  if (missingConfig.length) {
+    console.error("[BusBooking][BalanceLog] Missing configuration", missingConfig);
+    return res.status(500).json({
+      success: false,
+      message: "Balance log provider configuration is missing",
+    });
+  }
+
+  try {
+    const providerResponse = await axios.post(
+      process.env.SRDV_BALANCE_LOG_URL,
+      {
+        EndUserIp: process.env.SRDV_END_USER_IP,
+        ClientId: process.env.SRDV_CLIENT_ID,
+        UserName: process.env.SRDV_USERNAME,
+        Password: process.env.SRDV_PASSWORD,
+      },
+      {
+        headers: {
+          "Api-Token": process.env.SRDV_API_TOKEN,
+          "Content-Type": "application/json",
+        },
+        timeout: 30000,
+      },
+    );
+
+    const apiData = providerResponse.data;
+    const providerErrorCode = Number(apiData?.Error?.ErrorCode ?? 0);
+    const providerErrorMessage = String(apiData?.Error?.ErrorMessage || "");
+
+    if (providerErrorCode !== 0) {
+      return res.status(400).json({
+        success: false,
+        message: providerErrorMessage || "Unable to fetch provider balance log",
+        errorCode: providerErrorCode,
+      });
+    }
+
+    const entries = Array.isArray(apiData?.Result) ? apiData.Result : [];
+    return res.status(200).json({
+      success: true,
+      data: entries.map((entry) => ({
+        id: entry?.ID ?? null,
+        date: entry?.Date ?? null,
+        clientId: entry?.ClientID ?? null,
+        clientName: entry?.ClientName ?? null,
+        detail: entry?.Detail ?? null,
+        debit: entry?.Debit ?? null,
+        credit: entry?.Credit ?? null,
+        balance: entry?.Balance ?? null,
+        module: entry?.Module ?? null,
+        traceId: entry?.TraceID ?? null,
+        refId: entry?.RefID ?? null,
+        updatedBy: entry?.UpdatedBy ?? null,
+      })),
+    });
+  } catch (error) {
+    console.error("[BusBooking][BalanceLog] Error", error.message);
+    return res.status(error.response ? 502 : 500).json({
+      success: false,
+      message: "Unable to fetch provider balance log",
+    });
+  }
+};
+
+const cancelBusTicket = async (req, res) => {
+  const userId = req.user.user_id;
+  const orderRef = String(req.body?.order_ref || "").trim();
+  const seatName = String(req.body?.seatName || "").trim();
+  const remarks = String(req.body?.remarks || "").trim();
+
+  if (!orderRef || !seatName || !remarks) {
+    return res.status(400).json({
+      success: false,
+      message: "order_ref, seatName and remarks are required",
+    });
+  }
+
+  if (remarks.length > 500) {
+    return res.status(400).json({
+      success: false,
+      message: "remarks must not exceed 500 characters",
+    });
+  }
+
+  const requiredConfig = [
+    "SRDV_CANCEL_URL",
+    "SRDV_API_TOKEN",
+    "SRDV_CLIENT_ID",
+    "SRDV_USERNAME",
+    "SRDV_PASSWORD",
+  ];
+  const missingConfig = requiredConfig.filter(
+    (key) => !String(process.env[key] || "").trim(),
+  );
+  if (missingConfig.length) {
+    console.error("[BusBooking][Cancel] Missing configuration", missingConfig);
+    return res.status(500).json({
+      success: false,
+      message: "Cancellation provider configuration is missing",
+    });
+  }
+
+  let connection;
+  let cancellationId;
+  let order;
+  // Once the provider has been asked, the seat may be cancelled whatever
+  // happens next, so the request must never be written off as "failed".
+  let providerCalled = false;
+
+  try {
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+
+    const [orderRows] = await connection.execute(
+      `SELECT id, user_id, order_ref, trace_id, seat_count, total_amount,
+              reward_coins_used, status, payment_status
+         FROM busbooking_orders
+        WHERE order_ref = ? AND user_id = ?
+        LIMIT 1
+        FOR UPDATE`,
+      [orderRef, userId],
+    );
+    order = orderRows[0];
+
+    if (!order) {
+      await connection.rollback();
+      return res.status(404).json({ success: false, message: "Booking order not found" });
+    }
+
+    if (order.status !== "confirmed" || order.payment_status !== "paid") {
+      await connection.rollback();
+      return res.status(409).json({
+        success: false,
+        message: "Only a confirmed paid booking can be cancelled",
+      });
+    }
+
+    const [[passenger]] = await connection.execute(
+      `SELECT id
+         FROM busbooking_passengers
+        WHERE busbooking_order_id = ? AND seat_name = ?
+        LIMIT 1`,
+      [order.id, seatName],
+    );
+    if (!passenger) {
+      await connection.rollback();
+      return res.status(400).json({
+        success: false,
+        message: "Seat does not belong to this booking",
+      });
+    }
+
+    const [[existing]] = await connection.execute(
+      `SELECT id, status, refund_status, refund_amount
+         FROM busbooking_cancellations
+        WHERE busbooking_order_id = ? AND seat_name = ?
+        LIMIT 1
+        FOR UPDATE`,
+      [order.id, seatName],
+    );
+
+    if (existing?.status === "succeeded") {
+      await connection.commit();
+      return res.status(200).json({
+        success: true,
+        reused: true,
+        message: "Seat was already cancelled",
+        data: {
+          order_ref: orderRef,
+          seatName,
+          refundAmount: Number(existing.refund_amount),
+          refundStatus: existing.refund_status,
+        },
+      });
+    }
+
+    if (existing?.status === "processing") {
+      await connection.rollback();
+      return res.status(409).json({
+        success: false,
+        message: "Cancellation is already being processed",
+      });
+    }
+
+    if (existing) {
+      cancellationId = existing.id;
+      await connection.execute(
+        `UPDATE busbooking_cancellations
+            SET remarks = ?, status = 'processing',
+                provider_error_code = NULL, provider_error_message = NULL
+          WHERE id = ?`,
+        [remarks, cancellationId],
+      );
+    } else {
+      const [insertResult] = await connection.execute(
+        `INSERT INTO busbooking_cancellations
+          (busbooking_order_id, user_id, seat_name, remarks, status)
+         VALUES (?, ?, ?, ?, 'processing')`,
+        [order.id, userId, seatName, remarks],
+      );
+      cancellationId = insertResult.insertId;
+    }
+
+    await connection.commit();
+    connection.release();
+    connection = null;
+
+    let apiData;
+    providerCalled = true;
+    try {
+      const providerResponse = await axios.post(
+        process.env.SRDV_CANCEL_URL,
+        {
+          ClientId: process.env.SRDV_CLIENT_ID,
+          UserName: process.env.SRDV_USERNAME,
+          Password: process.env.SRDV_PASSWORD,
+          TraceId: String(order.trace_id),
+          SeatName: seatName,
+          Remark: remarks,
+        },
+        {
+          headers: {
+            "Api-Token": process.env.SRDV_API_TOKEN,
+            "Content-Type": "application/json",
+          },
+          timeout: 30000,
+        },
+      );
+      apiData = providerResponse.data;
+    } catch (providerError) {
+      console.error("[BusBooking][Cancel] Provider request failed", providerError.message);
+
+      if (!isAmbiguousProviderError(providerError)) {
+        await db.execute(
+          `UPDATE busbooking_cancellations
+              SET status = 'failed', provider_error_message = ?
+            WHERE id = ?`,
+          [
+            `Provider rejected the cancel request (HTTP ${providerError.response.status})`,
+            cancellationId,
+          ],
+        );
+        return res.status(502).json({
+          success: false,
+          message: "Unable to cancel bus seat",
+        });
+      }
+
+      await db.execute(
+        `UPDATE busbooking_cancellations
+            SET provider_error_message = ?
+          WHERE id = ?`,
+        ["Cancel request outcome is unknown", cancellationId],
+      );
+      await sendOpsAlert({
+        level: "critical",
+        category: "busbooking_review",
+        message: `Bus cancellation for ${orderRef} seat ${seatName} has an unknown provider outcome`,
+        meta: { orderId: order.id, cancellationId },
+      });
+      return res.status(202).json({
+        success: true,
+        message: "Bus cancellation is being processed",
+        data: {
+          order_ref: orderRef,
+          seatName,
+          status: "processing",
+          refundAmount: 0,
+          refundStatus: "not_requested",
+        },
+      });
+    }
+
+    const providerErrorCode = Number(apiData?.Error?.ErrorCode ?? 0);
+    const providerErrorMessage = String(apiData?.Error?.ErrorMessage || "");
+
+    if (providerErrorCode !== 0) {
+      await db.execute(
+        `UPDATE busbooking_cancellations
+            SET status = 'failed', provider_error_code = ?,
+                provider_error_message = ?, raw_response = ?
+          WHERE id = ?`,
+        [
+          String(providerErrorCode),
+          providerErrorMessage || null,
+          JSON.stringify(apiData),
+          cancellationId,
+        ],
+      );
+      return res.status(400).json({
+        success: false,
+        message: providerErrorMessage || "Unable to cancel bus seat",
+        errorCode: providerErrorCode,
+      });
+    }
+
+    const providerRefundAmount = Number(
+      apiData?.RefundAmount ?? apiData?.Result?.RefundAmount ?? 0,
+    );
+    const providerStatus = String(apiData?.Status || "").trim();
+    const providerCancelId = apiData?.CancelId ?? null;
+    const isFinalSuccess = ["success", "cancelled", "canceled"].includes(
+      providerStatus.toLowerCase(),
+    );
+
+    let refundId = null;
+    let refundAmount = 0;
+
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+
+    if (isFinalSuccess) {
+      ({ refundId, refundAmount } = await applyCancellationSuccess(connection, {
+        order,
+        cancellationId,
+        providerRefundAmount,
+        providerCancelId,
+        providerStatus,
+        rawResponse: apiData,
+      }));
+    } else {
+      await connection.execute(
+        `UPDATE busbooking_cancellations
+            SET provider_cancel_id = ?, provider_status = ?, raw_response = ?
+          WHERE id = ?`,
+        [
+          providerCancelId === null ? null : String(providerCancelId),
+          providerStatus || null,
+          JSON.stringify(apiData),
+          cancellationId,
+        ],
+      );
+    }
+
+    await connection.commit();
+    connection.release();
+    connection = null;
+
+    let refundStatus = "not_requested";
+    if (refundId) {
+      const refund = await processRefund(refundId);
+      refundStatus = refund.status === "processed" ? "processed" : "pending";
+    }
+
+    if (!isFinalSuccess) {
+      await sendOpsAlert({
+        level: "error",
+        category: "busbooking_review",
+        message: `Bus cancellation for ${orderRef} seat ${seatName} returned non-final status "${providerStatus}"`,
+        meta: { orderId: order.id, cancellationId },
+      });
+    }
+
+    return res.status(isFinalSuccess ? 200 : 202).json({
+      success: true,
+      message: isFinalSuccess
+        ? "Bus seat cancelled successfully"
+        : "Bus cancellation is being processed",
+      data: {
+        order_ref: orderRef,
+        seatName,
+        cancelId: providerCancelId,
+        status: providerStatus,
+        refundAmount,
+        refundStatus,
+      },
+    });
+  } catch (error) {
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch {}
+    }
+
+    if (cancellationId && !providerCalled) {
+      try {
+        await db.execute(
+          `UPDATE busbooking_cancellations
+              SET status = 'failed', provider_error_message = ?
+            WHERE id = ? AND status = 'processing'`,
+          ["Cancellation could not be started", cancellationId],
+        );
+      } catch (updateError) {
+        console.error("[BusBooking][Cancel] Failed to record failure", updateError.message);
+      }
+    } else if (cancellationId) {
+      await sendOpsAlert({
+        level: "critical",
+        category: "busbooking_review",
+        message: `Bus cancellation for ${orderRef} seat ${seatName}: provider result could not be recorded`,
+        meta: { cancellationId, error: error.message },
+      });
+    }
+
+    console.error("[BusBooking][Cancel] Error", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Unable to cancel bus seat",
+    });
+  } finally {
+    if (connection) connection.release();
+  }
+};
+
+/*
+|--------------------------------------------------------------------------
+| Admin review
+|--------------------------------------------------------------------------
+|
+| A booking or cancellation whose provider outcome could not be determined is
+| parked for staff, who check the provider and record what really happened.
+|
+|--------------------------------------------------------------------------
+*/
+
+const resolveBookingReview = async (req, res) => {
+  const orderRef = String(req.body?.order_ref || "").trim();
+  const outcome = String(req.body?.outcome || "").trim();
+  const bookingId = String(req.body?.bookingId || "").trim();
+
+  if (!orderRef || !["confirmed", "failed"].includes(outcome)) {
+    return res.status(400).json({
+      success: false,
+      message: "order_ref and outcome (confirmed or failed) are required",
+    });
+  }
+
+  if (outcome === "confirmed" && !bookingId) {
+    return res.status(400).json({
+      success: false,
+      message: "bookingId is required to confirm a booking",
+    });
+  }
+
+  try {
+    const result = await resolveReviewedBooking(orderRef, {
+      outcome,
+      bookingId,
+      ticketNo: String(req.body?.ticketNo || "").trim() || null,
+      travelOperatorPNR: String(req.body?.travelOperatorPNR || "").trim() || null,
+      note: String(req.body?.note || "").trim() || null,
+    });
+
+    if (!result.ok) {
+      return res.status(result.status).json({ success: false, message: result.message });
+    }
+
+    console.info("[BusBooking][Review] Booking resolved", {
+      orderRef,
+      outcome,
+      resolvedBy: req.user.user_id,
+    });
+    return res.status(200).json({
+      success: true,
+      data: {
+        order_ref: orderRef,
+        status: result.order.status,
+        paymentStatus: result.order.payment_status,
+      },
+    });
+  } catch (error) {
+    console.error("[BusBooking][Review] Booking resolve failed", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Unable to resolve booking",
+    });
+  }
+};
+
+const resolveCancellationReview = async (req, res) => {
+  const orderRef = String(req.body?.order_ref || "").trim();
+  const seatName = String(req.body?.seatName || "").trim();
+  const outcome = String(req.body?.outcome || "").trim();
+  const refundAmount = Number(req.body?.refundAmount ?? 0);
+
+  if (!orderRef || !seatName || !["succeeded", "failed"].includes(outcome)) {
+    return res.status(400).json({
+      success: false,
+      message: "order_ref, seatName and outcome (succeeded or failed) are required",
+    });
+  }
+
+  if (!Number.isFinite(refundAmount) || refundAmount < 0) {
+    return res.status(400).json({
+      success: false,
+      message: "refundAmount must be zero or a positive number",
+    });
+  }
+
+  try {
+    const result = await resolveCancellation(orderRef, seatName, {
+      outcome,
+      refundAmount,
+      note: String(req.body?.note || "").trim() || null,
+    });
+
+    if (!result.ok) {
+      return res.status(result.status).json({ success: false, message: result.message });
+    }
+
+    console.info("[BusBooking][Review] Cancellation resolved", {
+      orderRef,
+      seatName,
+      outcome,
+      resolvedBy: req.user.user_id,
+    });
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("[BusBooking][Review] Cancellation resolve failed", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Unable to resolve cancellation",
+    });
+  }
+};
+
 module.exports = {
 
     getCities,
@@ -4368,10 +4418,20 @@ module.exports = {
     getBoardingDroppingPoints,
 
     blockSeat,
-    
+
     createPaymentOrder,
 
     verifyPayment,
 
     bookBusTicket,
+
+    cancelBusTicket,
+
+    resolveBookingReview,
+
+    resolveCancellationReview,
+
+    getProviderBalance,
+
+    getProviderBalanceLog,
 };

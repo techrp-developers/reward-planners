@@ -10,8 +10,33 @@ export default function RmLayout() {
   if (!user || user.role !== "rm") return <Navigate to="/login" replace />;
 
   return (
-    <PremiumPortalShell sidebar={<RmSidebar />} roleLabel="RM workspace" userLabel={user.name || user.email}>
-      <Outlet />
-    </PremiumPortalShell>
+    <>
+      <style>{`
+        .rm-portal button:not(:disabled),
+        .rm-portal a,
+        .rm-portal select:not(:disabled),
+        .rm-portal summary,
+        .rm-portal label[for],
+        .rm-portal label:has(input[type="file"]),
+        .rm-portal label:has(input[type="checkbox"]),
+        .rm-portal label:has(input[type="radio"]),
+        .premium-role-sidebar button:not(:disabled),
+        .premium-role-sidebar a,
+        .premium-role-sidebar summary {
+          cursor: pointer;
+        }
+
+        .rm-portal button:disabled,
+        .rm-portal select:disabled,
+        .premium-role-sidebar button:disabled {
+          cursor: not-allowed;
+        }
+      `}</style>
+      <PremiumPortalShell sidebar={<RmSidebar />} roleLabel="RM workspace" userLabel={user.name || user.email}>
+        <div className="rm-portal">
+          <Outlet />
+        </div>
+      </PremiumPortalShell>
+    </>
   );
 }

@@ -234,6 +234,100 @@ class RewardModel {
     return rows;
   }
 
+  // Batched sibling of getProductRewards — for a whole PAGE of items (e.g.
+  // AllProductsPage) instead of one. Fetches every specificity-matching
+  // mapping+rule row for the WHOLE batch in a single query, deliberately
+  // omitting the per-item order_amount price-band filter (each item has its
+  // own price) — callers must still run each item's candidate rules through
+  // resolveRedemption/calculateReward (server/app/ecommerce/v1/utils/
+  // rewardCalculate.js), which already do that price-band/active/redemption-
+  // capability filtering in pure JS given a rules array. This avoids N
+  // round trips without touching that filtering logic at all — same rules,
+  // same math, just fetched once instead of once per item.
+  //
+  // items: [{ productId, variantId, categoryId, subcategoryId, isDiscountEligible }]
+  // Returns a Map<string, row[]> keyed by `${productId}:${variantId}` —
+  // callers look up their own item's candidate rules by that key.
+  async getProductRewardsBatch(items) {
+    const eligible = items.filter((item) => item.isDiscountEligible && item.productId != null);
+    if (!eligible.length) return new Map();
+
+    const productIds = [...new Set(eligible.map((item) => item.productId))];
+    const variantIds = [...new Set(eligible.map((item) => item.variantId).filter((id) => id != null))];
+    const categoryIds = [...new Set(eligible.map((item) => item.categoryId).filter((id) => id != null))];
+    const subcategoryIds = [...new Set(eligible.map((item) => item.subcategoryId).filter((id) => id != null))];
+
+    const inClause = (column, ids) => `${column} IN (${ids.map(() => "?").join(",")})`;
+
+    // Built in lockstep with params (never pre-declared then patched) so an
+    // empty variantIds/categoryIds/subcategoryIds array just omits its
+    // branch entirely instead of risking a param/placeholder mismatch.
+    const conditions = [];
+    const params = [];
+
+    if (variantIds.length) {
+      conditions.push(`(${inClause("prs.variant_id", variantIds)} AND ${inClause("prs.product_id", productIds)})`);
+      params.push(...variantIds, ...productIds);
+    }
+    conditions.push(`(${inClause("prs.product_id", productIds)} AND prs.variant_id IS NULL)`);
+    params.push(...productIds);
+
+    if (subcategoryIds.length) {
+      conditions.push(inClause("prs.subcategory_id", subcategoryIds));
+      params.push(...subcategoryIds);
+    }
+    if (categoryIds.length) {
+      conditions.push(inClause("prs.category_id", categoryIds));
+      params.push(...categoryIds);
+    }
+    conditions.push(
+      `(prs.product_id IS NULL AND prs.variant_id IS NULL AND prs.category_id IS NULL AND prs.subcategory_id IS NULL)`,
+    );
+
+    const [rows] = await db.execute(
+      `
+    SELECT
+      prs.*,
+      rr.*,
+      prs.priority AS mapping_priority,
+      rr.priority AS rule_priority,
+      CASE
+        WHEN prs.variant_id IS NOT NULL THEN 1
+        WHEN prs.product_id IS NOT NULL THEN 2
+        WHEN prs.subcategory_id IS NOT NULL THEN 3
+        WHEN prs.category_id IS NOT NULL THEN 4
+        ELSE 5
+      END AS target_rank
+    FROM product_reward_settings prs
+    JOIN reward_rules rr
+      ON prs.reward_rule_id = rr.reward_rule_id
+    WHERE prs.is_active = 1
+      AND rr.is_active = 1
+      AND (${conditions.join(" OR ")})
+    `,
+      params,
+    );
+
+    // Group into per-item candidate lists by re-checking each row against
+    // every item's own specificity chain — same logical match the single-
+    // item query's WHERE clause does, just evaluated in JS against the
+    // pre-fetched batch instead of re-querying per item.
+    const result = new Map();
+    for (const item of eligible) {
+      const key = `${item.productId}:${item.variantId ?? ""}`;
+      const matches = rows.filter(
+        (row) =>
+          (row.variant_id != null && row.variant_id === item.variantId && row.product_id === item.productId) ||
+          (row.product_id === item.productId && row.variant_id == null) ||
+          (row.subcategory_id != null && row.subcategory_id === item.subcategoryId) ||
+          (row.category_id != null && row.category_id === item.categoryId) ||
+          (row.product_id == null && row.variant_id == null && row.category_id == null && row.subcategory_id == null),
+      );
+      result.set(key, matches);
+    }
+    return result;
+  }
+
   // WALLET TRANSACTION
   async insertWalletTransaction(conn, data) {
     const {

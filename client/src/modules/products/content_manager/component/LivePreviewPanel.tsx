@@ -1,0 +1,111 @@
+import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import type { ContentEntry, Zone } from "../types";
+import { getResolvedZones, type ContentModule } from "../api/ContentApi";
+import { fromApiEntry } from "../store/mappers";
+import type { ResolvedModuleIcon } from "../api/ModuleIconApi";
+import { resolveZoneEntry } from "../store";
+import PhoneFrame from "./PhoneFrame";
+import MobileHomePreview from "./MobileHomePreview";
+
+interface Props {
+  entries: ContentEntry[];
+  draft: ContentEntry;
+  now: Date;
+  module: ContentModule;
+  /** From GET /content/resolved/modules - fetched once at the Content Management level, not per-preview. */
+  moduleIcons?: ResolvedModuleIcon[];
+}
+
+type PreviewMode = "default" | "campaign";
+
+const DEVICE_WIDTHS = [360, 390, 430] as const;
+
+export default function LivePreviewPanel({ entries, draft, now, module, moduleIcons = [] }: Props) {
+  const [mode, setMode] = useState<PreviewMode>("campaign");
+  const [previewModule, setPreviewModule] = useState<string>(module);
+  const [deviceWidth, setDeviceWidth] = useState<(typeof DEVICE_WIDTHS)[number]>(390);
+  const { data: resolvedZones } = useQuery({
+    queryKey: ["content", "preview-zones", module],
+    queryFn: () => getResolvedZones(module),
+    refetchInterval: 30_000,
+  });
+
+  useEffect(() => {
+    setPreviewModule(module);
+  }, [module]);
+
+  const resolve = (zone: Zone): ContentEntry | undefined => {
+    if (zone === draft.zone) {
+      if (mode === "default") return entries.find((entry) => entry.zone === zone && entry.isDefault);
+      return draft;
+    }
+    if (resolvedZones) {
+      const entry = resolvedZones[zone];
+      return entry ? fromApiEntry(entry) : undefined;
+    }
+    return resolveZoneEntry(zone, entries, now);
+  };
+
+  const navbar = resolve("navbar_background");
+  const promo = resolve("promotional_banner");
+  const brand = resolve("brand_promotional_banner");
+  const offers = resolve("offers_banner");
+
+  return (
+    <div className="min-w-0 self-start space-y-4 lg:sticky lg:top-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-black text-slate-900">Live Mobile Preview</h3>
+          <span className="text-[11px] font-semibold text-slate-400">Reward Planner Home</span>
+        </div>
+
+        {!draft.isDefault && (
+          <div className="flex w-fit gap-1 rounded-xl border border-purple-100 bg-white p-1 shadow-sm">
+            <button
+              type="button"
+              onClick={() => setMode("default")}
+              className={`rounded-lg px-3 py-1.5 text-[11px] font-bold transition ${mode === "default" ? "bg-[#852BAF] text-white shadow" : "text-slate-500 hover:bg-purple-50"}`}
+            >
+              Default
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("campaign")}
+              className={`rounded-lg px-3 py-1.5 text-[11px] font-bold transition ${mode === "campaign" ? "bg-[#852BAF] text-white shadow" : "text-slate-500 hover:bg-purple-50"}`}
+            >
+              This Campaign
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-center gap-1.5">
+        <span className="text-[11px] font-semibold text-slate-400">Preview width:</span>
+        {DEVICE_WIDTHS.map((width) => (
+          <button
+            key={width}
+            type="button"
+            onClick={() => setDeviceWidth(width)}
+            className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition ${deviceWidth === width ? "bg-[#852BAF] text-white shadow" : "bg-white text-slate-500 border border-slate-200 hover:bg-purple-50"}`}
+          >
+            {width}
+          </button>
+        ))}
+      </div>
+
+      <PhoneFrame width={deviceWidth}>
+        <MobileHomePreview resolve={resolve} moduleIcons={moduleIcons} previewModule={previewModule} onSelectModule={setPreviewModule} />
+      </PhoneFrame>
+
+      <div className="space-y-1.5 rounded-2xl border border-slate-100 bg-white p-3">
+        {([["Navbar", navbar], ["Promo Banner", promo], ["Brand Promotional Banner", brand], ["Offers Banner", offers]] as const).map(([label, entry]) => (
+          <div key={label} className="flex items-center justify-between text-[11px]">
+            <span className="font-bold text-slate-500">{label}</span>
+            <span className="font-semibold text-slate-700">{entry?.isDefault ? "Default" : entry?.title || "—"}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

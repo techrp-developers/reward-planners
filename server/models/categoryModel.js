@@ -14,7 +14,7 @@ class CategoryModel {
   async updateCategoryImage(categoryId, imagePath) {
     await db.execute(
       `UPDATE categories
-     SET cover_image = ?
+     SET cover_image = ?, updated_at = NOW()
      WHERE category_id = ?`,
       [imagePath, categoryId],
     );
@@ -75,7 +75,7 @@ class CategoryModel {
 
   async updateCategoryImage(id, imagePath) {
     await db.execute(
-      `UPDATE categories SET cover_image = ? WHERE category_id = ?`,
+      `UPDATE categories SET cover_image = ?, updated_at = NOW() WHERE category_id = ?`,
       [imagePath, id],
     );
   }

@@ -20,9 +20,22 @@ import {
 import { api } from "../../../common/api/api";
 import { SERVER_CONFIG } from "../../../common/config/serverConfig";
 const API_BASEIMAGE_URL = SERVER_CONFIG.apiBaseUrl;
+const R2_PUBLIC_BASE_URL = "https://cdn.rewardplanners.com";
 
-const resolveImageUrl = (path: string) =>
-  path?.startsWith("http") ? path : `${API_BASEIMAGE_URL}/uploads/${path}`;
+const resolveImageUrl = (path: string) => {
+  if (!path) return "";
+  if (path.startsWith("http")) return path;
+
+  const cleanPath = path.replace(/^\/+/, "");
+  if (
+    cleanPath.startsWith("public/") ||
+    cleanPath.startsWith("private/")
+  ) {
+    return `${R2_PUBLIC_BASE_URL}/${cleanPath}`;
+  }
+
+  return `${API_BASEIMAGE_URL}/uploads/${cleanPath}`;
+};
 
 const downloadFile = (url: string, filename?: string) => {
   const link = document.createElement("a");
@@ -174,7 +187,7 @@ const DocumentPreviewCard = ({ label, doc }: { label: string; doc: any }) => {
     );
   }
 
-  const fileUrl = resolveImageUrl(doc.file_path);
+  const fileUrl = resolveImageUrl(doc.url || doc.file_path);
   const isImage = doc.mime_type?.startsWith("image/");
 
   return (

@@ -1,7 +1,13 @@
 const express = require("express");
 const router = express.Router();
 const BillController = require("../controllers/billController");
+const OperatorLogoController = require("../controllers/operatorLogoController");
 const auth = require("../../../common/middlewares/auth");
+const operatorLogoUpload = require("../../../../middleware/mediaUpload/operatorLogoUpload");
+const {
+  authenticateToken,
+  authorizeRoles,
+} = require("../../../../middleware/auth");
 const fetchBillValidation = require("../middlewares/fetchBillValidation");
 const fetchBillRateLimit = require("../middlewares/fetchBillRateLimit");
 const {
@@ -17,6 +23,28 @@ router.get("/locations", providerReadLimiter, BillController.getLocations);
 
 // Operators
 router.get("/operators", providerReadLimiter, BillController.getOperators);
+
+router.get(
+  "/operators/logos",
+  authenticateToken,
+  authorizeRoles("admin", "vendor_manager"),
+  OperatorLogoController.list,
+);
+
+router.delete(
+  "/operators/logo/:operatorId",
+  authenticateToken,
+  authorizeRoles("admin", "vendor_manager"),
+  OperatorLogoController.remove,
+);
+
+router.post(
+  "/operators/logo",
+  authenticateToken,
+  authorizeRoles("admin", "vendor_manager"),
+  operatorLogoUpload.single("logo"),
+  OperatorLogoController.upload,
+);
 
 // Search operators across ALL categories
 router.get(

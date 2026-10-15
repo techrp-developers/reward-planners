@@ -5,6 +5,7 @@ const {
   isEkoPaymentSuccessful,
 } = require("../services/paymentProcessor");
 const {
+  hasRazorpayPaymentAttempts,
   shouldIgnoreCapturedEvent,
   shouldIgnoreFailedEvent,
 } = require("../utils/paymentState");
@@ -88,4 +89,13 @@ test("late failed attempts cannot overwrite captured transaction states", () => 
     }),
     false,
   );
+});
+
+test("local cancellation is allowed only when Razorpay reports no payment attempts", () => {
+  assert.equal(hasRazorpayPaymentAttempts({ count: 0, items: [] }), false);
+  assert.equal(
+    hasRazorpayPaymentAttempts({ count: 1, items: [{ id: "pay_123", status: "created" }] }),
+    true,
+  );
+  assert.equal(hasRazorpayPaymentAttempts(null), false);
 });

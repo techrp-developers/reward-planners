@@ -58,6 +58,14 @@ const FETCH_BILL_TIMEOUT_MS =
   Number.isFinite(configuredFetchBillTimeout) && configuredFetchBillTimeout > 0
     ? configuredFetchBillTimeout
     : 30000;
+const configuredRechargeOperatorTimeout = Number(
+  process.env.EKO_RECHARGE_OPERATOR_TIMEOUT_MS || 8000,
+);
+const RECHARGE_OPERATOR_TIMEOUT_MS =
+  Number.isFinite(configuredRechargeOperatorTimeout) &&
+  configuredRechargeOperatorTimeout > 0
+    ? configuredRechargeOperatorTimeout
+    : 8000;
 const configuredCatalogCacheTtl = Number(
   process.env.EKO_CATALOG_CACHE_TTL_MS || 5 * 60 * 1000,
 );
@@ -90,10 +98,27 @@ const getCategoryName = (category) =>
   category?.operator_category_name;
 
 const getCategoryId = (category) =>
+  category?.operator_category_id ??
   category?.category_id ??
   category?.categoryId ??
-  category?.operator_category ??
-  category?.operator_category_id;
+  category?.operator_category;
+
+const getOperatorCategoryId = (operator) =>
+  operator?.operator_category ??
+  operator?.operator_category_id ??
+  operator?.category_id ??
+  operator?.categoryId;
+
+const normalizeCategory = (category) => ({
+  ...category,
+  category_id: getCategoryId(category),
+  category_name: getCategoryName(category),
+});
+
+const normalizeOperator = (operator) => ({
+  ...operator,
+  operator_category: getOperatorCategoryId(operator),
+});
 
 const isEnabledCategory = (category) =>
   ENABLED_CATEGORY_NAMES.has(normalizeCategoryName(getCategoryName(category)));
@@ -191,7 +216,9 @@ exports.getCategories = async () => {
 
   return {
     ...data,
-    data: (Array.isArray(data?.data) ? data.data : []).filter(isEnabledCategory),
+    data: (Array.isArray(data?.data) ? data.data : [])
+      .filter(isEnabledCategory)
+      .map(normalizeCategory),
   };
 };
 
@@ -206,9 +233,9 @@ exports.getOperators = async (category_id) => {
     getEnabledCategoryIds(),
   ]);
 
-  let operators = (Array.isArray(data?.data) ? data.data : []).filter((op) =>
-    enabledCategoryIds.has(String(op.operator_category)),
-  );
+  let operators = (Array.isArray(data?.data) ? data.data : [])
+    .map(normalizeOperator)
+    .filter((op) => enabledCategoryIds.has(String(op.operator_category)));
 
   if (category_id) {
     operators = operators.filter((op) => op.operator_category == category_id);
@@ -290,17 +317,174 @@ exports.searchOperators = async (keyword = "") => {
 };
 
 // 3. Operator details
+const normalizeOperatorDetails = (response, fallback = {}) => {
+  const record = response?.param_attributes || response?.data?.param_attributes || response;
+  const fields = record?.list_elements ?? record?.data;
+  return {
+    ...fallback,
+    ...record,
+    data: Array.isArray(fields) ? fields : [],
+  };
+};
+
 exports.getOperatorDetails = async (id) => {
   return withCatalogCache(`operator:${id}`, async () => {
     const headers = await headerUtil.fetchHeaders();
     const res = await axios.get(ekoUrl(`billpayments/operators/${id}`), {
       headers,
     });
-    return res.data;
+    const legacy = normalizeOperatorDetails(res.data);
+    if (legacy.data.some((field) => field?.param_name && field?.param_label)) {
+      return legacy;
+    }
+
+    const initiatorId = String(process.env.EKO_INITIATOR_ID || "").trim();
+    if (!initiatorId) {
+      throw new Error("Missing BBPS initiator configuration for operator parameters");
+    }
+    const parameters = await axios.get(
+      ekoRechargeUrl(`customer/payment/bbps/operator/${encodeURIComponent(id)}/parameters`),
+      {
+        headers: await headerUtil.fetchHeaders(),
+        params: { initiator_id: initiatorId },
+        timeout: FETCH_BILL_TIMEOUT_MS,
+      },
+    );
+    if (parameters.data?.status !== undefined && Number(parameters.data.status) !== 0) {
+      throw new Error("Unable to load biller fields from the provider. Please try again.");
+    }
+    const details = normalizeOperatorDetails(parameters.data, legacy);
+    if (!details.data.some((field) => field?.param_name && field?.param_label)) {
+      throw new Error("This biller's input fields are currently unavailable. Please try again later.");
+    }
+    return details;
   });
 };
 
+const findRechargeOperatorRecord = (value) => {
+  if (!value || typeof value !== "object") return null;
+  if (Array.isArray(value)) {
+    const namedValues = Object.fromEntries(
+      value
+        .filter(
+          (item) =>
+            item &&
+            typeof item === "object" &&
+            typeof item.name === "string" &&
+            Object.prototype.hasOwnProperty.call(item, "value"),
+        )
+        .map((item) => [item.name.trim().toLowerCase(), item.value]),
+    );
+    const namedMatch = findRechargeOperatorRecord(namedValues);
+    if (namedMatch) return namedMatch;
+  }
+  const operatorCode =
+    value.phone_operator_code ??
+    value.operator_code ??
+    value.operatorCode ??
+    value.operator_id ??
+    value.operatorId;
+  const circleId =
+    value.circleid ??
+    value.circle_id ??
+    value.circleId ??
+    value.circle_code ??
+    value.circle_area;
+
+  if (operatorCode !== undefined && operatorCode !== null) {
+    return { value, operatorCode, circleId };
+  }
+
+  for (const child of Object.values(value)) {
+    const match = findRechargeOperatorRecord(child);
+    if (match) return match;
+  }
+  return null;
+};
+
+exports.getRechargeOperator = async (mobile) => {
+  const headers = await headerUtil.fetchHeaders();
+  const path = `customer/payment/bbps/recharge/${encodeURIComponent(
+    mobile,
+  )}/operator`;
+  const response = await retry(
+    () =>
+      axios.get(ekoRechargeUrl(path), {
+        headers,
+        params: {
+          initiator_id: process.env.EKO_INITIATOR_ID,
+          user_code: process.env.EKO_USER_CODE,
+        },
+        timeout: RECHARGE_OPERATOR_TIMEOUT_MS,
+      }),
+    1,
+    250,
+  );
+  const providerResponse = response.data || {};
+
+  if (Number(providerResponse.status) !== 0) {
+    const error = new Error(
+      providerResponse.message || "EKO failed to identify the mobile operator",
+    );
+    error.statusCode = 502;
+    error.details = providerResponse;
+    throw error;
+  }
+
+  const match = findRechargeOperatorRecord(providerResponse);
+  if (!match || String(match.operatorCode).trim() === "") {
+    const error = new Error("EKO did not return an operator for this mobile number");
+    error.statusCode = 502;
+    error.details = providerResponse;
+    throw error;
+  }
+
+  return {
+    operatorId: String(match.operatorCode).trim(),
+    operatorName: String(
+      match.value.operator_name ?? match.value.operatorName ?? match.value.name ?? "",
+    ).trim() || null,
+    circleId:
+      match.circleId === undefined || match.circleId === null
+        ? null
+        : String(match.circleId).trim() || null,
+  };
+};
+
 exports.getRechargePlans = async ({ mobile, operatorCode, circleId }) => {
+  const detected = await exports.getRechargeOperator(mobile);
+
+  if (/\bpostpaid\b/i.test(String(detected.operatorName || ""))) {
+    const error = new Error(
+      "This mobile number is postpaid. Recharge packages are available only for prepaid numbers.",
+    );
+    error.statusCode = 422;
+    error.code = "RECHARGE_POSTPAID_NUMBER";
+    error.details = {
+      detectedOperatorId: detected.operatorId,
+      detectedOperatorName: detected.operatorName,
+      detectedCircleId: detected.circleId,
+    };
+    throw error;
+  }
+
+  if (operatorCode && String(operatorCode) !== detected.operatorId) {
+    const error = new Error(
+      `This mobile number belongs to ${detected.operatorName || "another operator"}. Please select the correct operator.`,
+    );
+    error.statusCode = 409;
+    error.code = "RECHARGE_OPERATOR_MISMATCH";
+    error.details = {
+      selectedOperatorId: String(operatorCode),
+      detectedOperatorId: detected.operatorId,
+      detectedOperatorName: detected.operatorName,
+      detectedCircleId: detected.circleId,
+    };
+    throw error;
+  }
+
+  const verifiedOperatorCode = detected.operatorId;
+  const verifiedCircleId = detected.circleId || circleId;
   const headers = await headerUtil.fetchHeaders();
   const path = `customer/payment/bbps/recharge/${encodeURIComponent(
     mobile,
@@ -311,12 +495,10 @@ exports.getRechargePlans = async ({ mobile, operatorCode, circleId }) => {
     user_code: process.env.EKO_USER_CODE,
   };
 
-  if (operatorCode) {
-    params.phone_operator_code = operatorCode;
-  }
+  params.phone_operator_code = verifiedOperatorCode;
 
-  if (circleId) {
-    params.circleid = circleId;
+  if (verifiedCircleId) {
+    params.circleid = verifiedCircleId;
   }
 
   const response = await axios.get(ekoRechargeUrl(path), {
@@ -349,7 +531,7 @@ exports.getRechargePlans = async ({ mobile, operatorCode, circleId }) => {
       return null;
     }
 
-    const fingerprint = `${operatorCode}|${circleId}|${amount}|${validity}|${description}`;
+    const fingerprint = `${verifiedOperatorCode}|${verifiedCircleId}|${amount}|${validity}|${description}`;
     return {
       planId: createHash("sha256")
         .update(fingerprint)
@@ -433,8 +615,9 @@ exports.getRechargePlans = async ({ mobile, operatorCode, circleId }) => {
     status: providerResponse.status,
     responseTypeId: providerResponse.response_type_id,
     message: providerResponse.message,
-    operatorId: operatorCode ? String(operatorCode) : null,
-    circleId: circleId ? String(circleId) : null,
+    operatorId: verifiedOperatorCode,
+    operatorName: detected.operatorName,
+    circleId: verifiedCircleId || null,
     mobile,
     count: plans.length,
     groups,
@@ -527,12 +710,13 @@ exports.getFetchBillReadiness = async (req, operatorId) => {
 };
 
 exports.fetchBill = async (body, req) => {
+  const initiatorId = String(process.env.EKO_INITIATOR_ID || "").trim();
   if (
     !BASE ||
     !process.env.EKO_DEVELOPER_KEY ||
     !process.env.EKO_ACCESS_KEY ||
     !process.env.EKO_USER_CODE ||
-    !process.env.EKO_INITIATOR_ID
+    !initiatorId
   ) {
     const envErr = new Error("Missing BBPS provider environment configuration");
     envErr.statusCode = 500;
@@ -555,6 +739,8 @@ exports.fetchBill = async (body, req) => {
     const payload = {
       operator_id,
       ...dynamicParams,
+      phone_operator_code: String(operator_id || "").trim(),
+      initiator_id: initiatorId,
       user_code: process.env.EKO_USER_CODE,
       client_ref_id: Date.now().toString(),
       hc_channel: "0",
@@ -568,25 +754,27 @@ exports.fetchBill = async (body, req) => {
       dynamicKeys: Object.keys(body || {}).filter(
         (key) => !["operator_id"].includes(key),
       ),
+      queryKeys: Object.keys(payload),
+      initiatorIdPresent: Boolean(payload.initiator_id),
+      phone_operator_code: payload.phone_operator_code,
     });
+
+    const fetchBillEndpoint = ekoRechargeUrl("customer/payment/bbps/bill");
 
     console.info("[BBPS][provider][fetch-bill] request-meta", {
       initiator_id: process.env.EKO_INITIATOR_ID,
       source_ip: payload.source_ip,
-      endpoint: ekoUrl(
-        `billpayments/fetchbill?initiator_id=${process.env.EKO_INITIATOR_ID}`,
-      ),
+      endpoint: fetchBillEndpoint,
+      method: "GET",
     });
 
     const res = await retry(
       () =>
-        axios.post(
-          ekoUrl(
-            `billpayments/fetchbill?initiator_id=${process.env.EKO_INITIATOR_ID}`,
-          ),
-          payload,
-          { headers, timeout: FETCH_BILL_TIMEOUT_MS },
-        ),
+        axios.get(fetchBillEndpoint, {
+          headers,
+          params: payload,
+          timeout: FETCH_BILL_TIMEOUT_MS,
+        }),
       1,
     );
 

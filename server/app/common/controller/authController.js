@@ -7,6 +7,7 @@
   const FitnessService = require("../../step-counter/v1/service/fitnessService");
   const bcrypt = require("bcryptjs");
   const crypto = require("crypto");
+  const bwipjs = require("bwip-js");
   const {
     issueCustomerSession,
     rotateCustomerSession,
@@ -35,7 +36,16 @@ const { getPublicUrl } = require("../../../utils/publicUrl");
 const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
 
   function generateOTP() {
-    return crypto.randomInt(100000, 1000000).toString();
+    const otp = crypto.randomInt(100000, 1000000).toString();
+    const shouldLogOtp =
+      process.env.NODE_ENV !== "production" ||
+      String(process.env.LOG_OTP_TO_CONSOLE).toLowerCase() === "true";
+
+    if (shouldLogOtp) {
+      console.log(`[DEV OTP] Generated customer OTP: ${otp}`);
+    }
+
+    return otp;
   }
 
   function normalizeEmail(email) {
@@ -43,13 +53,58 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
   }
 
   function normalizePhone(phone) {
-    return typeof phone === "string" || typeof phone === "number"
-      ? String(phone).trim()
-      : "";
+    if (typeof phone !== "string" && typeof phone !== "number") return "";
+    const digits = String(phone).replace(/\D/g, "");
+    // Employee contacts are stored as Indian 10-digit mobile numbers.
+    if (digits.length === 12 && digits.startsWith("91")) return digits.slice(2);
+    if (digits.length === 11 && digits.startsWith("0")) return digits.slice(1);
+    return digits;
+  }
+
+  function escapeVCardValue(value) {
+    return String(value ?? "")
+      .replace(/\\/g, "\\\\")
+      .replace(/\n/g, "\\n")
+      .replace(/;/g, "\\;")
+      .replace(/,/g, "\\,");
+  }
+
+  async function createVisitCardQr(user) {
+    const companyName = user.company?.name || "Reward Planners";
+    const role = user.employeeInfo?.role || "Customer";
+    const vcard = [
+      "BEGIN:VCARD",
+      "VERSION:3.0",
+      `FN:${escapeVCardValue(user.name)}`,
+      `ORG:${escapeVCardValue(companyName)}`,
+      `TITLE:${escapeVCardValue(role)}`,
+      `EMAIL:${escapeVCardValue(user.email)}`,
+      ...(user.phone ? [`TEL:${escapeVCardValue(user.phone)}`] : []),
+      `NOTE:Reward Planners customer #${user.userId}`,
+      "END:VCARD",
+    ].join("\r\n");
+
+    const png = await bwipjs.toBuffer({
+      bcid: "qrcode",
+      text: vcard,
+      scale: 5,
+      padding: 2,
+      backgroundcolor: "FFFFFF",
+    });
+
+    return png;
   }
 
   function getActivationIdentity(body = {}) {
-    const rawLogin = [body.login, body.email, body.phone, body.mobile, body.contact].find(
+    const rawLogin = [
+      body.login,
+      body.identifier,
+      body.username,
+      body.email,
+      body.phone,
+      body.mobile,
+      body.contact,
+    ].find(
       (value) => value !== undefined && value !== null && String(value).trim(),
     );
     const normalizedLogin =
@@ -325,7 +380,10 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
         });
       } catch (error) {
         console.error("Activate account error:", error);
-        return res.status(500).json({ success: false });
+        return res.status(500).json({
+          success: false,
+          message: "Unable to generate login code. Please try again.",
+        });
       }
     }
 
@@ -368,8 +426,10 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
           message: "OTP resent successfully",
         });
       } catch (error) {
+        console.error("Resend activation OTP error:", error);
         return res.status(500).json({
           success: false,
+          message: "Unable to generate login code. Please try again.",
         });
       }
     }
@@ -1684,6 +1744,10 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
             },
             thought: randomThought,
             birthday_employees: birthdayEmployees || [],
+            visit_card: {
+              qr_code_url: "/v1/auth/visit-card/qr",
+              format: "vcard",
+            },
           },
         });
       } catch (error) {
@@ -1692,6 +1756,31 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
         return res.status(500).json({
           success: false,
           message: "Failed to fetch user info",
+        });
+      }
+    }
+
+    async getVisitCardQr(req, res) {
+      try {
+        const userId = req.user?.user_id;
+        if (!userId) {
+          return res.status(401).json({ success: false, message: "Unauthorized user" });
+        }
+
+        const userInfo = await AuthModel.getUserInfo(userId);
+        if (!userInfo) {
+          return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        const png = await createVisitCardQr(userInfo);
+        res.set("Content-Type", "image/png");
+        res.set("Content-Disposition", `inline; filename=visit-card-${userId}.png`);
+        return res.send(png);
+      } catch (error) {
+        console.error("GET VISIT CARD QR ERROR:", error);
+        return res.status(500).json({
+          success: false,
+          message: "Failed to generate visit card QR",
         });
       }
     }

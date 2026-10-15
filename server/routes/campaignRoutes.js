@@ -6,6 +6,13 @@ const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 
 // ================================= ADMIN ROUTES =================================
 
+router.get(
+  "/redirect-targets",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  campaignController.getRedirectTargets,
+);
+
 // Create campaign
 router.post(
   "/campaigns",

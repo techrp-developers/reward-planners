@@ -8,6 +8,7 @@ import {
   FiLogOut,
   FiGift,
   FiChevronDown,
+  FiBarChart2,
 } from "react-icons/fi";
 import { HiOutlineUserCircle } from "react-icons/hi2";
 import { useAuth } from "../../../common/auth/useAuth";
@@ -89,6 +90,12 @@ const navItems: NavItem[] = [
     label: "Manage Rewards",
     to: "/hr/rewards",
     Icon: FiGift,
+  },
+  {
+    type: "link",
+    label: "Polls",
+    to: "/hr/polls",
+    Icon: FiBarChart2,
   },
 ];
 

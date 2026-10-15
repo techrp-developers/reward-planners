@@ -735,6 +735,42 @@ class ProductModel {
     }
   }
 
+  async getActiveCampaignOfferPrices(campaignId, productId) {
+    const [rows] = await db.execute(
+      `
+      SELECT ci.variant_id, ci.offer_price
+      FROM campaign_items ci
+      INNER JOIN campaigns c ON c.campaign_id = ci.campaign_id
+      WHERE ci.campaign_id = ?
+        AND ci.product_id = ?
+        AND c.campaign_type = 'flash_sale'
+        AND c.status = 'active'
+        AND NOW() BETWEEN c.start_at AND c.end_at
+        AND ci.offer_price IS NOT NULL
+      `,
+      [campaignId, productId],
+    );
+
+    return new Map(
+      rows.map((row) => [Number(row.variant_id), Number(row.offer_price)]),
+    );
+  }
+
+  async getActiveContentOfferPrices(contentId, productId) {
+    const [rows] = await db.execute(
+      `SELECT cpo.variant_id, cpo.offer_price
+       FROM content_product_offers cpo
+       JOIN content_zone_entries cze ON cze.content_id = cpo.content_id
+       WHERE cpo.content_id = ? AND cpo.product_id = ?
+         AND cze.zone = 'promotional_banner' AND cze.target_type = 'product'
+         AND cze.is_published = 1
+         AND (cze.start_at IS NULL OR cze.start_at <= NOW())
+         AND (cze.end_at IS NULL OR cze.end_at >= NOW())`,
+      [contentId, productId],
+    );
+    return new Map(rows.map((row) => [Number(row.variant_id), Number(row.offer_price)]));
+  }
+
   // async getProductsByCategory({
   //   search,
   //   sortBy,
@@ -1745,7 +1781,7 @@ class ProductModel {
 
           const finalRedeemCoins = redemptionEnabled ? redeem_coins : 0;
 
-          const rp_price = salePrice - finalRedeemCoins;
+          const rp_price = (salePrice - finalRedeemCoins).toFixed(2);
 
           return {
             product_id: row.product_id,
@@ -1754,8 +1790,8 @@ class ProductModel {
             variant_id: row.variant_id,
             image,
 
-            price: `₹${salePrice}`,
-            originalPrice: `₹${mrp}`,
+            price: `₹${salePrice.toFixed(2)}`,
+            originalPrice: `₹${mrp.toFixed(2)}`,
             discount: `${mrpDiscountPercent}%`,
             rp_price: redemptionEnabled ? `₹${rp_price}` : 0,
 
@@ -1951,7 +1987,7 @@ class ProductModel {
 
           const finalRedeemCoins = redemptionEnabled ? redeem_coins : 0;
 
-          const rp_price = salePrice - finalRedeemCoins;
+          const rp_price = (salePrice - finalRedeemCoins).toFixed(2);
 
           return {
             product_id: row.product_id,
@@ -1960,8 +1996,8 @@ class ProductModel {
             variant_id: row.variant_id,
             image,
 
-            price: `₹${salePrice}`,
-            originalPrice: `₹${mrp}`,
+            price: `₹${salePrice.toFixed(2)}`,
+            originalPrice: `₹${mrp.toFixed(2)}`,
             discount: `${mrpDiscountPercent}%`,
             rp_price: redemptionEnabled ? `₹${rp_price}` : 0,
 
@@ -2129,7 +2165,7 @@ class ProductModel {
 
           const finalRedeemCoins = redemptionEnabled ? redeem_coins : 0;
 
-          const rp_price = salePrice - finalRedeemCoins;
+          const rp_price = (salePrice - finalRedeemCoins).toFixed(2);
 
           return {
             product_id: row.product_id,
@@ -2139,8 +2175,8 @@ class ProductModel {
 
             image,
 
-            price: `₹${salePrice}`,
-            originalPrice: `₹${mrp}`,
+            price: `₹${salePrice.toFixed(2)}`,
+            originalPrice: `₹${mrp.toFixed(2)}`,
             discount: `${mrpDiscountPercent}%`,
             rp_price: redemptionEnabled ? `₹${rp_price}` : 0,
 
@@ -2315,7 +2351,7 @@ class ProductModel {
 
           const finalRedeemCoins = redemptionEnabled ? redeem_coins : 0;
 
-          const rp_price = salePrice - finalRedeemCoins;
+          const rp_price = (salePrice - finalRedeemCoins).toFixed(2);
 
           return {
             product_id: row.product_id,
@@ -2324,8 +2360,8 @@ class ProductModel {
             variant_id: row.variant_id,
             image,
 
-            price: `₹${salePrice}`,
-            originalPrice: `₹${mrp}`,
+            price: `₹${salePrice.toFixed(2)}`,
+            originalPrice: `₹${mrp.toFixed(2)}`,
             discount: `${mrpDiscountPercent}%`,
             rp_price: redemptionEnabled ? `₹${rp_price}` : 0,
 
@@ -2487,7 +2523,7 @@ class ProductModel {
 
           const finalRedeemCoins = redemptionEnabled ? redeem_coins : 0;
 
-          const rp_price = salePrice - finalRedeemCoins;
+          const rp_price = (salePrice - finalRedeemCoins).toFixed(2);
 
           return {
             product_id: row.product_id,
@@ -2497,8 +2533,8 @@ class ProductModel {
 
             image,
 
-            price: `₹${salePrice}`,
-            originalPrice: `₹${mrp}`,
+            price: `₹${salePrice.toFixed(2)}`,
+            originalPrice: `₹${mrp.toFixed(2)}`,
             discount: `${mrpDiscountPercent}%`,
             rp_price: redemptionEnabled ? `₹${rp_price}` : 0,
 
@@ -2662,7 +2698,7 @@ class ProductModel {
 
           const finalRedeemCoins = redemptionEnabled ? redeem_coins : 0;
 
-          const rp_price = salePrice - finalRedeemCoins;
+          const rp_price = (salePrice - finalRedeemCoins).toFixed(2);
 
           return {
             product_id: row.product_id,
@@ -2672,8 +2708,8 @@ class ProductModel {
 
             image,
 
-            price: `₹${salePrice}`,
-            originalPrice: `₹${mrp}`,
+            price: `₹${salePrice.toFixed(2)}`,
+            originalPrice: `₹${mrp.toFixed(2)}`,
             discount: `${mrpDiscountPercent}%`,
             rp_price: redemptionEnabled ? `₹${rp_price}` : 0,
 
@@ -2832,7 +2868,7 @@ class ProductModel {
 
           const finalRedeemCoins = redemptionEnabled ? redeem_coins : 0;
 
-          const rp_price = salePrice - finalRedeemCoins;
+          const rp_price = (salePrice - finalRedeemCoins).toFixed(2);
 
           return {
             product_id: row.product_id,
@@ -2842,8 +2878,8 @@ class ProductModel {
 
             image,
 
-            price: `₹${salePrice}`,
-            originalPrice: `₹${mrp}`,
+            price: `₹${salePrice.toFixed(2)}`,
+            originalPrice: `₹${mrp.toFixed(2)}`,
             discount: `${mrpDiscountPercent}%`,
             rp_price: redemptionEnabled ? `₹${rp_price}` : 0,
 
@@ -2989,7 +3025,7 @@ class ProductModel {
 
           const finalRedeemCoins = redemptionEnabled ? redeem_coins : 0;
 
-          const rp_price = salePrice - finalRedeemCoins;
+          const rp_price = (salePrice - finalRedeemCoins).toFixed(2);
 
           return {
             product_id: row.product_id,
@@ -2999,8 +3035,8 @@ class ProductModel {
 
             image,
 
-            price: `₹${salePrice}`,
-            originalPrice: `₹${mrp}`,
+            price: `₹${salePrice.toFixed(2)}`,
+            originalPrice: `₹${mrp.toFixed(2)}`,
             discount: `${mrpDiscountPercent}%`,
             rp_price: redemptionEnabled ? `₹${rp_price}` : 0,
 

@@ -18,6 +18,15 @@ function toDateObject(dateTimeString) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function toLocalDateTimeString(date) {
+  const pad = (value) => String(value).padStart(2, "0");
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+  ].join("-") + ` ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
 function buildReminderPayload(todo, reminder) {
   const isStartReminder = reminder.reminder_type === "START_15";
   const title = isStartReminder
@@ -36,6 +45,7 @@ function buildReminderPayload(todo, reminder) {
     icon: "clock",
     reference_type: "todo",
     reference_id: String(todo.id),
+    idempotency_key: `todo:reminder:${reminder.id}`,
     action_url: "/todo",
     screen: "TodoList",
     metadata: {
@@ -94,7 +104,7 @@ async function replaceReminderSchedule(todo, customReminders = []) {
         todo.created_by,
         "START_15",
         "15 min before",
-        `${startReminderAt.toISOString().slice(0, 19).replace("T", " ")}`,
+        toLocalDateTimeString(startReminderAt),
       ]);
     }
   }
@@ -112,7 +122,7 @@ async function replaceReminderSchedule(todo, customReminders = []) {
       todo.created_by,
       "CUSTOM",
       reminder.label || reminder.time,
-      `${scheduledAt.toISOString().slice(0, 19).replace("T", " ")}`,
+      toLocalDateTimeString(scheduledAt),
     ]);
   }
 
@@ -212,6 +222,7 @@ async function getDueReminders(limit = 100) {
     INNER JOIN todos t ON t.id = tr.todo_id
     WHERE tr.status IN ('pending', 'failed')
       AND tr.scheduled_for <= NOW()
+      AND tr.scheduled_for >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)
       AND tr.attempt_count < 5
       AND t.completed = 0
     ORDER BY tr.scheduled_for ASC, tr.id ASC
@@ -221,6 +232,19 @@ async function getDueReminders(limit = 100) {
   );
 
   return rows;
+}
+
+async function expireStaleReminders() {
+  await db.query(
+    `
+    UPDATE todo_reminders
+    SET status = 'expired',
+        last_error = 'Reminder delivery window elapsed',
+        updated_at = NOW()
+    WHERE status IN ('pending', 'failed')
+      AND scheduled_for < DATE_SUB(NOW(), INTERVAL 5 MINUTE)
+    `,
+  );
 }
 
 async function markReminderProcessing(reminderId) {
@@ -268,6 +292,7 @@ async function markReminderFailed(reminderId, error) {
 }
 
 async function processDueReminders(limit = 100) {
+  await expireStaleReminders();
   const reminders = await getDueReminders(limit);
 
   for (const reminder of reminders) {

@@ -17,12 +17,17 @@ const logisticRoutes = require("./logisticsRoute");
 const companyRoutes = require("./companyRoute");
 const maintenanceRoutes = require("./maintenanceRoute");
 const campaignRoutes = require("./campaignRoutes");
+const contentRoutes = require("./contentRoutes");
 const employeeRoutes = require("./employeeRoutes");
 const companyWalletRoutes = require("./companyWalletRoutes");
 const clientOnboardingOtpRoutes = require("./clientOnboardingOtpRoutes");
+const clientOnboardingReviewRoutes = require("./clientOnboardingReviewRoutes");
 const supportTicketRoutes = require("./supportTicketRoutes");
+const pollRoutes = require("./pollRoutes");
 
 // dashboard Routes
+// Expose app-global endpoints when this router is mounted at /api/crm.
+router.use("/v1/global", require("../app/common/routes/globalRoute"));
 router.use("/auth", authRoutes);
 router.use("/vendor", vendorRoutes);
 router.use("/manager", managerRoutes);
@@ -40,9 +45,12 @@ router.use("/logistics", logisticRoutes);
 router.use("/company", companyRoutes);
 router.use("/maintenance", maintenanceRoutes);
 router.use("/campaign", campaignRoutes);
+router.use("/content", contentRoutes);
 router.use("/employees", employeeRoutes);
 router.use("/company-wallet", companyWalletRoutes);
 router.use("/client-onboarding/otp", clientOnboardingOtpRoutes);
+router.use("/client-onboarding/reviews", clientOnboardingReviewRoutes);
 router.use("/manager", supportTicketRoutes);
+router.use("/polls", pollRoutes);
 
 module.exports = router;

@@ -31,7 +31,9 @@ const RmDashboard = lazy(() => import("./modules/rm/Dashboard.tsx"));
 const RmEmployeeDirectory = lazy(() => import("./modules/rm/employees/EmployeeDirectory.tsx"));
 const RmCompanyEmployees = lazy(() => import("./modules/rm/employees/CompanyEmployees.tsx"));
 const RmReportPage = lazy(() => import("./modules/rm/reports/RmReportPage.tsx"));
+const InactiveUsersReportPage = lazy(() => import("./modules/rm/reports/InactiveUsersReportPage.tsx"));
 const RmSupportTickets = lazy(() => import("./modules/rm/support/SupportTickets.tsx"));
+const RmClientApprovals = lazy(() => import("./modules/rm/clients/ClientApprovals.tsx"));
 const HrDashboard = lazy(() => import("./modules/hr/dashboard/HrDashboard.tsx"));
 const WarehouseDashboard = lazy(() => import("./modules/warehouse_manager/dashboard/WarehouseDashboard.tsx"));
 const FleaMarketDashboard = lazy(() => import("./modules/flea_market/dashboard/FleaMarketDashboard.tsx"));
@@ -57,6 +59,9 @@ const SubcategoryManagement = lazy(() => import("./modules/products/vendorManage
 const DocumentManagement = lazy(() => import("./modules/products/vendorManager/document/DocumentAdd.tsx"));
 const DocumentCategoryManagement = lazy(() => import("./modules/products/vendorManager/document/DocumentCategory.tsx"));
 const SubSubCategoryManagement = lazy(() => import("./modules/products/vendorManager/category/Subsubcategories.tsx"));
+const ContentManagement = lazy(() => import("./modules/products/content_manager/component/ContentManagement.tsx"));
+const ModuleIcon = lazy(() => import("./modules/products/content_manager/component/module_icon/ModuleIcon.tsx"));
+const AppIcons = lazy(() => import("./modules/products/content_manager/component/app_icon/AppIcons.tsx"));
 const ProductViewPage = lazy(() => import("./modules/products/vendorManager/ProductViewPage.tsx"));
 const Onboarding = lazy(() => import("./modules/products/vendor/Onboarding.tsx"));
 const ChangePasswordPage = lazy(() => import("./common/auth/changePassword.tsx"));
@@ -110,6 +115,7 @@ const ProductRewardMapping = lazy(() => import("./modules/products/vendorManager
 const AttributeManagement = lazy(() => import("./modules/products/vendorManager/attribute/attributes.tsx"));
 const FlashSaleList = lazy(() => import("./modules/products/vendorManager/flashSale/FlashSaleList.tsx"));
 const FlashSaleEditor = lazy(() => import("./modules/products/vendorManager/flashSale/FlashSaleEditor.tsx"));
+const BbpsLogoUpload = lazy(() => import("./modules/products/vendorManager/bbps/BbpsLogoUpload.tsx"));
 
 /* Sales */
 // import FlashSaleCreate from "./vendor/components/feature/manager/flashSale/FlashSaleCreate";
@@ -120,6 +126,7 @@ const FlashSaleEditor = lazy(() => import("./modules/products/vendorManager/flas
 const CancellationRequest = lazy(() => import("./modules/products/vendorManager/order/CancellationRequest.tsx"));
 const CancellationDetail = lazy(() => import("./modules/products/vendorManager/order/CancellationDetail.tsx"));
 const ManageRewards = lazy(() => import("./modules/hr/rewards/ManageRewards.tsx"));
+const PollManagement = lazy(() => import("./modules/hr/polls/PollManagement.tsx"));
 
 // Service Partners (Services vertical)
 const ServicePartnerList = lazy(() => import("./modules/service/serviceManager/servicePartners/pages/ServicePartnerList.tsx"));
@@ -348,9 +355,18 @@ export default function App() {
           element={<AttributeManagement />}
         />
 
+        {/* Content */}
+        <Route path={routes.manager.content.product} element={<ContentManagement module="product" />} />
+        <Route path={routes.manager.content.service} element={<ContentManagement module="service" />} />
+        <Route path={routes.manager.content.payment} element={<ContentManagement module="payment" />} />
+        <Route path={routes.manager.content.mobileDashboard} element={<ContentManagement module="mobile_dashboard" />} />
+        <Route path={routes.manager.content.moduleIcons} element={<ModuleIcon />} />
+        <Route path={routes.manager.content.appIcons} element={<AppIcons />} />
+
         <Route path={routes.manager.flashSales.list} element={<FlashSaleList />} />
         <Route path={routes.manager.flashSales.create} element={<FlashSaleEditor />} />
         <Route path={routes.manager.flashSales.edit} element={<FlashSaleEditor />} />
+        <Route path={routes.manager.bbpsLogos} element={<BbpsLogoUpload />} />
 
         {/* Orders */}
         <Route path={routes.manager.orders.orderList} element={<OrderList />} />
@@ -416,6 +432,11 @@ export default function App() {
           element={<AdminVendorApprovalForm />}
         />
         <Route path={routes.admin.services} element={<AdminServicesPage />} />
+        <Route path={routes.admin.content.product} element={<ContentManagement module="product" />} />
+        <Route path={routes.admin.content.service} element={<ContentManagement module="service" />} />
+        <Route path={routes.admin.content.payment} element={<ContentManagement module="payment" />} />
+        <Route path={routes.admin.content.mobileDashboard} element={<ContentManagement module="mobile_dashboard" />} />
+        <Route path={routes.admin.content.appIcons} element={<AppIcons />} />
       </Route>
 
       {/* ========== SERVICES ========== */}
@@ -581,6 +602,7 @@ export default function App() {
         />
         <Route path={routes.hr.profile} element={<EditProfilePage />} />
         <Route path={routes.hr.rewards} element={<ManageRewards />} />
+        <Route path={routes.hr.polls} element={<PollManagement />} />
       </Route>
 
       {/* ========== RM ========== */}
@@ -589,7 +611,9 @@ export default function App() {
         <Route path={routes.rm.employees} element={<RmEmployeeDirectory />} />
         <Route path={routes.rm.companyEmployees} element={<RmCompanyEmployees />} />
         <Route path={routes.rm.reports.usage} element={<RmReportPage />} />
+        <Route path={routes.rm.reports.inactiveUsers} element={<InactiveUsersReportPage />} />
         <Route path={routes.rm.supportTickets} element={<RmSupportTickets />} />
+        <Route path={routes.rm.clientApprovals} element={<RmClientApprovals />} />
         <Route path={routes.rm.changePassword} element={<ChangePasswordPage />} />
         <Route path={routes.rm.profile} element={<EditProfilePage />} />
       </Route>

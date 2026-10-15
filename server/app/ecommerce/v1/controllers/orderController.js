@@ -124,6 +124,11 @@ const template = fs.readFileSync(
   "utf8",
 );
 
+const invoiceLogo = fs.readFileSync(
+  path.join(__dirname, "../../../../templates/assets/invoice-logo.svg"),
+  "utf8",
+);
+
 function buildInvoiceHTML(invoice = {}, items = []) {
   // Build product rows
   const rows = items
@@ -158,7 +163,7 @@ function buildInvoiceHTML(invoice = {}, items = []) {
     .join("")
     .replace(/\n\s*.*GST\s+[^<\n]*%/g, "");
 
-  let html = template;
+  let html = template.replace(/{{company_logo}}/g, () => invoiceLogo);
 
   // ------------------------
   // Invoice Info
@@ -735,4 +740,10 @@ class OrderController {
   }
 }
 
-module.exports = new OrderController();
+const orderController = new OrderController();
+
+// Reused by post-payment email delivery. Keeping invoice rendering in one
+// place ensures downloaded and emailed invoices remain identical.
+orderController.buildInvoiceHTML = buildInvoiceHTML;
+
+module.exports = orderController;

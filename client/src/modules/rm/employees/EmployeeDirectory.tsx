@@ -1,3 +1,4 @@
+import EmployeeContactActions from "../../../common/components/EmployeeContactActions";
 import { useEffect, useMemo, useState } from "react";
 import { FiBriefcase, FiDownload, FiEdit2, FiEye, FiPlus, FiSearch, FiTrash2, FiUploadCloud, FiUsers, FiX } from "react-icons/fi";
 import { Link } from "react-router-dom";
@@ -35,6 +36,23 @@ interface Customer {
   device_platform: "android" | "ios" | null;
   device_id: string | null;
   device_name: string | null;
+}
+
+interface ReportEmployee {
+  id: number;
+  company_id: number;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  department: string | null;
+  role: string | null;
+  customer_id: number | null;
+  customer_status: number | null;
+  customer_is_verified: number | null;
+  device_platform: string | null;
+  device_name: string | null;
+  last_login_at: string | null;
+  created_at: string | null;
 }
 
 type Tab = "companies" | "employees";
@@ -129,6 +147,8 @@ export default function EmployeeDirectory() {
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState("");
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [downloadingReport, setDownloadingReport] = useState(false);
+  const [reportCompanyId, setReportCompanyId] = useState("");
   const query = useDebounce(search.trim().toLowerCase(), 250);
 
   async function fetchCompanies() {
@@ -344,6 +364,73 @@ export default function EmployeeDirectory() {
     }
   }
 
+  async function downloadEmployeeReport() {
+    setDownloadingReport(true);
+    setError("");
+    try {
+      if (reportCompanyId) {
+        // Use the existing company directory endpoint, including on servers
+        // that do not yet have the company-specific report route.
+        const response = await api.get(`/manager/employee-directory/companies/${encodeURIComponent(reportCompanyId)}/employees`);
+        const data = response.data?.data;
+        if (!data?.company || !Array.isArray(data.employees)
+          || Number(data.company.company_id) !== Number(reportCompanyId)
+          || data.employees.some((employee: ReportEmployee) => Number(employee.company_id) !== Number(reportCompanyId))) {
+          throw new Error("Company report response did not match the selected company");
+        }
+        const employees: ReportEmployee[] = data.employees;
+        const activated = (employee: ReportEmployee) => !!employee.customer_id && Number(employee.customer_status) === 1;
+        const detailRows = employees.map((employee) => [
+          employee.id, employee.name, data.company.company_name,
+          employee.email || "", employee.phone || "", employee.department || "", employee.role || "",
+          activated(employee) ? "Activated" : "Not Activated",
+          employee.device_platform === "ios" ? "iOS" : employee.device_platform === "android" ? "Android" : "Unknown",
+          employee.device_name || "", Number(employee.customer_is_verified) === 1 ? "Yes" : "No",
+          employee.last_login_at || "Never", employee.created_at || "",
+        ]);
+        const headers = ["Employee ID", "Employee Name", "Company", "Email", "Phone", "Department", "Role", "Activation Status", "Platform", "Device", "Verified", "Last Login", "Employee Created"];
+        const workbook = XLSX.utils.book_new();
+        const addSheet = (name: string, values: (string | number)[][]) => {
+          const sheet = XLSX.utils.aoa_to_sheet(values);
+          sheet["!cols"] = values[0].map(() => ({ wch: 24 }));
+          if (sheet["!ref"]) sheet["!autofilter"] = { ref: sheet["!ref"] };
+          XLSX.utils.book_append_sheet(workbook, sheet, name);
+        };
+        addSheet("Summary", [
+          ["Metric", "Count"],
+          ["Company", data.company.company_name],
+          ["Total Employees", employees.length],
+          ["Activated", employees.filter(activated).length],
+          ["Not Activated", employees.filter((employee) => !activated(employee)).length],
+          ["Android Users", employees.filter((employee) => activated(employee) && employee.device_platform === "android").length],
+          ["iOS Users", employees.filter((employee) => activated(employee) && employee.device_platform === "ios").length],
+          ["Platform Unknown", employees.filter((employee) => activated(employee) && !["android", "ios"].includes(employee.device_platform || "")).length],
+        ]);
+        addSheet("Employees", [headers, ...detailRows]);
+        addSheet("Activated Employees", [headers, ...detailRows.filter((row) => row[7] === "Activated")]);
+        addSheet("Not Activated Employees", [headers, ...detailRows.filter((row) => row[7] === "Not Activated")]);
+        XLSX.writeFile(workbook, `employee-activation-report-company-${reportCompanyId}-${new Date().toISOString().slice(0, 10)}.xlsx`);
+        return;
+      }
+      const response = await api.get("/manager/employee-directory/report", {
+        responseType: "blob",
+      });
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `employee-activation-report-${reportCompanyId ? `company-${reportCompanyId}-` : ""}${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (requestError) {
+      console.error("Unable to download employee report:", requestError);
+      setError("Unable to download the employee report.");
+    } finally {
+      setDownloadingReport(false);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       <section className="flex flex-col gap-4 rounded-2xl border border-purple-100 bg-white/70 p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
@@ -356,7 +443,17 @@ export default function EmployeeDirectory() {
             <p className="mt-0.5 text-xs font-medium text-gray-500">View companies and registered customer accounts</p>
           </div>
         </div>
-        <span className="rounded-xl bg-purple-50 px-3 py-1.5 text-xs font-bold text-[#852BAF]">{visibleCount} records</span>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="rounded-xl bg-purple-50 px-3 py-1.5 text-xs font-bold text-[#852BAF]">{visibleCount} records</span>
+          <label className="flex flex-col gap-1 text-xs font-semibold text-gray-500">
+            Report company
+            <select value={reportCompanyId} onChange={(event) => setReportCompanyId(event.target.value)} disabled={loading || downloadingReport} className="max-w-64 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700">
+              <option value="">All companies</option>
+              {companies.map((company) => <option key={company.company_id} value={company.company_id}>{company.company_name}</option>)}
+            </select>
+          </label>
+          <button type="button" onClick={() => void downloadEmployeeReport()} disabled={loading || downloadingReport} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#C64EFE] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"><FiDownload /> {downloadingReport ? "Downloading..." : "Download Report"}</button>
+        </div>
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
@@ -404,7 +501,7 @@ export default function EmployeeDirectory() {
               <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="px-5 py-3">Employee</th><th className="px-5 py-3">Company</th><th className="px-5 py-3">Role / Department</th><th className="px-5 py-3">Platform</th><th className="px-5 py-3">Account</th><th className="px-5 py-3">Last login</th></tr></thead>
               <tbody className="divide-y divide-gray-100">
                 {filteredCustomers.map((customer) => <tr key={customer.user_id} className="hover:bg-purple-50/30">
-                  <td className="px-5 py-4"><p className="font-bold text-gray-900">{customer.name}</p><p className="text-xs text-gray-500">{customer.email || "No email"}</p><p className="text-xs text-gray-400">{customer.phone || "No phone"}</p></td>
+                  <td className="px-5 py-4"><div className="flex items-center gap-2"><p className="font-bold text-gray-900">{customer.name}</p><EmployeeContactActions name={customer.name} email={customer.email} activated={Number(customer.status) === 1} endpoint={customer.company_id && customer.company_user_id ? `/manager/employee-directory/companies/${customer.company_id}/employees/${customer.company_user_id}/activation-email` : undefined} /></div><p className="text-xs text-gray-500">{customer.email || "No email"}</p><p className="text-xs text-gray-400">{customer.phone || "No phone"}</p></td>
                   <td className="px-5 py-4"><p className="font-semibold text-gray-700">{customer.company_name || "Unassigned"}</p><p className="text-xs text-gray-400">Customer #{customer.user_id}</p></td>
                   <td className="px-5 py-4"><p className="text-gray-700">{customer.company_role || "—"}</p><p className="text-xs text-gray-400">{customer.department || "No department"}</p></td>
                   <td className="px-5 py-4"><PlatformBadge platform={customer.device_platform} />{customer.device_name && <p className="mt-1 max-w-32 truncate text-[11px] text-gray-400" title={customer.device_name}>{customer.device_name}</p>}</td>

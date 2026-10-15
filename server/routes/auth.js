@@ -100,6 +100,10 @@ router.post("/admin/login", authLimiter, (req, res) =>
   authController.login(req, res, "admin"),
 );
 
+router.get("/hr/approvals", authenticateToken, authorizeRoles("admin", "vendor_manager", "rm"), authController.listHrApprovals);
+
+router.patch("/hr/approvals/:userId", authenticateToken, authorizeRoles("admin", "vendor_manager", "rm"), authController.reviewHrApproval);
+
 /* ============================================================
    LOGIN (ROLE RESOLVED FROM DB — used by the client login form,
    which no longer asks the user to pick a role up front)
@@ -129,5 +133,7 @@ router.post("/logout", authController.logout);
    ============================================================ */
 
 router.get("/all-states", authController.getAllStates);
+
+router.get("/client-onboarding-options", authController.getClientOnboardingOptions);
 
 module.exports = router;

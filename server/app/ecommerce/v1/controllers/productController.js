@@ -33,6 +33,20 @@ function getProductId(product) {
   return Number(product.product_id || product.id);
 }
 
+function shuffleProducts(products) {
+  const shuffled = [...products];
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[randomIndex]] = [
+      shuffled[randomIndex],
+      shuffled[index],
+    ];
+  }
+
+  return shuffled;
+}
+
 async function addWishlistStatus(products, userId) {
   const list = Array.isArray(products) ? products : [products];
 
@@ -195,7 +209,7 @@ class ProductController {
           const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
           const canRedeem = rules.some((r) => r.can_redeem_reward);
           const redemptionEnabled = canRedeem && redeem_coins > 0;
-          const rp_price = salePrice - redeem_coins;
+          const rp_price = (salePrice - redeem_coins).toFixed(2);
 
           const mrpDiscountPercent =
             mrp > 0 ? Math.round(((mrp - salePrice) / mrp) * 100) : 0;
@@ -210,8 +224,10 @@ class ProductController {
             sub_subcategory: product.sub_subcategory_name,
             short_description: product.short_description,
             image: mainImage,
-            price: salePrice ? `₹${salePrice}` : null,
-            originalPrice: product.mrp ? `₹${Number(product.mrp)}` : null,
+            price: salePrice ? `₹${salePrice.toFixed(2)}` : null,
+            originalPrice: product.mrp
+              ? `₹${Number(product.mrp).toFixed(2)}`
+              : null,
 
             rp_price: redemptionEnabled ? `₹${rp_price}` : null,
             redeem_coins: redemptionEnabled ? redeem_coins : 0,
@@ -348,7 +364,7 @@ class ProductController {
 
           const redemptionEnabled = canRedeem && redeem_coins > 0;
 
-          const rp_price = salePrice - redeem_coins;
+          const rp_price = (salePrice - redeem_coins).toFixed(2);
 
           const mrpDiscountPercent =
             mrp > 0 ? Math.round(((mrp - salePrice) / mrp) * 100) : 0;
@@ -363,8 +379,8 @@ class ProductController {
             sub_subcategory: product.sub_subcategory_name,
             image: mainImage,
 
-            price: salePrice ? `₹${salePrice}` : null,
-            originalPrice: mrp ? `₹${mrp}` : null,
+            price: salePrice ? `₹${salePrice.toFixed(2)}` : null,
+            originalPrice: mrp ? `₹${mrp.toFixed(2)}` : null,
             discount: `${mrpDiscountPercent}%`,
             rp_price: redemptionEnabled ? `₹${rp_price}` : 0,
             redeem_coins: redemptionEnabled ? redeem_coins : 0,
@@ -499,7 +515,7 @@ class ProductController {
 
           const redemptionEnabled = canRedeem && redeem_coins > 0;
 
-          const rp_price = salePrice - redeem_coins;
+          const rp_price = (salePrice - redeem_coins).toFixed(2);
 
           const mrpDiscountPercent =
             mrp > 0 ? Math.round(((mrp - salePrice) / mrp) * 100) : 0;
@@ -514,8 +530,8 @@ class ProductController {
             sub_subcategory: product.sub_subcategory_name,
             image: mainImage,
 
-            price: salePrice ? `₹${salePrice}` : null,
-            originalPrice: mrp ? `₹${mrp}` : null,
+            price: salePrice ? `₹${salePrice.toFixed(2)}` : null,
+            originalPrice: mrp ? `₹${mrp.toFixed(2)}` : null,
             discount: `${mrpDiscountPercent}%`,
             rp_price: redemptionEnabled ? `₹${rp_price}` : 0,
             redeem_coins: redemptionEnabled ? redeem_coins : 0,
@@ -577,6 +593,15 @@ class ProductController {
         });
       }
 
+      const campaignId = Number.parseInt(req.query.campaign_id, 10);
+      const contentId = Number.parseInt(req.query.content_id, 10);
+      const campaignOfferPrices = Number.isInteger(campaignId) && campaignId > 0
+        ? await ProductModel.getActiveCampaignOfferPrices(campaignId, productId)
+        : new Map();
+      const contentOfferPrices = Number.isInteger(contentId) && contentId > 0
+        ? await ProductModel.getActiveContentOfferPrices(contentId, productId)
+        : new Map();
+
       if (req.user?.user_id) {
         await db.execute(
           `
@@ -592,17 +617,27 @@ class ProductController {
         ...product,
         variants: await Promise.all(
           product.variants.map(async (variant) => {
-            const salePrice = Number(variant.sale_price) || 0;
+            const campaignPrice = campaignOfferPrices.get(Number(variant.variant_id));
+            const contentPrice = contentOfferPrices.get(Number(variant.variant_id));
+            const isCampaignPrice = campaignPrice !== undefined;
+            const isContentPrice = !isCampaignPrice && contentPrice !== undefined;
+            const isOfferPrice = isCampaignPrice || isContentPrice;
+            const salePrice = isCampaignPrice
+              ? campaignPrice
+              : isContentPrice ? contentPrice
+              : Number(variant.sale_price) || 0;
             const mrp = Number(variant.mrp) || 0;
 
-            const rules = await RewardModel.getProductRewards(
-              product.product_id,
-              variant.variant_id,
-              product.category_id,
-              product.subcategory_id,
-              salePrice,
-              product.is_discount_eligible,
-            );
+            const rules = isOfferPrice
+              ? []
+              : await RewardModel.getProductRewards(
+                  product.product_id,
+                  variant.variant_id,
+                  product.category_id,
+                  product.subcategory_id,
+                  salePrice,
+                  product.is_discount_eligible,
+                );
 
             let rewardCoins = 0;
             let canEarn = false;
@@ -642,8 +677,16 @@ class ProductController {
 
             return {
               ...variant,
-              price: `₹${salePrice}`,
-              finalPrice: redemptionEnabled ? `₹${finalPrice}` : null,
+              sale_price: salePrice,
+              original_sale_price: Number(variant.sale_price) || 0,
+              offer_price: isOfferPrice ? salePrice : null,
+              price: `₹${salePrice.toFixed(2)}`,
+              campaign_id: isCampaignPrice ? campaignId : null,
+              content_id: isContentPrice ? contentId : null,
+              promotional_offer_price: isContentPrice ? salePrice : null,
+              finalPrice: redemptionEnabled
+                ? `₹${finalPrice.toFixed(2)}`
+                : null,
               discount: `${mrpDiscountPercent}%`,
               redemption: {
                 enabled: redemptionEnabled,
@@ -691,9 +734,10 @@ class ProductController {
       const processedCategories = rows.map((category) => ({
         id: category.category_id,
         name: category.category_name,
-        image: category.cover_image
-          ? `${CDN_BASE_URL}/${category.cover_image}`
-          : null,
+        image: buildImageUrl(
+          category.cover_image,
+          category.updated_at,
+        ),
       }));
 
       res.json({
@@ -994,7 +1038,7 @@ class ProductController {
 
           const finalRedeemCoins = redemptionEnabled ? redeem_coins : 0;
 
-          const rp_price = salePrice - finalRedeemCoins;
+          const rp_price = (salePrice - finalRedeemCoins).toFixed(2);
 
           return {
             product_id: row.product_id,
@@ -1004,8 +1048,8 @@ class ProductController {
 
             image,
 
-            price: `₹${salePrice}`,
-            originalPrice: `₹${mrp}`,
+            price: `₹${salePrice.toFixed(2)}`,
+            originalPrice: `₹${mrp.toFixed(2)}`,
             discount: `${mrpDiscountPercent}%`,
             rp_price: redemptionEnabled ? `₹${rp_price}` : 0,
 
@@ -1062,7 +1106,7 @@ class ProductController {
         success: true,
         total: products.length,
         hasMore: products.length === limit,
-        products,
+        products: shuffleProducts(products),
       });
     } catch (error) {
       console.error("Recommendation error:", error);
@@ -1087,7 +1131,7 @@ class ProductController {
         success: true,
         total: products.length,
         hasMore: products.length === limit,
-        products,
+        products: shuffleProducts(products),
       });
     } catch (error) {
       console.error("New arrivals error:", error);
@@ -1124,7 +1168,7 @@ class ProductController {
         success: true,
         total: products.length,
         hasMore: products.length === limit,
-        products,
+        products: shuffleProducts(products),
       });
     } catch (error) {
       console.error("Customers also bought error:", error);
@@ -1155,7 +1199,7 @@ class ProductController {
         success: true,
         total: products.length,
         hasMore: products.length === limit,
-        products,
+        products: shuffleProducts(products),
       });
     } catch (error) {
       console.error("Trending products error:", error);
@@ -1182,7 +1226,7 @@ class ProductController {
         success: true,
         total: products.length,
         hasMore: products.length === limit,
-        products,
+        products: shuffleProducts(products),
       });
     } catch (error) {
       console.error("Best sellers error:", error);
@@ -1213,7 +1257,7 @@ class ProductController {
         success: true,
         total: products.length,
         hasMore: products.length === limit,
-        products,
+        products: shuffleProducts(products),
       });
     } catch (error) {
       console.error("Most viewed products error:", error);
@@ -1239,7 +1283,7 @@ class ProductController {
         success: true,
         total: products.length,
         hasMore: products.length === limit,
-        products,
+        products: shuffleProducts(products),
       });
     } catch (error) {
       console.error("Top rated products error:", error);
@@ -1271,9 +1315,10 @@ class ProductController {
       const processedSubCategories = data.map((subcategory) => ({
         id: subcategory.subcategory_id,
         name: subcategory.subcategory_name,
-        image: subcategory.cover_image
-          ? `${CDN_BASE_URL}/${subcategory.cover_image}`
-          : null,
+        image: buildImageUrl(
+          subcategory.cover_image,
+          subcategory.updated_at,
+        ),
       }));
 
       res.json({
@@ -1293,9 +1338,11 @@ class ProductController {
         c.category_id,
         c.category_name,
         c.cover_image AS category_image,
+        c.updated_at AS category_updated_at,
         sc.subcategory_id,
         sc.subcategory_name,
-        sc.cover_image AS subcategory_image
+        sc.cover_image AS subcategory_image,
+        sc.updated_at AS subcategory_updated_at
       FROM categories c
       LEFT JOIN sub_categories sc 
         ON sc.category_id = c.category_id 
@@ -1313,9 +1360,10 @@ class ProductController {
           categoryMap[row.category_id] = {
             id: row.category_id,
             name: row.category_name,
-            image: row.category_image
-              ? `${CDN_BASE_URL}/${row.category_image}`
-              : null,
+            image: buildImageUrl(
+              row.category_image,
+              row.category_updated_at,
+            ),
             subcategories: [],
           };
         }
@@ -1325,9 +1373,10 @@ class ProductController {
           categoryMap[row.category_id].subcategories.push({
             id: row.subcategory_id,
             name: row.subcategory_name,
-            image: row.subcategory_image
-              ? `${CDN_BASE_URL}/${row.subcategory_image}`
-              : null,
+            image: buildImageUrl(
+              row.subcategory_image,
+              row.subcategory_updated_at,
+            ),
           });
         }
       });
@@ -1369,7 +1418,7 @@ class ProductController {
         success: true,
         total: products.length,
         hasMore: products.length === limit,
-        products,
+        products: shuffleProducts(products),
       });
     } catch (error) {
       console.error("Get similar products error:", error);
@@ -1472,12 +1521,14 @@ class ProductController {
 
             image: mainImage,
 
-            price: `₹${salePrice}`,
-            originalPrice: `₹${mrp}`,
+            price: `₹${salePrice.toFixed(2)}`,
+            originalPrice: `₹${mrp.toFixed(2)}`,
 
             discount: `${mrpDiscountPercent}%`,
 
-            pointsPrice: redemptionEnabled ? `₹${finalPrice}` : null,
+            pointsPrice: redemptionEnabled
+              ? `₹${finalPrice.toFixed(2)}`
+              : null,
 
             points: finalRedeemCoins,
           };

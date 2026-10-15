@@ -1,6 +1,7 @@
 const cron = require("node-cron");
 const db = require("../../config/database");
-const { notifyUser } = require("../../app/common/utils/notification");
+const { notifyUserAndWait } = require("../../app/common/utils/notification");
+const SCHEDULE_TIMEZONE = process.env.SCHEDULE_TIMEZONE || "Asia/Kolkata";
 
 // Run every 30 minutes
 cron.schedule("*/30 * * * *", async () => {
@@ -8,27 +9,27 @@ cron.schedule("*/30 * * * *", async () => {
   await checkCartRecovery();
   await checkLowStockCarts();
   await checkPriceDrops();
-});
+}, { timezone: SCHEDULE_TIMEZONE, noOverlap: true, name: "ecommerce-cart-recovery" });
 
 // 1. Cart Abandonment: items in cart > 2 hours with no order
 async function checkCartRecovery() {
   try {
     const [abandonedCarts] = await db.query(
       `
-      SELECT DISTINCT ci.user_id, p.product_name
+      SELECT ci.user_id, DATE_FORMAT(NOW(), '%Y-%m-%d') AS notification_day
       FROM cart_items ci
-      JOIN eproducts p ON ci.product_id = p.product_id
       INNER JOIN customer c ON ci.user_id = c.user_id
       LEFT JOIN notifications n ON n.user_id = ci.user_id 
                                AND n.type = 'cart_abandonment'
                                AND n.created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
       WHERE ci.created_at <= DATE_SUB(NOW(), INTERVAL 2 HOUR)
         AND n.notification_id IS NULL
+      GROUP BY ci.user_id
       `
     );
 
     for (const cart of abandonedCarts) {
-      notifyUser({
+      await notifyUserAndWait({
         userId: cart.user_id,
         module: "ecommerce",
         type: "cart_abandonment",
@@ -37,6 +38,7 @@ async function checkCartRecovery() {
         icon: "shopping-cart",
         reference_type: "cart",
         reference_id: "cart_abandon",
+        idempotency_key: `cart:abandonment:${cart.user_id}:${cart.notification_day}`,
         action_url: "/cart",
       }, "cart abandonment notification");
     }
@@ -50,7 +52,8 @@ async function checkLowStockCarts() {
   try {
     const [lowStockItems] = await db.query(
       `
-      SELECT DISTINCT ci.user_id, p.product_name, v.stock, v.variant_id
+      SELECT DISTINCT ci.user_id, p.product_name, v.stock, v.variant_id,
+             DATE_FORMAT(NOW(), '%Y-%m-%d') AS notification_day
       FROM cart_items ci
       JOIN eproducts p ON ci.product_id = p.product_id
       JOIN product_variants v ON ci.variant_id = v.variant_id
@@ -69,7 +72,7 @@ async function checkLowStockCarts() {
     );
 
     for (const item of lowStockItems) {
-      notifyUser({
+      await notifyUserAndWait({
         userId: item.user_id,
         module: "ecommerce",
         type: "cart_low_stock",
@@ -78,6 +81,7 @@ async function checkLowStockCarts() {
         icon: "alert-triangle",
         reference_type: "product_variant",
         reference_id: String(item.variant_id),
+        idempotency_key: `cart:low-stock:${item.user_id}:${item.variant_id}:${item.notification_day}`,
         action_url: "/cart",
       }, "cart low stock notification");
     }
@@ -91,7 +95,8 @@ async function checkPriceDrops() {
   try {
     const [priceDrops] = await db.query(
       `
-      SELECT DISTINCT ci.user_id, p.product_name, v.sale_price, v.variant_id
+      SELECT DISTINCT ci.user_id, p.product_name, v.sale_price, v.variant_id,
+             DATE_FORMAT(NOW(), '%Y-%m-%d') AS notification_day
       FROM cart_items ci
       JOIN eproducts p ON ci.product_id = p.product_id
       JOIN product_variants v ON ci.variant_id = v.variant_id
@@ -107,7 +112,7 @@ async function checkPriceDrops() {
     );
 
     for (const item of priceDrops) {
-      notifyUser({
+      await notifyUserAndWait({
         userId: item.user_id,
         module: "ecommerce",
         type: "cart_price_drop",
@@ -116,6 +121,7 @@ async function checkPriceDrops() {
         icon: "trending-down",
         reference_type: "product_variant",
         reference_id: String(item.variant_id),
+        idempotency_key: `cart:price-drop:${item.user_id}:${item.variant_id}:${item.notification_day}`,
         action_url: "/cart",
       }, "cart price drop notification");
     }

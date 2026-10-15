@@ -1,0 +1,309 @@
+diff --git a/server/config/database.js b/server/config/database.js
+index 2814fce..cd11799 100644
+--- a/server/config/database.js
++++ b/server/config/database.js
+@@ -8,6 +8,17 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
+   throw new Error("DB_PORT must be an integer between 1 and 65535");
+ }
+ 
++const connectTimeout = Number(process.env.DB_CONNECT_TIMEOUT_MS || 10000);
++if (!Number.isSafeInteger(connectTimeout) || connectTimeout <= 0) {
++  throw new Error("DB_CONNECT_TIMEOUT_MS must be a positive integer");
++}
++if (!process.env.DB_PASSWORD) {
++  console.warn("Database startup warning: DB_PASSWORD is empty; verify that the configured MySQL user permits passwordless local connections.");
++}
++if (!process.env.DB_NAME) {
++  console.warn("Database startup warning: DB_NAME is not set; using the existing rewardplanners_db default.");
++}
++
+ const config = {
+   host: process.env.DB_HOST || "localhost",
+   port,
+@@ -19,6 +30,7 @@ const config = {
+   queueLimit: 0,
+   charset: "utf8mb4",
+   dateStrings: true,
++  connectTimeout,
+ };
+ 
+ console.log([
+@@ -31,13 +43,21 @@ console.log([
+ 
+ const pool = mysql.createPool(config);
+ // Acquiring a connection verifies authentication and the configured database.
+-pool.getConnection((err, connection) => {
+-  if (err) {
+-    console.error("Database connection: FAILED", err.code || "UNKNOWN_ERROR");
+-    return;
+-  }
+-  console.log("Database connection: SUCCESS");
+-  connection.release();
+-});
++function checkConnection(retried = false) {
++  pool.getConnection((err, connection) => {
++    if (err) {
++      if (err.code === "ETIMEDOUT" && !retried) {
++        console.warn("Database startup connection timed out; retrying once in 1 second. Check DB_HOST and DB_CONNECT_TIMEOUT_MS if it persists.");
++        setTimeout(() => checkConnection(true), 1000).unref();
++        return;
++      }
++      console.error("Database connection: FAILED", err.code || "UNKNOWN_ERROR");
++      return;
++    }
++    console.log("Database connection: SUCCESS");
++    connection.release();
++  });
++}
++checkConnection();
+ 
+ module.exports = pool.promise();
+diff --git a/server/config/firebase.js b/server/config/firebase.js
+index 10453e5..422ca1d 100644
+--- a/server/config/firebase.js
++++ b/server/config/firebase.js
+@@ -44,10 +44,10 @@ try {
+ 
+   console.log("Firebase Admin initialized successfully.");
+ } catch (error) {
+-  console.error(
+-    "Failed to initialize Firebase Admin SDK:",
++  console.warn(
++    "Firebase push notifications are disabled:",
+     error.message.startsWith("Missing Firebase credentials.")
+       ? error.message
+       : "Invalid or unreadable Firebase credentials. Check FIREBASE_SERVICE_ACCOUNT or FIREBASE_SERVICE_ACCOUNT_PATH.",
+   );
+-}
+\ No newline at end of file
++}
+diff --git a/server/config/mail.js b/server/config/mail.js
+index 67d8ff8..e46116b 100644
+--- a/server/config/mail.js
++++ b/server/config/mail.js
+@@ -1,22 +1,7 @@
+-const nodemailer = require("nodemailer");
+-
+-const transporter = nodemailer.createTransport({
+-  service: "gmail",
+-  auth: {
+-    user: process.env.MAIL_USER,
+-    pass: process.env.MAIL_PASS,
+-  },
+-});
+-
+-transporter.verify((err) => {
+-  if (err) {
+-    console.error("SMTP Error:", err);
+-  } else {
+-    console.log("SMTP ready");
+-  }
+-});
++const { transporter, assertMailConfigured } = require("./mailTransport");
+ 
+ async function sendOtpEmail(email, otp) {
++  assertMailConfigured();
+   try {
+     await transporter.sendMail({
+       from: `"Reward Planner" <${process.env.MAIL_USER}>`,
+@@ -36,6 +21,7 @@ async function sendOtpEmail(email, otp) {
+ }
+ 
+ async function sendPasswordResetEmail(email, link) {
++  assertMailConfigured();
+   await transporter.sendMail({
+     from: `"Reward Planner" <${process.env.MAIL_USER}>`,
+     to: email,
+@@ -52,6 +38,7 @@ async function sendPasswordResetEmail(email, link) {
+ }
+ 
+ async function sendAdminOnboardedEmail({ email, adminName, companyName }) {
++  assertMailConfigured();
+   const safeAdminName = String(adminName || "Administrator").replace(/[\r\n]/g, " ").slice(0, 120);
+   const safeCompanyName = String(companyName || "your organization").replace(/[\r\n]/g, " ").slice(0, 160);
+   const escapeHtml = (value) => value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
+diff --git a/server/services/mailService.js b/server/services/mailService.js
+index 0124cf0..1350cca 100644
+--- a/server/services/mailService.js
++++ b/server/services/mailService.js
+@@ -1,36 +1,4 @@
+-const nodemailer = require("nodemailer");
+-
+-const transporter = nodemailer.createTransport({
+-  service: "gmail",
+-  pool: true,
+-  connectionTimeout: Number(process.env.MAIL_CONNECTION_TIMEOUT_MS || 10000),
+-  greetingTimeout: Number(process.env.MAIL_GREETING_TIMEOUT_MS || 10000),
+-  socketTimeout: Number(process.env.MAIL_SOCKET_TIMEOUT_MS || 15000),
+-  auth: {
+-    user: process.env.MAIL_USER,
+-    pass: process.env.MAIL_PASS,
+-  },
+-});
+-
+-if (process.env.MAIL_USER && process.env.MAIL_PASS) {
+-  setImmediate(() => {
+-    transporter.verify((err) => {
+-      if (err) {
+-        console.error("SMTP Error Mail Services:", err);
+-      } else {
+-        console.log("SMTP ready Mail Services");
+-      }
+-    });
+-  });
+-} else {
+-  console.warn("SMTP credentials are missing; mail sending is disabled");
+-}
+-
+-function assertMailConfigured() {
+-  if (!process.env.MAIL_USER || !process.env.MAIL_PASS) {
+-    throw new Error("MAIL_CONFIG_MISSING");
+-  }
+-}
++const { transporter, assertMailConfigured } = require("../config/mailTransport");
+ 
+ async function sendMail({ to, subject, html, text, attachments }) {
+   assertMailConfigured();
+@@ -50,7 +18,9 @@ async function sendMailBestEffort(message, label = "mail") {
+     await sendMail(message);
+     return { ok: true };
+   } catch (err) {
+-    console.error(`[MAIL_BEST_EFFORT] ${label} failed:`, err);
++    if (err.message !== "MAIL_CONFIG_MISSING") {
++      console.error(`[MAIL_BEST_EFFORT] ${label} failed:`, err);
++    }
+     return { ok: false, error: err.message };
+   }
+ }
+
+diff --git a/server/config/mailTransport.js b/server/config/mailTransport.js
+new file mode 100644
+index 0000000..d4950ac
+--- /dev/null
++++ b/server/config/mailTransport.js
+@@ -0,0 +1,30 @@
++const path = require("path");
++require("dotenv").config({ path: path.join(__dirname, "../.env") });
++const nodemailer = require("nodemailer");
++
++const configured = Boolean(process.env.MAIL_USER && process.env.MAIL_PASS);
++const transporter = nodemailer.createTransport({
++  service: "gmail",
++  pool: true,
++  connectionTimeout: Number(process.env.MAIL_CONNECTION_TIMEOUT_MS || 10000),
++  greetingTimeout: Number(process.env.MAIL_GREETING_TIMEOUT_MS || 10000),
++  socketTimeout: Number(process.env.MAIL_SOCKET_TIMEOUT_MS || 15000),
++  auth: { user: process.env.MAIL_USER, pass: process.env.MAIL_PASS },
++});
++
++if (configured) {
++  setImmediate(() => {
++    transporter.verify((error) => {
++      if (error) console.warn("SMTP verification failed:", error.code || "UNKNOWN_ERROR");
++      else console.log("SMTP ready");
++    });
++  });
++} else {
++  console.warn("SMTP credentials are missing; mail sending is disabled. Set MAIL_USER and MAIL_PASS to enable Gmail SMTP.");
++}
++
++function assertMailConfigured() {
++  if (!configured) throw new Error("MAIL_CONFIG_MISSING");
++}
++
++module.exports = { transporter, assertMailConfigured };
+
+diff --git a/server/tests/localDevConfig.test.js b/server/tests/localDevConfig.test.js
+new file mode 100644
+index 0000000..10f0db8
+--- /dev/null
++++ b/server/tests/localDevConfig.test.js
+@@ -0,0 +1,87 @@
++const assert = require("node:assert/strict");
++const { readFileSync } = require("node:fs");
++const path = require("node:path");
++const { test } = require("node:test");
++const { runInNewContext } = require("node:vm");
++
++function loadConfig(file, env, dependencies = {}, timers = {}) {
++  const warnings = [];
++  const errors = [];
++  const module = { exports: {} };
++  runInNewContext(readFileSync(path.join(__dirname, "..", file), "utf8"), {
++    module, exports: module.exports, __dirname: path.join(__dirname, "../config"),
++    process: { env },
++    require(name) {
++      if (name === "path") return path;
++      if (name === "dotenv") return { config() {} };
++      if (name in dependencies) return dependencies[name];
++      throw new Error(`Unexpected dependency: ${name}`);
++    },
++    console: { log() {}, warn: (...args) => warnings.push(args.join(" ")), error: (...args) => errors.push(args.join(" ")) },
++    ...timers,
++  });
++  return { exports: module.exports, warnings, errors };
++}
++
++test("database keeps defaults and warns without exposing passwords", () => {
++  let options;
++  const mysql = { createPool(config) {
++    options = config;
++    return { getConnection(callback) { callback(null, { release() {} }); }, promise() { return {}; } };
++  } };
++  const result = loadConfig("config/database.js", {}, { mysql2: mysql });
++  assert.equal(options.host, "localhost");
++  assert.equal(options.user, "root");
++  assert.equal(options.database, "rewardplanners_db");
++  assert.equal(options.password, "");
++  assert.equal(options.connectTimeout, 10000);
++  assert.equal(options.dateStrings, true);
++  assert.equal(result.warnings.length, 2);
++});
++
++test("startup retries a timeout only once and respects configured timeout", () => {
++  let attempts = 0;
++  let timeout;
++  const mysql = { createPool(config) {
++    timeout = config.connectTimeout;
++    return { getConnection(callback) { attempts++; callback({ code: "ETIMEDOUT" }); }, promise() { return {}; } };
++  } };
++  const result = loadConfig("config/database.js", { DB_CONNECT_TIMEOUT_MS: "15000", DB_NAME: "rewardplanners_db" }, { mysql2: mysql }, {
++    setTimeout(callback, delay) { assert.equal(delay, 1000); callback(); return { unref() {} }; },
++  });
++  assert.equal(timeout, 15000);
++  assert.equal(attempts, 2);
++  assert.equal(result.errors.length, 1);
++  assert.match(result.errors[0], /ETIMEDOUT/);
++});
++
++test("authentication errors are not retried", () => {
++  let attempts = 0;
++  const mysql = { createPool() {
++    return { getConnection(callback) { attempts++; callback({ code: "ER_ACCESS_DENIED_ERROR" }); }, promise() { return {}; } };
++  } };
++  const result = loadConfig("config/database.js", {}, { mysql2: mysql }, {
++    setTimeout() { assert.fail("Authentication errors must not be retried"); },
++  });
++  assert.equal(attempts, 1);
++  assert.match(result.errors[0], /ER_ACCESS_DENIED_ERROR/);
++});
++
++test("missing Gmail credentials warn once and skip SMTP verification", () => {
++  const result = loadConfig("config/mailTransport.js", {}, {
++    nodemailer: { createTransport() { return { verify() { assert.fail("Missing credentials must not contact SMTP"); } }; } },
++  }, { setImmediate() { assert.fail("Missing credentials must not schedule SMTP verification"); } });
++  assert.equal(result.warnings.length, 1);
++  assert.equal(result.errors.length, 0);
++  assert.throws(() => result.exports.assertMailConfigured(), /MAIL_CONFIG_MISSING/);
++});
++
++test("missing Firebase credentials warn once without failing module load", () => {
++  const result = loadConfig("config/firebase.js", {}, {
++    fs: { existsSync() { return false; } },
++    "firebase-admin/app": { getApps() { return []; }, cert() { assert.fail("No credentials to certify"); }, initializeApp() { assert.fail("No credentials to initialize"); } },
++  });
++  assert.equal(result.warnings.length, 1);
++  assert.match(result.warnings[0], /Firebase push notifications are disabled/);
++  assert.equal(result.errors.length, 0);
++});
+

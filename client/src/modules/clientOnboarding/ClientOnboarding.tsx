@@ -1,17 +1,47 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../../common/api/api";
-import { MdAdminPanelSettings, MdAnalytics, MdArrowBack, MdArrowForward, MdAutorenew, MdBusiness, MdCelebration, MdCheck as Check, MdCheckCircle, MdClose, MdDarkMode, MdDraw, MdEmail, MdFactCheck, MdGroups, MdLightMode, MdLocationOn, MdPerson, MdRedeem, MdSecurity, MdVerifiedUser, MdVisibility, MdVisibilityOff, MdWhatsapp } from "react-icons/md";
+import logoImage from "../../common/assets/logo.svg";
+import { MdAdminPanelSettings, MdAnalytics, MdArrowForward, MdAutorenew, MdBusiness, MdCheck as Check, MdCheckCircle, MdClose, MdDarkMode, MdDraw, MdEmail, MdErrorOutline, MdFactCheck, MdGroups, MdHourglassTop, MdLightMode, MdLocationOn, MdPerson, MdRedeem, MdSecurity, MdVerifiedUser, MdVisibility, MdVisibilityOff, MdWhatsapp } from "react-icons/md";
 
 type FormData = Record<string, string | boolean>;
 type StateOption = { state_id: number; state_name: string };
+type CompanyTypeOption = { company_type_id: number; company_type_name: string };
+type IndustryOption = { industry_id: number; industry_name: string };
 type OtpChannel = "email" | "whatsapp";
 type OtpState = { sessionId: string; otp: string; sent: boolean; verified: boolean; verificationToken: string; loading: boolean; message: string; error: string };
 
 const emptyOtpState = (): OtpState => ({ sessionId: "", otp: "", sent: false, verified: false, verificationToken: "", loading: false, message: "", error: "" });
-// Temporary local-testing switch. Set to true to restore WhatsApp verification.
-const ENABLE_WHATSAPP_VERIFICATION = false;
+const ENABLE_WHATSAPP_VERIFICATION = true;
 const REQUIRE_ZOHO_SIGNING = String(import.meta.env.VITE_REQUIRE_ZOHO_SIGNING ?? "true").toLowerCase() !== "false";
+const ONBOARDING_RETURN_URL_KEY = "rp-client-onboarding-return-url";
+
+const onboardingReturnUrl = () => {
+  const configuredOrigins = String(import.meta.env.VITE_ONBOARDING_RETURN_ORIGINS || "https://rewardplanners.com,https://www.rewardplanners.com")
+    .split(",").map((value) => value.trim()).filter(Boolean);
+  const allowedOrigins = new Set([window.location.origin, ...configuredOrigins]);
+  const validate = (candidate: string | null) => {
+    if (!candidate) return "";
+    try {
+      const url = new URL(candidate, window.location.origin);
+      return allowedOrigins.has(url.origin) && ["http:", "https:"].includes(url.protocol) ? url.toString() : "";
+    } catch { return ""; }
+  };
+
+  const requested = validate(new URLSearchParams(window.location.search).get("returnUrl"));
+  if (requested) {
+    sessionStorage.setItem(ONBOARDING_RETURN_URL_KEY, requested);
+    return requested;
+  }
+  const saved = validate(sessionStorage.getItem(ONBOARDING_RETURN_URL_KEY));
+  if (saved) return saved;
+  const referrer = validate(document.referrer);
+  if (referrer) {
+    sessionStorage.setItem(ONBOARDING_RETURN_URL_KEY, referrer);
+    return referrer;
+  }
+  return "https://rewardplanners.com/";
+};
 
 const steps = [
   { title: "Company", icon: MdBusiness },
@@ -57,9 +87,14 @@ const fields: Record<number, Array<{ name: string; label: string; type?: string;
 
 export default function ClientOnboarding() {
   const navigate = useNavigate();
+  const exitUrl = useMemo(onboardingReturnUrl, []);
   const saved = useMemo(() => {
     try {
       const parsed = JSON.parse(localStorage.getItem("rp-client-onboarding") || "null");
+      if (parsed?.completed) {
+        localStorage.removeItem("rp-client-onboarding");
+        return null;
+      }
       if (parsed?.data) parsed.data = { ...parsed.data, password: "", confirmPassword: "" };
       return parsed;
     } catch { return null; }
@@ -78,11 +113,15 @@ export default function ClientOnboarding() {
   const [states, setStates] = useState<StateOption[]>([]);
   const [statesLoading, setStatesLoading] = useState(true);
   const [statesError, setStatesError] = useState("");
-  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("rp-onboarding-theme") !== "light");
+  const [companyTypes, setCompanyTypes] = useState<CompanyTypeOption[]>([]);
+  const [industries, setIndustries] = useState<IndustryOption[]>([]);
+  const [businessOptionsLoading, setBusinessOptionsLoading] = useState(true);
+  const [businessOptionsError, setBusinessOptionsError] = useState("");
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("rp-onboarding-theme") === "dark");
   const [showIntroduction, setShowIntroduction] = useState(true);
   const [otpVerification, setOtpVerification] = useState<Record<OtpChannel, OtpState>>({
     email: { ...emptyOtpState(), verified: Boolean(saved?.emailVerificationToken), verificationToken: String(saved?.emailVerificationToken || "") },
-    whatsapp: emptyOtpState(),
+    whatsapp: { ...emptyOtpState(), verified: Boolean(saved?.whatsappVerificationToken), verificationToken: String(saved?.whatsappVerificationToken || "") },
   });
   const [sendingAdminWelcome, setSendingAdminWelcome] = useState(false);
   const [adminWelcomeSent, setAdminWelcomeSent] = useState(false);
@@ -110,13 +149,41 @@ export default function ClientOnboarding() {
       return;
     }
     void api.post("/client-onboarding/otp/sign/status", { state: signingState }).then((response) => {
+      const consumed = Boolean(response.data?.data?.consumed);
       const signed = Boolean(response.data?.data?.signed);
       setAgreementSigned(signed);
+      if (consumed) {
+        localStorage.removeItem("rp-client-onboarding");
+        setAdminWelcomeSent(true);
+        setHighestStep(steps.length - 1);
+        setStep(steps.length - 1);
+        setAgreementMessage("This onboarding application has already been submitted.");
+        return;
+      }
       setAgreementMessage(signed ? "Agreement signed and confirmed by Zoho Sign." : "Zoho has not marked the agreement as signed yet. Please open it again and complete all required fields.");
     }).catch((requestError) => setAgreementMessage((requestError as { response?: { data?: { message?: string } } }).response?.data?.message || "Unable to confirm the signed agreement.")).finally(() => {
       setAgreementLoading(false);
       window.history.replaceState({}, "", window.location.pathname);
     });
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const loadBusinessOptions = async () => {
+      try {
+        const response = await api.get("/auth/client-onboarding-options");
+        if (!active) return;
+        const options = response.data?.data;
+        setCompanyTypes(Array.isArray(options?.companyTypes) ? options.companyTypes : []);
+        setIndustries(Array.isArray(options?.industries) ? options.industries : []);
+      } catch {
+        if (active) setBusinessOptionsError("Unable to load this list. Please refresh and try again.");
+      } finally {
+        if (active) setBusinessOptionsLoading(false);
+      }
+    };
+    void loadBusinessOptions();
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
@@ -138,6 +205,10 @@ export default function ClientOnboarding() {
   }, []);
 
   useEffect(() => {
+    if (step === steps.length - 1) {
+      localStorage.removeItem("rp-client-onboarding");
+      return;
+    }
     const { password: _password, confirmPassword: _confirmPassword, ...draftData } = data;
     localStorage.setItem("rp-client-onboarding", JSON.stringify({
       step,
@@ -145,12 +216,13 @@ export default function ClientOnboarding() {
       version: 2,
       data: draftData,
       emailVerificationToken: otpVerification.email.verificationToken,
+      whatsappVerificationToken: otpVerification.whatsapp.verificationToken,
       agreementState,
       agreementSigned,
       savedAt: new Date().toISOString(),
-      completed: step === steps.length - 1,
+      completed: false,
     }));
-  }, [step, highestStep, data, otpVerification.email.verificationToken, agreementState, agreementSigned]);
+  }, [step, highestStep, data, otpVerification.email.verificationToken, otpVerification.whatsapp.verificationToken, agreementState, agreementSigned]);
 
   const update = (name: string, value: string | boolean) => {
     let normalized = value;
@@ -215,9 +287,19 @@ export default function ClientOnboarding() {
           emailVerificationToken: otpVerification.email.verificationToken,
           signingState: agreementState,
         });
+        localStorage.removeItem("rp-client-onboarding");
         setAdminWelcomeSent(true);
       } catch (requestError) {
         const responseError = requestError as { response?: { data?: { code?: string } } };
+        if (responseError.response?.data?.code === "CLIENT_ONBOARDING_EXISTS") {
+          localStorage.removeItem("rp-client-onboarding");
+          setAdminWelcomeSent(true);
+          setHighestStep(steps.length - 1);
+          setStep(steps.length - 1);
+          setSendingAdminWelcome(false);
+          window.scrollTo({ top: 0, behavior: "smooth" });
+          return;
+        }
         if (responseError.response?.data?.code === "EMAIL_VERIFICATION_REQUIRED") {
           setOtpVerification((current) => ({ ...current, email: emptyOtpState() }));
           setStep(2);
@@ -330,43 +412,52 @@ export default function ClientOnboarding() {
     }
   };
 
-  const startOver = () => {
-    localStorage.removeItem("rp-client-onboarding");
-    setData(initialData);
-    setStep(0);
-    setHighestStep(0);
-    setError("");
-    setFieldErrors({});
-    setOtpVerification({ email: emptyOtpState(), whatsapp: emptyOtpState() });
-    setAdminWelcomeSent(false);
-    setSendingAdminWelcome(false);
-    setAgreementSigned(false);
-    setAgreementState("");
-    setAgreementLoading(false);
-    setAgreementMessage("");
-  };
-
   const renderFields = () => (
-    <div className="grid gap-4 sm:grid-cols-2">
+    <div className="rp-field-grid grid gap-6 sm:grid-cols-2">
       {(fields[step] || []).map((field) => (
-        <label key={field.name} className="group block border-0 bg-transparent p-1 transition-all duration-200">
-          <span className={`flex items-center justify-between text-sm font-bold ${darkMode ? "text-white" : "text-slate-600"}`}><span>{field.label}{field.required && <span className="text-pink-500"> *</span>}</span>{!darkMode && <span className="h-1.5 w-1.5 rounded-full bg-purple-300 transition group-focus-within:bg-[#C64EFE]" />}</span>
-          {field.name === "state" ? (
+        <label key={field.name} className="rp-field group block">
+          <span className={`mb-2 block text-[13px] font-bold ${darkMode ? "text-slate-200" : "text-slate-700"}`}>{field.label}{field.required && <span className="text-pink-500"> *</span>}</span>
+          {field.name === "companyType" || field.name === "industry" ? (
+            <>
+              <select
+                value={String(data[field.name] ?? "")}
+                onChange={(event) => update(field.name, event.target.value)}
+                onBlur={() => setFieldErrors((current) => ({ ...current, [field.name]: validateField(field.name, data[field.name] ?? "") }))}
+                disabled={businessOptionsLoading || Boolean(businessOptionsError)}
+                aria-invalid={Boolean(fieldErrors[field.name])}
+                aria-describedby={fieldErrors[field.name] ? `${field.name}-error` : undefined}
+                className={`h-12 w-full rounded-xl border px-4 text-sm font-semibold outline-none transition duration-200 focus:-translate-y-px focus:ring-4 disabled:cursor-not-allowed ${darkMode ? "border-white/10 bg-[#0c111d] text-white focus:border-violet-500 focus:ring-violet-500/10" : "border-slate-200 bg-slate-50/70 text-slate-800 hover:border-slate-300 focus:border-purple-400 focus:bg-white focus:ring-purple-100 disabled:bg-slate-100"} ${fieldErrors[field.name] ? "border-red-400 bg-red-50/40 focus:border-red-400 focus:ring-red-100" : ""}`}
+              >
+                <option value="">{businessOptionsLoading ? "Loading options…" : `Select ${field.name === "companyType" ? "company type" : "industry"}`}</option>
+                {(field.name === "companyType" ? companyTypes : industries).map((option) => (
+                  <option
+                    key={field.name === "companyType" ? (option as CompanyTypeOption).company_type_id : (option as IndustryOption).industry_id}
+                    value={field.name === "companyType" ? (option as CompanyTypeOption).company_type_name : (option as IndustryOption).industry_name}
+                  >
+                    {field.name === "companyType" ? (option as CompanyTypeOption).company_type_name : (option as IndustryOption).industry_name}
+                  </option>
+                ))}
+              </select>
+              {businessOptionsError && <span className="rp-field-error mt-2 flex items-center gap-1.5 text-xs font-semibold text-red-500"><MdErrorOutline className="shrink-0 text-sm" />{businessOptionsError}</span>}
+            </>
+          ) : field.name === "state" ? (
             <>
               <select
                 value={String(data.state ?? "")}
                 onChange={(event) => update("state", event.target.value)}
                 onBlur={() => setFieldErrors((current) => ({ ...current, state: validateField("state", data.state) }))}
                 disabled={statesLoading || Boolean(statesError)}
-                className={`mt-3 w-full rounded-xl border px-4 py-4 text-base font-medium outline-none transition focus:ring-4 disabled:cursor-not-allowed ${darkMode ? "border-[#4c4852] bg-[#242328] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus:border-fuchsia-500 focus:ring-fuchsia-500/10" : "border-transparent bg-[#f1f4f7] text-slate-800 focus:border-purple-300 focus:bg-white focus:ring-purple-100 disabled:bg-slate-100"} ${fieldErrors.state ? "border-red-400 focus:border-red-400 focus:ring-red-500/10" : ""}`}
+                aria-invalid={Boolean(fieldErrors.state)}
+                aria-describedby={fieldErrors.state ? "state-error" : undefined}
+                className={`h-12 w-full rounded-xl border px-4 text-sm font-semibold outline-none transition duration-200 focus:-translate-y-px focus:ring-4 disabled:cursor-not-allowed ${darkMode ? "border-white/10 bg-[#0c111d] text-white focus:border-violet-500 focus:ring-violet-500/10" : "border-slate-200 bg-slate-50/70 text-slate-800 hover:border-slate-300 focus:border-purple-400 focus:bg-white focus:ring-purple-100 disabled:bg-slate-100"} ${fieldErrors.state ? "border-red-400 bg-red-50/40 focus:border-red-400 focus:ring-red-100" : ""}`}
               >
                 <option value="">{statesLoading ? "Loading states…" : "Select state"}</option>
                 {states.map((state) => (
                   <option key={state.state_id} value={state.state_id}>{state.state_name}</option>
                 ))}
               </select>
-              {statesError && <span className="mt-1 block text-xs font-normal text-red-600">{statesError}</span>}
-              {fieldErrors.state && <span className="mt-1.5 block text-xs font-semibold text-red-600">{fieldErrors.state}</span>}
+              {statesError && <span className="rp-field-error mt-2 flex items-center gap-1.5 text-xs font-semibold text-red-500"><MdErrorOutline className="shrink-0 text-sm" />{statesError}</span>}
+              {fieldErrors.state && <span id="state-error" className="rp-field-error mt-2 flex items-center gap-1.5 text-xs font-semibold text-red-500"><MdErrorOutline className="shrink-0 text-sm" />{fieldErrors.state}</span>}
             </>
           ) : field.name === "employeeCount" ? (
             <>
@@ -374,7 +465,9 @@ export default function ClientOnboarding() {
                 value={String(data.employeeCount ?? "")}
                 onChange={(event) => update("employeeCount", event.target.value)}
                 onBlur={() => setFieldErrors((current) => ({ ...current, employeeCount: validateField("employeeCount", data.employeeCount) }))}
-                className={`mt-3 w-full rounded-xl border px-4 py-4 text-base font-medium outline-none transition focus:ring-4 ${darkMode ? "border-[#4c4852] bg-[#242328] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus:border-fuchsia-500 focus:ring-fuchsia-500/10" : "border-transparent bg-[#f1f4f7] text-slate-800 focus:border-purple-300 focus:bg-white focus:ring-purple-100"} ${fieldErrors.employeeCount ? "border-red-400 focus:border-red-400 focus:ring-red-500/10" : ""}`}
+                aria-invalid={Boolean(fieldErrors.employeeCount)}
+                aria-describedby={fieldErrors.employeeCount ? "employeeCount-error" : undefined}
+                className={`h-12 w-full rounded-xl border px-4 text-sm font-semibold outline-none transition duration-200 focus:-translate-y-px focus:ring-4 ${darkMode ? "border-white/10 bg-[#0c111d] text-white focus:border-violet-500 focus:ring-violet-500/10" : "border-slate-200 bg-slate-50/70 text-slate-800 hover:border-slate-300 focus:border-purple-400 focus:bg-white focus:ring-purple-100"} ${fieldErrors.employeeCount ? "border-red-400 bg-red-50/40 focus:border-red-400 focus:ring-red-100" : ""}`}
               >
                 <option value="">Select employee range</option>
                 <option value="1-100">1–100 employees</option>
@@ -386,19 +479,20 @@ export default function ClientOnboarding() {
             </>
           ) : (
             <div className="relative">
-            {field.type === "tel" && <span className={`pointer-events-none absolute left-4 top-[27px] z-10 flex h-9 items-center border-r pr-3 text-sm font-semibold ${darkMode ? "border-slate-600 text-slate-300" : "border-slate-300 text-slate-600"}`}>+91</span>}
+            {field.type === "tel" && <span className={`pointer-events-none absolute left-4 top-2 z-10 flex h-9 items-center border-r pr-3 text-sm font-semibold ${darkMode ? "border-slate-600 text-slate-300" : "border-slate-300 text-slate-600"}`}>+91</span>}
             <input
               type={field.type === "password" && visiblePasswords[field.name] ? "text" : field.type || "text"} value={String(data[field.name] ?? "")}
               onChange={(event) => update(field.name, event.target.value)} placeholder={field.type === "tel" ? "10-digit mobile number" : field.placeholder}
               autoComplete={field.type === "tel" ? "tel-national" : undefined}
               onBlur={() => setFieldErrors((current) => ({ ...current, [field.name]: validateField(field.name, data[field.name] ?? "") }))}
               aria-invalid={Boolean(fieldErrors[field.name])}
-              className={`mt-3 w-full rounded-xl border px-4 py-4 text-base font-medium outline-none transition placeholder:font-normal focus:ring-4 ${field.type === "password" ? "pr-12" : ""} ${field.type === "tel" ? "pl-[4.5rem]" : ""} ${darkMode ? "border-[#4c4852] bg-[#242328] text-white placeholder:text-[#8c8992] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus:border-fuchsia-500 focus:ring-fuchsia-500/10" : "border-transparent bg-[#f1f4f7] text-slate-800 placeholder:text-slate-400 focus:border-purple-300 focus:bg-white focus:ring-purple-100"} ${fieldErrors[field.name] ? "border-red-400 focus:border-red-400 focus:ring-red-500/10" : ""}`}
+              aria-describedby={fieldErrors[field.name] ? `${field.name}-error` : undefined}
+              className={`h-12 w-full rounded-xl border px-4 text-sm font-semibold outline-none transition duration-200 placeholder:font-normal focus:-translate-y-px focus:ring-4 ${field.type === "password" ? "pr-12" : ""} ${field.type === "tel" ? "pl-[4.5rem]" : ""} ${darkMode ? "border-white/10 bg-[#0c111d] text-white placeholder:text-slate-600 focus:border-violet-500 focus:ring-violet-500/10" : "border-slate-200 bg-slate-50/70 text-slate-800 placeholder:text-slate-400 hover:border-slate-300 focus:border-purple-400 focus:bg-white focus:ring-purple-100"} ${fieldErrors[field.name] ? "border-red-400 bg-red-50/40 focus:border-red-400 focus:ring-red-100" : ""}`}
             />
-            {field.type === "password" && <button type="button" onClick={() => setVisiblePasswords((current) => ({ ...current, [field.name]: !current[field.name] }))} className={`absolute right-3 top-[27px] grid h-9 w-9 place-items-center rounded-md text-xl transition ${darkMode ? "text-slate-400 hover:bg-slate-700 hover:text-white" : "text-slate-500 hover:bg-white hover:text-purple-700"}`} aria-label={visiblePasswords[field.name] ? `Hide ${field.label}` : `Show ${field.label}`} title={visiblePasswords[field.name] ? "Hide password" : "Show password"}>{visiblePasswords[field.name] ? <MdVisibilityOff /> : <MdVisibility />}</button>}
+            {field.type === "password" && <button type="button" onClick={() => setVisiblePasswords((current) => ({ ...current, [field.name]: !current[field.name] }))} className={`absolute right-3 top-2 grid h-9 w-9 place-items-center rounded-md text-xl transition ${darkMode ? "text-slate-400 hover:bg-slate-700 hover:text-white" : "text-slate-500 hover:bg-white hover:text-purple-700"}`} aria-label={visiblePasswords[field.name] ? `Hide ${field.label}` : `Show ${field.label}`} title={visiblePasswords[field.name] ? "Hide password" : "Show password"}>{visiblePasswords[field.name] ? <MdVisibilityOff /> : <MdVisibility />}</button>}
             </div>
           )}
-          {field.name !== "state" && fieldErrors[field.name] && <span className="mt-1.5 block text-xs font-semibold text-red-600">{fieldErrors[field.name]}</span>}
+          {field.name !== "state" && fieldErrors[field.name] && <span id={`${field.name}-error`} className="rp-field-error mt-2 flex items-center gap-1.5 text-xs font-semibold text-red-500"><MdErrorOutline className="shrink-0 text-sm" />{fieldErrors[field.name]}</span>}
         </label>
       ))}
       {step === 2 && (
@@ -409,7 +503,7 @@ export default function ClientOnboarding() {
           ] as const).map(({ channel, title, destination, Icon, hint }) => {
             const channelState = otpVerification[channel];
             return (
-              <article key={channel} className={`rounded-2xl border p-5 transition ${channelState.verified ? darkMode ? "border-emerald-500/40 bg-emerald-500/10" : "border-emerald-200 bg-emerald-50/60" : darkMode ? "border-slate-700 bg-slate-900/45" : "border-slate-200 bg-white shadow-[0_10px_28px_rgba(60,72,88,0.06)]"}`}>
+              <article key={channel} className={`rounded-lg border p-5 transition ${channelState.verified ? darkMode ? "border-emerald-500/40 bg-emerald-500/10" : "border-emerald-200 bg-emerald-50/60" : darkMode ? "border-slate-700 bg-slate-900/45" : "border-slate-200 bg-white"}`}>
                 <div className="flex items-start gap-4"><span className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl text-xl ${channelState.verified ? "bg-emerald-600 text-white" : darkMode ? "bg-purple-500/15 text-purple-300" : "bg-purple-50 text-purple-700"}`}><Icon /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{title}</h3>{channelState.verified && <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${darkMode ? "bg-emerald-500/15 text-emerald-300" : "bg-emerald-100 text-emerald-700"}`}><MdCheckCircle /> Verified</span>}</div><p className={`mt-1 truncate text-sm font-medium ${darkMode ? "text-slate-300" : "text-slate-600"}`}>{destination}</p></div></div>
                 <p className={`mt-4 text-sm leading-6 ${darkMode ? "text-slate-400" : "text-slate-500"}`}>{hint}</p>
                 {!channelState.sent && !channelState.verified && <button type="button" onClick={() => void sendRepresentativeOtp(channel)} disabled={channelState.loading} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#7457d7] to-[#9a63df] px-4 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-70">{channelState.loading ? <MdAutorenew className="animate-spin text-lg" /> : <Icon className="text-lg" />}{channelState.loading ? "Sending..." : `Send ${channel === "email" ? "email" : "WhatsApp"} OTP`}</button>}
@@ -469,12 +563,12 @@ export default function ClientOnboarding() {
     );
     if (step === 3) return (
       <div>
-        <section className={`mb-6 overflow-hidden rounded-2xl border ${agreementSigned ? darkMode ? "border-emerald-500/40 bg-emerald-500/10" : "border-emerald-200 bg-emerald-50/60" : darkMode ? "border-purple-500/30 bg-purple-500/10" : "border-purple-200 bg-gradient-to-r from-purple-50 via-white to-indigo-50"}`}>
+        <section className={`mb-6 overflow-hidden rounded-lg border ${agreementSigned ? darkMode ? "border-emerald-500/40 bg-emerald-500/10" : "border-emerald-200 bg-emerald-50/60" : darkMode ? "border-slate-700 bg-slate-900/45" : "border-slate-200 bg-slate-50"}`}>
           <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-            <div className="flex items-start gap-4"><span className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-2xl ${agreementSigned ? "bg-emerald-600 text-white" : darkMode ? "bg-purple-500/20 text-purple-300" : "bg-white text-purple-700 shadow-sm"}`}>{agreementSigned ? <MdCheckCircle /> : <MdDraw />}</span><div><div className="flex flex-wrap items-center gap-2"><h3 className="text-lg font-semibold">Client service agreement</h3>{agreementSigned ? <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${darkMode ? "bg-emerald-500/15 text-emerald-300" : "bg-emerald-100 text-emerald-700"}`}>Signed</span> : !REQUIRE_ZOHO_SIGNING && <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${darkMode ? "bg-amber-500/15 text-amber-300" : "bg-amber-100 text-amber-700"}`}>Temporarily optional</span>}</div><p className={`mt-1.5 max-w-2xl text-sm leading-6 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>{agreementSigned ? "Zoho Sign has confirmed your completed signature." : REQUIRE_ZOHO_SIGNING ? "Review and digitally sign the client agreement securely through Zoho Sign. You will return to this page automatically after signing." : "Zoho Sign integration is being finalized. You may continue onboarding without signing for now."}</p></div></div>
-            <button type="button" onClick={() => void startAgreementSigning()} disabled={agreementLoading || agreementSigned} className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold transition ${agreementSigned ? "cursor-default bg-emerald-600 text-white" : "bg-gradient-to-r from-[#7457d7] to-[#9a63df] text-white shadow-[0_10px_24px_rgba(116,87,215,0.2)] hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-70"}`}>{agreementLoading ? <><MdAutorenew className="animate-spin text-lg" /> Checking...</> : agreementSigned ? <><MdCheckCircle className="text-lg" /> Agreement signed</> : <><MdDraw className="text-lg" /> Review and sign</>}</button>
+            <div className="flex items-start gap-4"><span className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-2xl ${agreementSigned ? "bg-emerald-600 text-white" : darkMode ? "bg-slate-800 text-slate-300" : "bg-white text-purple-700 shadow-sm"}`}>{agreementSigned ? <MdCheckCircle /> : <MdDraw />}</span><div><div className="flex flex-wrap items-center gap-2"><h3 className="text-lg font-semibold">Client service agreement</h3>{agreementSigned ? <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${darkMode ? "bg-emerald-500/15 text-emerald-300" : "bg-emerald-100 text-emerald-700"}`}>Signed</span> : !REQUIRE_ZOHO_SIGNING && <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${darkMode ? "bg-amber-500/15 text-amber-300" : "bg-amber-100 text-amber-700"}`}>Temporarily optional</span>}</div><p className={`mt-1.5 max-w-2xl text-sm leading-6 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>{agreementSigned ? "Zoho Sign has confirmed your completed signature." : REQUIRE_ZOHO_SIGNING ? "Review and digitally sign the client agreement securely through Zoho Sign. You will return to this page automatically after signing." : "Zoho Sign integration is being finalized. You may continue onboarding without signing for now."}</p></div></div>
+            {(REQUIRE_ZOHO_SIGNING || agreementSigned) && <button type="button" onClick={() => void startAgreementSigning()} disabled={agreementLoading || agreementSigned} className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold transition ${agreementSigned ? "cursor-default bg-emerald-600 text-white" : "bg-gradient-to-r from-[#7457d7] to-[#9a63df] text-white shadow-[0_10px_24px_rgba(116,87,215,0.2)] hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-70"}`}>{agreementLoading ? <><MdAutorenew className="animate-spin text-lg" /> Checking...</> : agreementSigned ? <><MdCheckCircle className="text-lg" /> Agreement signed</> : <><MdDraw className="text-lg" /> Review and sign</>}</button>}
           </div>
-          {agreementMessage && <p className={`border-t px-5 py-3 text-sm font-medium sm:px-6 ${agreementSigned ? darkMode ? "border-emerald-500/20 text-emerald-300" : "border-emerald-200 text-emerald-700" : darkMode ? "border-purple-500/20 text-purple-300" : "border-purple-100 text-purple-700"}`}>{agreementMessage}</p>}
+          {agreementMessage && <p className={`border-t px-5 py-3 text-sm font-medium sm:px-6 ${agreementSigned ? darkMode ? "border-emerald-500/20 text-emerald-300" : "border-emerald-200 text-emerald-700" : darkMode ? "border-slate-700 text-slate-400" : "border-purple-100 text-purple-700"}`}>{agreementMessage}</p>}
         </section>
         <div className="grid gap-4 md:grid-cols-2">
           {[
@@ -485,7 +579,7 @@ export default function ClientOnboarding() {
           ].map(({ name, label, description, Icon }) => {
             const checked = Boolean(data[name]);
             return (
-              <label key={name} className={`group relative flex cursor-pointer items-start gap-4 rounded-2xl border p-5 transition-all duration-200 ${checked ? darkMode ? "border-purple-500/70 bg-purple-500/10 shadow-[0_10px_30px_rgba(139,92,246,0.08)]" : "border-purple-300 bg-purple-50/70 shadow-[0_10px_30px_rgba(116,87,215,0.09)]" : darkMode ? "border-slate-700 bg-slate-900/45 hover:border-slate-600 hover:bg-slate-800/60" : "border-slate-200 bg-white hover:-translate-y-0.5 hover:border-purple-200 hover:shadow-[0_12px_30px_rgba(60,72,88,0.08)]"}`}>
+              <label key={name} className={`group relative flex cursor-pointer items-start gap-4 rounded-lg border p-5 transition-colors duration-150 ${checked ? darkMode ? "border-slate-600 bg-slate-800/70" : "border-purple-300 bg-purple-50/60" : darkMode ? "border-slate-700 bg-slate-900/45 hover:border-slate-600" : "border-slate-200 bg-white hover:border-slate-300"}`}>
                 <input type="checkbox" checked={checked} onChange={(e) => update(name, e.target.checked)} className="sr-only" />
                 <span className={`mt-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-xl text-xl transition ${checked ? "bg-gradient-to-br from-[#7457d7] to-[#9a63df] text-white" : darkMode ? "bg-slate-800 text-slate-400" : "bg-slate-100 text-slate-500 group-hover:bg-purple-50 group-hover:text-purple-600"}`}><Icon /></span>
                 <span className="min-w-0 flex-1"><span className={`block text-base font-semibold ${darkMode ? "text-slate-100" : "text-slate-800"}`}>{label}</span><span className={`mt-1.5 block text-sm leading-6 ${darkMode ? "text-slate-400" : "text-slate-500"}`}>{description}</span></span>
@@ -494,34 +588,66 @@ export default function ClientOnboarding() {
             );
           })}
         </div>
-        <div className={`mt-5 flex items-center gap-3 rounded-xl px-4 py-3 text-sm ${darkMode ? "bg-slate-800/60 text-slate-400" : "bg-slate-100/80 text-slate-500"}`}><MdSecurity className={`shrink-0 text-lg ${darkMode ? "text-purple-300" : "text-purple-600"}`} />All four agreements are required to continue. Your selections are securely recorded with the onboarding submission.</div>
+        <div className={`mt-5 flex items-center gap-3 rounded-xl px-4 py-3 text-sm ${darkMode ? "border border-slate-700 bg-slate-900/40 text-slate-400" : "bg-slate-100/80 text-slate-500"}`}><MdSecurity className={`shrink-0 text-lg ${darkMode ? "text-slate-400" : "text-purple-600"}`} />All four agreements are required to continue. Your selections are securely recorded with the onboarding submission.</div>
       </div>
     );
     return (
       <div className="relative min-h-[500px] overflow-hidden py-10 text-center">
-        <style>{`@keyframes rp-burst{0%{opacity:0;transform:scale(.05) rotate(0)}18%{opacity:1}65%{opacity:.9}100%{opacity:0;transform:scale(1.2) rotate(25deg)}}.rp-firework{position:absolute;width:5px;height:5px;border-radius:999px;animation:rp-burst 1.9s ease-out infinite;box-shadow:0 -58px #a855f7,41px -41px #ec4899,58px 0 #f59e0b,41px 41px #8b5cf6,0 58px #22c55e,-41px 41px #f43f5e,-58px 0 #06b6d4,-41px -41px #eab308}.rp-firework:nth-of-type(2){animation-delay:.55s}.rp-firework:nth-of-type(3){animation-delay:1.1s}@media(prefers-reduced-motion:reduce){.rp-firework{display:none}}`}</style>
-        <span className="rp-firework left-[13%] top-[28%]" /><span className="rp-firework right-[13%] top-[24%]" /><span className="rp-firework left-1/2 top-[12%]" />
         <div className="relative z-10 mx-auto max-w-3xl">
-          <div className={`mx-auto grid h-24 w-24 place-items-center rounded-full border text-5xl ${darkMode ? "border-purple-500/30 bg-purple-500/10 text-purple-300" : "border-purple-100 bg-purple-50 text-purple-700"}`}><MdCelebration /></div>
-          <p className={`mt-7 text-sm font-semibold uppercase tracking-[0.18em] ${darkMode ? "text-purple-300" : "text-purple-700"}`}>Onboarding complete</p>
-          <h2 className={`mt-3 text-4xl font-semibold tracking-tight sm:text-5xl ${darkMode ? "text-white" : "text-slate-900"}`}>Welcome aboard, {String(data.companyName || "your team")}!</h2>
-          <p className={`mx-auto mt-4 max-w-xl text-lg leading-8 ${darkMode ? "text-slate-400" : "text-slate-500"}`}>Your organization profile is ready. You can now continue to Reward Planners and begin setting up your workplace experience.</p>
+          <div className={`mx-auto grid h-20 w-20 place-items-center rounded-full border text-4xl ${darkMode ? "border-amber-500/30 bg-amber-500/10 text-amber-300" : "border-amber-200 bg-amber-50 text-amber-700"}`}><MdHourglassTop /></div>
+          <p className={`mt-7 text-sm font-semibold uppercase tracking-[0.16em] ${darkMode ? "text-amber-300" : "text-amber-700"}`}>Application submitted</p>
+          <h2 className={`mt-3 text-4xl font-semibold tracking-tight sm:text-5xl ${darkMode ? "text-white" : "text-slate-900"}`}>Your organization is under review</h2>
+          <p className={`mx-auto mt-4 max-w-2xl text-lg leading-8 ${darkMode ? "text-slate-400" : "text-slate-500"}`}>We have received the onboarding details for {String(data.companyName || "your organization")}. Review may take up to seven days, and the HR portal will remain unavailable until your account is approved.</p>
           <div className={`mx-auto mt-9 grid max-w-2xl border-y text-left sm:grid-cols-2 ${darkMode ? "divide-slate-700 border-slate-700 sm:divide-x" : "divide-slate-200 border-slate-200 sm:divide-x"}`}>
             <div className="px-5 py-5"><span className={`text-sm ${darkMode ? "text-slate-500" : "text-slate-400"}`}>Organization</span><strong className="mt-1 block text-base">{String(data.companyName)}</strong></div>
             <div className="px-5 py-5"><span className={`text-sm ${darkMode ? "text-slate-500" : "text-slate-400"}`}>Primary administrator</span><strong className="mt-1 block text-base">{String(data.adminEmail)}</strong></div>
-            <div className="px-5 py-5"><span className={`text-sm ${darkMode ? "text-slate-500" : "text-slate-400"}`}>Setup status</span><strong className="mt-1 flex items-center gap-2 text-base text-purple-500"><MdCheckCircle /> Ready to continue</strong></div>
-            <div className="px-5 py-5"><span className={`text-sm ${darkMode ? "text-slate-500" : "text-slate-400"}`}>Next step</span><strong className="mt-1 block text-base">Organization workspace</strong></div>
+            <div className="px-5 py-5"><span className={`text-sm ${darkMode ? "text-slate-500" : "text-slate-400"}`}>Account status</span><strong className={`mt-1 flex items-center gap-2 text-base ${darkMode ? "text-amber-300" : "text-amber-700"}`}><MdHourglassTop /> Pending approval</strong></div>
+            <div className="px-5 py-5"><span className={`text-sm ${darkMode ? "text-slate-500" : "text-slate-400"}`}>What happens next</span><strong className="mt-1 block text-base">Approval notification by email</strong></div>
           </div>
-          <div className="mt-9 flex flex-wrap items-center justify-center gap-4"><button onClick={() => navigate("/login", { state: { message: "Client onboarding completed successfully." } })} className="inline-flex items-center gap-2 rounded-md bg-gradient-to-r from-[#7457d7] to-[#a855d5] px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-purple-900/20">Continue to login <MdArrowForward /></button><button type="button" onClick={startOver} className={`rounded-md border px-6 py-3.5 text-base font-medium ${darkMode ? "border-slate-700 text-slate-300 hover:bg-slate-800" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>Start over</button></div>
+          <p className={`mx-auto mt-7 max-w-xl text-sm leading-6 ${darkMode ? "text-slate-500" : "text-slate-500"}`}>We will send the approval decision to {String(data.adminEmail)}. Please do not submit another onboarding application for the same organization.</p>
+          <div className="mt-7 flex justify-center"><button onClick={() => navigate("/login", { state: { message: "Your HR account is pending approval. Reviews may take up to 7 days." } })} className="inline-flex items-center gap-2 rounded-md bg-purple-700 px-7 py-3 text-base font-semibold text-white shadow-sm transition-colors hover:bg-purple-800">Return to login <MdArrowForward /></button></div>
         </div>
       </div>
     );
   };
 
-  const descriptions = ["Tell us about your organization.", "Add the registered business address.", "Add and verify the authorized company representative.", "Review and accept the required agreements.", "Create the primary HR administrator.", "Your organization is ready for the next step."];
+  const descriptions = ["Tell us about your organization.", "Add the registered business address.", "Add and verify the authorized company representative.", "Review and accept the required agreements.", "Create the primary HR administrator.", "Your application has been submitted for review."];
+  const prompts = ["Tell us about your business", "Where is your organization located?", "Who should we contact?", "Review your legal requirements", "Set up your workspace administrator", "Application received"];
+  const helperCopy = ["Share the official details your team uses for business communication.", "Use the registered address associated with your organization.", "Add an authorized representative we can securely verify.", "Complete the agreement and required permissions to move forward.", "This person will manage your organization workspace and team access.", "We’ll keep you informed while your application is reviewed."];
   const representativeVerificationComplete = otpVerification.email.verified && (!ENABLE_WHATSAPP_VERIFICATION || otpVerification.whatsapp.verified);
   const legalStepComplete = (!REQUIRE_ZOHO_SIGNING || agreementSigned) && [data.terms, data.privacy, data.dataConsent, data.communicationConsent].every(Boolean);
-  const interactionStyles = `.rp-client-onboarding button:not(:disabled),.rp-client-onboarding a,.rp-client-onboarding select:not(:disabled),.rp-client-onboarding label:has(input[type="checkbox"]){cursor:pointer}.rp-client-onboarding button:disabled,.rp-client-onboarding select:disabled{cursor:not-allowed}.rp-client-onboarding button:focus-visible,.rp-client-onboarding a:focus-visible,.rp-client-onboarding input:focus-visible,.rp-client-onboarding select:focus-visible{outline:2px solid #a855f7;outline-offset:3px}@keyframes rp-step-enter{0%{opacity:0;transform:translateY(14px) scale(.992)}100%{opacity:1;transform:translateY(0) scale(1)}}.rp-step-panel{transform-origin:top center;animation:rp-step-enter .42s cubic-bezier(.22,1,.36,1) both}@media(prefers-reduced-motion:reduce){.rp-step-panel{animation:none}}`;
+
+  const modernStyles = `
+    @import url('https://api.fontshare.com/v2/css?f[]=satoshi@400,500,600,700,800,900&display=swap');
+    .rp-modern{font-family:'Satoshi','Inter','Segoe UI',sans-serif!important}
+    .rp-modern .rp-display{font-family:'Satoshi','Inter','Segoe UI',sans-serif!important}
+    .rp-modern button:not(:disabled),.rp-modern a,.rp-modern select:not(:disabled),.rp-modern label:has(input[type="checkbox"]){cursor:pointer}
+    .rp-modern button:focus-visible,.rp-modern a:focus-visible,.rp-modern input:focus-visible,.rp-modern select:focus-visible{outline:2px solid #7c3aed;outline-offset:3px}
+    @keyframes rp-modern-enter{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+    @keyframes rp-modern-slide{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
+    .rp-modern .rp-step-panel{animation:rp-modern-slide .4s cubic-bezier(.22,1,.36,1) both}
+    .rp-modern .rp-field{animation:rp-modern-enter .32s ease both}
+    .rp-modern .rp-field:nth-child(2){animation-delay:.03s}.rp-modern .rp-field:nth-child(3){animation-delay:.06s}.rp-modern .rp-field:nth-child(4){animation-delay:.09s}.rp-modern .rp-field:nth-child(5){animation-delay:.12s}.rp-modern .rp-field:nth-child(6){animation-delay:.15s}.rp-modern .rp-field:nth-child(7){animation-delay:.18s}.rp-modern .rp-field:nth-child(8){animation-delay:.21s}
+    .rp-modern .rp-progress-fill:after{display:none}
+    .rp-modern .rp-active-step{animation:none}
+    .rp-modern .rp-field-grid{gap:24px!important}
+    .rp-modern .rp-field-grid input,.rp-modern .rp-field-grid select{min-height:48px!important;border-radius:12px!important;border-width:1px!important;box-shadow:none!important}
+    .rp-modern .rp-field-grid select{appearance:none!important;-webkit-appearance:none!important;padding-right:44px!important;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237c7185' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")!important;background-repeat:no-repeat!important;background-position:right 16px center!important;background-size:16px!important}
+    .rp-modern .rp-field-grid input:focus,.rp-modern .rp-field-grid select:focus{box-shadow:0 0 0 4px rgba(124,58,237,.08)!important}
+    .rp-modern-light .rp-field-grid input,.rp-modern-light .rp-field-grid select{background-color:rgba(255,255,255,.92)!important;border-color:rgba(55,35,75,.13)!important;box-shadow:0 1px 2px rgba(35,24,46,.035)!important}
+    .rp-modern-light .rp-field-grid input:hover,.rp-modern-light .rp-field-grid select:hover{border-color:rgba(124,58,237,.28)!important;background-color:#fff!important}
+    .rp-modern-light .rp-field-grid input:focus,.rp-modern-light .rp-field-grid select:focus{border-color:#8b5cf6!important;box-shadow:0 0 0 4px rgba(124,58,237,.09),0 8px 20px rgba(65,38,85,.06)!important}
+    .rp-modern .rp-field-grid label>span:first-child{letter-spacing:-.01em}
+    .rp-modern .rp-field-error{font-weight:500!important}
+    .rp-modern .rp-step-panel article{border-radius:14px!important;box-shadow:none!important}
+    .rp-modern .rp-step-panel section{border-radius:14px!important}
+    .rp-modern .rp-step-panel button{border-radius:11px!important}
+    .rp-modern .rp-step-panel input[type="checkbox"]+span{border-radius:7px!important}
+    .rp-modern .rp-step-panel input[type="checkbox"]~span{ }
+    .rp-modern .rp-otp-card{min-height:100%!important}
+    @media(prefers-reduced-motion:reduce){.rp-modern .rp-step-panel,.rp-modern .rp-field{animation:none!important}}
+  `;
+
   if (showIntroduction) {
     const benefits = [
       { Icon: MdRedeem, title: "Meaningful rewards", text: "Create rewarding experiences that make recognition useful, timely and memorable." },
@@ -529,39 +655,81 @@ export default function ClientOnboarding() {
       { Icon: MdAnalytics, title: "Clear visibility", text: "Understand participation, engagement and reward activity through one organized portal." },
       { Icon: MdSecurity, title: "Secure by design", text: "Protected account access, verified organization details and role-based workspaces." },
     ];
-    return <div className={`rp-client-onboarding min-h-screen px-5 py-6 sm:px-8 lg:px-12 ${darkMode ? "bg-[#090d18] text-white" : "bg-[#f7f5f8] text-slate-900"}`} style={{ fontFamily: '"Segoe UI Variable", "Avenir Next", Inter, ui-sans-serif, system-ui, sans-serif' }}>
-      <style>{interactionStyles}</style>
-      <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-7xl flex-col">
-        <header className="flex items-center justify-between"><Link to="/login" className={`inline-flex items-center gap-2 text-sm font-medium ${darkMode ? "text-slate-400 hover:text-white" : "text-slate-500 hover:text-purple-700"}`}><MdArrowBack className="h-5 w-5" /> Back to login</Link><button type="button" onClick={() => setDarkMode((value) => !value)} className={`grid h-10 w-10 place-items-center rounded-full text-lg ${darkMode ? "bg-slate-800 text-amber-300" : "bg-white text-purple-700 shadow-sm"}`} aria-label={darkMode ? "Use light mode" : "Use dark mode"}>{darkMode ? <MdLightMode /> : <MdDarkMode />}</button></header>
-        <main className="grid flex-1 items-center gap-12 py-12 lg:grid-cols-[1.08fr_.92fr] lg:py-16">
-          <section><span className={`inline-flex rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] ${darkMode ? "bg-purple-500/10 text-purple-300" : "bg-purple-100 text-purple-700"}`}>Welcome to Reward Planners</span><h1 className="mt-7 max-w-3xl text-4xl font-semibold leading-[1.1] tracking-tight sm:text-5xl lg:text-6xl">Recognition that feels <span className="bg-gradient-to-r from-[#8b5cf6] to-[#ec4899] bg-clip-text text-transparent">personal.</span><br />Rewards that create impact.</h1><p className={`mt-7 max-w-2xl text-lg leading-8 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>Reward Planners is a unified employee engagement and rewards platform that helps organizations recognize people, manage benefits and build a stronger workplace culture.</p><div className="mt-9 flex flex-wrap items-center gap-4"><button type="button" onClick={() => { setShowIntroduction(false); window.scrollTo({ top: 0 }); }} className="inline-flex items-center gap-3 rounded-lg bg-gradient-to-r from-[#7457d7] to-[#a855d5] px-7 py-3.5 text-base font-semibold text-white shadow-lg shadow-purple-900/20 transition hover:-translate-y-0.5">Get Onboarded <MdArrowForward className="text-xl" /></button><span className={`text-sm ${darkMode ? "text-slate-500" : "text-slate-500"}`}>Takes approximately 5–8 minutes</span></div></section>
-          <section className={`border px-6 py-7 sm:px-8 sm:py-9 ${darkMode ? "border-slate-700 bg-[#0e1422]" : "border-slate-200 bg-white shadow-xl shadow-slate-200/60"}`}><div className="mb-7"><p className={`text-sm font-medium ${darkMode ? "text-purple-300" : "text-purple-700"}`}>One platform. Shared purpose.</p><h2 className="mt-2 text-2xl font-semibold">What your organization gains</h2></div><div className="divide-y divide-slate-700/30">{benefits.map(({ Icon, title, text }) => <article key={title} className="flex gap-4 py-5 first:pt-0 last:pb-0"><span className={`grid h-11 w-11 shrink-0 place-items-center rounded-full text-xl ${darkMode ? "bg-purple-500/10 text-purple-300" : "bg-purple-50 text-purple-700"}`}><Icon /></span><div><h3 className="text-base font-semibold">{title}</h3><p className={`mt-1 text-sm leading-6 ${darkMode ? "text-slate-400" : "text-slate-500"}`}>{text}</p></div></article>)}</div></section>
+    return <div className={`rp-modern min-h-screen ${darkMode ? "bg-[#090b12] text-white" : "bg-[#fbfafc] text-[#15131a]"}`}>
+      <style>{modernStyles}</style>
+      <div className="mx-auto flex min-h-screen max-w-[1280px] flex-col px-5 sm:px-8 lg:px-10">
+        <header className={`flex h-[76px] items-center justify-end border-b ${darkMode ? "border-white/8" : "border-black/5"}`}>
+          <button type="button" onClick={() => setDarkMode(v => !v)} className={`relative inline-flex h-9 w-16 items-center justify-between rounded-full border p-1 shadow-sm transition duration-200 hover:-translate-y-0.5 ${darkMode ? "border-white/10 bg-white/[.06] shadow-black/10" : "border-violet-200/70 bg-violet-100 shadow-violet-200/40"}`} aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"} title={darkMode ? "Switch to light mode" : "Switch to dark mode"}><span className={`absolute left-1 top-1 h-7 w-7 rounded-full shadow-sm transition-transform duration-300 ${darkMode ? "translate-x-7 bg-[#292330]" : "translate-x-0 bg-white"}`}/><MdLightMode className={`relative z-10 ml-1 text-sm transition ${darkMode ? "text-white/30" : "text-amber-500"}`}/><MdDarkMode className={`relative z-10 mr-1 text-sm transition ${darkMode ? "text-violet-200" : "text-violet-400/50"}`}/></button>
+        </header>
+        <main className="grid flex-1 items-center gap-16 py-14 lg:grid-cols-[1.05fr_.95fr] lg:py-20">
+          <section>
+            <div className={`mb-7 flex items-center gap-3 text-xs font-bold uppercase tracking-[.16em] ${darkMode ? "text-violet-300" : "text-violet-700"}`}><span className="h-px w-8 bg-current"/> Reward Planners</div>
+            <h1 className="rp-display max-w-3xl text-[42px] font-semibold leading-[1.08] tracking-[-.04em] sm:text-5xl lg:text-[64px]">Build a better employee experience, <span className="text-violet-600">from day one.</span></h1>
+            <p className={`mt-7 max-w-xl text-[17px] leading-8 ${darkMode ? "text-white/55" : "text-black/55"}`}>Set up your organization in a few simple steps. We'll use these details to create a secure Reward Planners workspace for your team.</p>
+            <div className="mt-9 flex flex-wrap items-center gap-5"><button type="button" onClick={() => {setShowIntroduction(false);window.scrollTo({top:0});}} className="inline-flex h-12 items-center gap-3 rounded-xl bg-[#17131d] px-6 text-sm font-semibold text-white shadow-[0_10px_25px_rgba(23,19,29,.16)] transition hover:-translate-y-0.5 hover:bg-violet-700">Start onboarding <MdArrowForward className="text-lg"/></button><span className={`flex items-center gap-2 text-sm ${darkMode ? "text-white/40" : "text-black/40"}`}><MdSecurity/> Secure & encrypted</span></div>
+          </section>
+          <section className={`relative overflow-hidden rounded-[22px] border p-7 sm:p-9 ${darkMode ? "border-white/8 bg-[#11131b]" : "border-black/6 bg-white shadow-[0_25px_70px_rgba(31,23,43,.08)]"}`}>
+            <div className={`absolute -right-20 -top-20 h-48 w-48 rounded-full blur-3xl ${darkMode ? "bg-violet-700/15" : "bg-violet-200/45"}`}/>
+            <div className="relative"><p className={`text-xs font-bold uppercase tracking-[.15em] ${darkMode ? "text-violet-300" : "text-violet-700"}`}>Why Reward Planners</p><h2 className="rp-display mt-3 text-2xl font-semibold tracking-[-.025em]">Everything you need to get started.</h2><div className={`mt-8 divide-y ${darkMode ? "divide-white/8" : "divide-black/6"}`}>{benefits.map(({Icon,title,text})=><article key={title} className="flex gap-4 py-5 first:pt-0 last:pb-0"><span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${darkMode ? "bg-violet-500/10 text-violet-300" : "bg-violet-50 text-violet-700"}`}><Icon/></span><div><h3 className="text-sm font-semibold">{title}</h3><p className={`mt-1.5 text-sm leading-6 ${darkMode ? "text-white/45" : "text-black/45"}`}>{text}</p></div></article>)}</div></div>
+          </section>
         </main>
-        <footer className={`border-t py-5 text-sm ${darkMode ? "border-slate-800 text-slate-600" : "border-slate-200 text-slate-400"}`}>Reward Planners · Organization onboarding</footer>
+        <footer className={`border-t py-5 text-xs ${darkMode ? "border-white/8 text-white/25" : "border-black/5 text-black/30"}`}>© Reward Planners · Organization onboarding</footer>
       </div>
     </div>;
   }
+
+  const progress = Math.round((step / (steps.length - 1)) * 100);
   return (
-    <div className={`rp-client-onboarding relative min-h-screen overflow-hidden px-4 py-8 sm:px-7 sm:py-12 ${darkMode ? "bg-[#0b1120] text-white" : "bg-[#eef2f7] text-slate-900"}`} style={{ fontFamily: 'Inter, "SF Pro Display", "Segoe UI Variable", "Avenir Next", ui-sans-serif, system-ui, sans-serif' }}>
-      <style>{interactionStyles}</style>
-      <div aria-hidden="true" className={`pointer-events-none absolute -left-32 -top-32 h-96 w-96 rounded-full blur-3xl ${darkMode ? "bg-purple-700/10" : "bg-purple-300/25"}`} />
-      <div aria-hidden="true" className={`pointer-events-none absolute -bottom-40 -right-28 h-[28rem] w-[28rem] rounded-full blur-3xl ${darkMode ? "bg-indigo-700/10" : "bg-indigo-300/20"}`} />
-      <div className={`relative mx-auto w-full max-w-7xl overflow-hidden rounded-[28px] border shadow-[0_32px_90px_rgba(30,41,59,0.18)] ${darkMode ? "border-white/10 bg-[#0e1422]" : "border-white bg-white"}`}>
-        <header className={`flex items-center justify-between border-b px-6 py-5 sm:px-8 ${darkMode ? "border-white/10 bg-[#111827]" : "border-slate-100 bg-white/95"}`}>
-          <div className="flex items-center gap-3.5"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-[#7457d7] to-[#a855d5] text-xl text-white shadow-lg shadow-purple-900/20"><MdBusiness /></span><h1 className="text-xl font-semibold tracking-tight">Client Onboarding</h1></div>
-          <div className="flex items-center gap-2"><button type="button" onClick={() => setDarkMode((value) => !value)} className={`grid h-9 w-9 place-items-center rounded-full text-lg ${darkMode ? "bg-slate-800 text-amber-300" : "bg-slate-100 text-purple-700"}`} aria-label={darkMode ? "Use light mode" : "Use dark mode"}>{darkMode ? <MdLightMode /> : <MdDarkMode />}</button><Link to="/login" className={`grid h-9 w-9 place-items-center rounded-full text-xl ${darkMode ? "text-slate-400 hover:bg-slate-800" : "text-slate-500 hover:bg-slate-100"}`} aria-label="Close onboarding"><MdClose /></Link></div>
+    <div className={`rp-modern relative min-h-screen overflow-hidden ${darkMode ? "bg-[#090b12] text-white" : "rp-modern-light bg-[linear-gradient(145deg,#faf8fc_0%,#f3f0f7_48%,#faf7fa_100%)] text-[#15131a]"}`}>
+      <style>{modernStyles}</style>
+      {!darkMode && <><span className="pointer-events-none absolute -left-40 top-16 h-[30rem] w-[30rem] rounded-full bg-violet-300/20 blur-3xl"/><span className="pointer-events-none absolute -right-40 bottom-[-8rem] h-[32rem] w-[32rem] rounded-full bg-pink-300/15 blur-3xl"/><span className="pointer-events-none absolute left-[44%] top-[28%] h-56 w-56 rounded-full bg-fuchsia-200/10 blur-3xl"/></>}
+      <div className="relative mx-auto flex min-h-screen max-w-[1500px] flex-col px-4 sm:px-6 lg:px-8">
+        <header className={`relative flex h-[76px] shrink-0 items-center justify-between border-b px-3 backdrop-blur-md sm:px-4 ${darkMode ? "border-white/10 bg-white/[.018]" : "border-purple-950/[.08] bg-white/35"}`}>
+          <div className="flex min-w-0 items-center gap-3"><Link to="/login" className="group flex items-center gap-3"><span className={`grid h-10 w-10 place-items-center rounded-xl transition duration-300 group-hover:-rotate-3 group-hover:scale-105 ${darkMode ? "bg-white shadow-[0_6px_18px_rgba(0,0,0,.18)]" : "bg-[#17131d] shadow-[0_6px_18px_rgba(23,19,29,.16)]"}`}><img src={logoImage} alt="Reward Planners" className={`h-6 w-6 object-contain ${darkMode ? "" : "brightness-0 invert"}`}/></span><span><span className="rp-display block text-sm font-extrabold tracking-[-.025em]">Reward Planners</span><span className={`hidden text-[10px] font-medium sm:block ${darkMode?"text-white/30":"text-black/35"}`}>Rewards that make work better</span></span></Link><span className={`hidden h-6 w-px md:block ${darkMode?"bg-white/10":"bg-black/10"}`}/><span className={`hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[.1em] md:inline-flex ${darkMode?"border-violet-300/10 bg-violet-400/10 text-violet-200":"border-violet-100 bg-gradient-to-r from-violet-50 to-pink-50 text-violet-700"}`}><MdBusiness className="text-sm"/> Client onboarding</span></div>
+          <div className="flex items-center gap-2.5"><button type="button" onClick={() => setDarkMode(v=>!v)} className={`relative inline-flex h-9 w-16 items-center justify-between rounded-full border p-1 shadow-sm transition duration-200 hover:-translate-y-0.5 ${darkMode ? "border-white/10 bg-white/[.06] shadow-black/10" : "border-violet-200/70 bg-violet-100 shadow-violet-200/40"}`} aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"} title={darkMode ? "Switch to light mode" : "Switch to dark mode"}><span className={`absolute top-1 h-7 w-7 rounded-full shadow-sm transition-transform duration-300 ${darkMode ? "translate-x-7 bg-[#292330]" : "translate-x-0 bg-white"}`}/><MdLightMode className={`relative z-10 ml-1 text-sm transition ${darkMode ? "text-white/30" : "text-amber-500"}`}/><MdDarkMode className={`relative z-10 mr-1 text-sm transition ${darkMode ? "text-violet-200" : "text-violet-400/50"}`}/></button><a href={exitUrl} className={`grid h-9 w-9 place-items-center rounded-xl border text-xl shadow-sm transition duration-200 hover:-translate-y-0.5 ${darkMode ? "border-white/15 bg-white/[.08] text-white/80 shadow-black/10 hover:border-white/25 hover:bg-white/[.14] hover:text-white" : "border-black/8 bg-white/80 text-black/55 shadow-black/[.04] hover:border-pink-200 hover:bg-pink-50 hover:text-pink-700"}`} aria-label="Close onboarding and return to website" title="Return to website"><MdClose/></a></div>
         </header>
+        <div className="flex w-full gap-1.5 py-1" aria-label={`${progress}% onboarding complete`}>{steps.slice(0,-1).map((item,index)=><span key={item.title} className={`h-1 flex-1 overflow-hidden rounded-full transition-colors duration-500 ${index<=step ? "bg-gradient-to-r from-violet-600 to-pink-500" : darkMode?"bg-white/[.08]":"bg-violet-100/80"}`} />)}</div>
 
-        <nav className={`overflow-x-auto border-b px-6 py-6 sm:px-9 ${darkMode ? "border-slate-700 bg-[#0d1524]" : "border-slate-100 bg-[#fbfcfd]"}`}>
-          <div className="flex min-w-[900px]">{steps.map((item, index) => { const available = index <= highestStep && (index <= 2 || representativeVerificationComplete) && (index <= 3 || legalStepComplete); const completed = index < highestStep && (index < 2 || representativeVerificationComplete) && (index < 3 || legalStepComplete); const current = index === step; return <div key={item.title} className="relative flex flex-1 justify-center">{index < steps.length - 1 && <span className={`absolute left-[58%] top-5 w-[84%] border-t border-dashed ${completed ? "border-purple-500" : darkMode ? "border-slate-600" : "border-slate-300"}`} />}<button type="button" disabled={!available} onClick={() => { setStep(index); setError(""); }} className="relative z-10 flex w-28 flex-col items-center disabled:cursor-not-allowed disabled:opacity-60"><span className={`grid h-11 w-11 place-items-center rounded-full text-sm font-semibold ${current ? "bg-gradient-to-br from-[#7457d7] to-[#9a63df] text-white" : completed ? "bg-[#6f4dcc] text-white" : darkMode ? "bg-slate-700 text-slate-300" : "bg-slate-200 text-slate-600"}`}>{completed ? <Check className="text-xl" /> : index + 1}</span><span className={`mt-2 text-center text-sm leading-4 ${current ? darkMode ? "text-white" : "text-slate-900" : darkMode ? "text-slate-400" : "text-slate-500"}`}>{item.title}</span></button></div>; })}</div>
-        </nav>
+        <div className="grid flex-1 lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-10 xl:grid-cols-[280px_minmax(0,860px)] xl:gap-12 xl:justify-center">
+          <aside className="hidden pt-12 lg:block">
+            <div className={`sticky top-8 overflow-hidden rounded-[20px] border p-3 ${darkMode ? "border-white/8 bg-white/[.025] shadow-[0_18px_50px_rgba(0,0,0,.16)]" : "border-white/80 bg-white/50 shadow-[0_18px_50px_rgba(51,30,69,.07)] backdrop-blur-md"}`}>
+              <div className={`mb-4 flex items-center gap-3 rounded-2xl px-3 py-3.5 ${darkMode ? "bg-gradient-to-br from-violet-500/12 to-pink-500/[.06]" : "bg-gradient-to-br from-violet-100/90 via-white/70 to-pink-50/90"}`}><div className="relative grid h-11 w-11 shrink-0 place-items-center rounded-full" style={{background:`conic-gradient(#8b5cf6 0%,#ec4899 ${progress}%,${darkMode ? "rgba(255,255,255,.08)" : "rgba(124,58,237,.1)"} ${progress}% 100%)`}}><span className={`grid h-8 w-8 place-items-center rounded-full text-[10px] font-extrabold ${darkMode?"bg-[#11131b] text-white":"bg-white text-violet-700"}`}>{progress}%</span></div><div><div className={`text-[10px] font-bold uppercase tracking-[.16em] ${darkMode ? "text-violet-300" : "text-violet-700"}`}>Workspace setup</div><p className={`mt-1 text-[11px] leading-4 ${darkMode ? "text-white/35" : "text-black/45"}`}>Complete your organization profile.</p></div></div>
+              <nav className="relative space-y-1">
+                <span className="absolute bottom-5 left-[26px] top-5 w-px" style={{background:`linear-gradient(to bottom,#8b5cf6 0%,#ec4899 ${progress}%,${darkMode ? "rgba(255,255,255,.08)" : "rgba(30,20,40,.08)"} ${progress}%,${darkMode ? "rgba(255,255,255,.08)" : "rgba(30,20,40,.08)"} 100%)`}}/>
+                {steps.map((item,index)=>{
+                  const available=index<=highestStep&&(index<=2||representativeVerificationComplete)&&(index<=3||legalStepComplete);
+                  const completed=index<highestStep&&(index<2||representativeVerificationComplete)&&(index<3||legalStepComplete);
+                  const current=index===step; const Icon=item.icon;
+                  return <button key={item.title} type="button" disabled={!available} onClick={()=>{setStep(index);setError("");}} className={`group relative flex w-full items-center gap-3 overflow-hidden rounded-xl px-2.5 py-2.5 text-left transition ${current ? (darkMode?"bg-white/[.07] shadow-[inset_0_0_0_1px_rgba(255,255,255,.05)]":"bg-white shadow-[0_8px_22px_rgba(58,34,78,.1)]") : darkMode?"hover:translate-x-0.5 hover:bg-white/[.035]":"hover:translate-x-0.5 hover:bg-white/70"} disabled:translate-x-0 disabled:opacity-35`}>
+                    {current&&<span className="absolute bottom-2 left-0 top-2 w-[3px] rounded-r-full bg-gradient-to-b from-violet-500 to-pink-500"/>}<span className={`relative z-10 grid h-8 w-8 shrink-0 place-items-center border text-sm transition group-hover:scale-105 ${current ? (darkMode?"rounded-lg border-transparent bg-gradient-to-br from-violet-500 to-pink-500 text-white shadow-[0_6px_18px_rgba(168,85,247,.28)]":"rounded-lg border-transparent bg-gradient-to-br from-violet-600 to-pink-500 text-white shadow-[0_6px_18px_rgba(124,58,237,.25)]") : completed ? (darkMode?"rounded-xl border-pink-300/20 bg-[#17131d] text-pink-200":"rounded-xl border-pink-200 bg-white text-pink-600") : (darkMode?"rounded-xl border-white/10 bg-[#11131b] text-white/35":"rounded-xl border-black/8 bg-[#f8f7fa] text-black/30")}`}><Icon/></span>
+                    <span className={`min-w-0 flex-1 text-sm font-semibold ${current ? (darkMode?"text-white":"text-black") : completed ? (darkMode?"text-white/80":"text-black/75") : darkMode?"text-white/40":"text-black/40"}`}>{item.title}</span>
+                  </button>;
+                })}
+              </nav>
+            </div>
+          </aside>
 
-        <main className={`px-6 py-9 sm:px-12 sm:py-11 lg:px-16 lg:py-12 ${darkMode ? "bg-[#0e1422]" : "bg-[#f9fbfc]"}`}>
-          <div className={`mb-8 rounded-2xl border px-5 py-4 ${darkMode ? "border-slate-700 bg-slate-800/35" : "border-slate-100 bg-white shadow-[0_8px_24px_rgba(60,72,88,0.05)]"}`}><div className="flex flex-wrap items-center justify-between gap-3"><div><p className={`text-sm font-medium ${darkMode ? "text-purple-300" : "text-purple-700"}`}>Step {step + 1} of {steps.length}</p><h2 className="mt-1 text-2xl font-semibold tracking-tight">{steps[step].title}</h2><p className={`mt-2 text-base ${darkMode ? "text-slate-400" : "text-slate-500"}`}>{descriptions[step]}</p></div><div className="min-w-44"><div className="flex justify-between text-xs"><span className={darkMode ? "text-slate-400" : "text-slate-500"}>Progress</span><strong>{Math.round((step / (steps.length - 1)) * 100)}%</strong></div><div className={`mt-2 h-1.5 overflow-hidden rounded-full ${darkMode ? "bg-slate-700" : "bg-slate-100"}`}><span className="block h-full rounded-full bg-gradient-to-r from-[#7457d7] to-[#9a63df] transition-all" style={{ width: `${(step / (steps.length - 1)) * 100}%` }} /></div></div></div></div>
-          <div key={step} className="rp-step-panel">{content()}</div>
-          {error && <div className={`mt-5 rounded-xl border px-4 py-3 text-sm ${darkMode ? "border-red-500/40 bg-red-950/30 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>{error}</div>}
-          {step < steps.length - 1 && <footer className={`mt-9 flex items-center justify-between border-t pt-6 ${darkMode ? "border-slate-700" : "border-slate-200"}`}><button type="button" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0 || sendingAdminWelcome} className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition disabled:invisible ${darkMode ? "text-slate-300 hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100"}`}><MdArrowBack className="text-lg" />Previous</button><button type="button" onClick={() => void next()} disabled={(step === 2 && !representativeVerificationComplete) || (step === 3 && !legalStepComplete) || sendingAdminWelcome} title={step === 2 && !representativeVerificationComplete ? "Verify email to continue" : step === 3 && !legalStepComplete ? "Sign the agreement and accept all required terms to continue" : undefined} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#7457d7] to-[#9a63df] px-7 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(116,87,215,0.22)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none disabled:hover:translate-y-0">{sendingAdminWelcome ? <><MdAutorenew className="animate-spin text-lg" /> Sending welcome email...</> : step === 2 && !representativeVerificationComplete ? "Complete email verification" : step === 3 && !legalStepComplete ? "Complete legal requirements" : step === 4 ? "Complete onboarding" : "Continue"}{!sendingAdminWelcome && <MdArrowForward className="text-lg" />}</button></footer>}
-        </main>
+          <main className="w-full pb-10 pt-7 sm:pt-10 lg:pt-12">
+            <div className="mx-auto max-w-[820px]">
+              <div className="mb-8 w-full">
+                <h1 className="rp-display text-[32px] font-semibold leading-tight tracking-[-.04em] sm:text-[40px]">{prompts[step]}</h1><p className={`mt-2 max-w-2xl text-sm leading-6 sm:text-[15px] ${darkMode?"text-white/45":"text-black/45"}`}>{descriptions[step]}</p>
+              </div>
+
+              <section key={step} className="rp-step-panel">
+                <div className={`relative overflow-hidden rounded-[18px] border transition-shadow duration-300 ${darkMode?"border-white/8 bg-[#101219]":"border-white/90 bg-white/95 shadow-[0_22px_65px_rgba(48,29,66,.11)] backdrop-blur-sm hover:shadow-[0_28px_75px_rgba(48,29,66,.14)]"}`}>
+                  <header className={`border-b px-4 py-4 sm:px-8 ${darkMode?"border-white/8":"border-black/6"}`}><h2 className="rp-display text-base font-bold">{steps[step].title}</h2></header>
+                  <div className="p-4 sm:p-8"><div className={`mb-8 flex items-center gap-4 rounded-xl border px-4 py-4 ${darkMode?"border-white/8 bg-white/[.025]":"border-violet-100 bg-gradient-to-r from-violet-50/70 to-pink-50/40"}`}><span className="h-8 w-1 shrink-0 rounded-full bg-gradient-to-b from-violet-600 to-pink-500" /><p className={`text-sm font-semibold leading-6 ${darkMode?"text-white/75":"text-black/70"}`}>{helperCopy[step]}</p></div>{content()}
+                    {error && <div role="alert" className={`mt-6 flex items-start gap-3 rounded-xl border px-4 py-3.5 text-sm ${darkMode?"border-red-400/20 bg-red-400/5 text-red-300":"border-red-200 bg-red-50 text-red-700"}`}><MdErrorOutline className="mt-0.5 shrink-0"/><span>{error}</span></div>}
+                  </div>
+                  {step < steps.length-1 && <footer className={`flex items-center justify-end gap-4 border-t px-4 py-4 sm:px-8 ${darkMode?"border-white/8":"border-black/6"}`}>
+                    <button type="button" onClick={()=>void next()} disabled={(step===2&&!representativeVerificationComplete)||(step===3&&!legalStepComplete)||sendingAdminWelcome} title={step===2&&!representativeVerificationComplete?"Verify contact details to continue":step===3&&!legalStepComplete?"Complete legal requirements to continue":undefined} className={`group inline-flex h-11 items-center gap-2 rounded-xl px-5 text-sm font-semibold shadow-[0_8px_18px_rgba(23,19,29,.14)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-35 ${darkMode?"bg-white text-[#17131d] hover:bg-violet-100":"bg-[#17131d] text-white hover:bg-violet-700"}`}>{sendingAdminWelcome?<><MdAutorenew className="animate-spin"/> Sending...</>:step===2&&!representativeVerificationComplete?"Complete verification":step===3&&!legalStepComplete?"Complete requirements":step===4?"Complete onboarding":"Continue"}{!sendingAdminWelcome&&<MdArrowForward className="transition group-hover:translate-x-0.5"/>}</button>
+                  </footer>}
+                </div>
+              </section>
+            </div>
+          </main>
+        </div>
+        <footer className={`flex min-h-12 items-center justify-center border-t text-xs ${darkMode?"border-white/[.06] text-white/25":"border-purple-950/[.06] text-black/35"}`}>© {new Date().getFullYear()} Reward Planners. All rights reserved.</footer>
       </div>
     </div>
   );

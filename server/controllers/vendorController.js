@@ -8,7 +8,9 @@ const fs = require("fs");
 const path = require("path");
 const {
   notifyVendorStatusChange,
+  notifyVendorOnboardingSubmitted,
 } = require("../services/mailBuilder/vendorNotificationService");
+const { runNonBlocking } = require("../utils/nonBlocking");
 const { uploadToR2 } = require("../utils/r2upload");
 const { getPrivateFileUrl } = require("../utils/r2SignedUrl");
 const sharp = require("sharp");
@@ -125,6 +127,22 @@ class VendorController {
       }
       await connection.commit();
 
+      runNonBlocking(async () => {
+        const [[vendorRecipient]] = await db.query(
+          `SELECT v.*, COALESCE(NULLIF(vc.email, ''), u.email) AS email
+           FROM vendors v
+           JOIN eusers u ON u.user_id = v.user_id
+           LEFT JOIN vendor_contacts vc ON vc.vendor_id = v.vendor_id
+           WHERE v.vendor_id = ? LIMIT 1`,
+          [vndID],
+        );
+        const [[manager]] = await db.query(
+          `SELECT name, email FROM eusers WHERE role = 'vendor_manager' AND email IS NOT NULL
+           ORDER BY is_verified DESC, user_id LIMIT 1`,
+        );
+        if (vendorRecipient) await notifyVendorOnboardingSubmitted(vendorRecipient, manager);
+      }, "vendor onboarding emails");
+
       return res.status(201).json({
         success: true,
         message: "Vendor onboarded successfully",
@@ -167,6 +185,27 @@ class VendorController {
         });
       }
 
+      // Vendor documents are stored in the private R2 bucket. Return short-lived
+      // signed URLs instead of making manager/admin clients treat R2 keys as
+      // paths under the server's public /uploads directory.
+      if (data.documents?.length) {
+        await Promise.all(
+          data.documents.map(async (doc) => {
+            const isPrivateR2Object = doc.file_path
+              ?.replace(/^\/+/, "")
+              .startsWith("private/");
+
+            if (isPrivateR2Object) {
+              const storagePath = doc.file_path.replace(/^\/+/, "");
+              const signedUrl = await getPrivateFileUrl(storagePath);
+              doc.storage_path = storagePath;
+              doc.file_path = signedUrl;
+              doc.url = signedUrl;
+            }
+          }),
+        );
+      }
+
       return res.json({ success: true, data });
     } catch (err) {
       console.error("GET VENDOR ERROR:", err);
@@ -206,7 +245,7 @@ class VendorController {
 
       status = status.toLowerCase().trim();
 
-      const allowed = ["approved", "rejected", "pending"];
+      const allowed = ["approved", "rejected", "pending", "resubmission"];
       if (!allowed.includes(status)) {
         return res.status(400).json({
           success: false,
@@ -229,7 +268,11 @@ class VendorController {
 
       // Fetch Vendor Details
       const [vendorRows] = await db.query(
-        `SELECT * FROM vendors WHERE vendor_id = ?`,
+        `SELECT v.*, COALESCE(NULLIF(vc.email, ''), u.email) AS email
+         FROM vendors v
+         JOIN eusers u ON u.user_id = v.user_id
+         LEFT JOIN vendor_contacts vc ON vc.vendor_id = v.vendor_id
+         WHERE v.vendor_id = ? LIMIT 1`,
         [vendorId],
       );
 
@@ -242,10 +285,10 @@ class VendorController {
 
       const vendor = vendorRows[0];
 
-      // Send Mail
-      // if (status === "approved" || status === "rejected") {
-      //   await notifyVendorStatusChange(vendor, status);
-      // }
+      runNonBlocking(
+        () => notifyVendorStatusChange(vendor, status),
+        `vendor ${status} email`,
+      );
 
       return res.json({
         success: true,
@@ -360,10 +403,11 @@ class VendorController {
           throw new Error("Image processing failed");
         }
 
-        //  R2 path
-        const r2Path = `public/category-images/${categoryID}/cover.webp`;
+        // Use a new object key for every replacement so CDN/mobile caches cannot
+        // keep serving an older image stored at the same URL.
+        const r2Path = `public/category-images/${categoryID}/cover-${Date.now()}.webp`;
 
-        // Upload to R2 (overwrites existing file)
+        // Upload to R2
         await uploadToR2(optimizedBuffer, r2Path, "image/webp");
 
         // cleanup temp file
@@ -611,9 +655,9 @@ class VendorController {
           throw new Error("Image processing failed");
         }
 
-        const r2Path = `public/subcategory-images/${id}/cover.webp`;
+        const r2Path = `public/subcategory-images/${id}/cover-${Date.now()}.webp`;
 
-        //  overwrite existing image
+        // Upload the replacement at a new URL to avoid stale CDN/app caches.
         await uploadToR2(optimizedBuffer, r2Path, "image/webp");
 
         fs.unlinkSync(req.file.path);
@@ -892,8 +936,14 @@ class VendorController {
       //  signed URLs to documents
       if (data.documents && data.documents.length) {
         for (const doc of data.documents) {
-          if (doc.file_path) {
-            doc.url = await getPrivateFileUrl(doc.file_path);
+          const isPrivateR2Object = doc.file_path
+            ?.replace(/^\/+/, "")
+            .startsWith("private/");
+
+          if (isPrivateR2Object) {
+            doc.url = await getPrivateFileUrl(
+              doc.file_path.replace(/^\/+/, ""),
+            );
           }
         }
       }

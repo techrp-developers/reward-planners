@@ -361,3 +361,22 @@
     border-radius: 1rem;
   }
 }
+
+/* Service manager: consistent affordances for every actionable control. */
+.service-manager-ui :is(a[href], button:not(:disabled), select:not(:disabled), summary, label[for], [role="button"]:not([aria-disabled="true"])) {
+  cursor: pointer;
+}
+
+.service-manager-ui :is(button:disabled, select:disabled, [aria-disabled="true"]) {
+  cursor: not-allowed;
+}
+
+/* DataTables renders its own pagination buttons, so keep their states explicit. */
+.service-manager-ui :is(.dt-paging-button, .paginate_button):not(.disabled):not(:disabled) {
+  cursor: pointer !important;
+}
+
+.service-manager-ui :is(.dt-paging-button, .paginate_button).disabled,
+.service-manager-ui :is(.dt-paging-button, .paginate_button):disabled {
+  cursor: not-allowed !important;
+}

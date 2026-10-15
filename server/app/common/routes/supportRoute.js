@@ -23,7 +23,4 @@ router.post("/create-ticket", auth, uploadAttachment, SupportController.createTi
 // get all tickets for logged in user
 router.get("/my-tickets", auth, SupportController.getMyTickets);
 
-// get latest ecommerce and service orders for logged in user
-router.get("/recent-orders", auth, SupportController.getRecentOrders);
-
 module.exports = router;

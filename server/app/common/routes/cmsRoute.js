@@ -3,6 +3,9 @@ const router = express.Router();
 const CmsController = require('../controller/cmsController');
 const { authenticateToken, authorizeRoles } = require('../../../middleware/auth');
 
+router.get('/mobile-content', CmsController.getMobileContent.bind(CmsController));
+router.get('/content/:id/products', CmsController.getContentProducts.bind(CmsController));
+
 router.get('/dashboard-layouts/:id', CmsController.getDashboardLayout.bind(CmsController));
 
 router.put(

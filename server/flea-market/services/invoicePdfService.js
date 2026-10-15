@@ -2,6 +2,8 @@ const puppeteer = require("puppeteer");
 const fs = require("fs");
 const path = require("path");
 
+const logoBuffer = fs.readFileSync(path.join(__dirname, "../../uploads/logo 2.png"));
+const logoDataUri = `data:image/png;base64,${logoBuffer.toString("base64")}`;
 const logoPath = path.join(__dirname, "../../uploads/assets/logo2.svg");
 
 function getLogoDataUri() {

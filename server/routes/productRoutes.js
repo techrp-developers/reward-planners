@@ -5,6 +5,29 @@ const { productUpload } = require("../middleware/mediaUpload/productUpload");
 const { bulkProductUpload } = require("../middleware/mediaUpload/bulkProductUpload");
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 
+const { processCoverImage, prepareCoverImage } = require("../controllers/coverImageController");
+const { coverImageUpload, coverImageLimiter, coverImageConcurrency } = require("../middleware/mediaUpload/coverImageUpload");
+
+router.post(
+  "/process-cover-image",
+  authenticateToken,
+  authorizeRoles("vendor"),
+  coverImageLimiter,
+  coverImageConcurrency,
+  coverImageUpload,
+  processCoverImage,
+);
+
+// Free manual preparation: no provider call, R2 upload or database write.
+router.post(
+  "/prepare-cover-image",
+  authenticateToken,
+  authorizeRoles("vendor"),
+  coverImageLimiter,
+  coverImageUpload,
+  prepareCoverImage,
+);
+
 // CREATE PRODUCT (images + ALL category documents)
 router.post(
   "/create-product",

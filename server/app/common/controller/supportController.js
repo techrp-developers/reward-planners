@@ -64,7 +64,7 @@ class SupportController {
       const attachmentUrls = (req.files || []).map(
         (file) => `/uploads/support/${file.filename}`,
       );
-      const attachmentUrlFromFiles =
+      let attachmentUrl =
         attachmentUrls.length > 1
           ? JSON.stringify(attachmentUrls)
           : attachmentUrls[0] || null;
@@ -169,7 +169,7 @@ class SupportController {
 
       // Store the attachment in R2 (the ticket table keeps the R2 key, not a
       // local path) and drop the multer temp file once it's uploaded.
-      let attachmentUrl = null;
+      attachmentUrl = null;
       if (req.file) {
         const fileBuffer = fs.readFileSync(req.file.path);
         const extension = path.extname(req.file.originalname);
@@ -204,12 +204,21 @@ class SupportController {
       }
 
       const [result] = await db.execute(
-        `INSERT INTO support_tickets
+        `INSERT INTO support_tickets 
        (user_id, subject, description, category_id, support_module,
         reference_type, reference_id, reference_label, attachment_url)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [userId, ticketSubject, description, category_id, normalizedModule,
-          verifiedReferenceType, verifiedReferenceId, verifiedReferenceLabel, attachmentUrl],
+        [
+          userId,
+          ticketSubject,
+          description,
+          category_id,
+          normalizedModule,
+          verifiedReferenceType,
+          verifiedReferenceId,
+          verifiedReferenceLabel,
+          attachmentUrl
+        ],
       );
 
       const ticketId = result.insertId;
@@ -479,6 +488,12 @@ class SupportController {
     }
   }
 
+
+  /* ======================================================
+    STAFF (RM/ADMIN) — SUPPORT ENQUIRIES
+  ====================================================== */
+
+  // list every ticket, across all customers
   async getAllTickets(req, res) {
     try {
       const { status, search } = req.query;

@@ -97,6 +97,8 @@ router.get("/address/:address_id", auth, authController.getAddressById);
 // user information overall
 router.get("/user-info", auth, authController.getUserInfo);
 
+router.get("/visit-card/qr", auth, authController.getVisitCardQr);
+
 // update profile information
 router.put(
   "/profile",

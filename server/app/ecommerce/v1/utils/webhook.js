@@ -4,9 +4,7 @@ const {
 } = require("../../../../services/whatsapp/waEnqueueService");
 const xpressService = require("../../../../services/ExpressBees/xpressbees_service");
 const { sendOpsAlert } = require("../../../../services/alertService");
-const {
-  orderConfirmationMail,
-} = require("../../../../services/mailBuilder/orderConfirmation");
+const { sendEcommerceOrderPlacedEmails } = require("../../../../services/mailBuilder/ecommerceOrderPlaced");
 const { runNonBlocking } = require("../../../../utils/nonBlocking");
 const { notifyNewEcommerceOrder } = require("../../../../services/whatsapp/adminNotificationService");
 const { notifyUser } = require("../../../common/utils/notification");
@@ -686,38 +684,6 @@ async function sendOrderPlacedWhatsApp(orderId) {
 }
 
 // send email
-async function sendOrderPlacedEmail(orderId) {
-  try {
-    const [rows] = await db.query(
-      `SELECT 
-        o.order_ref,
-        o.total_amount,
-        cu.name AS customer_name,
-        cu.email
-     FROM eorders o
-     JOIN customer cu ON cu.user_id = o.user_id
-     WHERE o.order_id = ?
-     LIMIT 1`,
-      [orderId],
-    );
-
-    if (!rows.length) return;
-
-    const ctx = rows[0];
-
-    if (!ctx.email) return;
-
-    await orderConfirmationMail({
-      name: ctx.customer_name,
-      email: ctx.email,
-      amount: ctx.total_amount,
-      orderId: ctx.order_ref,
-    });
-  } catch (err) {
-    console.error("Email sending error:", err);
-  }
-}
-
 // webhook
 async function processEvent(req) {
   const conn = await db.getConnection();
@@ -1022,8 +988,8 @@ async function processEvent(req) {
       );
 
       runNonBlocking(
-        () => sendOrderPlacedEmail(order_id),
-        "order placed email",
+        () => sendEcommerceOrderPlacedEmails(order_id),
+        "order placed recipient emails",
       );
 
       console.log("Ecommerce payment success", {

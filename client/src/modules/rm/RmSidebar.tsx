@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { FiGrid, FiUserCheck, FiBarChart2, FiHelpCircle, FiChevronDown, FiChevronRight, FiLogOut, FiLock, FiUser } from "react-icons/fi";
+import { FiGrid, FiUserCheck, FiBarChart2, FiHelpCircle, FiChevronDown, FiChevronRight, FiLogOut, FiLock, FiUser, FiBriefcase } from "react-icons/fi";
 import { useAuth } from "../../common/auth/useAuth";
 import { routes } from "../../routes";
 import logo from "../../common/assets/logo.svg";
@@ -41,6 +41,12 @@ export default function RmSidebar() {
       type: "link",
     },
     {
+      label: "Client Approvals",
+      to: routes.rm.clientApprovals,
+      Icon: FiBriefcase,
+      type: "link",
+    },
+    {
       label: "Support Enquiries",
       to: routes.rm.supportTickets,
       Icon: FiHelpCircle,
@@ -52,6 +58,7 @@ export default function RmSidebar() {
       type: "dropdown",
       children: [
         { label: "Usage Report", to: routes.rm.reports.usage },
+        { label: "Inactive Users", to: routes.rm.reports.inactiveUsers },
       ],
     },
   ];
