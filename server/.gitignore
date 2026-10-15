@@ -11,3 +11,6 @@ dist
 !.env.*.example
 firebase-service-account*.json
 **/*-firebase-adminsdk-*.json
+
+# SRDV request/response logs (contain booking data)
+logs/

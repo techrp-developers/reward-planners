@@ -1,5 +1,5 @@
 const db = require("../../../config/database");
-const axios = require("axios");
+const srdvClient = require("../utils/srdvClient");
 const crypto = require("crypto");
 const razorpay = require("../../service/v1/middlewares/razorpay");
 const BusModel =
@@ -379,7 +379,7 @@ const searchBuses = async (req, res) => {
         */
 
         const srdvResponse =
-            await axios.post(
+            await srdvClient.post(
 
                 process.env.SRDV_SEARCH_URL,
 
@@ -837,7 +837,7 @@ const getSeatLayout = async (req, res) => {
         */
 
         const providerResponse =
-            await axios.post(
+            await srdvClient.post(
 
                 process.env
                     .SRDV_SEAT_LAYOUT_URL,
@@ -1394,7 +1394,7 @@ const getBoardingDroppingPoints = async (
     */
 
     const providerResponse =
-      await axios.post(
+      await srdvClient.post(
 
         process.env
           .SRDV_BOARDING_DROPPING_URL,
@@ -2033,7 +2033,7 @@ const blockSeat =
       */
 
       const providerResponse =
-        await axios.post(
+        await srdvClient.post(
 
           process.env
             .SRDV_BLOCK_URL,
@@ -3832,7 +3832,7 @@ const getProviderBalance = async (req, res) => {
   }
 
   try {
-    const providerResponse = await axios.post(
+    const providerResponse = await srdvClient.post(
       process.env.SRDV_BALANCE_URL,
       {
         EndUserIp: process.env.SRDV_END_USER_IP,
@@ -3899,7 +3899,7 @@ const getProviderBalanceLog = async (req, res) => {
   }
 
   try {
-    const providerResponse = await axios.post(
+    const providerResponse = await srdvClient.post(
       process.env.SRDV_BALANCE_LOG_URL,
       {
         EndUserIp: process.env.SRDV_END_USER_IP,
@@ -4101,7 +4101,7 @@ const cancelBusTicket = async (req, res) => {
     let apiData;
     providerCalled = true;
     try {
-      const providerResponse = await axios.post(
+      const providerResponse = await srdvClient.post(
         process.env.SRDV_CANCEL_URL,
         {
           ClientId: process.env.SRDV_CLIENT_ID,

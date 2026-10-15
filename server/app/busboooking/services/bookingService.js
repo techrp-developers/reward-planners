@@ -1,4 +1,4 @@
-const axios = require("axios");
+const srdvClient = require("../utils/srdvClient");
 const db = require("../../../config/database");
 const { sendOpsAlert } = require("../../../services/alertService");
 const {
@@ -65,7 +65,7 @@ async function claimForBooking(orderId) {
 
 async function callProviderBook(order) {
   try {
-    const response = await axios.post(
+    const response = await srdvClient.post(
       process.env.SRDV_BOOK_URL,
       {
         ClientId: process.env.SRDV_CLIENT_ID,
