@@ -82,7 +82,7 @@ class ChatModel {
 
   async listConversations(userId) {
     const [rows] = await db.execute(
-      `SELECT c.conversation_id, c.type, c.name, c.description, c.image_url, c.updated_at, m.role,
+      `SELECT c.conversation_id, c.type, c.name, c.description, c.image_url, c.theme_key, c.updated_at, m.role,
               lm.message_id AS last_message_id,
               CASE WHEN lm.deleted_at IS NOT NULL THEN 'This message was deleted' ELSE lm.body END AS last_message,
               CASE WHEN lm.deleted_at IS NOT NULL THEN 'text' ELSE lm.message_type END AS last_message_type,
@@ -296,6 +296,17 @@ class ChatModel {
     if (!member || member.type !== "group") throw Object.assign(new Error("Group not found"), { status: 404 });
     if (member.role !== "admin") throw Object.assign(new Error("Group admin permission required"), { status: 403 });
     await db.execute(`UPDATE chat_conversations SET name = COALESCE(?, name), description = COALESCE(?, description) WHERE conversation_id = ?`, [data.name ?? null, data.description ?? null, conversationId]);
+  }
+
+  async setTheme(userId, conversationId, themeKey) {
+    if (!await this.assertMember(userId, conversationId)) {
+      throw Object.assign(new Error("Conversation not found"), { status: 404 });
+    }
+    await db.execute(
+      `UPDATE chat_conversations SET theme_key = ?, updated_at = NOW() WHERE conversation_id = ?`,
+      [themeKey, conversationId],
+    );
+    return { conversation_id: conversationId, theme_key: themeKey, updated_by: userId };
   }
 
   async addMembers(userId, conversationId, memberIds) {

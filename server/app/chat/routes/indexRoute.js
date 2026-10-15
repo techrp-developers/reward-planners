@@ -30,6 +30,7 @@ router.post("/conversations/:id/polls", controller.createPoll);
 router.post("/polls/:pollId/votes", controller.votePoll);
 router.post("/conversations/:id/read", controller.read);
 router.patch("/conversations/:id", controller.updateGroup);
+router.patch("/conversations/:id/theme", controller.updateTheme);
 router.post("/conversations/:id/image", (req, res, next) => {
   imageUpload.single("image")(req, res, (error) => {
     if (!error) return next();
