@@ -33,7 +33,7 @@ export default function VendorSalesSummaryCards({ summary }: VendorSalesSummaryC
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <SummaryCard
-        label="Total Revenue"
+        label="Gross Invoiced"
         value={`Rs ${formatter.format(summary.totalGrossRevenue)}`}
         Icon={FiBarChart2}
       />

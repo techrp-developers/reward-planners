@@ -51,6 +51,9 @@ class CustomerController {
       const { userId, channel } = req.body;
 
       const result = await otpService.sendOtp({ userId, channel, locationId });
+      if (result.sessionToken) {
+        await require("../../config/database").execute("INSERT INTO flea_market_session_managers (session_id,manager_user_id) VALUES (?,?)", [result.sessionToken,req.user.user_id]);
+      }
       return res.json({ success: true, data: result });
     } catch (error) {
       return sendServiceError(res, error, "Failed to send OTP");
@@ -65,6 +68,9 @@ class CustomerController {
       const { userId } = req.body;
 
       const result = await otpService.selectCustomer({ userId, locationId });
+      if (result.sessionToken) {
+        await require("../../config/database").execute("INSERT INTO flea_market_session_managers (session_id,manager_user_id) VALUES (?,?)", [result.sessionToken,req.user.user_id]);
+      }
       return res.json({ success: true, data: result });
     } catch (error) {
       return sendServiceError(res, error, "Failed to select customer");
@@ -77,6 +83,9 @@ class CustomerController {
       const { userId, otp, channel } = req.body;
 
       const result = await otpService.verifyOtp({ userId, otp, channel, locationId });
+      if (result.sessionToken) {
+        await require("../../config/database").execute("INSERT INTO flea_market_session_managers (session_id,manager_user_id) VALUES (?,?)", [result.sessionToken,req.user.user_id]);
+      }
       return res.json({ success: true, data: result });
     } catch (error) {
       return sendServiceError(res, error, "Failed to verify OTP");
@@ -92,7 +101,10 @@ class CustomerController {
 
       if (otp && channel) {
         const result = await otpService.verifyOtp({ userId, otp, channel, locationId });
-        return res.json({ success: true, data: result });
+        if (result.sessionToken) {
+        await require("../../config/database").execute("INSERT INTO flea_market_session_managers (session_id,manager_user_id) VALUES (?,?)", [result.sessionToken,req.user.user_id]);
+      }
+      return res.json({ success: true, data: result });
       }
 
       if (!channel) {
@@ -100,6 +112,9 @@ class CustomerController {
       }
 
       const result = await otpService.sendOtp({ userId, channel, locationId });
+      if (result.sessionToken) {
+        await require("../../config/database").execute("INSERT INTO flea_market_session_managers (session_id,manager_user_id) VALUES (?,?)", [result.sessionToken,req.user.user_id]);
+      }
       return res.json({ success: true, data: result });
     } catch (error) {
       return sendServiceError(res, error, "Failed to reverify customer");

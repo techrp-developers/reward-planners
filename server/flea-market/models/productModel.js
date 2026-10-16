@@ -72,7 +72,7 @@ class ProductModel {
 
     params.push(limit);
 
-    const [rows] = await db.execute(
+    const [rows] = await db.query(
       `SELECT
          pv.variant_id, pv.product_id, pv.sku, pv.mrp, pv.sale_price, pv.stock,
          p.product_name, p.brand_name, p.vendor_id
@@ -109,7 +109,7 @@ class ProductModel {
     const [productResult] = await conn.execute(
       `INSERT INTO eproducts
         (vendor_id, category_id, subcategory_id, brand_name, product_name, status, is_deleted, is_searchable, is_visible, created_via)
-       VALUES (?, ?, ?, ?, ?, 'approved', 0, 1, 1, 'flea_market_quick_create')`,
+       VALUES (?, ?, ?, ?, ?, 'approved', 0, 0, 0, 'flea_market_quick_create')`,
       [vendorId, categoryId || null, subcategoryId || null, brandName || null, productName],
     );
     const productId = productResult.insertId;
@@ -201,7 +201,7 @@ class ProductModel {
     const where = this.buildOverviewFilter(query, vendorId, params);
     params.push(limit, offset);
 
-    const [rows] = await db.execute(
+    const [rows] = await db.query(
       `SELECT
          p.product_id, p.brand_name, p.product_name, p.category_id, p.subcategory_id, p.is_discount_eligible,
          pv.variant_id, pv.sku, pv.mrp, pv.sale_price,

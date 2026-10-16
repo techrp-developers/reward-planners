@@ -96,6 +96,7 @@ export interface PurchaseHistoryRow {
   unitPrice: number;
   lineTotal: number;
   pointsRedeemed: number;
+  /** Legacy API name: invoice grand_total, not independently verified collection. */
   amountPaid: number;
   scheduleId: number | null;
   scheduledDate: string | null;

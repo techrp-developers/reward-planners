@@ -11,6 +11,7 @@ import { ErrorState } from "../ui/EmptyState";
 /* ================= TYPES ================= */
 
 interface InvoiceViewProps {
+  checkoutId?: string;
   invoices: CheckoutInvoiceSummary[];
   totalPointsRedeemed: number;
   totalAmountPaid: number;
@@ -22,6 +23,7 @@ interface InvoiceViewProps {
 /* ================= COMPONENT ================= */
 
 function InvoiceViewImpl({
+  checkoutId,
   invoices,
   totalPointsRedeemed,
   totalAmountPaid,
@@ -105,7 +107,7 @@ function InvoiceViewImpl({
       <div className="flex items-center gap-3 p-4 mb-6 border border-emerald-200 rounded-xl bg-emerald-50 print:hidden">
         <FiCheckCircle className="w-6 h-6 text-emerald-600 shrink-0" />
         <div>
-          <p className="text-sm font-bold text-emerald-800">Payment successful</p>
+          <p className="text-sm font-bold text-emerald-800">Collection confirmed by cashier</p>
           <p className="text-xs text-emerald-600">
             {invoices.length > 1
               ? `${invoices.length} invoices were generated for this cart (split by vendor).`
@@ -114,6 +116,13 @@ function InvoiceViewImpl({
         </div>
       </div>
 
+      <section className="mb-6 rounded-xl border border-purple-100 p-4">
+        <h2 className="font-bold text-[#852BAF]">Combined checkout receipt</h2>
+        <p className="break-all text-xs text-gray-500">Checkout: {checkoutId??'—'}</p>
+        <p className="mt-2 text-sm">Vendor invoices: {invoices.map(invoice=>invoice.invoiceNumber).join(', ')}</p>
+        <p className="mt-2 font-semibold">Collected ₹{totalAmountPaid.toLocaleString('en-IN')} · Redeemed {totalPointsRedeemed} points</p>
+        <button type="button" className="mt-2 text-sm text-[#852BAF] underline print:hidden" onClick={()=>window.print()}>Print receipt</button>
+      </section>
       {/* Combined summary strip */}
       <div className="grid grid-cols-1 gap-4 mb-6 sm:grid-cols-3 print:hidden">
         <div className="p-4 border border-amber-100 rounded-xl bg-amber-50">
