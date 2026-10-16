@@ -648,6 +648,12 @@ class ContentZoneModel {
   async updateEntry(id, data) {
     const existing = await this.getEntryById(id);
 
+    // An explicit empty destination clears all stored target fields, even when
+    // multipart clients omit target_id. Unrelated edits preserve the target.
+    if (data.target_type !== undefined && !data.target_type) {
+      data = { ...data, target_type: null, target_id: null, target_ids: null };
+    }
+
     validateMotion(data, existing.zone);
     this.validateEntry(data, { isUpdate: true });
 
@@ -686,6 +692,13 @@ class ContentZoneModel {
         fields.push(`${key} = ?`);
         if (key === "is_published") values.push(data[key] ? 1 : 0);
         else if (key === "text_color") values.push(data[key] || null);
+        else if (key === "target_type") values.push(data[key] || null);
+        else if (key === "target_id")
+          values.push(
+            (data.target_type === undefined ? existing.target_type : data.target_type)
+              ? Number(data[key])
+              : null,
+          );
         else if (key === "target_ids")
           values.push(
             data.target_type === "product"

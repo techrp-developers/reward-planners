@@ -53,8 +53,16 @@ padding-bottom:30px;
 }
 
 .company-logo{
-max-height:50px;
+display:block;
+width:180px;
+height:60px;
+flex-shrink:0;
 margin-bottom:10px;
+}
+.company-logo svg{
+display:block;
+width:100%;
+height:100%;
 }
 
 .invoice-label h1{
@@ -187,7 +195,7 @@ body{background:white;padding:0;}
 
 <div class="header">
 <div class="brand">
-<!-- <img src="https://rewardplanners.com/api/crm/uploads/assets/logo2.svg" class="company-logo"> -->
+<div class="company-logo" role="img" aria-label="Reward Planners">{{company_logo}}</div>
 <!-- <div class="meta-tag">Reward Planners</div> -->
 </div>
 

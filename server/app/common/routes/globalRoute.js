@@ -1,12 +1,17 @@
 const express = require("express");
 const router = express.Router();
 const GlobalController = require("../controller/globalController");
+const communityInvitation = require("../controller/communityInvitationController");
 const {
   authenticateToken,
   authorizeRoles,
 } = require("../../../middleware/auth");
 
 // Global search
+router.post("/community-invitation",communityInvitation.english);
+  
+router.post("/community-invitation-marathi",communityInvitation.marathi);
+
 router.get("/search/suggestions", GlobalController.getGlobalSuggestions);
 
 // Get maintenance status

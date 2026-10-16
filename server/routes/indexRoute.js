@@ -26,6 +26,8 @@ const supportTicketRoutes = require("./supportTicketRoutes");
 const pollRoutes = require("./pollRoutes");
 
 // dashboard Routes
+// Expose app-global endpoints when this router is mounted at /api/crm.
+router.use("/v1/global", require("../app/common/routes/globalRoute"));
 router.use("/auth", authRoutes);
 router.use("/vendor", vendorRoutes);
 router.use("/manager", managerRoutes);

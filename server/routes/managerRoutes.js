@@ -6,6 +6,12 @@ const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 const managerController = require("../controllers/managerController");
 const CategoryAttributeController = require("../controllers/categoryAttributeController");
 const employeeController = require("../controllers/employeeController");
+const { sendActivationEmail } = require("../controllers/employeeActivationController");
+const { rateLimit } = require("express-rate-limit");
+router.post("/employee-directory/companies/:companyId/employees/:employeeId/activation-email",
+  authenticateToken, authorizeRoles("admin", "rm"),
+  rateLimit({ windowMs: 60 * 1000, limit: 10, message: { success: false, message: "Please wait a minute before sending more activation emails." } }),
+  sendActivationEmail);
 
 const employeeFileUpload = multer({
   storage: multer.memoryStorage(),

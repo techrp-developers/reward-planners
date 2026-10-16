@@ -335,7 +335,7 @@ class ContentController {
         success: true,
         message: "Content entry fetched successfully",
         data: await withOffersImages(withPublicImageUrl(entry), {
-          includeInactive: entry.zone === "brand_promotional_banner",
+          includeInactive: true,
         }),
       });
     } catch (err) {

@@ -43,6 +43,37 @@ const assertMotion = (entry, expected) => {
 };
 beforeEach(() => { rows.clear(); nextId = 1; });
 
+test('clearing a target through the update endpoint stores SQL nulls', async () => {
+  const entry = await model.createEntry({ ...base, target_type: 'product', target_id: 42, target_ids: [42] });
+  const res = response();
+  await controller.updateEntry({ params: { id: entry.content_id }, body: { target_type: '', target_id: '', target_ids: '' } }, res);
+  assert.equal(res.code, 200);
+  const saved = rows.get(entry.content_id);
+  assert.equal(saved.target_type, null);
+  assert.equal(saved.target_id, null);
+  assert.equal(saved.target_ids, null);
+});
+
+test('target updates store numeric IDs and reject blank IDs for selected target types', async () => {
+  const entry = await model.createEntry(base);
+  await model.updateEntry(entry.content_id, { target_type: 'category', target_id: '42' });
+  assert.equal(rows.get(entry.content_id).target_id, 42);
+  await model.updateEntry(entry.content_id, { title: 'Updated title' });
+  assert.equal(rows.get(entry.content_id).target_id, 42);
+  await assert.rejects(model.updateEntry(entry.content_id, { target_type: 'category', target_id: '' }), /target_id must be a positive integer/);
+  assert.equal(rows.get(entry.content_id).target_id, 42);
+});
+
+test('no destination clears an existing target when multipart omits target_id', async () => {
+  const entry = await model.createEntry({ ...base, target_type: 'product', target_id: 42, target_ids: [42] });
+  const res = response();
+  await controller.updateEntry({ params: { id: entry.content_id }, body: { target_type: '', target_ids: '[]' } }, res);
+  assert.equal(res.code, 200);
+  assert.equal(rows.get(entry.content_id).target_type, null);
+  assert.equal(rows.get(entry.content_id).target_id, null);
+  assert.equal(rows.get(entry.content_id).target_ids, null);
+});
+
 test('create stores validated values and returns camelCase; omitted fields default', async () => {
   const res = response();
   await controller.createEntry({ body: { ...base, ...motion } }, res);

@@ -172,7 +172,9 @@ export const buildEntryFormData = (
   }
 
   fd.append("target_type", draft.targetType);
-  fd.append("target_id", draft.targetType && draft.targetId ? String(draft.targetId) : "");
+  if (draft.targetType && draft.targetId) {
+    fd.append("target_id", String(draft.targetId));
+  }
   fd.append("target_ids", draft.targetType === "product" ? JSON.stringify(draft.targetIds) : "[]");
 
   if (draft.startAt) {

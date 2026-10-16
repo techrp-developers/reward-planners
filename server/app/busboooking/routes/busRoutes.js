@@ -95,12 +95,24 @@ const {
 
     cancelBusTicket,
 
+    resolveBookingReview,
+
+    resolveCancellationReview,
+
     getProviderBalance,
 
     getProviderBalanceLog,
 
 } = require(
     "../controllers/busController"
+);
+
+const {
+    getMyBookings,
+    getBookingDetail,
+    getPopularRoutes,
+} = require(
+    "../controllers/busOrderController"
 );
 
 
@@ -113,6 +125,39 @@ const {
 router.get(
     "/cities",
     getCities
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| Popular Routes
+|--------------------------------------------------------------------------
+*/
+
+router.get(
+    "/popular-routes",
+    getPopularRoutes
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| Customer Bookings
+|--------------------------------------------------------------------------
+*/
+
+router.get(
+    "/orders",
+    auth,
+    customerOnly,
+    getMyBookings
+);
+
+router.get(
+    "/orders/:orderRef",
+    auth,
+    customerOnly,
+    getBookingDetail
 );
 
 
@@ -246,6 +291,22 @@ router.post(
     checkoutLimiter,
     drainMode,
     cancelBusTicket
+);
+
+router.post(
+    "/admin/resolve-booking",
+    auth,
+    adminOnly,
+    checkoutLimiter,
+    resolveBookingReview
+);
+
+router.post(
+    "/admin/resolve-cancellation",
+    auth,
+    adminOnly,
+    checkoutLimiter,
+    resolveCancellationReview
 );
 
 router.post(

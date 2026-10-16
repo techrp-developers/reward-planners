@@ -50,7 +50,7 @@ async function sendTemplateMessage({
     });
     return res.data;
   } catch (err) {
-    console.log("❌ Interakt 400 payload:", JSON.stringify(payload));
+    console.log("❌ Interakt request failed:", JSON.stringify(payload));
     console.log("❌ Interakt error response:", err.response?.status, err.response?.data);
     throw err;
   }

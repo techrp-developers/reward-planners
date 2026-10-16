@@ -1,8 +1,15 @@
 const db = require("../../../config/database");
 const { isExpectedCapturedPayment } = require("./workflowPolicy");
+const { reconcileRefundEntity } = require("../services/refundService");
 
 async function processEvent(req) {
   const body = req.parsedBody;
+
+  if (body?.event === "refund.processed" || body?.event === "refund.failed") {
+    await reconcileRefundEntity(body?.payload?.refund?.entity, body.event);
+    return;
+  }
+
   if (body?.event !== "payment.captured") return;
 
   const payment = body?.payload?.payment?.entity;
@@ -13,7 +20,7 @@ async function processEvent(req) {
     await connection.beginTransaction();
 
     const [[paymentOrder]] = await connection.execute(
-      `SELECT id, ref_id, client_id, amount, status, razorpay_payment_id
+      `SELECT id, ref_id, amount, status, razorpay_payment_id
          FROM razorpay_orders
         WHERE razorpay_order_id = ?
           AND module = 'busbooking'
@@ -48,10 +55,9 @@ async function processEvent(req) {
       `SELECT id, payment_status, status
          FROM busbooking_orders
         WHERE order_ref = ?
-          AND user_id = ?
         LIMIT 1
         FOR UPDATE`,
-      [paymentOrder.ref_id, paymentOrder.client_id],
+      [paymentOrder.ref_id],
     );
 
     if (!bookingOrder) {

@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import type { ContentEntry } from "../types";
 import { blankEntry } from "../types";
 import type { ContentModule } from "../api/ContentApi";
-import { buildEntryFormData, createEntry, deactivateEntry, deleteEntry, duplicateEntry, listEntries, updateEntry } from "../api/ContentApi";
+import { buildEntryFormData, createEntry, deactivateEntry, deleteEntry, duplicateEntry, getEntry, listEntries, updateEntry } from "../api/ContentApi";
 import { getResolvedModules } from "../api/ModuleIconApi";
 import { fromApiEntry } from "../store/mappers";
 import { isGradientConfig, isValidHexColor } from "../utils/cmsColor";
@@ -76,7 +76,16 @@ export default function ContentManagement({ module }: ContentManagementProps) {
   });
 
   const startAdd = () => { setDraft(blankEntry("navbar_background")); setView("form"); };
-  const startEdit = (entry: ContentEntry) => { setDraft({ ...entry }); setView("form"); };
+  const startEdit = async (entry: ContentEntry) => {
+    if (!entry.id) return;
+    try {
+      const detail = await getEntry(entry.id);
+      setDraft(fromApiEntry(detail));
+      setView("form");
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to load content entry"));
+    }
+  };
   const patchDraft = (patch: Partial<ContentEntry>) => setDraft((prev) => ({ ...prev, ...patch }));
 
   const validate = (entry: ContentEntry, requireContentValue: boolean) => {

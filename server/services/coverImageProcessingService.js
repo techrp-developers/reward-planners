@@ -1,4 +1,3 @@
-const { Poof, PoofError, AuthenticationError, PaymentRequiredError, RateLimitError, ValidationError } = require("@poof-bg/js");
 const sharp = require("sharp");
 const coverBudget = require("./coverImageBudget");
 const { validateCoverImage, encodeCoverImage } = require("../utils/productCoverImage");
@@ -21,6 +20,15 @@ async function processProductCoverImage(inputBuffer) {
   if (!process.env.POOF_API_KEY) {
     throw processingError(503, "BACKGROUND_REMOVAL_NOT_CONFIGURED", "Background removal is not configured");
   }
+  let sdk;
+  try {
+    // Use the ESM export; some installations lack the SDK's CommonJS entry.
+    // Load on demand so an unavailable SDK cannot prevent backend startup.
+    sdk = await import("@poof-bg/js");
+  } catch {
+    throw processingError(503, "BACKGROUND_REMOVAL_UNAVAILABLE", "Background removal is temporarily unavailable. Please contact support.");
+  }
+  const { Poof, PoofError, AuthenticationError, PaymentRequiredError, RateLimitError, ValidationError } = sdk;
   coverBudget.reserveCoverRequest();
   try {
     const poof = new Poof({ apiKey: process.env.POOF_API_KEY, timeout: 60_000 });

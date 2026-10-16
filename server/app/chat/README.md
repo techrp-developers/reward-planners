@@ -21,7 +21,7 @@ Run `migrations/20260929_01_create_chat.sql` against the application database, t
 - `POST /polls/:pollId/votes` — create or change a vote with `{ "option_ids": [1] }`.
 - `POST /conversations/:id/read` — body: `{ "message_id": 123 }`.
 - `PATCH /conversations/:id` — group admin updates `name` and/or `description`.
-- `PATCH /conversations/:id/theme` — any active member sets the shared theme. Body: `{ "theme_key": "violet" }` (`default`, `violet`, `ocean`, `forest`, `sunset`). Returns `{ conversation_id, theme_key }` and broadcasts `conversation:theme` to members. Requires `migrations/20261014_01_add_chat_conversation_theme.sql`.
+- `PATCH /conversations/:id/theme` — any member sets the chat theme. Body: `{ "theme_key": "ocean" }` (`default`, `violet`, `ocean`, `forest`, `sunset`). Broadcasts `conversation:theme` to members.
 - `POST /conversations/:id/members` — group admin body: `{ "member_ids": [4,5] }`.
 - `DELETE /conversations/:id/members/:userId` — group admin removes a member.
 - `POST /conversations/:id/leave` — leave a conversation.
@@ -43,4 +43,4 @@ Client events:
 {"type":"typing:stop","conversation_id":1}
 ```
 
-Server events are `connected`, `conversation:available`, `message:new`, `message:read`, `poll:updated`, `typing:start`, `typing:stop`, `presence`, and `error`. `connected` contains the company's currently online user IDs; subsequent `presence` events update online/offline state and include `last_seen_at` when a user goes offline. The server uses ping/pong heartbeats and supports multiple devices per user.
+Server events are `connected`, `conversation:available`, `message:new`, `message:read`, `poll:updated`, `conversation:theme`, `typing:start`, `typing:stop`, `presence`, and `error`. `connected` contains the company's currently online user IDs; subsequent `presence` events update online/offline state and include `last_seen_at` when a user goes offline. The server uses ping/pong heartbeats and supports multiple devices per user.
