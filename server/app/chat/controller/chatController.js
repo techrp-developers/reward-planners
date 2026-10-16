@@ -98,7 +98,7 @@ exports.votePoll = async (req, res) => {
     };
     req.app.locals.chatSocket?.broadcastConversation(result.conversationId, {
       type: "poll:updated",
-      data: { message_id: result.message.message_id, poll: publicPoll, voter_id: req.user.user_id, option_ids: optionIds },
+      data: { conversation_id: result.conversationId, message_id: result.message.message_id, poll: publicPoll, voter_id: req.user.user_id, option_ids: optionIds },
     });
     res.json({ success: true, data: result.message.poll });
   } catch (error) { fail(res, error); }
