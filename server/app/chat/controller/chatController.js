@@ -159,6 +159,23 @@ exports.read = async (req, res) => {
 exports.updateGroup = async (req, res) => {
   try { await Chat.updateGroup(req.user.user_id, Number(req.params.id), req.body); res.json({ success: true }); } catch (error) { fail(res, error); }
 };
+const CHAT_THEME_KEYS = new Set(["default", "violet", "ocean", "forest", "sunset"]);
+
+exports.updateTheme = async (req, res) => {
+  try {
+    const conversationId = Number(req.params.id);
+    const themeKey = req.body?.theme_key;
+    if (!Number.isSafeInteger(conversationId) || conversationId <= 0) return res.status(404).json({ success: false, message: "Conversation not found" });
+    if (!CHAT_THEME_KEYS.has(themeKey)) return res.status(422).json({ success: false, message: "Unknown chat theme" });
+    const data = await Chat.updateTheme(req.user.user_id, conversationId, themeKey);
+    req.app.locals.chatSocket?.broadcastConversation(conversationId, {
+      type: "conversation:theme",
+      data: { ...data, updated_by: req.user.user_id },
+    });
+    res.json({ success: true, data });
+  } catch (error) { fail(res, error); }
+};
+
 exports.addMembers = async (req, res) => {
   try {
     const memberIds = ids(req.body.member_ids), conversationId = Number(req.params.id);

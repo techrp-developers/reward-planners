@@ -21,6 +21,7 @@ Run `migrations/20260929_01_create_chat.sql` against the application database, t
 - `POST /polls/:pollId/votes` — create or change a vote with `{ "option_ids": [1] }`.
 - `POST /conversations/:id/read` — body: `{ "message_id": 123 }`.
 - `PATCH /conversations/:id` — group admin updates `name` and/or `description`.
+- `PATCH /conversations/:id/theme` — any active member sets the shared theme. Body: `{ "theme_key": "violet" }` (`default`, `violet`, `ocean`, `forest`, `sunset`). Returns `{ conversation_id, theme_key }` and broadcasts `conversation:theme` to members. Requires `migrations/20261014_01_add_chat_conversation_theme.sql`.
 - `POST /conversations/:id/members` — group admin body: `{ "member_ids": [4,5] }`.
 - `DELETE /conversations/:id/members/:userId` — group admin removes a member.
 - `POST /conversations/:id/leave` — leave a conversation.

@@ -299,6 +299,37 @@ const searchBuses = async (req, res) => {
         |--------------------------------------------------------------------------
         */
 
+        // Check the provider setup before any database work. This is a
+        // server deployment problem, so answer 503 and log the key names;
+        // clients only see them outside production (never the values).
+        const missingConfig =
+            getMissingSearchConfig();
+
+        if (missingConfig.length > 0) {
+
+            console.error(
+                "[BusBooking][Search] Provider not configured; missing env:",
+                missingConfig.join(", ")
+            );
+
+            return res
+                .status(503)
+                .json({
+
+                    success: false,
+
+                    code:
+                        "BUS_PROVIDER_NOT_CONFIGURED",
+
+                    message:
+                        "Bus booking provider configuration is missing",
+
+                    ...(String(process.env.NODE_ENV).toLowerCase() !== "production"
+                        ? { missingConfig }
+                        : {})
+                });
+        }
+
         const sourceCity =
             await getOptionalCityDetails(
                 sourceCityCode
@@ -308,24 +339,6 @@ const searchBuses = async (req, res) => {
             await getOptionalCityDetails(
                 destinationCityCode
             );
-
-        const missingConfig =
-            getMissingSearchConfig();
-
-        if (missingConfig.length > 0) {
-
-            return res
-                .status(500)
-                .json({
-
-                    success: false,
-
-                    message:
-                        "Bus booking provider configuration is missing",
-
-                    missingConfig
-                });
-        }
 
 
         /*

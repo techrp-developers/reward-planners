@@ -72,7 +72,7 @@ class ChatModel {
 
   async listConversations(userId) {
     const [rows] = await db.execute(
-      `SELECT c.conversation_id, c.type, c.name, c.description, c.updated_at, m.role,
+      `SELECT c.conversation_id, c.type, c.name, c.description, c.theme_key, c.updated_at, m.role,
               lm.message_id AS last_message_id, lm.body AS last_message, lm.message_type AS last_message_type,
               lm.created_at AS last_message_at, lm.sender_id AS last_sender_id,
               (SELECT COUNT(*) FROM chat_messages um WHERE um.conversation_id = c.conversation_id
@@ -251,6 +251,13 @@ class ChatModel {
     if (!member || member.type !== "group") throw Object.assign(new Error("Group not found"), { status: 404 });
     if (member.role !== "admin") throw Object.assign(new Error("Group admin permission required"), { status: 403 });
     await db.execute(`UPDATE chat_conversations SET name = COALESCE(?, name), description = COALESCE(?, description) WHERE conversation_id = ?`, [data.name ?? null, data.description ?? null, conversationId]);
+  }
+
+  // Any active member may change the shared theme, as in other chat apps.
+  async updateTheme(userId, conversationId, themeKey) {
+    if (!await this.assertMember(userId, conversationId)) throw Object.assign(new Error("Conversation not found"), { status: 404 });
+    await db.execute(`UPDATE chat_conversations SET theme_key = ? WHERE conversation_id = ?`, [themeKey, conversationId]);
+    return { conversation_id: conversationId, theme_key: themeKey };
   }
 
   async addMembers(userId, conversationId, memberIds) {

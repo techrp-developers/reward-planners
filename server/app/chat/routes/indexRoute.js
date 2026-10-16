@@ -29,6 +29,7 @@ router.post("/conversations/:id/polls", controller.createPoll);
 router.post("/polls/:pollId/votes", controller.votePoll);
 router.post("/conversations/:id/read", controller.read);
 router.patch("/conversations/:id", controller.updateGroup);
+router.patch("/conversations/:id/theme", controller.updateTheme);
 router.post("/conversations/:id/members", controller.addMembers);
 router.delete("/conversations/:id/members/:userId", controller.removeMember);
 router.post("/conversations/:id/leave", controller.leave);

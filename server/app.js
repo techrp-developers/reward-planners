@@ -16,8 +16,9 @@ const swaggerSpec = require("./config/swagger");
 // setupTodoReminderDB();
 
 require("dotenv").config();
-require("./app/busboooking/config/productionSafety")
-  .assertProductionConfiguration();
+const busProductionSafety = require("./app/busboooking/config/productionSafety");
+busProductionSafety.assertProductionConfiguration();
+busProductionSafety.warnIfBusConfigurationIncomplete();
 if (String(process.env.RUN_SCHEDULED_JOBS ?? "true").toLowerCase() === "true") {
   require("./services/ExpressBees/cron/shipmentCron");
   require("./services/Status/statusCleanupCron");
