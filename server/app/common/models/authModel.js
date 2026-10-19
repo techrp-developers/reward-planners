@@ -577,49 +577,135 @@ class authModel {
     };
   }
 
-  // Get employee birthday
-  async getTodayBirthdayEmployees(userId) {
+  // Get all company birthdays (both today and upcoming)
+  async getCompanyBirthdays(userId) {
     const [rows] = await db.execute(
       `
     SELECT
-      cu_emp.id,
+      cu_emp.id AS employee_id,
+      cu_emp.company_id,
       cu_emp.name,
       cu_emp.email,
-      cu_emp.contact,
+      cu_emp.contact AS phone,
       cu_emp.department,
       cu_emp.role,
       cu_emp.dob,
+      c.user_id AS recipient_user_id,
       c.user_image,
       c.updated_at AS user_image_updated_at
     FROM customer c_logged
 
-    INNER JOIN company_users cu_logged
+    LEFT JOIN company_users cu_logged
       ON c_logged.company_user_id = cu_logged.id
+      OR (c_logged.email IS NOT NULL AND LOWER(TRIM(c_logged.email)) = LOWER(TRIM(cu_logged.email)))
 
     INNER JOIN company_users cu_emp
       ON cu_logged.company_id = cu_emp.company_id
 
     LEFT JOIN customer c
       ON c.company_user_id = cu_emp.id
+      OR (c.email IS NOT NULL AND LOWER(TRIM(c.email)) = LOWER(TRIM(cu_emp.email)))
 
     WHERE c_logged.user_id = ?
-      AND MONTH(cu_emp.dob) = MONTH(CURDATE())
-      AND DAY(cu_emp.dob) = DAY(CURDATE())
+      AND cu_emp.dob IS NOT NULL
       AND cu_emp.status = 1
     `,
       [userId],
     );
 
-    return rows.map((emp) => ({
-      employeeId: emp.id,
-      name: emp.name,
-      email: emp.email,
-      phone: emp.contact,
-      department: emp.department,
-      role: emp.role,
-      dob: emp.dob,
-      image: getPublicUrl(emp.user_image, emp.user_image_updated_at),
-    }));
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1; // 1-12
+    const currentDay = now.getDate(); // 1-31
+    const currentYear = now.getFullYear();
+
+    const monthNames = [
+      "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    ];
+
+    const parsedList = [];
+    const seen = new Set();
+
+    for (const emp of rows) {
+      if (!emp.dob || seen.has(emp.employee_id)) continue;
+      seen.add(emp.employee_id);
+
+      const str = String(emp.dob).trim();
+      const match = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+      let m = 0;
+      let d = 0;
+      if (match) {
+        m = parseInt(match[2], 10);
+        d = parseInt(match[3], 10);
+      } else {
+        const parsed = new Date(str);
+        if (!isNaN(parsed.getTime())) {
+          m = parsed.getMonth() + 1;
+          d = parsed.getDate();
+        }
+      }
+
+      if (!m || !d) continue;
+
+      const isToday = (m === currentMonth && d === currentDay);
+      let daysUntil = 0;
+
+      if (isToday) {
+        daysUntil = 0;
+      } else {
+        let nextBday = new Date(currentYear, m - 1, d);
+        if (nextBday < now && (nextBday.toDateString() !== now.toDateString())) {
+          nextBday = new Date(currentYear + 1, m - 1, d);
+        }
+        daysUntil = Math.max(1, Math.ceil((nextBday.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+      }
+
+      const dateStr = isToday ? "Birthday today" : `${monthNames[m - 1]} ${d}`;
+
+      parsedList.push({
+        id: String(emp.employee_id),
+        employeeId: emp.employee_id,
+        userId: emp.recipient_user_id || null,
+        name: emp.name,
+        email: emp.email,
+        phone: emp.phone,
+        department: emp.department || "Team Member",
+        role: emp.role || emp.department || "Colleague",
+        dob: emp.dob,
+        isToday,
+        daysUntil,
+        dateStr,
+        avatar: emp.user_image ? getPublicUrl(emp.user_image, emp.user_image_updated_at) : null,
+        image: emp.user_image ? getPublicUrl(emp.user_image, emp.user_image_updated_at) : null,
+      });
+    }
+
+    parsedList.sort((a, b) => {
+      if (a.isToday && !b.isToday) return -1;
+      if (!a.isToday && b.isToday) return 1;
+      return a.daysUntil - b.daysUntil;
+    });
+
+    const today = parsedList.filter((x) => x.isToday);
+    const upcoming = parsedList.filter((x) => !x.isToday);
+
+    return {
+      today,
+      upcoming,
+      all: parsedList,
+      todayCount: today.length,
+      upcomingCount: upcoming.length,
+    };
+  }
+
+  // Get employee birthday (today only - backward compatible)
+  async getTodayBirthdayEmployees(userId) {
+    try {
+      const bdays = await this.getCompanyBirthdays(userId);
+      return bdays.today;
+    } catch {
+      return [];
+    }
   }
 
   // Delete Customer — soft delete only. The account and its cart/wishlist/
