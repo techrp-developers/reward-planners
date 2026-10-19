@@ -6,6 +6,7 @@ const optionalAuth = require("../../../common/middlewares/optionalAuth");
 
 // Product Listing
 router.get("/all-products", optionalAuth, ProductController.getAllProducts);
+router.get("/by-brand", optionalAuth, ProductController.getProductsByBrand);
 
 // get Products by Category
 router.get(

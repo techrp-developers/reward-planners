@@ -136,8 +136,20 @@ async function addWishlistStatus(products, userId) {
 }
 
 class ProductController {
+  async getProductsByBrand(req, res) {
+    const brandName = req.query.brand;
+    if (typeof brandName !== "string" || !brandName.trim() || brandName.trim().length > 255) {
+      return res.status(400).json({ success: false, message: "A brand name of 1–255 characters is required" });
+    }
+    return ProductController.prototype.listProducts(req, res, brandName.trim());
+  }
+
   // all the products
   async getAllProducts(req, res) {
+    return ProductController.prototype.listProducts(req, res);
+  }
+
+  async listProducts(req, res, brandName) {
     try {
       const page = positiveInt(req.query.page, 1, 10000);
       const limit = positiveInt(req.query.limit, 10, 50);
@@ -149,6 +161,7 @@ class ProductController {
         req.query.sortOrder?.toUpperCase() === "ASC" ? "ASC" : "DESC";
 
       const { products, totalItems } = await ProductModel.getAllProducts({
+        brandName,
         search,
         sortBy,
         sortOrder,

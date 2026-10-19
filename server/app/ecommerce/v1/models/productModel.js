@@ -219,10 +219,15 @@ class ProductModel {
 
   // Get Product By ID
 
-  async getAllProducts({ search, sortBy, sortOrder, limit, offset }) {
+  async getAllProducts({ search, sortBy, sortOrder, limit, offset, brandName }) {
     try {
       const conditions = [];
       const params = [];
+
+      if (brandName !== undefined) {
+        conditions.push("LOWER(TRIM(p.brand_name)) = LOWER(?)");
+        params.push(brandName.trim());
+      }
 
       /* ===============================
          SEARCH
@@ -324,7 +329,7 @@ class ProductModel {
         ${whereClause}
 
         GROUP BY p.product_id
-        ORDER BY p.${sortBy} ${sortOrder}
+        ORDER BY p.${sortBy} ${sortOrder}, p.product_id ${sortOrder}
         LIMIT ? OFFSET ?
       `;
 
