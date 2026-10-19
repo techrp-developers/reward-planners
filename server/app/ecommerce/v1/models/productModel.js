@@ -984,6 +984,8 @@ class ProductModel {
 
   async getProductsByCategory({
     search,
+    brandName = null,
+    searchBrands = false,
     sortBy,
     sortOrder,
     limit,
@@ -1022,9 +1024,15 @@ class ProductModel {
         params.push(categoryId);
       }
 
-      if (search) {
-        conditions.push("p.product_name LIKE ?");
+      if (brandName !== null) {
+        conditions.push("LOWER(TRIM(p.brand_name)) = LOWER(?)");
+        params.push(brandName);
+      } else if (search) {
+        conditions.push(searchBrands
+          ? "(p.product_name LIKE ? OR p.brand_name LIKE ?)"
+          : "p.product_name LIKE ?");
         params.push(`%${search}%`);
+        if (searchBrands) params.push(`%${search}%`);
       }
 
       // price filters (now SAFE because v is correct)
@@ -1418,6 +1426,7 @@ class ProductModel {
   async getSearchSuggestions({ search, limit }) {
     if (!search || search.length < 2) {
       return {
+        brands: [],
         categories: [],
         subcategories: [],
         products: [],
@@ -1425,8 +1434,32 @@ class ProductModel {
     }
 
     const patterns = buildSearchPatterns(search);
+    if (!patterns.length) return { brands: [], categories: [], subcategories: [], products: [] };
     const likeAny = (column) =>
       `(${patterns.map(() => `${column} LIKE ?`).join(" OR ")})`;
+
+    const [brandRows] = await db.execute(
+      `SELECT MIN(TRIM(p.brand_name)) AS brand_name
+       FROM eproducts p
+       WHERE p.status = 'approved' AND p.is_visible = 1
+         AND p.is_searchable = 1 AND p.is_deleted = 0
+         AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
+         AND TRIM(COALESCE(p.brand_name, '')) != ''
+         AND LOWER(p.brand_name) LIKE ?
+         AND EXISTS (SELECT 1 FROM product_variants pv
+                     WHERE pv.product_id = p.product_id AND pv.is_visible = 1
+                       AND pv.sale_price IS NOT NULL)
+       GROUP BY LOWER(TRIM(p.brand_name))
+       ORDER BY (LOWER(TRIM(p.brand_name)) = LOWER(?)) DESC, brand_name ASC
+       LIMIT ?`,
+      [`%${search.trim().toLowerCase()}%`, search.trim(), limit],
+    );
+    const brands = brandRows.map(({ brand_name }) => ({
+      id: brand_name,
+      title: brand_name,
+      type: "brand",
+      navigation: { destination: "brand_products", brand_name },
+    }));
 
     /* ========================================
      1 Category Suggestions
@@ -1580,6 +1613,7 @@ class ProductModel {
     );
 
     return {
+      brands,
       categories: formattedCategories,
       subcategories: formattedSubcategories,
       products: formattedProducts,
@@ -1588,8 +1622,25 @@ class ProductModel {
 
   // Load Products
   async loadProducts({ search, limit, offset }) {
+    const term = typeof search === "string" ? search.trim() : "";
+    // An exact brand search should return that brand only, even when another
+    // product mentions the brand in its title. Otherwise allow partial matches.
+    let brandName = null;
+    if (term) {
+      const [brands] = await db.execute(
+        `SELECT p.brand_name FROM eproducts p
+         WHERE LOWER(TRIM(p.brand_name)) = LOWER(?)
+           AND p.status = 'approved' AND p.is_visible = 1 AND p.is_deleted = 0
+           AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
+         LIMIT 1`,
+        [term],
+      );
+      if (brands.length) brandName = term;
+    }
     return this.getProductsByCategory({
-      search,
+      search: term,
+      brandName,
+      searchBrands: true,
       sortBy: "created_at",
       sortOrder: "DESC",
       limit,
@@ -1820,7 +1871,7 @@ class ProductModel {
   }
 
   // Get User Recommendations
-  async getUserRecommendations(userId, limit = 10, offset = 0) {
+  async getUserRecommendations(userId, limit = 10, offset = 0, search = '') {
     try {
       const query = `
       SELECT 
@@ -1915,6 +1966,7 @@ class ProductModel {
         AND p.is_deleted = 0
         AND p.is_visible = 1
         AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
+        AND (? = '' OR p.product_name LIKE CONCAT('%', ?, '%'))
 
       GROUP BY p.product_id
       HAVING total_score > 0
@@ -1927,6 +1979,8 @@ class ProductModel {
         userId,
         userId,
         userId,
+        search,
+        search,
         limit,
         offset,
       ]);
@@ -2027,7 +2081,7 @@ class ProductModel {
   }
 
   // New Arrivals
-  async getNewArrivals(limit = 10, offset = 0) {
+  async getNewArrivals(limit = 10, offset = 0, search = '') {
     try {
       const query = `
       SELECT
@@ -2101,13 +2155,14 @@ class ProductModel {
         AND p.is_deleted = 0
         AND p.is_visible = 1
         AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
+        AND (? = '' OR p.product_name LIKE CONCAT('%', ?, '%'))
 
       GROUP BY p.product_id
       ORDER BY p.created_at DESC
       LIMIT ? OFFSET ?
     `;
 
-      const [rows] = await db.execute(query, [limit, offset]);
+      const [rows] = await db.execute(query, [search, search, limit, offset]);
 
       /* ===============================
        CACHE
@@ -2564,7 +2619,7 @@ class ProductModel {
   }
 
   // Best sellers
-  async getBestSellers(limit = 10, offset = 0, days = 30) {
+  async getBestSellers(limit = 10, offset = 0, days = 30, search = '') {
     try {
       const query = `
       SELECT
@@ -2634,13 +2689,14 @@ class ProductModel {
         AND p.is_deleted = 0
         AND p.is_visible = 1
         AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
+        AND (? = '' OR p.product_name LIKE CONCAT('%', ?, '%'))
 
       GROUP BY p.product_id
       ORDER BY total_sold DESC
       LIMIT ? OFFSET ?
     `;
 
-      const [rows] = await db.execute(query, [days, limit, offset]);
+      const [rows] = await db.execute(query, [days, search, search, limit, offset]);
 
       /* ===============================
        CACHE
@@ -2739,7 +2795,7 @@ class ProductModel {
   }
 
   // Get Most viewed products
-  async getMostViewedProducts(limit = 10, offset = 0, days = 30) {
+  async getMostViewedProducts(limit = 10, offset = 0, days = 30, search = '') {
     try {
       const query = `
       SELECT
@@ -2804,13 +2860,14 @@ class ProductModel {
         AND p.is_deleted = 0
         AND p.is_visible = 1
         AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
+        AND (? = '' OR p.product_name LIKE CONCAT('%', ?, '%'))
 
       GROUP BY p.product_id
       ORDER BY view_count DESC
       LIMIT ? OFFSET ?
     `;
 
-      const [rows] = await db.execute(query, [days, limit, offset]);
+      const [rows] = await db.execute(query, [days, search, search, limit, offset]);
 
       /* ===============================
           CACHE
@@ -2909,7 +2966,7 @@ class ProductModel {
   }
 
   // Get Rop rated products
-  async getTopRatedProducts(limit = 10, offset = 0) {
+  async getTopRatedProducts(limit = 10, offset = 0, search = '') {
     try {
       const query = `
       SELECT
@@ -2960,6 +3017,7 @@ class ProductModel {
         AND p.is_deleted = 0
         AND p.is_visible = 1
         AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
+        AND (? = '' OR p.product_name LIKE CONCAT('%', ?, '%'))
 
       GROUP BY p.product_id
       HAVING total_reviews >= 3
@@ -2967,7 +3025,7 @@ class ProductModel {
       LIMIT ? OFFSET ?
     `;
 
-      const [rows] = await db.execute(query, [limit, offset]);
+      const [rows] = await db.execute(query, [search, search, limit, offset]);
 
       /* ===============================
        CACHE

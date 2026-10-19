@@ -914,6 +914,9 @@ class ProductController {
       const userId = req.user?.user_id;
       // const userId = 1;
       let recentlyViewed = [];
+      const limit = positiveInt(req.query.limit, 10, 50);
+      const offset = nonNegativeInt(req.query.offset);
+      const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
 
       if (!userId) {
         return res.json({ success: true, data: [] });
@@ -984,12 +987,13 @@ class ProductController {
         AND p.is_searchable = 1
         AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
 
+        AND (? = '' OR p.product_name LIKE CONCAT('%', ?, '%'))
       GROUP BY rv.product_id
-      ORDER BY rv.viewed_at DESC
-      LIMIT 10
+      ORDER BY MAX(rv.viewed_at) DESC, p.product_id DESC
+      LIMIT ? OFFSET ?
     `;
 
-      const [rows] = await db.execute(query, [userId]);
+      const [rows] = await db.execute(query, [userId, search, search, limit, offset]);
 
       const rewardCache = {};
 
@@ -1085,6 +1089,9 @@ class ProductController {
       return res.json({
         success: true,
         data: recentlyViewed,
+        hasMore: recentlyViewed.length === limit,
+        offset,
+        nextOffset: offset + recentlyViewed.length,
       });
     } catch (error) {
       console.error("Error fetching recent products:", error);
@@ -1099,6 +1106,7 @@ class ProductController {
       // const userId = 1;
       const limit = positiveInt(req.query.limit, 10, 50);
       const offset = nonNegativeInt(req.query.offset);
+      const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
 
       if (!userId) {
         return res.status(401).json({
@@ -1111,6 +1119,7 @@ class ProductController {
         userId,
         limit,
         offset,
+        search,
       );
 
       await addWishlistStatus(products, userId);
@@ -1135,8 +1144,9 @@ class ProductController {
     try {
       const limit = positiveInt(req.query.limit, 10, 50);
       const offset = nonNegativeInt(req.query.offset);
+      const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
 
-      const products = await ProductModel.getNewArrivals(limit, offset);
+      const products = await ProductModel.getNewArrivals(limit, offset, search);
 
       await addWishlistStatus(products, req.user?.user_id);
 
@@ -1230,8 +1240,9 @@ class ProductController {
       const limit = positiveInt(req.query.limit, 10, 50);
       const days = positiveInt(req.query.days, 30, 365);
       const offset = nonNegativeInt(req.query.offset);
+      const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
 
-      const products = await ProductModel.getBestSellers(limit, offset, days);
+      const products = await ProductModel.getBestSellers(limit, offset, days, search);
 
       await addWishlistStatus(products, req.user?.user_id);
 
@@ -1257,11 +1268,13 @@ class ProductController {
       const limit = positiveInt(req.query.limit, 10, 50);
       const days = positiveInt(req.query.days, 30, 365);
       const offset = nonNegativeInt(req.query.offset);
+      const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
 
       const products = await ProductModel.getMostViewedProducts(
         limit,
         offset,
         days,
+        search,
       );
 
       await addWishlistStatus(products, req.user?.user_id);
@@ -1287,8 +1300,9 @@ class ProductController {
     try {
       const limit = positiveInt(req.query.limit, 10, 50);
       const offset = nonNegativeInt(req.query.offset);
+      const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
 
-      const products = await ProductModel.getTopRatedProducts(limit, offset);
+      const products = await ProductModel.getTopRatedProducts(limit, offset, search);
 
       await addWishlistStatus(products, req.user?.user_id);
 
