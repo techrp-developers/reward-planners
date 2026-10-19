@@ -84,8 +84,17 @@ function writeExchange(config, { status = null, data, error = null }) {
 
 const srdvClient = axios.create();
 
+// The upgraded (live) SRDV API authenticates with the Api-Token header only and
+// must not receive the legacy credentials, so they are dropped unless set.
+const LEGACY_CREDENTIAL_KEYS = ["ClientId", "UserName", "Password"];
+
 srdvClient.interceptors.request.use((config) => {
   config.srdvStartedAt = Date.now();
+  if (config.data && typeof config.data === "object") {
+    for (const key of LEGACY_CREDENTIAL_KEYS) {
+      if (!String(config.data[key] ?? "").trim()) delete config.data[key];
+    }
+  }
   return config;
 });
 

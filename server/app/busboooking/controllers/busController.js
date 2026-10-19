@@ -147,9 +147,6 @@ const getMissingSearchConfig = () => {
     const requiredEnvKeys = [
         "SRDV_SEARCH_URL",
         "SRDV_API_TOKEN",
-        "SRDV_CLIENT_ID",
-        "SRDV_USERNAME",
-        "SRDV_PASSWORD"
     ];
 
     return requiredEnvKeys.filter((key) => {
@@ -725,9 +722,6 @@ const getSeatLayout = async (req, res) => {
         const requiredConfig = [
             "SRDV_SEAT_LAYOUT_URL",
             "SRDV_API_TOKEN",
-            "SRDV_CLIENT_ID",
-            "SRDV_USERNAME",
-            "SRDV_PASSWORD"
         ];
 
 
@@ -1279,11 +1273,8 @@ const getBoardingDroppingPoints = async (
 
       "SRDV_API_TOKEN",
 
-      "SRDV_CLIENT_ID",
 
-      "SRDV_USERNAME",
 
-      "SRDV_PASSWORD",
     ];
 
 
@@ -1899,11 +1890,8 @@ const blockSeat =
 
         "SRDV_API_TOKEN",
 
-        "SRDV_CLIENT_ID",
 
-        "SRDV_USERNAME",
 
-        "SRDV_PASSWORD",
 
         "SRDV_END_USER_IP",
       ];
@@ -3814,9 +3802,6 @@ const getProviderBalance = async (req, res) => {
   const requiredConfig = [
     "SRDV_BALANCE_URL",
     "SRDV_API_TOKEN",
-    "SRDV_CLIENT_ID",
-    "SRDV_USERNAME",
-    "SRDV_PASSWORD",
     "SRDV_END_USER_IP",
   ];
   const missingConfig = requiredConfig.filter(
@@ -3881,9 +3866,6 @@ const getProviderBalanceLog = async (req, res) => {
   const requiredConfig = [
     "SRDV_BALANCE_LOG_URL",
     "SRDV_API_TOKEN",
-    "SRDV_CLIENT_ID",
-    "SRDV_USERNAME",
-    "SRDV_PASSWORD",
     "SRDV_END_USER_IP",
   ];
   const missingConfig = requiredConfig.filter(
@@ -3978,9 +3960,6 @@ const cancelBusTicket = async (req, res) => {
   const requiredConfig = [
     "SRDV_CANCEL_URL",
     "SRDV_API_TOKEN",
-    "SRDV_CLIENT_ID",
-    "SRDV_USERNAME",
-    "SRDV_PASSWORD",
   ];
   const missingConfig = requiredConfig.filter(
     (key) => !String(process.env[key] || "").trim(),

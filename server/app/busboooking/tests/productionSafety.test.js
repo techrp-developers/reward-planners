@@ -15,9 +15,6 @@ const productionEnv = {
   SRDV_BALANCE_URL: "https://bus.example.com/v9/rest/Balance",
   SRDV_BALANCE_LOG_URL: "https://bus.example.com/v9/rest/BalanceLog",
   SRDV_API_TOKEN: "token",
-  SRDV_CLIENT_ID: "client",
-  SRDV_USERNAME: "user",
-  SRDV_PASSWORD: "password",
   SRDV_END_USER_IP: "203.0.113.1",
   RAZOR_API_KEY: "rzp_live_example",
   RAZOR_SECRET_KEY: "secret",
@@ -25,6 +22,8 @@ const productionEnv = {
   ACCESS_TOKEN_SECRET: "access-secret",
 };
 
+// The upgraded live API authenticates with the Api-Token header alone; the
+// legacy ClientId/UserName/Password must not be required (or sent).
 test("production configuration accepts HTTPS live endpoints and live payment keys", () => {
   assert.deepEqual(getProductionConfigurationErrors(productionEnv), []);
 });
