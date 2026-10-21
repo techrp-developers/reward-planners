@@ -6,6 +6,9 @@ const MODULE = "product";
 const IMAGE_GALLERY_ZONES: Zone[] = ["offers_banner", "promotional_banner", "brand_promotional_banner"];
 
 export interface ApiContentZoneImage {
+  target_type?: ContentTargetType | null;
+  target_id?: number | null;
+  target_ids?: number[] | string | null;
   image_id: number | null;
   content_id: number;
   image_url: string;
@@ -373,4 +376,8 @@ export const listContentTargetOptions = async (
 
 export const setEntryImageActive = async (id: number, imageId: number, active: boolean): Promise<void> => {
   await api.patch(`${BASE}/entries/${id}/images/${imageId}/${active ? "activate" : "deactivate"}`);
+};
+
+export const saveImageTarget = async (contentId: number, imageId: number, targetType: ContentTargetType | "", targetId: number | null, targetIds: number[]) => {
+  await api.patch(`${BASE}/entries/${contentId}/images/${imageId}/target`, { target_type: targetType, target_id: targetId, target_ids: targetIds });
 };

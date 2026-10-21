@@ -238,6 +238,7 @@ export default function ContentForm({ draft, entries, now, module, onChange, onS
         ) : IMAGE_GALLERY_ZONES.includes(draft.zone) ? (
           draft.id ? (
             <OfferImagesManager
+              module={module}
               zone={draft.zone}
               allowActivation={draft.zone === "brand_promotional_banner"}
               contentId={draft.id}

@@ -228,6 +228,9 @@ const withOffersImages = async (entry, { includeInactive = false } = {}) => {
         image_url: getEntryImageUrl(row.image_url),
         sort_order: row.sort_order,
         is_active: row.is_active,
+        target_type: row.target_type || null,
+        target_id: row.target_id ?? null,
+        target_ids: parseTargetIds(row.target_ids),
       }))
     : entry.image_url && !allImages?.length
       ? [
@@ -563,16 +566,17 @@ class ContentController {
         );
 
         for (const image of originalImages) {
-          const copiedPath = copyContentImageFile(
+          const copiedPath = await copyContentImageFile(
             image.image_url,
             entry.content_id,
           );
           if (copiedPath) {
-            await ContentZoneModel.createEntryImage(
+            const copiedImage = await ContentZoneModel.createEntryImage(
               entry.content_id,
               copiedPath,
               image.sort_order,
             );
+            if (image.target_type) await ContentZoneModel.updateImageTarget(entry.content_id, copiedImage.image_id, image);
           }
         }
       }
@@ -695,6 +699,15 @@ class ContentController {
         success: false,
         message: err.message,
       });
+    }
+  }
+
+  async updateImageTarget(req, res) {
+    try {
+      const image = await ContentZoneModel.updateImageTarget(req.params.id, req.params.imageId, req.body);
+      return res.json({ success: true, data: { ...image, image_url: getEntryImageUrl(image.image_url) } });
+    } catch (error) {
+      return res.status(error.statusCode || 500).json({ success: false, message: error.message });
     }
   }
 

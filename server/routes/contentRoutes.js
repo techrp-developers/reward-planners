@@ -118,6 +118,11 @@ router.delete(
 );
 
 router.patch(
+  "/entries/:id/images/:imageId/target",
+  contentController.updateImageTarget,
+);
+
+router.patch(
   "/entries/:id/images/:imageId/deactivate",
   contentController.deactivateEntryImage,
 );

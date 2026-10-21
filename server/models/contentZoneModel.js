@@ -473,8 +473,8 @@ class ContentZoneModel {
   }
 
   /** Product cards linked to a banner, in the same order selected in CMS. */
-  async getContentProducts(contentId) {
-    const entry = await this.getEntryById(contentId);
+  async getContentProducts(contentId, imageId = null) {
+    const entry = await this.getImageTargetEntry(contentId, imageId);
     if (entry.target_type !== "product") return [];
 
     const ids = parseTargetIds(entry.target_ids)
@@ -521,8 +521,8 @@ class ContentZoneModel {
     return rows;
   }
 
-  async getContentServices(contentId) {
-    const entry = await this.getEntryById(contentId);
+  async getContentServices(contentId, imageId = null) {
+    const entry = await this.getImageTargetEntry(contentId, imageId);
     if (entry.target_type !== 'service') return [];
     const ids = contentTargetIds(entry);
     if (!ids.length) return [];
@@ -535,6 +535,44 @@ class ContentZoneModel {
       [...ids, ...ids],
     );
     return rows;
+  }
+
+  async getImageTargetEntry(contentId, imageId = null) {
+    const entry = await this.getEntryById(contentId);
+    if (imageId == null) return entry;
+    const image = await this.getImageById(imageId);
+    if (Number(image.content_id) !== Number(contentId) || !Number(image.is_active)) {
+      const error = new Error('Banner image not found');
+      error.statusCode = 404;
+      throw error;
+    }
+    return image.target_type ? { ...entry, target_type: image.target_type, target_id: image.target_id, target_ids: image.target_ids } : entry;
+  }
+
+  async updateImageTarget(contentId, imageId, data) {
+    const entry = await this.getEntryById(contentId);
+    const image = await this.getImageById(imageId);
+    if (Number(image.content_id) !== Number(contentId)) {
+      const error = new Error('Banner image not found');
+      error.statusCode = 404;
+      throw error;
+    }
+    if (!['product', 'service'].includes(entry.module)) {
+      const error = new Error('Image destinations require ecommerce or service content');
+      error.statusCode = 400;
+      throw error;
+    }
+    const type = data.target_type || null;
+    const multi = ['product', 'service'].includes(type);
+    const ids = multi ? parseTargetIds(data.target_ids) : [];
+    const targetId = type ? (ids.length ? ids[0] : data.target_id) : null;
+    this.validateEntry({ module: entry.module, target_type: type, target_id: targetId, target_ids: ids }, { isUpdate: true });
+    if (type) {
+      for (const id of ids.length ? ids : [targetId]) await this.validateTarget(type, id);
+    }
+    await db.query('UPDATE content_zone_entry_images SET target_type = ?, target_id = ?, target_ids = ? WHERE content_id = ? AND image_id = ?',
+      [type, type ? Number(targetId) : null, multi ? JSON.stringify(ids.length ? ids : [Number(targetId)]) : null, contentId, imageId]);
+    return this.getImageById(imageId);
   }
 
   async getProductOffers(contentId) {
@@ -870,7 +908,7 @@ class ContentZoneModel {
   async getImagesByContentId(contentId) {
     const [rows] = await db.query(
       `
-      SELECT image_id, content_id, image_url, sort_order, is_active
+      SELECT image_id, content_id, image_url, sort_order, is_active, target_type, target_id, target_ids
       FROM content_zone_entry_images
       WHERE content_id = ?
         AND is_active = 1
@@ -886,7 +924,7 @@ class ContentZoneModel {
   async getAllImagesByContentId(contentId) {
     const [rows] = await db.query(
       `
-      SELECT image_id, content_id, image_url, sort_order, is_active
+      SELECT image_id, content_id, image_url, sort_order, is_active, target_type, target_id, target_ids
       FROM content_zone_entry_images
       WHERE content_id = ?
       `,
@@ -899,7 +937,7 @@ class ContentZoneModel {
   async getImageById(imageId) {
     const [rows] = await db.query(
       `
-      SELECT image_id, content_id, image_url, sort_order, is_active
+      SELECT image_id, content_id, image_url, sort_order, is_active, target_type, target_id, target_ids
       FROM content_zone_entry_images
       WHERE image_id = ?
       LIMIT 1

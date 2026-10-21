@@ -2,7 +2,7 @@ import type { ApiContentEntry } from "../api/ContentApi";
 import type { ContentEntry } from "../types";
 
 // Backend always returns a complete, ready-to-use URL for image_url (or null) - see contentController.js buildContentImageUrl.
-const targetIdsFromApi = (row: ApiContentEntry): number[] => {
+const targetIdsFromApi = (row: { target_ids?: number[] | string | null; target_id?: number | null }): number[] => {
   let values: unknown = row.target_ids;
   if (typeof values === "string") {
     try { values = JSON.parse(values); } catch { values = []; }
@@ -38,5 +38,5 @@ export const fromApiEntry = (row: ApiContentEntry): ContentEntry => ({
   createdBy: row.created_by_name || "",
   createdAt: row.created_at,
   imageFile: null,
-  images: row.images?.map((image) => ({ imageId: image.image_id, imageUrl: image.image_url, sortOrder: image.sort_order, isActive: !!image.is_active })),
+  images: row.images?.map((image) => ({ targetType: image.target_type || "", targetId: image.target_id ?? null, targetIds: targetIdsFromApi(image), imageId: image.image_id, imageUrl: image.image_url, sortOrder: image.sort_order, isActive: !!image.is_active })),
 });

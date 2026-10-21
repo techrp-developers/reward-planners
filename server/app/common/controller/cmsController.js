@@ -41,11 +41,19 @@ const publicModule = (row) => ({
   sortOrder: Number(row.sort_order || 0),
 });
 
-const publicImage = (row) => ({
+const publicImage = (row, entry) => {
+  const target = row.target_type ? { ...entry, target_type: row.target_type, target_id: row.target_id, target_ids: row.target_ids } : entry;
+  const navigation = contentNavigation(target);
+  return ({
   imageId: row.image_id,
   imageUrl: contentAssetUrl(row.image_url),
   sortOrder: Number(row.sort_order || 0),
+  targetType: target.target_type || null,
+  targetId: target.target_id == null ? null : Number(target.target_id),
+  targetIds: ['product', 'service'].includes(target.target_type) ? contentTargetIds(target) : [],
+  navigation: navigation ? { ...navigation, imageId: Number(row.image_id) } : null,
 });
+};
 
 const publicContentEntry = async (entry) => {
   if (!entry) return null;
@@ -80,7 +88,7 @@ const publicContentEntry = async (entry) => {
       ? allBrandImages.filter(image => Number(image.is_active) === 1).sort((a, b) => a.sort_order - b.sort_order)
       : await ContentZoneModel.getImagesByContentId(entry.content_id);
     if (allBrandImages?.length && !images.length) response.imageUrl = null;
-    response.images = images.length ? images.map(publicImage) : response.imageUrl ? [{
+    response.images = images.length ? images.map(image => publicImage(image, entry)) : response.imageUrl ? [{
       imageId: null,
       imageUrl: response.imageUrl,
       sortOrder: 0,
@@ -104,12 +112,12 @@ const getRequestedModules = (queryValue) => {
 class CmsController {
   async getContentServices(req, res) {
     try {
-      const entry = await ContentZoneModel.getEntryById(req.params.id);
+      const entry = await ContentZoneModel.getImageTargetEntry(req.params.id, req.query?.imageId ?? null);
       if (entry.module !== 'service' || entry.target_type !== 'service' || !IMAGE_GALLERY_ZONES.includes(entry.zone)) {
         return res.status(400).json({ success: false, message: 'Content must target services' });
       }
       if (entry.status !== 'active') return res.status(404).json({ success: false, message: 'Service offer is not active' });
-      const rows = await ContentZoneModel.getContentServices(entry.content_id);
+      const rows = await ContentZoneModel.getContentServices(entry.content_id, req.query?.imageId ?? null);
       const services = rows.map(service => ({ ...service, service_image: getPublicUrl(service.service_image, service.updated_at) }));
       return res.json({ success: true, count: services.length, data: { content: await publicContentEntry(entry), services } });
     } catch (error) {
@@ -119,7 +127,7 @@ class CmsController {
 
   async getContentProducts(req, res) {
     try {
-      const entry = await ContentZoneModel.getEntryById(req.params.id);
+      const entry = await ContentZoneModel.getImageTargetEntry(req.params.id, req.query?.imageId ?? null);
       if (!IMAGE_GALLERY_ZONES.includes(entry.zone)) {
         return res.status(400).json({ success: false, message: 'Content must be a promotional, offer, or brand banner' });
       }
@@ -127,7 +135,7 @@ class CmsController {
         return res.status(404).json({ success: false, message: 'Promotional content is not active' });
       }
 
-      const rows = await ContentZoneModel.getContentProducts(entry.content_id);
+      const rows = await ContentZoneModel.getContentProducts(entry.content_id, req.query?.imageId ?? null);
       const rewardCache = new Map();
       const products = await Promise.all(rows.map(async (product) => {
         const originalSalePrice = Number(product.sale_price || 0);

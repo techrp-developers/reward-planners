@@ -18,6 +18,9 @@ export interface GradientConfig {
 }
 
 export interface ContentZoneImage {
+  targetType?: ContentTargetType | "";
+  targetId?: number | null;
+  targetIds?: number[];
   imageId: number | null;
   isActive?: boolean;
   /** Preview-only layout ratio; never persisted to the CMS API. */

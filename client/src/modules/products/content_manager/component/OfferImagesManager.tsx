@@ -1,9 +1,11 @@
+import ContentTargetSelector from "./ContentTargetSelector";
+import { saveImageTarget, type ContentModule } from "../api/ContentApi";
 import { useState } from "react";
 import { isAxiosError } from "axios";
 import { FaSpinner } from "react-icons/fa";
 import { FiAlertTriangle, FiArrowLeft, FiArrowRight, FiCheckCircle, FiPlus, FiTrash2 } from "react-icons/fi";
 import { toast } from "sonner";
-import type { ContentZoneImage, Zone } from "../types";
+import type { ContentTargetType, ContentZoneImage, Zone } from "../types";
 import { addEntryImages, deleteEntryImage, reorderEntryImages, setEntryImageActive } from "../api/ContentApi";
 import { aspectRatioLabel, ratioStatus, useImageDimensions, ZONE_IMAGE_SPECS } from "../utils/imageDimensions";
 
@@ -43,6 +45,7 @@ function OfferImageThumb({ image, order, zone }: { image: ContentZoneImage; orde
 }
 
 interface Props {
+  module?: ContentModule;
   contentId: number;
   images: ContentZoneImage[];
   onChange: (images: ContentZoneImage[]) => void;
@@ -51,7 +54,9 @@ interface Props {
 }
 
 /** Offers Banner only - lets the admin add/remove/reorder the campaign's images via their own endpoints. */
-export default function OfferImagesManager({ contentId, images, onChange, allowActivation = false, zone = "offers_banner" }: Props) {
+export default function OfferImagesManager({ module = "product", contentId, images, onChange, allowActivation = false, zone = "offers_banner" }: Props) {
+  const [editingImageId, setEditingImageId] = useState<number | null>(null);
+  const editingImage = images.find(image => image.imageId === editingImageId);
   const SPEC = ZONE_IMAGE_SPECS[zone];
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -134,6 +139,7 @@ export default function OfferImagesManager({ contentId, images, onChange, allowA
         {sorted.map((image, index) => (
           <div key={image.imageId ?? image.imageUrl} className="w-32 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white">
             <OfferImageThumb image={image} order={index + 1} zone={zone} />
+            {(module === "product" || module === "service") && <button type="button" disabled={busy || image.imageId == null} onClick={() => setEditingImageId(image.imageId)} className="w-full px-1 py-2 text-xs font-semibold text-purple-700">{image.targetType ? "Edit destination" : "Set destination"}</button>}
             {image.isActive === false && <p className="text-center text-xs text-slate-500">Inactive</p>}
             {allowActivation && <button type="button" disabled={busy || image.imageId == null} className="w-full py-1 text-xs font-semibold" onClick={async () => {
               if (image.imageId == null) return;
@@ -198,6 +204,29 @@ export default function OfferImagesManager({ contentId, images, onChange, allowA
           />
         </label>
       </div>
+      {editingImage && (module === "product" || module === "service") && <ImageDestinationEditor key={editingImage.imageId} image={editingImage} module={module} contentId={contentId} onCancel={() => setEditingImageId(null)} onSaved={(updated) => { onChange(images.map(image => image.imageId === updated.imageId ? updated : image)); setEditingImageId(null); }} />}
     </div>
   );
+}
+
+function ImageDestinationEditor({ image, module, contentId, onSaved, onCancel }: { image: ContentZoneImage; module: "product" | "service"; contentId: number; onSaved: (image: ContentZoneImage) => void; onCancel: () => void }) {
+  const [type, setType] = useState<ContentTargetType | "">(image.targetType || "");
+  const [id, setId] = useState<number | null>(image.targetId ?? null);
+  const [ids, setIds] = useState<number[]>(image.targetIds?.length ? image.targetIds : image.targetId ? [image.targetId] : []);
+  const [saving, setSaving] = useState(false);
+  return <div className="mt-4 rounded-xl border border-purple-200 p-3">
+    <img src={image.imageUrl} alt="Banner being configured" className="mb-3 h-20 max-w-full object-contain" />
+    <p className="mb-2 text-xs text-slate-500">This destination applies only to this image. Choose No destination to use the campaign destination.</p>
+    <ContentTargetSelector perImage module={module} targetType={type} targetId={id} targetIds={ids} multiple onChange={(nextType, nextId, nextIds = nextId ? [nextId] : []) => { setType(nextType); setId(nextId); setIds(nextIds); }} />
+    <div className="mt-3 flex gap-3">
+      <button type="button" disabled={saving || (!!type && !id)} className="rounded-lg bg-purple-700 px-4 py-2 text-sm text-white disabled:opacity-50" onClick={async () => {
+        if (image.imageId == null) return;
+        setSaving(true);
+        try { await saveImageTarget(contentId, image.imageId, type, id, ids); onSaved({ ...image, targetType: type, targetId: id, targetIds: ids }); toast.success("Image destination saved"); }
+        catch { toast.error("Unable to save image destination"); }
+        finally { setSaving(false); }
+      }}>Save image destination</button>
+      <button type="button" disabled={saving} onClick={onCancel}>Cancel</button>
+    </div>
+  </div>;
 }
