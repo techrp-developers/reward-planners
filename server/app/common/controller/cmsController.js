@@ -1,5 +1,6 @@
 const { motionValues } = require('../../../utils/contentMotion');
 const db = require('../../../config/database');
+const { contentNavigation, contentTargetIds } = require('../../../utils/contentNavigation');
 const ContentZoneModel = require('../../../models/contentZoneModel');
 const ModuleIconModel = require('../../../models/moduleIconModel');
 const { getContentImageUrl } = require('../../../utils/contentPublicUrl');
@@ -26,17 +27,6 @@ const parseConfig = (value) => {
 const MOBILE_CONTENT_MODULES = ['mobile_dashboard', 'product', 'service', 'payment', 'dineout'];
 const IMAGE_GALLERY_ZONES = ['offers_banner', 'promotional_banner', 'brand_promotional_banner'];
 const contentAssetUrl = (path) => /^\/?uploads\//i.test(path || '') ? getContentImageUrl(path) : getPublicUrl(path);
-
-const targetIds = (entry) => {
-  let ids = entry.target_ids;
-  if (typeof ids === 'string') {
-    try { ids = JSON.parse(ids); } catch { ids = []; }
-  }
-  if (!Array.isArray(ids)) ids = [];
-  const normalized = ids.map(Number).filter((id) => Number.isInteger(id) && id > 0);
-  if (!normalized.length && entry.target_id != null) normalized.push(Number(entry.target_id));
-  return [...new Set(normalized)];
-};
 
 const publicModule = (row) => ({
   moduleKey: row.module_key,
@@ -72,7 +62,8 @@ const publicContentEntry = async (entry) => {
     redirectLink: entry.redirect_link,
     targetType: entry.target_type || null,
     targetId: entry.target_id == null ? null : Number(entry.target_id),
-    targetIds: entry.target_type === 'product' ? targetIds(entry) : [],
+    targetIds: ['product', 'service'].includes(entry.target_type) ? contentTargetIds(entry) : [],
+    navigation: contentNavigation(entry),
     colorValue: entry.content_type === 'color' ? entry.color_value : null,
     imageUrl: entry.content_type === 'image' ? contentAssetUrl(entry.image_url) : null,
     status: entry.status,
@@ -111,6 +102,21 @@ const getRequestedModules = (queryValue) => {
 };
 
 class CmsController {
+  async getContentServices(req, res) {
+    try {
+      const entry = await ContentZoneModel.getEntryById(req.params.id);
+      if (entry.module !== 'service' || entry.target_type !== 'service' || !IMAGE_GALLERY_ZONES.includes(entry.zone)) {
+        return res.status(400).json({ success: false, message: 'Content must target services' });
+      }
+      if (entry.status !== 'active') return res.status(404).json({ success: false, message: 'Service offer is not active' });
+      const rows = await ContentZoneModel.getContentServices(entry.content_id);
+      const services = rows.map(service => ({ ...service, service_image: getPublicUrl(service.service_image, service.updated_at) }));
+      return res.json({ success: true, count: services.length, data: { content: await publicContentEntry(entry), services } });
+    } catch (error) {
+      return res.status(error.statusCode || 500).json({ success: false, message: error.message });
+    }
+  }
+
   async getContentProducts(req, res) {
     try {
       const entry = await ContentZoneModel.getEntryById(req.params.id);

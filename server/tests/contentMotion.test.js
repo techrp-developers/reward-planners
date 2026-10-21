@@ -43,6 +43,26 @@ const assertMotion = (entry, expected) => {
 };
 beforeEach(() => { rows.clear(); nextId = 1; });
 
+test('multiple services survive edits and duplication and expose offer navigation', async () => {
+  const entry = await model.createEntry({ ...base, module: 'service', is_published: 1, target_type: 'service', target_id: 12, target_ids: [12, 13] });
+  const copy = await model.duplicateEntry(entry.content_id);
+  assert.deepEqual(JSON.parse(copy.target_ids), [12, 13]);
+  await model.updateEntry(entry.content_id, { target_ids: [12, 14] });
+  assert.deepEqual(JSON.parse((await model.getEntryById(entry.content_id)).target_ids), [12, 14]);
+  const original = model.getContentServices;
+  model.getContentServices = async () => [{ id: 12, service_image: null }, { id: 14, service_image: null }];
+  try {
+    const result = response();
+    await mobileController.getContentServices({ params: { id: entry.content_id } }, result);
+    assert.equal(result.code, 200);
+    assert.deepEqual(result.payload.data.content.navigation, { destination: 'service_offer', targetIds: [12, 14], contentId: entry.content_id });
+    assert.deepEqual(result.payload.data.services.map(service => service.id), [12, 14]);
+    const draft = response();
+    await mobileController.getContentServices({ params: { id: copy.content_id } }, draft);
+    assert.equal(draft.code, 404);
+  } finally { model.getContentServices = original; }
+});
+
 test('service destination lookup uses active service tables and rejects missing targets', async () => {
   const original = db.query;
   const tables = { service: 'services', service_category: 'service_categories', service_bundle: 'service_bundles' };

@@ -1,4 +1,5 @@
 const db = require("../config/database");
+const { contentTargetIds } = require('../utils/contentNavigation');
 const {
   motionFields,
   motionValues,
@@ -78,7 +79,8 @@ const parseTargetIds = (value) => {
   if (Array.isArray(value)) return value;
   if (typeof value !== "string" || !value.trim()) return [];
   try {
-    return JSON.parse(value);
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
@@ -166,10 +168,10 @@ class ContentZoneModel {
         errors.push("target_id must be a positive integer");
       const targetIds = parseTargetIds(data.target_ids);
       if (
-        data.target_type === "product" &&
+        ["product", "service"].includes(data.target_type) &&
         targetIds.some((id) => !Number.isInteger(Number(id)) || Number(id) <= 0)
       ) {
-        errors.push("target_ids must contain only positive product IDs");
+        errors.push("target_ids must contain only positive item IDs");
       }
     }
 
@@ -519,6 +521,22 @@ class ContentZoneModel {
     return rows;
   }
 
+  async getContentServices(contentId) {
+    const entry = await this.getEntryById(contentId);
+    if (entry.target_type !== 'service') return [];
+    const ids = contentTargetIds(entry);
+    if (!ids.length) return [];
+    const placeholders = ids.map(() => '?').join(',');
+    const [rows] = await db.query(
+      `SELECT s.*, c.name AS category_name FROM services s
+       JOIN service_categories c ON c.id = s.category_id
+       WHERE s.status = 1 AND c.status = 1 AND s.id IN (${placeholders})
+       ORDER BY FIELD(s.id, ${placeholders})`,
+      [...ids, ...ids],
+    );
+    return rows;
+  }
+
   async getProductOffers(contentId) {
     const [rows] = await db.query(
       `SELECT content_id, product_id, variant_id, offer_price FROM content_product_offers WHERE content_id = ? ORDER BY product_id, variant_id`,
@@ -632,7 +650,7 @@ class ContentZoneModel {
         data.redirect_link || null,
         data.target_type || null,
         data.target_type ? Number(data.target_id) : null,
-        data.target_type === "product"
+        ["product", "service"].includes(data.target_type)
           ? JSON.stringify(parseTargetIds(data.target_ids))
           : null,
         startAt,
@@ -724,7 +742,7 @@ class ContentZoneModel {
           );
         else if (key === "target_ids")
           values.push(
-            data.target_type === "product"
+            ["product", "service"].includes(data.target_type === undefined ? existing.target_type : data.target_type)
               ? JSON.stringify(parseTargetIds(data[key]))
               : null,
           );
@@ -791,7 +809,7 @@ class ContentZoneModel {
         original.redirect_link,
         original.target_type,
         original.target_id,
-        original.target_type === "product"
+        ["product", "service"].includes(original.target_type)
           ? JSON.stringify(parseTargetIds(original.target_ids))
           : null,
         original.start_at,

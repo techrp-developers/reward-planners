@@ -95,7 +95,7 @@ const parseTargetIds = (value) => {
 const validateTargets = async (body) => {
   if (!body.target_type) return;
 
-  if (body.target_type === "product") {
+  if (["product", "service"].includes(body.target_type)) {
     const ids = parseTargetIds(body.target_ids);
     if (ids.length) {
       await Promise.all(
@@ -452,9 +452,9 @@ class ContentController {
       const existing = await ContentZoneModel.getEntryById(id);
       const body = { ...req.body };
       validateMotion(body, existing.zone);
-      if (body.target_type !== undefined || body.target_id !== undefined) {
-        body.target_type = body.target_type || null;
-        await validateTargets(body);
+      if (body.target_type !== undefined || body.target_id !== undefined || body.target_ids !== undefined) {
+        body.target_type = body.target_type === undefined ? existing.target_type : body.target_type || null;
+        await validateTargets({ ...existing, ...body });
       }
 
       if (

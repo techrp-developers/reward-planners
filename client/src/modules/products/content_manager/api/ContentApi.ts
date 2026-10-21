@@ -175,7 +175,7 @@ export const buildEntryFormData = (
   if (draft.targetType && draft.targetId) {
     fd.append("target_id", String(draft.targetId));
   }
-  fd.append("target_ids", draft.targetType === "product" ? JSON.stringify(draft.targetIds) : "[]");
+  fd.append("target_ids", ["product", "service"].includes(draft.targetType) ? JSON.stringify(draft.targetIds) : "[]");
 
   if (draft.startAt) {
     fd.append("start_at", draft.startAt);
