@@ -26,7 +26,12 @@ const IMAGE_GALLERY_ZONES = [
 const CONTENT_TYPES = ["color", "image"];
 const DISPLAY_MODES = ["single", "carousel", "grid_2", "grid_3"];
 const DEFAULT_DISPLAY_MODE = "carousel";
-const TARGET_TYPES = ["product", "category", "subcategory"];
+const TARGET_TYPES = ["product", "category", "subcategory", "service", "service_category", "service_bundle"];
+const SERVICE_TARGETS = {
+  service: "services",
+  service_category: "service_categories",
+  service_bundle: "service_bundles",
+};
 const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
 const HEX_TEXT_COLOR_RE = /^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$/;
 const GRADIENT_DIRECTIONS = new Set([
@@ -150,6 +155,10 @@ class ContentZoneModel {
     ) {
       if (!TARGET_TYPES.includes(data.target_type))
         errors.push(`target_type must be one of: ${TARGET_TYPES.join(", ")}`);
+      if (data.module && Object.hasOwn(SERVICE_TARGETS, data.target_type) && data.module !== "service")
+        errors.push("Service destinations require the service module");
+      if (data.module === "service" && !Object.hasOwn(SERVICE_TARGETS, data.target_type))
+        errors.push("Choose a service, service category, or service bundle destination");
       if (
         !Number.isInteger(Number(data.target_id)) ||
         Number(data.target_id) <= 0
@@ -388,6 +397,15 @@ class ContentZoneModel {
       throw error;
     }
     const term = `%${String(search).trim()}%`;
+    if (Object.hasOwn(SERVICE_TARGETS, type)) {
+      const table = SERVICE_TARGETS[type];
+      const selected = Number(selectedId);
+      const [rows] = await db.query(
+        `SELECT id, name AS label FROM ${table} WHERE status = 1 AND (name LIKE ? OR id = ?) ORDER BY name`,
+        [term, Number.isInteger(selected) && selected > 0 ? selected : 0],
+      );
+      return rows.map(row => ({ id: Number(row.id), label: row.label, imageUrl: null }));
+    }
     const queries = {
       product: [
         "SELECT p.product_id AS id, p.product_name AS label, (SELECT pi.image_url FROM product_images pi WHERE pi.product_id = p.product_id ORDER BY pi.image_id ASC LIMIT 1) AS image_url FROM eproducts p WHERE p.is_deleted = 0 AND (p.product_name LIKE ? OR p.brand_name LIKE ?) ORDER BY p.product_name",
@@ -655,7 +673,12 @@ class ContentZoneModel {
     }
 
     validateMotion(data, existing.zone);
-    this.validateEntry(data, { isUpdate: true });
+    this.validateEntry({
+      ...data,
+      module: data.module ?? existing.module,
+      target_type: data.target_type === undefined ? existing.target_type : data.target_type,
+      target_id: data.target_id === undefined ? existing.target_id : data.target_id,
+    }, { isUpdate: true });
 
     if (
       existing.is_default &&

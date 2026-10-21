@@ -5,6 +5,7 @@ import { listContentTargetOptions, type ContentTargetOption } from "../api/Conte
 import type { ContentTargetType } from "../types";
 
 interface Props {
+  module?: "product" | "service";
   targetType: ContentTargetType | "";
   targetId: number | null;
   targetIds: number[];
@@ -16,7 +17,8 @@ const fieldClass = "w-full rounded-xl border border-slate-200 bg-white px-4 py-3
 // const R2_BASE_URL = "https://cdn.rewardplanners.com";
 // const productImageUrl = (path?: string | null) => !path ? "" : /^https?:\/\//i.test(path) ? path : `${R2_BASE_URL}/${path.replace(/^\/+/, "")}`;
 
-export default function ContentTargetSelector({ targetType, targetId, targetIds, multiple = false, onChange }: Props) {
+export default function ContentTargetSelector({ module = "product", targetType, targetId, targetIds, multiple = false, onChange }: Props) {
+  const destinationLabel = targetType.replaceAll("_", " ");
   const [search, setSearch] = useState("");
   const [options, setOptions] = useState<ContentTargetOption[]>([]);
   const [loading, setLoading] = useState(false);
@@ -46,14 +48,20 @@ export default function ContentTargetSelector({ targetType, targetId, targetIds,
   return (
     <div className="sm:col-span-2 rounded-2xl border border-purple-100 bg-purple-50/40 p-4">
       <div className="flex items-center gap-2"><FiLink className="text-[#852BAF]" /><p className="text-xs font-black text-slate-700">Mobile click destination</p></div>
-      <p className="mt-1 text-[11px] text-slate-500">Choose products, a category, or a subcategory to open when this banner is tapped. This destination applies to all images in the campaign.</p>
+      <p className="mt-1 text-[11px] text-slate-500">{module === "service" ? "Choose a service category, individual service, or bundle to open when this banner is tapped." : "Choose products, a category, or a subcategory to open when this banner is tapped."} This destination applies to all images in the campaign.</p>
       {multiple && <p className="mt-1 text-[11px] text-slate-500">For a brand campaign, search by brand name and select the products to feature.</p>}
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <select value={targetType} onChange={(event) => { onChange(event.target.value as ContentTargetType | "", null, []); setSearch(""); }} className={fieldClass}>
           <option value="">No destination</option>
-          <option value="product">{multiple ? "Products" : "Product"}</option>
-          <option value="category">Category</option>
-          <option value="subcategory">Subcategory</option>
+          {module === "service" ? <>
+            <option value="service_category">Service category</option>
+            <option value="service">Individual service</option>
+            <option value="service_bundle">Service bundle</option>
+          </> : <>
+            <option value="product">{multiple ? "Products" : "Product"}</option>
+            <option value="category">Category</option>
+            <option value="subcategory">Subcategory</option>
+          </>}
         </select>
         {targetType && (
           <>
@@ -71,7 +79,7 @@ export default function ContentTargetSelector({ targetType, targetId, targetIds,
               </div>
             ) : (
               <select value={targetId ?? ""} onChange={(event) => onChange(targetType, event.target.value ? Number(event.target.value) : null)} className={fieldClass}>
-                <option value="">{loading ? "Loading..." : `Select ${targetType}`}</option>
+                <option value="">{loading ? "Loading..." : `Select ${destinationLabel}`}</option>
                 {options.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
               </select>
             )}

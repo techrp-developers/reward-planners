@@ -328,12 +328,13 @@ export default function ContentForm({ draft, entries, now, module, onChange, onS
           <input value={draft.redirectLink} onChange={(event) => onChange({ redirectLink: event.target.value })} placeholder="https://..." className={inputClass} />
         </label>
 
-        {module === "product" && draft.zone !== "navbar_background" && (
+        {(module === "product" || module === "service") && draft.zone !== "navbar_background" && (
           <ContentTargetSelector
+            module={module}
             targetType={draft.targetType}
             targetId={draft.targetId}
             targetIds={draft.targetIds}
-            multiple={IMAGE_GALLERY_ZONES.includes(draft.zone)}
+            multiple={module === "product" && IMAGE_GALLERY_ZONES.includes(draft.zone)}
             onChange={(targetType, targetId, targetIds = targetId ? [targetId] : []) => onChange({ targetType, targetId, targetIds })}
           />
         )}
