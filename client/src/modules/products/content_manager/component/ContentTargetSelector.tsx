@@ -46,17 +46,18 @@ export default function ContentTargetSelector({ targetType, targetId, targetIds,
   return (
     <div className="sm:col-span-2 rounded-2xl border border-purple-100 bg-purple-50/40 p-4">
       <div className="flex items-center gap-2"><FiLink className="text-[#852BAF]" /><p className="text-xs font-black text-slate-700">Mobile click destination</p></div>
-      <p className="mt-1 text-[11px] text-slate-500">Choose what opens when the user taps this content below the navbar.</p>
+      <p className="mt-1 text-[11px] text-slate-500">Choose products, a category, or a subcategory to open when this banner is tapped. This destination applies to all images in the campaign.</p>
+      {multiple && <p className="mt-1 text-[11px] text-slate-500">For a brand campaign, search by brand name and select the products to feature.</p>}
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <select value={targetType} onChange={(event) => { onChange(event.target.value as ContentTargetType | "", null, []); setSearch(""); }} className={fieldClass}>
           <option value="">No destination</option>
-          <option value="product">Product</option>
+          <option value="product">{multiple ? "Products" : "Product"}</option>
           <option value="category">Category</option>
           <option value="subcategory">Subcategory</option>
         </select>
         {targetType && (
           <>
-            <label className="relative"><FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${targetType}...`} className={`${fieldClass} pl-10`} /></label>
+            <label className="relative"><FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={targetType === "product" ? "Search product or brand..." : `Search ${targetType}...`} className={`${fieldClass} pl-10`} /></label>
             {isMultiProduct ? (
               <div className="max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2 sm:col-span-2">
                 <p className="px-2 pb-2 text-[11px] font-semibold text-slate-500">{targetIds.length} product{targetIds.length === 1 ? "" : "s"} selected</p>

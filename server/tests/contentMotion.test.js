@@ -43,6 +43,28 @@ const assertMotion = (entry, expected) => {
 };
 beforeEach(() => { rows.clear(); nextId = 1; });
 
+test('offer and brand banners preserve destinations through create, update and mobile product lookup', async () => {
+  const original = model.getContentProducts;
+  const requested = [];
+  model.getContentProducts = async (id) => { requested.push(id); return []; };
+  try {
+    for (const zone of ['offers_banner', 'brand_promotional_banner']) {
+      const entry = await model.createEntry({ ...base, zone, is_published: 1, target_type: 'product', target_id: 42, target_ids: [42, 43] });
+      const mobile = response();
+      await mobileController.getContentProducts({ params: { id: entry.content_id } }, mobile);
+      assert.equal(mobile.code, 200);
+      assert.deepEqual(mobile.payload.data.content.targetIds, [42, 43]);
+      for (const type of ['category', 'subcategory']) {
+        await model.updateEntry(entry.content_id, { target_type: type, target_id: 7, target_ids: [] });
+        const saved = await model.getEntryById(entry.content_id);
+        assert.equal(saved.target_type, type);
+        assert.equal(saved.target_id, 7);
+      }
+    }
+    assert.equal(requested.length, 2);
+  } finally { model.getContentProducts = original; }
+});
+
 test('clearing a target through the update endpoint stores SQL nulls', async () => {
   const entry = await model.createEntry({ ...base, target_type: 'product', target_id: 42, target_ids: [42] });
   const res = response();

@@ -390,8 +390,8 @@ class ContentZoneModel {
     const term = `%${String(search).trim()}%`;
     const queries = {
       product: [
-        "SELECT p.product_id AS id, p.product_name AS label, (SELECT pi.image_url FROM product_images pi WHERE pi.product_id = p.product_id ORDER BY pi.image_id ASC LIMIT 1) AS image_url FROM eproducts p WHERE p.is_deleted = 0 AND p.product_name LIKE ? ORDER BY p.product_name",
-        [term],
+        "SELECT p.product_id AS id, p.product_name AS label, (SELECT pi.image_url FROM product_images pi WHERE pi.product_id = p.product_id ORDER BY pi.image_id ASC LIMIT 1) AS image_url FROM eproducts p WHERE p.is_deleted = 0 AND (p.product_name LIKE ? OR p.brand_name LIKE ?) ORDER BY p.product_name",
+        [term, term],
       ],
       category: [
         "SELECT category_id AS id, category_name AS label FROM categories WHERE category_name LIKE ? ORDER BY category_name",
@@ -452,7 +452,7 @@ class ContentZoneModel {
     }
   }
 
-  /** Product cards linked to a promotional banner, in the same order selected in CMS. */
+  /** Product cards linked to a banner, in the same order selected in CMS. */
   async getContentProducts(contentId) {
     const entry = await this.getEntryById(contentId);
     if (entry.target_type !== "product") return [];

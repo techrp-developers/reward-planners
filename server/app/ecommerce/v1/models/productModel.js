@@ -767,7 +767,7 @@ class ProductModel {
        FROM content_product_offers cpo
        JOIN content_zone_entries cze ON cze.content_id = cpo.content_id
        WHERE cpo.content_id = ? AND cpo.product_id = ?
-         AND cze.zone = 'promotional_banner' AND cze.target_type = 'product'
+         AND cze.zone IN ('promotional_banner', 'offers_banner', 'brand_promotional_banner') AND cze.target_type = 'product'
          AND cze.is_published = 1
          AND (cze.start_at IS NULL OR cze.start_at <= NOW())
          AND (cze.end_at IS NULL OR cze.end_at >= NOW())`,

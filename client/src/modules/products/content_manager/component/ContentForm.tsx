@@ -333,7 +333,7 @@ export default function ContentForm({ draft, entries, now, module, onChange, onS
             targetType={draft.targetType}
             targetId={draft.targetId}
             targetIds={draft.targetIds}
-            multiple={draft.zone === "promotional_banner"}
+            multiple={IMAGE_GALLERY_ZONES.includes(draft.zone)}
             onChange={(targetType, targetId, targetIds = targetId ? [targetId] : []) => onChange({ targetType, targetId, targetIds })}
           />
         )}

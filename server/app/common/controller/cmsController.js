@@ -114,8 +114,8 @@ class CmsController {
   async getContentProducts(req, res) {
     try {
       const entry = await ContentZoneModel.getEntryById(req.params.id);
-      if (entry.zone !== 'promotional_banner') {
-        return res.status(400).json({ success: false, message: 'Content must be a promotional banner' });
+      if (!IMAGE_GALLERY_ZONES.includes(entry.zone)) {
+        return res.status(400).json({ success: false, message: 'Content must be a promotional, offer, or brand banner' });
       }
       if (entry.status !== 'active') {
         return res.status(404).json({ success: false, message: 'Promotional content is not active' });
