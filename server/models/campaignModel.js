@@ -356,11 +356,7 @@ class CampaignModel {
         ON pv.product_id = ep.product_id
 
       WHERE
-        ep.status = 'approved'
-        AND ep.is_visible = 1
-        AND COALESCE(ep.created_via, '') != 'flea_market_quick_create'
-        AND pv.is_visible = 1
-        AND pv.stock > 0
+        ep.is_deleted = 0
 
         AND pv.variant_id NOT IN (
           SELECT variant_id
@@ -446,7 +442,6 @@ class CampaignModel {
       throw error;
     }
 
-    const salePrice = Number(variantRows[0].sale_price);
 
     const stock = Number(variantRows[0].stock);
 
@@ -454,8 +449,8 @@ class CampaignModel {
     const values = [];
 
     if (offerPrice !== undefined && offerPrice !== null) {
-      if (Number(offerPrice) > salePrice) {
-        const error = new Error("Offer price cannot exceed sale price");
+      if (!Number.isFinite(Number(offerPrice)) || Number(offerPrice) <= 0) {
+        const error = new Error("Offer price must be a positive number");
         error.statusCode = 400;
         throw error;
       }
@@ -465,8 +460,8 @@ class CampaignModel {
     }
 
     if (maxQty !== undefined && maxQty !== null) {
-      if (Number(maxQty) > stock) {
-        const error = new Error(`Max quantity cannot exceed stock (${stock})`);
+      if (!Number.isInteger(Number(maxQty)) || Number(maxQty) < 1 || Number(maxQty) > stock) {
+        const error = new Error(`Max quantity must be a whole number between 1 and ${stock}`);
         error.statusCode = 400;
         throw error;
       }
@@ -564,6 +559,15 @@ class CampaignModel {
       campaign_type = 'flash_sale'
       AND status = 'active'
       AND NOW() BETWEEN start_at AND end_at
+      AND EXISTS (
+        SELECT 1 FROM campaign_items ci
+        JOIN eproducts ep ON ep.product_id = ci.product_id
+        JOIN product_variants pv ON pv.variant_id = ci.variant_id AND pv.product_id = ep.product_id
+        WHERE ci.campaign_id = campaigns.campaign_id
+          AND ep.status = 'approved' AND ep.is_visible = 1 AND ep.is_deleted = 0
+          AND pv.is_visible = 1 AND pv.stock > 0
+          AND ci.offer_price > 0 AND ci.max_qty > COALESCE(ci.sold_qty, 0)
+      )
     ORDER BY display_order
     `,
     );
@@ -577,6 +581,7 @@ class CampaignModel {
         ...item,
         banner_image: getPublicUrl(item.banner_image, item.updated_at),
       })),
+      show_flash_sale: flashSales.length > 0,
       flash_sales: flashSales.map((item) => ({
         ...item,
         banner_image: getPublicUrl(item.banner_image, item.updated_at),
@@ -655,7 +660,7 @@ class CampaignModel {
   }
 
   async getCampaignProducts(campaignId) {
-    await this.getCampaignById(campaignId);
+    const campaign = await this.getCampaignById(campaignId);
 
     const [rows] = await db.query(
       `
@@ -708,6 +713,13 @@ class CampaignModel {
       AND ep.status = 'approved'
       AND ep.is_visible = 1
       AND pv.is_visible = 1
+      AND ep.is_deleted = 0
+      ${campaign.campaign_type === 'flash_sale' ? `
+      AND pv.stock > 0 AND ci.offer_price > 0
+      AND ci.max_qty > COALESCE(ci.sold_qty, 0)
+      AND EXISTS (SELECT 1 FROM campaigns c WHERE c.campaign_id = ci.campaign_id
+        AND c.status = 'active' AND NOW() BETWEEN c.start_at AND c.end_at)
+      ` : ''}
     `,
       [campaignId],
     );

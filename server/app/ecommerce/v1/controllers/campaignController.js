@@ -124,7 +124,7 @@ class CampaignController {
           const mrp = Number(product.mrp) || 0;
 
           const mrpDiscountPercent =
-            mrp > 0 ? Math.round(((mrp - salePrice) / mrp) * 100) : 0;
+            mrp > 0 ? Math.max(0, Math.round(((mrp - salePrice) / mrp) * 100)) : 0;
 
           const { image_url, image_updated_at, ...rest } = product;
 
@@ -156,6 +156,7 @@ class CampaignController {
       return res.json({
         success: true,
         count: data.length,
+        show_section: data.length > 0,
         data,
       });
     } catch (err) {
