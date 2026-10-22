@@ -93,7 +93,7 @@ class CheckoutModel {
           ON csi.campaign_id = ci.flash_sale_campaign_id
           AND csi.product_id = ci.product_id
           AND csi.variant_id = ci.variant_id
-      AND csi.offer_price > 0 AND csi.max_qty > COALESCE(csi.sold_qty, 0)
+      AND csi.offer_price > 0 AND csi.max_qty - COALESCE(csi.sold_qty, 0) >= ci.quantity
           AND EXISTS (
             SELECT 1 FROM campaigns active_campaign
             WHERE active_campaign.campaign_id = csi.campaign_id
@@ -360,7 +360,7 @@ class CheckoutModel {
            ON csi.campaign_id = ci.flash_sale_campaign_id
            AND csi.product_id = ci.product_id
            AND csi.variant_id = ci.variant_id
-      AND csi.offer_price > 0 AND csi.max_qty > COALESCE(csi.sold_qty, 0)
+      AND csi.offer_price > 0 AND csi.max_qty - COALESCE(csi.sold_qty, 0) >= ci.quantity
            AND EXISTS (
              SELECT 1 FROM campaigns active_campaign
              WHERE active_campaign.campaign_id = csi.campaign_id
@@ -483,8 +483,8 @@ class CheckoutModel {
         await conn.execute(
           `
         INSERT INTO eorder_items
-        (order_id, vendor_order_id, product_id, variant_id, quantity, price, reward_discount, reward_coins_used, reward_earned, reward_coins_earned, final_price)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (order_id, vendor_order_id, product_id, variant_id, quantity, price, reward_discount, reward_coins_used, reward_earned, reward_coins_earned, final_price, flash_sale_campaign_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
           [
             orderId,
@@ -498,8 +498,22 @@ class CheckoutModel {
             pricing.rewardEarn,
             pricing.rewardEarn,
             pricing.finalItemTotal,
+            item.flash_sale_campaign_id,
           ],
         );
+
+        if (item.flash_sale_campaign_id) {
+          const [flashSaleRes] = await conn.execute(
+            `UPDATE campaign_items
+             SET sold_qty = COALESCE(sold_qty, 0) + ?
+             WHERE campaign_id = ? AND variant_id = ?
+               AND max_qty - COALESCE(sold_qty, 0) >= ?`,
+            [item.quantity, item.flash_sale_campaign_id, item.variant_id, item.quantity],
+          );
+          if (flashSaleRes.affectedRows === 0) {
+            throw new Error("FLASH_SALE_LIMIT_EXCEEDED");
+          }
+        }
 
         const [updateRes] = await conn.execute(
           `
@@ -621,7 +635,7 @@ class CheckoutModel {
         ON csi.campaign_id = ?
         AND csi.product_id = ?
         AND csi.variant_id = v.variant_id
-        AND csi.offer_price > 0 AND csi.max_qty > COALESCE(csi.sold_qty, 0)
+        AND csi.offer_price > 0 AND csi.max_qty - COALESCE(csi.sold_qty, 0) >= ?
         AND EXISTS (
           SELECT 1 FROM campaigns active_campaign
           WHERE active_campaign.campaign_id = csi.campaign_id
@@ -638,7 +652,7 @@ class CheckoutModel {
       WHERE v.variant_id = ? AND v.product_id = ?
         AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
       `;
-      const pricingParams = [campaignId, productId, contentId, productId, variantId, productId];
+      const pricingParams = [campaignId, productId, quantity, contentId, productId, variantId, productId];
       const [[item]] = await conn.execute(pricingSql, pricingParams);
 
       if (!item) throw new Error("INVALID_VARIANT");
@@ -862,8 +876,8 @@ class CheckoutModel {
       (order_id, vendor_order_id, product_id, variant_id, quantity, price,
        reward_discount, reward_coins_used,
        reward_earned, reward_coins_earned,
-       final_price)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       final_price, flash_sale_campaign_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
         [
           orderId,
@@ -877,8 +891,22 @@ class CheckoutModel {
           rewardEarn,
           rewardEarn,
           finalItemTotal,
+          item.flash_sale_campaign_id,
         ],
       );
+
+      if (item.flash_sale_campaign_id) {
+        const [flashSaleRes] = await conn.execute(
+          `UPDATE campaign_items
+           SET sold_qty = COALESCE(sold_qty, 0) + ?
+           WHERE campaign_id = ? AND variant_id = ?
+             AND max_qty - COALESCE(sold_qty, 0) >= ?`,
+          [quantity, item.flash_sale_campaign_id, variantId, quantity],
+        );
+        if (flashSaleRes.affectedRows === 0) {
+          throw new Error("FLASH_SALE_LIMIT_EXCEEDED");
+        }
+      }
 
       // ===============================
       // 9. ORDER SHIPMENT
@@ -994,8 +1022,7 @@ class CheckoutModel {
       ON csi.campaign_id = ci.flash_sale_campaign_id
       AND csi.product_id = ci.product_id
       AND csi.variant_id = ci.variant_id
-      AND csi.offer_price > 0 AND csi.max_qty > COALESCE(csi.sold_qty, 0)
-      AND csi.offer_price > 0 AND csi.max_qty > COALESCE(csi.sold_qty, 0)
+      AND csi.offer_price > 0 AND csi.max_qty - COALESCE(csi.sold_qty, 0) >= ci.quantity
       AND EXISTS (
         SELECT 1 FROM campaigns active_campaign
         WHERE active_campaign.campaign_id = csi.campaign_id
@@ -1365,7 +1392,7 @@ class CheckoutModel {
       ON csi.campaign_id = ?
       AND csi.product_id = p.product_id
       AND csi.variant_id = v.variant_id
-      AND csi.offer_price > 0 AND csi.max_qty > COALESCE(csi.sold_qty, 0)
+      AND csi.offer_price > 0 AND csi.max_qty - COALESCE(csi.sold_qty, 0) >= ?
       AND EXISTS (
         SELECT 1 FROM campaigns active_campaign
         WHERE active_campaign.campaign_id = csi.campaign_id
@@ -1383,7 +1410,7 @@ class CheckoutModel {
       AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
     GROUP BY v.variant_id
     `,
-      [campaignId, contentId, productId, variantId, productId],
+      [campaignId, quantity, contentId, productId, variantId, productId],
     );
 
     if (!row) throw new Error("INVALID_VARIANT");

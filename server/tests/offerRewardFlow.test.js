@@ -26,7 +26,7 @@ async function execute(sql, params = []) {
   if (sql.includes('FROM vendor_addresses')) return [[{ pincode: '560001' }]];
   if (sql.includes('FROM customer_addresses')) return [[{ zipcode: '560002' }]];
   if (sql.includes('SELECT quantity FROM cart_items')) return [[]];
-  if (sql.includes('SELECT ci.offer_price') && sql.includes('FROM campaign_items')) return [mode === 'flash' ? [{ offer_price: 150 }] : []];
+  if (sql.includes('AS remaining_qty') && sql.includes('FROM campaign_items')) return [mode === 'flash' ? [{ remaining_qty: 10 }] : []];
   if (sql.includes('SELECT cpo.offer_price FROM')) return [mode === 'content' ? [{ offer_price: 150 }] : []];
   if (sql.includes('FROM cart_items') || sql.includes('FROM product_variants')) return [[row(sql)]];
   throw new Error(`Unexpected SQL: ${sql}`);

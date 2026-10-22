@@ -57,7 +57,7 @@ class cartModel {
       ON csi.campaign_id = ci.flash_sale_campaign_id
       AND csi.product_id = ci.product_id
       AND csi.variant_id = ci.variant_id
-      AND csi.offer_price > 0 AND csi.max_qty > COALESCE(csi.sold_qty, 0)
+      AND csi.offer_price > 0 AND csi.max_qty - COALESCE(csi.sold_qty, 0) >= ci.quantity
       AND EXISTS (
         SELECT 1 FROM campaigns active_campaign
         WHERE active_campaign.campaign_id = csi.campaign_id
@@ -167,7 +167,7 @@ class cartModel {
         ON csi.campaign_id = ci.flash_sale_campaign_id
         AND csi.product_id = ci.product_id
         AND csi.variant_id = ci.variant_id
-      AND csi.offer_price > 0 AND csi.max_qty > COALESCE(csi.sold_qty, 0)
+      AND csi.offer_price > 0 AND csi.max_qty - COALESCE(csi.sold_qty, 0) >= ci.quantity
         AND EXISTS (
           SELECT 1 FROM campaigns active_campaign
           WHERE active_campaign.campaign_id = csi.campaign_id
@@ -324,9 +324,10 @@ class cartModel {
 
       if (!variant) throw new Error("INVALID_VARIANT");
 
+      let flashSaleRemaining = null;
       if (campaignId !== null) {
         const [[campaignItem]] = await conn.execute(
-          `SELECT ci.offer_price
+          `SELECT ci.max_qty - COALESCE(ci.sold_qty, 0) AS remaining_qty
            FROM campaign_items ci
            JOIN campaigns c ON c.campaign_id = ci.campaign_id
            WHERE ci.campaign_id = ? AND ci.product_id = ? AND ci.variant_id = ?
@@ -338,6 +339,7 @@ class cartModel {
           [campaignId, productId, variantId],
         );
         if (!campaignItem) campaignId = null;
+        else flashSaleRemaining = Number(campaignItem.remaining_qty);
       }
       if (contentId !== null) {
         const [[contentOffer]] = await conn.execute(
@@ -361,6 +363,10 @@ class cartModel {
 
       if (newQty > variant.stock) {
         throw new Error("INSUFFICIENT_STOCK");
+      }
+
+      if (flashSaleRemaining !== null && newQty > flashSaleRemaining) {
+        throw new Error("FLASH_SALE_LIMIT_EXCEEDED");
       }
 
       await conn.execute(
@@ -414,10 +420,22 @@ class cartModel {
       SELECT 
         ci.cart_item_id,
         ci.variant_id,
-        v.stock
+        v.stock,
+        csi.max_qty - COALESCE(csi.sold_qty, 0) AS flash_sale_remaining
       FROM cart_items ci
       JOIN product_variants v
         ON ci.variant_id = v.variant_id
+      LEFT JOIN campaign_items csi
+        ON csi.campaign_id = ci.flash_sale_campaign_id
+        AND csi.variant_id = ci.variant_id
+        AND csi.offer_price > 0 AND csi.max_qty > COALESCE(csi.sold_qty, 0)
+        AND EXISTS (
+          SELECT 1 FROM campaigns active_campaign
+          WHERE active_campaign.campaign_id = csi.campaign_id
+            AND active_campaign.campaign_type = 'flash_sale'
+            AND active_campaign.status = 'active'
+            AND NOW() BETWEEN active_campaign.start_at AND active_campaign.end_at
+        )
       WHERE ci.cart_item_id = ? AND ci.user_id = ?
       `,
       [cartItemId, userId],
@@ -438,6 +456,10 @@ class cartModel {
     // 3 Stock validation
     if (quantity > row.stock) {
       throw new Error("INSUFFICIENT_STOCK");
+    }
+
+    if (row.flash_sale_remaining != null && quantity > Number(row.flash_sale_remaining)) {
+      throw new Error("FLASH_SALE_LIMIT_EXCEEDED");
     }
 
     // 4 Update quantity

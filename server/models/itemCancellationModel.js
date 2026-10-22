@@ -200,6 +200,14 @@ class ItemCancellationModel {
       [row.quantity, row.variant_id],
     );
     await conn.execute(
+      `UPDATE campaign_items csi
+       JOIN eorder_items oi
+         ON csi.campaign_id = oi.flash_sale_campaign_id AND csi.variant_id = oi.variant_id
+       SET csi.sold_qty = GREATEST(COALESCE(csi.sold_qty, 0) - oi.quantity, 0)
+       WHERE oi.order_item_id = ?`,
+      [row.order_item_id],
+    );
+    await conn.execute(
       `UPDATE eorder_items SET fulfillment_status = 'cancelled'
        WHERE order_item_id = ?`,
       [row.order_item_id],

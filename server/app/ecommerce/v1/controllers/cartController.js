@@ -117,6 +117,13 @@ class CartController {
         });
       }
 
+      if (error.message === "FLASH_SALE_LIMIT_EXCEEDED") {
+        return res.status(400).json({
+          success: false,
+          message: "Requested quantity exceeds the flash sale limit",
+        });
+      }
+
       if (error.message === "INSUFFICIENT_STOCK") {
         return res.status(400).json({
           success: false,
@@ -231,6 +238,13 @@ class CartController {
         return res.status(404).json({
           success: false,
           message: "Cart item not found",
+        });
+      }
+
+      if (error.message === "FLASH_SALE_LIMIT_EXCEEDED") {
+        return res.status(400).json({
+          success: false,
+          message: "Requested quantity exceeds the flash sale limit",
         });
       }
 

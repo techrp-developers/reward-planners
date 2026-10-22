@@ -19,6 +19,15 @@ async function expirePendingOrder(conn, orderId) {
   await releaseWalletReservation(conn, orderId);
 
   await conn.query(
+    `UPDATE campaign_items csi
+     JOIN eorder_items oi
+       ON csi.campaign_id = oi.flash_sale_campaign_id AND csi.variant_id = oi.variant_id
+     SET csi.sold_qty = GREATEST(COALESCE(csi.sold_qty, 0) - oi.quantity, 0)
+     WHERE oi.order_id = ?`,
+    [orderId],
+  );
+
+  await conn.query(
     `UPDATE product_variants pv
      JOIN eorder_items oi ON pv.variant_id = oi.variant_id
      SET pv.stock = pv.stock + oi.quantity

@@ -92,7 +92,7 @@ class CheckoutController {
       }
 
       if (
-        ["WALLET_BALANCE_CHANGED", "CHECKOUT_CHANGED"].includes(error.message)
+        ["WALLET_BALANCE_CHANGED", "CHECKOUT_CHANGED", "FLASH_SALE_LIMIT_EXCEEDED"].includes(error.message)
       ) {
         return res.status(409).json({
           success: false,
@@ -250,7 +250,7 @@ class CheckoutController {
       }
 
       if (
-        ["WALLET_BALANCE_CHANGED", "CHECKOUT_CHANGED"].includes(error.message)
+        ["WALLET_BALANCE_CHANGED", "CHECKOUT_CHANGED", "FLASH_SALE_LIMIT_EXCEEDED"].includes(error.message)
       ) {
         return res.status(409).json({
           success: false,
