@@ -48,12 +48,12 @@ export default function ContentTargetSelector({ perImage = false, module = "prod
 
   return (
     <div className="sm:col-span-2 rounded-2xl border border-purple-100 bg-purple-50/40 p-4">
-      <div className="flex items-center gap-2"><FiLink className="text-[#852BAF]" /><p className="text-xs font-black text-slate-700">Mobile click destination</p></div>
+      <div className="flex items-center gap-2"><FiLink className="text-[#852BAF]" /><p className="text-xs font-black text-slate-700">{perImage ? "This image's destination" : "Campaign destination"}</p></div>
       <p className="mt-1 text-[11px] text-slate-500">{module === "service" ? "Choose a service category, individual service, or bundle to open when this banner is tapped." : "Choose products, a category, or a subcategory to open when this banner is tapped."} {perImage ? "This destination applies only to this image." : "Images without their own destination use this campaign destination."}</p>
       {multiple && module === "product" && <p className="mt-1 text-[11px] text-slate-500">For a brand campaign, search by brand name and select the products to feature.</p>}
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <select value={targetType} onChange={(event) => { onChange(event.target.value as ContentTargetType | "", null, []); setSearch(""); }} className={fieldClass}>
-          <option value="">No destination</option>
+          <option value="">{perImage ? "Use campaign fallback" : "No destination"}</option>
           {module === "service" ? <>
             <option value="service_category">Service category</option>
             <option value="service">Services</option>

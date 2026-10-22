@@ -216,7 +216,7 @@ function ImageDestinationEditor({ image, module, contentId, onSaved, onCancel }:
   const [saving, setSaving] = useState(false);
   return <div className="mt-4 rounded-xl border border-purple-200 p-3">
     <img src={image.imageUrl} alt="Banner being configured" className="mb-3 h-20 max-w-full object-contain" />
-    <p className="mb-2 text-xs text-slate-500">This destination applies only to this image. Choose No destination to use the campaign destination.</p>
+    <p className="mb-2 text-xs text-slate-500">This destination applies only to this image. Choose Use campaign fallback to inherit the campaign destination.</p>
     <ContentTargetSelector perImage module={module} targetType={type} targetId={id} targetIds={ids} multiple onChange={(nextType, nextId, nextIds = nextId ? [nextId] : []) => { setType(nextType); setId(nextId); setIds(nextIds); }} />
     <div className="mt-3 flex gap-3">
       <button type="button" disabled={saving || (!!type && !id)} className="rounded-lg bg-purple-700 px-4 py-2 text-sm text-white disabled:opacity-50" onClick={async () => {
