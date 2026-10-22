@@ -21,6 +21,7 @@ import ImageDimensionInfo from "./ImageDimensionInfo";
 import AssetSpecPanel from "./AssetSpecPanel";
 import MotionEffectFields from "./MotionEffectFields";
 import ContentTargetSelector from "./ContentTargetSelector";
+import ContentProductPricing from "./ContentProductPricing";
 
 const inputClass = "mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100";
 const labelClass = "text-xs font-bold text-slate-500";
@@ -343,6 +344,8 @@ export default function ContentForm({ draft, entries, now, module, onChange, onS
           />
           </details>
         )}
+
+        {module === "product" && draft.id > 0 && IMAGE_GALLERY_ZONES.includes(draft.zone) && <ContentProductPricing key={draft.id} contentId={draft.id} />}
 
         <label className={labelClass}>
           Start Date &amp; Time

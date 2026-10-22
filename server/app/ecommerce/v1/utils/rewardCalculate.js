@@ -20,7 +20,7 @@ function calculateReward(orderAmount, rules) {
   const now = new Date();
 
   const validRules = rules.filter((rule) => {
-    if (!rule.is_active) return false;
+    if (!rule.is_active || !rule.can_earn_reward) return false;
 
     if (rule.start_date && new Date(rule.start_date) > now) return false;
     if (rule.end_date && new Date(rule.end_date) < now) return false;

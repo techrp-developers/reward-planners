@@ -19,7 +19,8 @@ function contentNavigation(entry) {
       ? { destination: `${type}_details`, targetId: ids[0], contentId: Number(entry.content_id) }
       : { destination: `${type}_offer`, targetIds: ids, contentId: Number(entry.content_id) };
   }
-  return { destination: type === 'service_bundle' ? 'service_bundle_details' : type, targetId: Number(entry.target_id) };
+  return { destination: type === 'service_bundle' ? 'service_bundle_details' : type, targetId: Number(entry.target_id),
+    ...(['category', 'subcategory'].includes(type) ? { contentId: Number(entry.content_id) } : {}) };
 }
 
 module.exports = { contentTargetIds, contentNavigation };

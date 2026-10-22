@@ -702,6 +702,28 @@ class ContentController {
     }
   }
 
+  async getDiscountRule(req, res) {
+    try { return res.json({ success: true, data: await ContentZoneModel.getDiscountRule(req.params.id) }); }
+    catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.message }); }
+  }
+
+  async saveDiscountRule(req, res) {
+    try { return res.json({ success: true, data: await ContentZoneModel.saveDiscountRule(req.params.id, req.body.discount_type, req.body.discount_value) }); }
+    catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.message }); }
+  }
+
+  async getProductPricing(req, res) {
+    try { return res.json({ success: true, data: await ContentZoneModel.getPricingVariants(req.params.id) }); }
+    catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.message }); }
+  }
+
+  async saveProductPricing(req, res) {
+    try {
+      await ContentZoneModel.saveVariantPrice(req.params.id, req.params.variantId, req.body.offer_price);
+      return res.json({ success: true });
+    } catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.message }); }
+  }
+
   async updateImageTarget(req, res) {
     try {
       const image = await ContentZoneModel.updateImageTarget(req.params.id, req.params.imageId, req.body);

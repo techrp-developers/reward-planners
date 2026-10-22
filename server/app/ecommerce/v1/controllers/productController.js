@@ -641,9 +641,7 @@ class ProductController {
               : Number(variant.sale_price) || 0;
             const mrp = Number(variant.mrp) || 0;
 
-            const rules = isOfferPrice
-              ? []
-              : await RewardModel.getProductRewards(
+            const rules = await RewardModel.getProductRewards(
                   product.product_id,
                   variant.variant_id,
                   product.category_id,
@@ -663,7 +661,7 @@ class ProductController {
             /* ===============================
                 REDEMPTION (rule-based)
               =============================== */
-            const redemption = resolveRedemption(salePrice, rules);
+            const redemption = resolveRedemption(salePrice, isOfferPrice ? [] : rules);
 
             const redeem_coins = calculateRedeemableCoins(
               salePrice,

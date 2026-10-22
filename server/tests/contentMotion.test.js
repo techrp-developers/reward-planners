@@ -43,6 +43,18 @@ const assertMotion = (entry, expected) => {
 };
 beforeEach(() => { rows.clear(); nextId = 1; });
 
+test('shared discount rules persist, duplicate, and can be disabled', async () => {
+  const entry = await model.createEntry(base);
+  assert.deepEqual(await model.getDiscountRule(entry.content_id), { discount_type: 'none', discount_value: 0 });
+  await model.saveDiscountRule(entry.content_id, 'percentage', 10);
+  const copy = await model.duplicateEntry(entry.content_id);
+  assert.equal(copy.discount_type, 'percentage');
+  assert.equal(copy.discount_value, 10);
+  await model.saveDiscountRule(entry.content_id, 'none', 0);
+  assert.deepEqual(await model.getDiscountRule(entry.content_id), { discount_type: 'none', discount_value: 0 });
+  await assert.rejects(model.saveDiscountRule(entry.content_id, 'percentage', 101), /percentage/);
+});
+
 test('multiple services survive edits and duplication and expose offer navigation', async () => {
   const entry = await model.createEntry({ ...base, module: 'service', is_published: 1, target_type: 'service', target_id: 12, target_ids: [12, 13] });
   const copy = await model.duplicateEntry(entry.content_id);

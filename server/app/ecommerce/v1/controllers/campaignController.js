@@ -121,6 +121,8 @@ class CampaignController {
       const data = await Promise.all(
         products.map(async (product) => {
           const salePrice = Number(product.final_price);
+          const rules = await RewardModel.getProductRewards(product.product_id, product.variant_id, product.category_id, product.subcategory_id, salePrice, product.is_discount_eligible);
+          const earnCoins = calculateReward(salePrice, rules);
           const mrp = Number(product.mrp) || 0;
 
           const mrpDiscountPercent =
@@ -140,9 +142,9 @@ class CampaignController {
             campaign_id: product.campaign_id,
 
             reward: {
-              enabled: false,
-              coins: 0,
-              label: null,
+              enabled: earnCoins > 0,
+              coins: earnCoins,
+              label: earnCoins > 0 ? `Earn up to ${earnCoins} coins` : null,
             },
 
             redeem_coins: 0,

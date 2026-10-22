@@ -1,4 +1,5 @@
 const db = require("../config/database");
+const { validateDiscount } = require('../utils/contentDiscount');
 const { contentTargetIds } = require('../utils/contentNavigation');
 const {
   motionFields,
@@ -475,12 +476,16 @@ class ContentZoneModel {
   /** Product cards linked to a banner, in the same order selected in CMS. */
   async getContentProducts(contentId, imageId = null) {
     const entry = await this.getImageTargetEntry(contentId, imageId);
-    if (entry.target_type !== "product") return [];
+    if (!["product", "category", "subcategory"].includes(entry.target_type)) return [];
 
-    const ids = parseTargetIds(entry.target_ids)
+    let ids = parseTargetIds(entry.target_ids)
       .map(Number)
       .filter((id) => Number.isInteger(id) && id > 0);
-    if (!ids.length && entry.target_id) ids.push(Number(entry.target_id));
+    if (['category', 'subcategory'].includes(entry.target_type)) {
+      const column = entry.target_type === 'category' ? 'category_id' : 'subcategory_id';
+      const [products] = await db.query(`SELECT product_id FROM eproducts WHERE ${column} = ? AND is_deleted = 0`, [entry.target_id]);
+      ids = products.map(product => Number(product.product_id));
+    } else if (!ids.length && entry.target_id) ids.push(Number(entry.target_id));
     if (!ids.length) return [];
 
     const placeholders = ids.map(() => "?").join(", ");
@@ -510,7 +515,7 @@ class ContentZoneModel {
         WHERE pi2.product_id = p.product_id
         ORDER BY (pi2.type = 'gallery') DESC, pi2.sort_order ASC, pi2.image_id ASC LIMIT 1
       )
-      LEFT JOIN content_product_offers cpo
+      LEFT JOIN content_effective_product_offers cpo
         ON cpo.content_id = ? AND cpo.product_id = p.product_id AND cpo.variant_id = v.variant_id
       WHERE p.product_id IN (${placeholders})
         AND p.status = 'approved' AND p.is_visible = 1 AND p.is_deleted = 0
@@ -573,6 +578,68 @@ class ContentZoneModel {
     await db.query('UPDATE content_zone_entry_images SET target_type = ?, target_id = ?, target_ids = ? WHERE content_id = ? AND image_id = ?',
       [type, type ? Number(targetId) : null, multi ? JSON.stringify(ids.length ? ids : [Number(targetId)]) : null, contentId, imageId]);
     return this.getImageById(imageId);
+  }
+
+  async getDiscountRule(contentId) {
+    const entry = await this.getEntryById(contentId);
+    if (entry.module !== 'product' || !IMAGE_GALLERY_ZONES.includes(entry.zone)) {
+      const error = new Error('Discount rules require an ecommerce banner'); error.statusCode = 400; throw error;
+    }
+    return { discount_type: entry.discount_type || 'none', discount_value: Number(entry.discount_value || 0) };
+  }
+
+  async saveDiscountRule(contentId, type, value) {
+    await this.getDiscountRule(contentId);
+    const rule = validateDiscount(type, value);
+    await db.query('UPDATE content_zone_entries SET discount_type = ?, discount_value = ? WHERE content_id = ?', [rule.discount_type, rule.discount_value, contentId]);
+    return rule;
+  }
+
+  async getPricingVariants(contentId) {
+    const entry = await this.getEntryById(contentId);
+    if (entry.module !== 'product' || !IMAGE_GALLERY_ZONES.includes(entry.zone)) {
+      const error = new Error('Product pricing requires an ecommerce banner');
+      error.statusCode = 400;
+      throw error;
+    }
+    const targets = [entry, ...await this.getAllImagesByContentId(contentId)];
+    const conditions = [];
+    const params = [contentId];
+    for (const target of targets) {
+      if (target.target_type === 'product') {
+        const ids = contentTargetIds(target);
+        if (ids.length) { conditions.push(`p.product_id IN (${ids.map(() => '?').join(',')})`); params.push(...ids); }
+      } else if (['category', 'subcategory'].includes(target.target_type) && target.target_id) {
+        conditions.push(`p.${target.target_type === 'category' ? 'category_id' : 'subcategory_id'} = ?`);
+        params.push(Number(target.target_id));
+      }
+    }
+    if (!conditions.length) return [];
+    const [rows] = await db.query(`SELECT p.product_id, p.product_name, p.brand_name,
+      v.variant_id, v.sku, v.sale_price, v.mrp, o.offer_price
+      FROM eproducts p JOIN product_variants v ON v.product_id = p.product_id
+      LEFT JOIN content_product_offers o ON o.content_id = ? AND o.product_id = p.product_id AND o.variant_id = v.variant_id
+      WHERE p.is_deleted = 0 AND (${conditions.join(' OR ')})
+      ORDER BY p.product_name, v.variant_id`, params);
+    return rows;
+  }
+
+  async saveVariantPrice(contentId, variantId, offerPrice) {
+    const variants = await this.getPricingVariants(contentId);
+    const variant = variants.find(row => Number(row.variant_id) === Number(variantId));
+    if (!variant) {
+      const error = new Error('Variant is not linked to this banner'); error.statusCode = 400; throw error;
+    }
+    if (offerPrice === null) {
+      await db.query('DELETE FROM content_product_offers WHERE content_id = ? AND variant_id = ?', [contentId, variantId]);
+      return;
+    }
+    const price = Number(offerPrice);
+    if (!Number.isFinite(price) || price <= 0) {
+      const error = new Error('Enter a positive offer price, or null to use the normal price'); error.statusCode = 400; throw error;
+    }
+    await db.query(`INSERT INTO content_product_offers (content_id, product_id, variant_id, offer_price)
+      VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE offer_price = VALUES(offer_price)`, [contentId, variant.product_id, variantId, price]);
   }
 
   async getProductOffers(contentId) {
@@ -830,9 +897,9 @@ class ContentZoneModel {
       `
       INSERT INTO content_zone_entries (
         module, zone, content_type, display_mode, color_value, text_color, image_url, title, cta_text,
-        redirect_link, target_type, target_id, target_ids, start_at, end_at, priority, is_default, is_published, created_by_name, motion_effect, motion_intensity, motion_speed
+        redirect_link, target_type, target_id, target_ids, start_at, end_at, priority, is_default, is_published, created_by_name, motion_effect, motion_intensity, motion_speed, discount_type, discount_value
       )
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,?,?,?,?)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,?,?,?,?,?,?)
       `,
       [
         original.module,
@@ -855,6 +922,8 @@ class ContentZoneModel {
         original.priority,
         original.created_by_name,
         ...Object.values(motionValues(original)),
+        original.discount_type || "none",
+        Number(original.discount_value || 0),
       ],
     );
 

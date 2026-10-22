@@ -143,8 +143,8 @@ class CmsController {
         const salePrice = offerPrice ?? originalSalePrice;
         const mrp = Number(product.mrp || 0);
         const cacheKey = `${product.product_id}_${product.variant_id}_${salePrice}`;
-        let rules = offerPrice !== null ? [] : rewardCache.get(cacheKey);
-        if (offerPrice === null && !rules) {
+        let rules = rewardCache.get(cacheKey);
+        if (!rules) {
           rules = await RewardModel.getProductRewards(
             product.product_id, product.variant_id, product.category_id,
             product.subcategory_id, salePrice, product.is_discount_eligible,
@@ -153,7 +153,7 @@ class CmsController {
         }
         const rewardCoins = rules.length ? calculateReward(salePrice, rules) : 0;
         const redeemCoins = calculateRedeemableCoins(salePrice, resolveRedemption(salePrice, rules));
-        const canRedeem = rules.some((rule) => rule.can_redeem_reward) && redeemCoins > 0;
+        const canRedeem = offerPrice === null && rules.some((rule) => rule.can_redeem_reward) && redeemCoins > 0;
 
         return {
           id: Number(product.product_id),

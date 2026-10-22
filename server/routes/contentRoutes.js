@@ -100,6 +100,10 @@ router.delete(
 );
 
 // ============================ ADMIN: Offers Banner campaign images ============================
+router.get('/entries/:id/product-pricing', contentController.getProductPricing);
+router.get('/entries/:id/discount-rule', contentController.getDiscountRule);
+router.put('/entries/:id/discount-rule', contentController.saveDiscountRule);
+router.put('/entries/:id/product-pricing/:variantId', contentController.saveProductPricing);
 
 router.post(
   "/entries/:id/images",

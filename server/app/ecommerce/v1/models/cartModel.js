@@ -57,6 +57,7 @@ class cartModel {
       ON csi.campaign_id = ci.flash_sale_campaign_id
       AND csi.product_id = ci.product_id
       AND csi.variant_id = ci.variant_id
+      AND csi.offer_price > 0 AND csi.max_qty > COALESCE(csi.sold_qty, 0)
       AND EXISTS (
         SELECT 1 FROM campaigns active_campaign
         WHERE active_campaign.campaign_id = csi.campaign_id
@@ -69,10 +70,10 @@ class cartModel {
       AND c.campaign_type = 'flash_sale'
       AND c.status = 'active'
       AND NOW() BETWEEN c.start_at AND c.end_at
-    LEFT JOIN content_product_offers pco
+    LEFT JOIN content_effective_product_offers pco
       ON pco.content_id = ci.promotional_content_id AND pco.product_id = ci.product_id AND pco.variant_id = ci.variant_id
       AND EXISTS (SELECT 1 FROM content_zone_entries cze WHERE cze.content_id = pco.content_id
-        AND cze.zone = 'promotional_banner' AND cze.is_published = 1
+        AND cze.module = 'product' AND cze.zone IN ('promotional_banner', 'offers_banner', 'brand_promotional_banner') AND cze.is_published = 1
         AND (cze.start_at IS NULL OR cze.start_at <= NOW()) AND (cze.end_at IS NULL OR cze.end_at >= NOW()))
 
     WHERE ci.user_id = ?
@@ -166,6 +167,7 @@ class cartModel {
         ON csi.campaign_id = ci.flash_sale_campaign_id
         AND csi.product_id = ci.product_id
         AND csi.variant_id = ci.variant_id
+      AND csi.offer_price > 0 AND csi.max_qty > COALESCE(csi.sold_qty, 0)
         AND EXISTS (
           SELECT 1 FROM campaigns active_campaign
           WHERE active_campaign.campaign_id = csi.campaign_id
@@ -178,10 +180,10 @@ class cartModel {
         AND c.campaign_type = 'flash_sale'
         AND c.status = 'active'
         AND NOW() BETWEEN c.start_at AND c.end_at
-      LEFT JOIN content_product_offers pco
+      LEFT JOIN content_effective_product_offers pco
         ON pco.content_id = ci.promotional_content_id AND pco.product_id = ci.product_id AND pco.variant_id = ci.variant_id
         AND EXISTS (SELECT 1 FROM content_zone_entries cze WHERE cze.content_id = pco.content_id
-          AND cze.zone = 'promotional_banner' AND cze.is_published = 1
+          AND cze.module = 'product' AND cze.zone IN ('promotional_banner', 'offers_banner', 'brand_promotional_banner') AND cze.is_published = 1
           AND (cze.start_at IS NULL OR cze.start_at <= NOW()) AND (cze.end_at IS NULL OR cze.end_at >= NOW()))
 
       WHERE ci.user_id = ?
@@ -199,9 +201,10 @@ class cartModel {
     let totalRewardEarn = 0;
 
     const items = [];
+    const earningRules = new Map();
 
     for (let item of cartItems) {
-      const fixedPrice = item.offer_price !== null || item.promotional_offer_price !== null;
+      const fixedPrice = item.offer_price != null || item.promotional_offer_price != null;
       const price = Number(item.offer_price ?? item.promotional_offer_price ?? item.sale_price ?? 0);
       const qty = Number(item.quantity || 0);
 
@@ -215,7 +218,7 @@ class cartModel {
 
       let rules = rewardCache[key];
 
-      if (!fixedPrice && !rules) {
+      if (!rules) {
         rules = await RewardModel.getProductRewards(
           item.product_id,
           item.variant_id,
@@ -228,9 +231,11 @@ class cartModel {
         rewardCache[key] = rules;
       }
 
+      earningRules.set(item.variant_id, rules);
+
       // earning
       let rewardEarn = 0;
-      if (!fixedPrice && rules.length) {
+      if (rules.length) {
         rewardEarn = calculateReward(itemTotal, rules);
       }
 
@@ -278,6 +283,11 @@ class cartModel {
 
     totalRedeemed = Math.min(totalRedeemed, cartTotal);
 
+    totalRewardEarn = 0;
+    for (const item of items) {
+      item.rewardEarn = calculateReward(item.itemTotal - item.redeemable, earningRules.get(item.variant_id));
+      totalRewardEarn += item.rewardEarn;
+    }
     const finalPayable = cartTotal - totalRedeemed;
 
     return {
@@ -323,23 +333,23 @@ class cartModel {
              AND c.campaign_type = 'flash_sale'
              AND c.status = 'active'
              AND NOW() BETWEEN c.start_at AND c.end_at
-             AND ci.offer_price IS NOT NULL
+             AND ci.offer_price > 0 AND ci.max_qty > COALESCE(ci.sold_qty, 0)
            FOR UPDATE`,
           [campaignId, productId, variantId],
         );
-        if (!campaignItem) throw new Error("INVALID_FLASH_SALE");
+        if (!campaignItem) campaignId = null;
       }
       if (contentId !== null) {
         const [[contentOffer]] = await conn.execute(
-          `SELECT cpo.offer_price FROM content_product_offers cpo
+          `SELECT cpo.offer_price FROM content_effective_product_offers cpo
            JOIN content_zone_entries cze ON cze.content_id = cpo.content_id
            WHERE cpo.content_id = ? AND cpo.product_id = ? AND cpo.variant_id = ?
-             AND cze.zone = 'promotional_banner' AND cze.is_published = 1
+             AND cze.module = 'product' AND cze.zone IN ('promotional_banner', 'offers_banner', 'brand_promotional_banner') AND cze.is_published = 1
              AND (cze.start_at IS NULL OR cze.start_at <= NOW())
              AND (cze.end_at IS NULL OR cze.end_at >= NOW()) FOR UPDATE`,
           [contentId, productId, variantId],
         );
-        if (!contentOffer) throw new Error("INVALID_PROMOTIONAL_OFFER");
+        if (!contentOffer) contentId = null;
       }
 
       const [[existing]] = await conn.execute(
