@@ -17,6 +17,9 @@ interface DetailData {
   refunds: { refund_amount: number; refund_method: string; status: string }[];
 }
 
+const escapeHtml = (value: string) =>
+  value.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
+
 const getErrorMessage = (error: unknown, fallback: string) => {
   if (!axios.isAxiosError<{ message?: unknown }>(error)) {
     return error instanceof Error && error.message ? error.message : fallback;
@@ -67,13 +70,40 @@ export default function CancellationDetail() {
       confirmButtonText: approving ? "Approve cancellation" : "Reject cancellation",
     });
     if (!confirmation.isConfirmed) return;
-    try {
-      setActionLoading(true);
-      await api.post(`/order/${decision}-item-cancellation/${orderItemId}`);
+    const submit = async (body?: { courierCancelledManually: true }) => {
+      await api.post(`/order/${decision}-item-cancellation/${orderItemId}`, body);
       await Swal.fire({ icon: "success", title: `Cancellation ${approving ? "approved" : "rejected"}`, timer: 1500, showConfirmButton: false });
       await load();
+    };
+    try {
+      setActionLoading(true);
+      await submit();
     } catch (error: unknown) {
       console.error(`Item cancellation ${decision} failed`, error);
+      const courierFailed = approving && axios.isAxiosError<{ code?: string }>(error)
+        && error.response?.data?.code === "COURIER_CANCELLATION_FAILED";
+      if (courierFailed) {
+        // The AWB may already have been cancelled by hand in the XpressBees
+        // panel, in which case the courier API refuses a second cancel.
+        const manual = await Swal.fire({
+          icon: "warning",
+          title: "XpressBees could not cancel the shipment",
+          html: `${escapeHtml(getErrorMessage(error, "Courier cancellation failed."))}<br/><br/>If this AWB was <b>already cancelled manually</b> in the XpressBees panel, you can approve and refund now.`,
+          showCancelButton: true,
+          confirmButtonColor: "#16a34a",
+          confirmButtonText: "AWB cancelled manually – refund",
+          cancelButtonText: "Close",
+        });
+        if (!manual.isConfirmed) return;
+        try {
+          await submit({ courierCancelledManually: true });
+        } catch (retryError: unknown) {
+          console.error("Manual-courier approval failed", retryError);
+          await Swal.fire({ icon: "error", title: "Could not approve cancellation", text: getErrorMessage(retryError, "Unable to approve this cancellation.") });
+          await load();
+        }
+        return;
+      }
       await Swal.fire({
         icon: "error",
         title: `Could not ${decision} cancellation`,

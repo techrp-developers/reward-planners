@@ -115,7 +115,7 @@ class ItemCancellationModel {
   async approve(
     orderItemId,
     conn,
-    { courierCancellationConfirmed = false } = {},
+    { courierCancellationConfirmed = false, approvalMeta = null } = {},
   ) {
     const [[row]] = await conn.execute(
       `SELECT ic.id AS cancellation_id, ic.status AS cancellation_status,
@@ -239,8 +239,8 @@ class ItemCancellationModel {
     );
     await conn.execute(
       `INSERT INTO ecommerce_item_cancellation_timeline
-        (order_item_id, event) VALUES (?, 'cancellation_approved')`,
-      [row.order_item_id],
+        (order_item_id, event, meta) VALUES (?, 'cancellation_approved', ?)`,
+      [row.order_item_id, approvalMeta ? JSON.stringify(approvalMeta) : null],
     );
     await conn.execute(
       `INSERT INTO ecommerce_item_cancellation_timeline

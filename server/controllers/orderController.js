@@ -509,8 +509,21 @@ class OrderController {
           orderItemId,
         );
       let courierCancellationConfirmed = false;
+      // Ops sometimes cancel the AWB directly in the XpressBees panel; the
+      // courier API then answers "Unable to cancel". The manager confirms the
+      // manual cancellation so the refund can proceed, and it is audited.
+      const courierCancelledManually =
+        req.body?.courierCancelledManually === true;
+      let approvalMeta = null;
 
-      if (candidate.requiresCourierCancellation) {
+      if (candidate.requiresCourierCancellation && courierCancelledManually) {
+        courierCancellationConfirmed = true;
+        approvalMeta = {
+          courier_cancelled_manually: true,
+          awb_number: candidate.awb_number,
+          confirmed_by: req.user?.user_id || null,
+        };
+      } else if (candidate.requiresCourierCancellation) {
         const courierResult =
           await xpressService.cancelShipmentExpressBees(
             candidate.awb_number,
@@ -530,7 +543,7 @@ class OrderController {
       const refund = await ItemCancellationModel.approve(
         orderItemId,
         conn,
-        { courierCancellationConfirmed },
+        { courierCancellationConfirmed, approvalMeta },
       );
       await conn.commit();
 
@@ -616,8 +629,10 @@ class OrderController {
           409,
           "XpressBees cancellation must complete before approving the refund",
         ],
+        // Not 502: Cloudflare replaces origin 502s with its own error page,
+        // which hides this message from the manager.
         COURIER_CANCELLATION_FAILED: [
-          502,
+          409,
           `${error.cause || "XpressBees could not cancel this shipment"}. No refund was started.`,
         ],
       };
@@ -626,7 +641,7 @@ class OrderController {
         "Unable to approve item cancellation",
       ];
       if (status >= 500) console.error("Approve item cancellation error:", error);
-      return res.status(status).json({ success: false, message });
+      return res.status(status).json({ success: false, code: error.message, message });
     } finally {
       conn.release();
     }
