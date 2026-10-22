@@ -595,6 +595,10 @@ class OrderController {
           409,
           "A booked shipment containing multiple active items cannot cancel only one item",
         ],
+        ORDER_ALREADY_CANCELLED: [
+          409,
+          "The whole order was already cancelled and refunded",
+        ],
         COURIER_CANCELLATION_REQUIRED: [
           409,
           "XpressBees cancellation must complete before approving the refund",

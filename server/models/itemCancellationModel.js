@@ -142,11 +142,25 @@ class ItemCancellationModel {
       SINGLE_ITEM_COURIER_CANCELLABLE_STATUSES.includes(
         row.shipping_status,
       );
+    // The shipment may already be cancelled at the courier or by ops; nothing
+    // is moving, so the item can still be refunded unless the whole order was.
+    const isShipmentAlreadyCancelled = row.shipping_status === "cancelled";
     if (
       !PRE_BOOKING_SHIPMENT_STATUSES.includes(row.shipping_status) &&
-      !isBookedCancellable
+      !isBookedCancellable &&
+      !isShipmentAlreadyCancelled
     ) {
       throw new Error("SHIPMENT_ALREADY_BOOKED");
+    }
+    if (isShipmentAlreadyCancelled) {
+      const [[orderRefund]] = await conn.execute(
+        `SELECT 1 AS found FROM order_refunds
+         WHERE order_id = ? AND order_item_id IS NULL LIMIT 1`,
+        [row.order_id],
+      );
+      if (row.order_status === "cancelled" || orderRefund) {
+        throw new Error("ORDER_ALREADY_CANCELLED");
+      }
     }
 
     const [[{ active_count: activeCount }]] = await conn.execute(
@@ -238,16 +252,18 @@ class ItemCancellationModel {
     );
 
     if (isLastActiveShipmentItem) {
-      await conn.execute(
-        `UPDATE order_shipments
-         SET shipping_status = 'cancelled', cancelled_at = NOW(),
-             cancel_sync_status = ?
-         WHERE id = ?`,
-        [
-          courierCancellationConfirmed ? "completed" : "not_needed",
-          row.shipment_id,
-        ],
-      );
+      if (!isShipmentAlreadyCancelled) {
+        await conn.execute(
+          `UPDATE order_shipments
+           SET shipping_status = 'cancelled', cancelled_at = NOW(),
+               cancel_sync_status = ?
+           WHERE id = ?`,
+          [
+            courierCancellationConfirmed ? "completed" : "not_needed",
+            row.shipment_id,
+          ],
+        );
+      }
       await conn.execute(
         `UPDATE vendor_orders SET shipping_status = 'cancelled'
          WHERE vendor_order_id = ?`,
