@@ -119,7 +119,20 @@ class CmsController {
       }
       if (entry.status !== 'active') return res.status(404).json({ success: false, message: 'Service offer is not active' });
       const rows = await ContentZoneModel.getContentServices(entry.content_id, req.query?.imageId ?? null);
-      const services = rows.map(service => ({ ...service, service_image: getPublicUrl(service.service_image, service.updated_at) }));
+      const offers = await ContentZoneModel.getLiveServiceOfferSummary(entry.content_id, rows.map(service => service.id));
+      // offer_price is the lowest live variant offer ("from ₹x"); pass content_id
+      // to service details, cart and buy-now so the offer is charged.
+      const services = rows.map(service => {
+        const offer = offers.get(Number(service.id));
+        return {
+          ...service,
+          service_image: getPublicUrl(service.service_image, service.updated_at),
+          content_id: Number(entry.content_id),
+          original_price: Number(service.price),
+          offer_price: offer ? offer.offer_price : null,
+          regular_price: offer ? offer.regular_price : null,
+        };
+      });
       return res.json({ success: true, count: services.length, data: { content: await publicContentEntry(entry), services } });
     } catch (error) {
       return res.status(error.statusCode || 500).json({ success: false, message: error.message });

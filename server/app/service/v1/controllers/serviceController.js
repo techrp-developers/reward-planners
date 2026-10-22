@@ -15,7 +15,11 @@ const ServiceVariantModel = require("../models/serviceVariantModel");
 const ServiceDocumentModel = require("../models/serviceDocumentModel");
 const ServiceFormModel = require("../models/serviceFormModel");
 const ServiceSectionModel = require("../models/serviceSectionModel");
-const { calculateServiceRewards } = require("../utils/serviceRewards");
+const {
+  toContentId,
+  getLiveServiceOfferPrices,
+  serviceOfferRewards,
+} = require("../utils/serviceOffers");
 const { UPLOAD_BASE } = require("../../../../config/path");
 const sharp = require("sharp");
 const { uploadToR2 } = require("../../../../utils/r2upload");
@@ -468,9 +472,16 @@ class ServiceController {
       const service = await ServiceModel.findById(id);
 
       const variants = await ServiceVariantModel.getVariantsByService(id);
+      const contentId = toContentId(req.query?.content_id);
+      const offerPrices = await getLiveServiceOfferPrices(contentId, id);
 
       for (let v of variants) {
-        v.rewards = calculateServiceRewards(v.price, v);
+        const offerPrice = offerPrices.get(Number(v.id)) ?? null;
+        v.regular_price = Number(v.price);
+        v.offer_price = offerPrice;
+        v.content_id = offerPrice === null ? null : contentId;
+        if (offerPrice !== null) v.price = offerPrice;
+        v.rewards = serviceOfferRewards(v.price, v, offerPrice !== null);
         const sections = await ServiceVariantModel.getSectionsByVariant(v.id);
 
         const formatted = formatVariantSections(sections);

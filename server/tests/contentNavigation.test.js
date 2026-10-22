@@ -12,7 +12,8 @@ for (const type of ['product', 'service']) {
 }
 
 test('bundle and category destinations remain direct links', () => {
-  assert.deepEqual(contentNavigation({ target_type: 'service_bundle', target_id: 8 }), { destination: 'service_bundle_details', targetId: 8 });
-  assert.deepEqual(contentNavigation({ target_type: 'service_category', target_id: 9 }), { destination: 'service_category', targetId: 9 });
+  // Service bundle and category banners carry their content id so offer pricing applies.
+  assert.deepEqual(contentNavigation({ content_id: 3, target_type: 'service_bundle', target_id: 8 }), { destination: 'service_bundle_details', targetId: 8, contentId: 3 });
+  assert.deepEqual(contentNavigation({ content_id: 4, target_type: 'service_category', target_id: 9 }), { destination: 'service_category', targetId: 9, contentId: 4 });
   assert.equal(contentNavigation({ target_type: null }), null);
 });

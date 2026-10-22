@@ -70,8 +70,8 @@ class ServiceOrderModel {
   async create(data, conn = db) {
     const [result] = await conn.execute(
       `INSERT INTO service_orders
-    (user_id, service_id, variant_id, address_id, enquiry_id, price, parent_order_id, bundle_id, status, payment_status, reward_coins_earned, reward_coins_used)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    (user_id, service_id, variant_id, address_id, enquiry_id, price, parent_order_id, bundle_id, promotional_content_id, status, payment_status, reward_coins_earned, reward_coins_used)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         data.user_id,
         data.service_id,
@@ -81,6 +81,7 @@ class ServiceOrderModel {
         data.price,
         data.parent_order_id,
         data.bundle_id || null,
+        data.promotional_content_id || null,
         data.status,
         data.payment_status || "pending",
         Number(data.reward_coins_earned || 0),

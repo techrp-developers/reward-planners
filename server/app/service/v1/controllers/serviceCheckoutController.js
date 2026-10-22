@@ -2,7 +2,14 @@ const db = require("../../../../config/database");
 const CartModel = require("../models/serviceCartModel");
 const ServiceOrderModel = require("../models/serviceOrderModel");
 const crypto = require("crypto");
-const { calculateServiceRewards, allocateRedeemedCoins } = require("../utils/serviceRewards");
+const { allocateRedeemedCoins } = require("../utils/serviceRewards");
+const {
+  toContentId,
+  getLiveServiceOfferPrice,
+  serviceOfferRewards,
+  getLiveBundleOfferTotal,
+  splitBundleOffer,
+} = require("../utils/serviceOffers");
 const {
   getWalletBalance,
   reserveServiceCoins,
@@ -112,6 +119,23 @@ async function applyRedemptionPreview(userId, items, requestedCoins, summary) {
   };
 }
 
+// A banner offer replaces the full-bundle price only (fixed bundles, or custom
+// bundles with every item selected). Returns the per-item split, or null.
+async function resolveBundleOffer(rawContentId, bundleId, bundleType, isFullBundleSelected, items, conn = db) {
+  if (bundleType !== "fixed" && !isFullBundleSelected) return null;
+  const contentId = toContentId(rawContentId);
+  const prices = items.map((item) => Number(item.bundle_price));
+  const bundleTotal = prices.reduce((sum, price) => sum + price, 0);
+  const offerTotal = await getLiveBundleOfferTotal(contentId, bundleId, bundleTotal, conn);
+  if (offerTotal === null) return null;
+  const parts = splitBundleOffer(prices, offerTotal);
+  return {
+    contentId,
+    total: offerTotal,
+    prices: new Map(items.map((item, index) => [Number(item.id), parts[index]])),
+  };
+}
+
 class ServiceCheckoutController {
   // checkout from cart
   async addToCheckout(req, res) {
@@ -176,6 +200,7 @@ class ServiceCheckoutController {
           price: item.price,
           parent_order_id: parentOrderId,
           bundle_id: null,
+          promotional_content_id: item.promotional_content_id || null,
           status: "pending_payment",
           reward_coins_earned: Number(item.rewards?.earn_coins || 0),
           reward_coins_used: allocation.redeem_coins,
@@ -197,6 +222,7 @@ class ServiceCheckoutController {
             price: item.price,
             parent_order_id: parentOrderId,
             bundle_id: bundle.bundle_id,
+            promotional_content_id: item.promotional_content_id || null,
             status: "pending_payment",
             reward_coins_earned: Number(item.rewards?.earn_coins || 0),
             reward_coins_used: allocation.redeem_coins,
@@ -295,10 +321,15 @@ class ServiceCheckoutController {
       }
 
       const parentOrderId = crypto.randomUUID();
-      const rewards = calculateServiceRewards(variant.price, variant);
-      const rewardItem = { price: Number(variant.price), rewards };
       conn = await db.getConnection();
       await conn.beginTransaction();
+      // Resolved inside the transaction so an offer that ends mid-checkout
+      // charges the normal price rather than a stale preview price.
+      const contentId = toContentId(req.body?.content_id);
+      const offerPrice = await getLiveServiceOfferPrice(contentId, variant_id, conn);
+      const price = offerPrice ?? Number(variant.price);
+      const rewards = serviceOfferRewards(price, variant, offerPrice !== null);
+      const rewardItem = { price, rewards };
       const walletBalance = await getWalletBalance(conn, userId, true);
       const redemption = allocateRedeemedCoins(
         [rewardItem],
@@ -313,9 +344,10 @@ class ServiceCheckoutController {
         service_id,
         variant_id,
         enquiry_id: null,
-        price: variant.price,
+        price,
         parent_order_id: parentOrderId,
         bundle_id: null,
+        promotional_content_id: offerPrice === null ? null : contentId,
         status: "pending_payment",
         reward_coins_earned: rewards.earn_coins,
         reward_coins_used: redemption.redeem_coins,
@@ -465,6 +497,9 @@ class ServiceCheckoutController {
 
       conn = await db.getConnection();
       await conn.beginTransaction();
+      const offer = await resolveBundleOffer(
+        req.body?.content_id, bundle_id, bundle.type, isFullBundleSelected, items, conn,
+      );
       const walletBalance = await getWalletBalance(conn, userId, true);
       let redeemRemaining = Math.max(0, Math.floor(Number(req.body?.redeem_coins || 0)));
       let walletRemaining = walletBalance;
@@ -481,7 +516,9 @@ class ServiceCheckoutController {
 
         let finalPrice;
 
-        if (bundle.type === "fixed") {
+        if (offer) {
+          finalPrice = offer.prices.get(Number(item.id));
+        } else if (bundle.type === "fixed") {
           finalPrice = Number(item.bundle_price);
         } else {
           finalPrice = isFullBundleSelected
@@ -489,7 +526,7 @@ class ServiceCheckoutController {
             : Number(item.individual_price); //  partial
         }
 
-        const rewards = calculateServiceRewards(finalPrice, item);
+        const rewards = serviceOfferRewards(finalPrice, item, Boolean(offer));
         const redemption = allocateRedeemedCoins(
           [{ price: finalPrice, rewards }],
           redeemRemaining,
@@ -509,6 +546,7 @@ class ServiceCheckoutController {
           price: finalPrice,
           parent_order_id: parentOrderId,
           bundle_id: bundle_id,
+          promotional_content_id: offer ? offer.contentId : null,
           status: "pending_payment",
           reward_coins_earned: rewards.earn_coins,
           reward_coins_used: redeemed,
@@ -532,6 +570,7 @@ class ServiceCheckoutController {
           orders: createdOrders,
           parent_order_id: parentOrderId,
           is_bundle_applied: bundle.type === "fixed" || isFullBundleSelected,
+          is_offer: Boolean(offer),
           rewards: {
             earn_coins: createdOrders.reduce((sum, order) => sum + order.reward_coins_earned, 0),
             redeem_coins: totalRedeemed,
@@ -664,6 +703,9 @@ class ServiceCheckoutController {
 
       // base variant data
       const firstRow = rows[0];
+      const contentId = toContentId(req.query?.content_id);
+      const offerPrice = await getLiveServiceOfferPrice(contentId, variant_id);
+      const price = offerPrice ?? parseFloat(firstRow.price);
 
       const documents = [];
 
@@ -692,10 +734,13 @@ class ServiceCheckoutController {
           image_url: getPublicUrl(firstRow.image_url),
           title: firstRow.title,
 
-          price: parseFloat(firstRow.price),
+          price,
+          regular_price: parseFloat(firstRow.price),
+          is_offer: offerPrice !== null,
+          content_id: offerPrice === null ? null : contentId,
           quantity: 1,
 
-          rewards: calculateServiceRewards(firstRow.price, firstRow),
+          rewards: serviceOfferRewards(price, firstRow, offerPrice !== null),
 
           documents, // added here
         },
@@ -828,6 +873,10 @@ class ServiceCheckoutController {
       // 4 Detect full bundle selection
       const isFullBundleSelected = selectedSet.size === items.length;
 
+      const offer = await resolveBundleOffer(
+        req.query?.content_id, bundle_id, bundle.type, isFullBundleSelected, items,
+      );
+
       // 5 Build selected items
       const selectedItems = [];
 
@@ -841,7 +890,9 @@ class ServiceCheckoutController {
 
         let finalPrice;
 
-        if (bundle.type === "fixed") {
+        if (offer) {
+          finalPrice = offer.prices.get(Number(item.id));
+        } else if (bundle.type === "fixed") {
           finalPrice = Number(item.bundle_price);
         } else {
           finalPrice = isFullBundleSelected
@@ -860,8 +911,9 @@ class ServiceCheckoutController {
           image_url: getPublicUrl(item.image_url),
 
           price: finalPrice,
+          regular_bundle_price: Number(item.bundle_price),
           quantity: 1,
-          rewards: calculateServiceRewards(finalPrice, item),
+          rewards: serviceOfferRewards(finalPrice, item, Boolean(offer)),
 
           // helpful for UI
           is_required: item.is_required,
@@ -880,6 +932,9 @@ class ServiceCheckoutController {
         ),
 
         is_bundle_applied: bundle.type === "fixed" || isFullBundleSelected,
+        is_offer: Boolean(offer),
+        content_id: offer ? offer.contentId : null,
+        regular_bundle_total: selectedItems.reduce((sum, i) => sum + i.regular_bundle_price, 0),
       };
 
       // 6 Summary (reuse your helper)

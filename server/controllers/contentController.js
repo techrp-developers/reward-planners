@@ -724,6 +724,30 @@ class ContentController {
     } catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.message }); }
   }
 
+  async getServicePricing(req, res) {
+    try { return res.json({ success: true, data: await ContentZoneModel.getServicePricingVariants(req.params.id) }); }
+    catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.message }); }
+  }
+
+  async saveServicePricing(req, res) {
+    try {
+      await ContentZoneModel.saveServiceVariantPrice(req.params.id, req.params.variantId, req.body.offer_price);
+      return res.json({ success: true });
+    } catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.message }); }
+  }
+
+  async getBundlePricing(req, res) {
+    try { return res.json({ success: true, data: await ContentZoneModel.getServiceBundlePricing(req.params.id) }); }
+    catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.message }); }
+  }
+
+  async saveBundlePricing(req, res) {
+    try {
+      await ContentZoneModel.saveServiceBundlePrice(req.params.id, req.params.bundleId, req.body.offer_price);
+      return res.json({ success: true });
+    } catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.message }); }
+  }
+
   async updateImageTarget(req, res) {
     try {
       const image = await ContentZoneModel.updateImageTarget(req.params.id, req.params.imageId, req.body);

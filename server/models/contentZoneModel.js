@@ -542,6 +542,28 @@ class ContentZoneModel {
     return rows;
   }
 
+  /** Lowest live offer per service (and that variant's normal price) on a banner. */
+  async getLiveServiceOfferSummary(contentId, serviceIds) {
+    const ids = serviceIds.map(Number).filter((id) => Number.isInteger(id) && id > 0);
+    if (!ids.length) return new Map();
+    const { LIVE_SERVICE_OFFER_SQL } = require('../app/service/v1/utils/serviceOffers');
+    const [rows] = await db.query(
+      `SELECT live.service_id, live.offer_price, v.price AS regular_price
+       FROM (${LIVE_SERVICE_OFFER_SQL} AND cso.content_id = ?) live
+       JOIN service_variants v ON v.id = live.variant_id
+       WHERE live.service_id IN (${ids.map(() => '?').join(',')})
+       ORDER BY live.offer_price ASC`,
+      [contentId, ...ids],
+    );
+    const summary = new Map();
+    for (const row of rows) {
+      if (!summary.has(Number(row.service_id))) {
+        summary.set(Number(row.service_id), { offer_price: Number(row.offer_price), regular_price: Number(row.regular_price) });
+      }
+    }
+    return summary;
+  }
+
   async getImageTargetEntry(contentId, imageId = null) {
     const entry = await this.getEntryById(contentId);
     if (imageId == null) return entry;
@@ -582,8 +604,8 @@ class ContentZoneModel {
 
   async getDiscountRule(contentId) {
     const entry = await this.getEntryById(contentId);
-    if (entry.module !== 'product' || !IMAGE_GALLERY_ZONES.includes(entry.zone)) {
-      const error = new Error('Discount rules require an ecommerce banner'); error.statusCode = 400; throw error;
+    if (!['product', 'service'].includes(entry.module) || !IMAGE_GALLERY_ZONES.includes(entry.zone)) {
+      const error = new Error('Discount rules require an ecommerce or service banner'); error.statusCode = 400; throw error;
     }
     return { discount_type: entry.discount_type || 'none', discount_value: Number(entry.discount_value || 0) };
   }
@@ -640,6 +662,95 @@ class ContentZoneModel {
     }
     await db.query(`INSERT INTO content_product_offers (content_id, product_id, variant_id, offer_price)
       VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE offer_price = VALUES(offer_price)`, [contentId, variant.product_id, variantId, price]);
+  }
+
+  /** Active service variants a service banner covers, with any individual price. */
+  async getServicePricingVariants(contentId) {
+    const entry = await this.getEntryById(contentId);
+    if (entry.module !== 'service' || !IMAGE_GALLERY_ZONES.includes(entry.zone)) {
+      const error = new Error('Service pricing requires a service banner');
+      error.statusCode = 400;
+      throw error;
+    }
+    const targets = [entry, ...await this.getAllImagesByContentId(contentId)];
+    const conditions = [];
+    const params = [contentId];
+    for (const target of targets) {
+      if (target.target_type === 'service') {
+        const ids = contentTargetIds(target);
+        if (ids.length) { conditions.push(`s.id IN (${ids.map(() => '?').join(',')})`); params.push(...ids); }
+      } else if (target.target_type === 'service_category' && target.target_id) {
+        conditions.push('s.category_id = ?');
+        params.push(Number(target.target_id));
+      }
+    }
+    if (!conditions.length) return [];
+    const [rows] = await db.query(`SELECT s.id AS service_id, s.name AS service_name,
+      v.id AS variant_id, v.variant_name, v.title, v.price, o.offer_price
+      FROM services s JOIN service_variants v ON v.service_id = s.id AND v.status = 1
+      LEFT JOIN content_service_offers o ON o.content_id = ? AND o.service_id = s.id AND o.variant_id = v.id
+      WHERE (${conditions.join(' OR ')})
+      ORDER BY s.name, v.id`, params);
+    return rows;
+  }
+
+  async saveServiceVariantPrice(contentId, variantId, offerPrice) {
+    const variants = await this.getServicePricingVariants(contentId);
+    const variant = variants.find(row => Number(row.variant_id) === Number(variantId));
+    if (!variant) {
+      const error = new Error('Service variant is not linked to this banner'); error.statusCode = 400; throw error;
+    }
+    if (offerPrice === null) {
+      await db.query('DELETE FROM content_service_offers WHERE content_id = ? AND variant_id = ?', [contentId, variantId]);
+      return;
+    }
+    const price = Number(offerPrice);
+    if (!Number.isFinite(price) || price <= 0 || Math.round(price * 100) / 100 !== price) {
+      const error = new Error('Enter a positive offer price with at most two decimals, or null to use the shared discount'); error.statusCode = 400; throw error;
+    }
+    await db.query(`INSERT INTO content_service_offers (content_id, service_id, variant_id, offer_price)
+      VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE offer_price = VALUES(offer_price)`, [contentId, variant.service_id, variantId, price]);
+  }
+
+  /** Bundles a service banner (or its images) links to, with normal and individual prices. */
+  async getServiceBundlePricing(contentId) {
+    const entry = await this.getEntryById(contentId);
+    if (entry.module !== 'service' || !IMAGE_GALLERY_ZONES.includes(entry.zone)) {
+      const error = new Error('Bundle pricing requires a service banner');
+      error.statusCode = 400;
+      throw error;
+    }
+    const targets = [entry, ...await this.getAllImagesByContentId(contentId)];
+    const ids = [...new Set(targets
+      .filter((target) => target.target_type === 'service_bundle' && target.target_id)
+      .map((target) => Number(target.target_id)))];
+    if (!ids.length) return [];
+    const [rows] = await db.query(`SELECT b.id AS bundle_id, b.name AS bundle_name, b.type AS bundle_type,
+      COALESCE(SUM(i.price), 0) AS bundle_total, COUNT(i.id) AS item_count, o.offer_price
+      FROM service_bundles b
+      LEFT JOIN service_bundle_items i ON i.bundle_id = b.id
+      LEFT JOIN content_bundle_offers o ON o.content_id = ? AND o.bundle_id = b.id
+      WHERE b.id IN (${ids.map(() => '?').join(',')})
+      GROUP BY b.id, b.name, b.type, o.offer_price
+      ORDER BY b.name`, [contentId, ...ids]);
+    return rows.map((row) => ({ ...row, bundle_total: Number(row.bundle_total), item_count: Number(row.item_count) }));
+  }
+
+  async saveServiceBundlePrice(contentId, bundleId, offerPrice) {
+    const bundles = await this.getServiceBundlePricing(contentId);
+    if (!bundles.some((row) => Number(row.bundle_id) === Number(bundleId))) {
+      const error = new Error('Bundle is not linked to this banner'); error.statusCode = 400; throw error;
+    }
+    if (offerPrice === null) {
+      await db.query('DELETE FROM content_bundle_offers WHERE content_id = ? AND bundle_id = ?', [contentId, bundleId]);
+      return;
+    }
+    const price = Number(offerPrice);
+    if (!Number.isFinite(price) || price <= 0 || Math.round(price * 100) / 100 !== price) {
+      const error = new Error('Enter a positive bundle price with at most two decimals, or null to use the shared discount'); error.statusCode = 400; throw error;
+    }
+    await db.query(`INSERT INTO content_bundle_offers (content_id, bundle_id, offer_price)
+      VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE offer_price = VALUES(offer_price)`, [contentId, Number(bundleId), price]);
   }
 
   async getProductOffers(contentId) {
