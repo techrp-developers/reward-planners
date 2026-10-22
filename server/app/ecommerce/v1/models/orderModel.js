@@ -1,4 +1,5 @@
 const db = require("../../../../config/database");
+const { applyActiveOffers } = require("../utils/activeOffers");
 const fs = require("fs");
 const path = require("path");
 const {
@@ -913,6 +914,7 @@ class orderModel {
     `,
       [...params, limit, offset],
     );
+    await applyActiveOffers(rows);
 
     const [[{ total }]] = await db.execute(
       `
@@ -949,6 +951,8 @@ class orderModel {
 
         variant_id: p.variant_id,
         sale_price: p.sale_price,
+        original_sale_price: p.original_sale_price,
+        offer_price: p.offer_price,
         mrp: p.mrp,
 
         attributes,

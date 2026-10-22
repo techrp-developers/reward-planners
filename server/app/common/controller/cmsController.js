@@ -11,6 +11,7 @@ const {
   resolveRedemption,
   calculateRedeemableCoins,
 } = require('../../ecommerce/v1/utils/rewardCalculate');
+const { getOfferCandidates, pickOffer } = require('../../ecommerce/v1/utils/activeOffers');
 
 const SUPPORTED_LAYOUTS = {
   main: ['header', 'birthdays', 'stepProgress', 'exploreModules', 'moduleBanner', 'rewardsOverview'],
@@ -137,9 +138,12 @@ class CmsController {
 
       const rows = await ContentZoneModel.getContentProducts(entry.content_id, req.query?.imageId ?? null);
       const rewardCache = new Map();
+      const offers = await getOfferCandidates(rows.map((product) => product.variant_id));
       const products = await Promise.all(rows.map(async (product) => {
         const originalSalePrice = Number(product.sale_price || 0);
-        const offerPrice = product.offer_price == null ? null : Number(product.offer_price);
+        // Lowest live offer wins, matching what cart and checkout will charge.
+        const best = pickOffer(offers.get(Number(product.variant_id)));
+        const offerPrice = best ? best.price : product.offer_price == null ? null : Number(product.offer_price);
         const salePrice = offerPrice ?? originalSalePrice;
         const mrp = Number(product.mrp || 0);
         const cacheKey = `${product.product_id}_${product.variant_id}_${salePrice}`;

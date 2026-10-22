@@ -16,6 +16,7 @@ const {
   resolveRedemption,
   calculateRedeemableCoins,
 } = require("../utils/rewardCalculate");
+const { applyActiveOffers } = require("../utils/activeOffers");
 
 function positiveInt(value, fallback, max = 100) {
   const parsed = Number.parseInt(value, 10);
@@ -171,6 +172,8 @@ class ProductController {
 
       const rewardCache = {};
 
+      await applyActiveOffers(products);
+
       const processedProducts = await Promise.all(
         products.map(async (product) => {
           const imagePath =
@@ -218,7 +221,7 @@ class ProductController {
           /* ===============================
               REDEMPTION (rule-based)
             =============================== */
-          const redemption = resolveRedemption(salePrice, rules);
+          const redemption = resolveRedemption(salePrice, product.is_offer_price ? [] : rules);
           const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
           const canRedeem = rules.some((r) => r.can_redeem_reward);
           const redemptionEnabled = canRedeem && redeem_coins > 0;
@@ -326,6 +329,8 @@ class ProductController {
 
       const rewardCache = {};
 
+      await applyActiveOffers(products);
+
       const processedProducts = await Promise.all(
         products.map(async (product) => {
           const imagePath = product.images?.length
@@ -370,7 +375,7 @@ class ProductController {
           /* ===============================
                 REDEMPTION (rule-based)
               =============================== */
-          const redemption = resolveRedemption(salePrice, rules);
+          const redemption = resolveRedemption(salePrice, product.is_offer_price ? [] : rules);
           const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
 
           const canRedeem = rules.some((r) => r.can_redeem_reward);
@@ -476,6 +481,8 @@ class ProductController {
 
       const rewardCache = {};
 
+      await applyActiveOffers(products);
+
       const processedProducts = await Promise.all(
         products.map(async (product) => {
           const imagePath = product.images?.length
@@ -520,7 +527,7 @@ class ProductController {
           /* ===============================
               REDEMPTION (rule-based)
             =============================== */
-          const redemption = resolveRedemption(salePrice, rules);
+          const redemption = resolveRedemption(salePrice, product.is_offer_price ? [] : rules);
 
           const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
 
@@ -606,14 +613,7 @@ class ProductController {
         });
       }
 
-      const campaignId = Number.parseInt(req.query.campaign_id, 10);
-      const contentId = Number.parseInt(req.query.content_id, 10);
-      const campaignOfferPrices = Number.isInteger(campaignId) && campaignId > 0
-        ? await ProductModel.getActiveCampaignOfferPrices(campaignId, productId)
-        : new Map();
-      const contentOfferPrices = Number.isInteger(contentId) && contentId > 0
-        ? await ProductModel.getActiveContentOfferPrices(contentId, productId)
-        : new Map();
+      await applyActiveOffers(product.variants);
 
       if (req.user?.user_id) {
         await db.execute(
@@ -630,15 +630,8 @@ class ProductController {
         ...product,
         variants: await Promise.all(
           product.variants.map(async (variant) => {
-            const campaignPrice = campaignOfferPrices.get(Number(variant.variant_id));
-            const contentPrice = contentOfferPrices.get(Number(variant.variant_id));
-            const isCampaignPrice = campaignPrice !== undefined;
-            const isContentPrice = !isCampaignPrice && contentPrice !== undefined;
-            const isOfferPrice = isCampaignPrice || isContentPrice;
-            const salePrice = isCampaignPrice
-              ? campaignPrice
-              : isContentPrice ? contentPrice
-              : Number(variant.sale_price) || 0;
+            const isOfferPrice = variant.is_offer_price;
+            const salePrice = Number(variant.sale_price) || 0;
             const mrp = Number(variant.mrp) || 0;
 
             const rules = await RewardModel.getProductRewards(
@@ -689,12 +682,12 @@ class ProductController {
             return {
               ...variant,
               sale_price: salePrice,
-              original_sale_price: Number(variant.sale_price) || 0,
+              original_sale_price: variant.original_sale_price,
               offer_price: isOfferPrice ? salePrice : null,
               price: `₹${salePrice.toFixed(2)}`,
-              campaign_id: isCampaignPrice ? campaignId : null,
-              content_id: isContentPrice ? contentId : null,
-              promotional_offer_price: isContentPrice ? salePrice : null,
+              campaign_id: variant.campaign_id,
+              content_id: variant.content_id,
+              promotional_offer_price: variant.content_id ? salePrice : null,
               finalPrice: redemptionEnabled
                 ? `₹${finalPrice.toFixed(2)}`
                 : null,
@@ -992,6 +985,7 @@ class ProductController {
     `;
 
       const [rows] = await db.execute(query, [userId, search, search, limit, offset]);
+      await applyActiveOffers(rows);
 
       const rewardCache = {};
 
@@ -1043,7 +1037,7 @@ class ProductController {
           /* ===============================
             REDEMPTION (rule-based)
           =============================== */
-          const redemption = resolveRedemption(salePrice, rules);
+          const redemption = resolveRedemption(salePrice, row.is_offer_price ? [] : rules);
 
           const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
 
@@ -1492,6 +1486,8 @@ class ProductController {
         offset,
       });
 
+      await applyActiveOffers(products);
+
       const processedProducts = await Promise.all(
         products.map(async (product) => {
           const imagePath =
@@ -1524,7 +1520,7 @@ class ProductController {
           /* ===============================
        REDEMPTION
     =============================== */
-          const redemption = resolveRedemption(salePrice, rules);
+          const redemption = resolveRedemption(salePrice, product.is_offer_price ? [] : rules);
 
           const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
 

@@ -47,16 +47,29 @@ test('real DB: rewards + flash/content offers across product → cart → checko
 
     const scopes = { product: [productId, null, null], category: [null, categoryId, null], subcategory: [null, null, subcategoryId], none: null };
     const expire = (table, key, id) => q(`UPDATE ${table} SET end_at = NOW() - INTERVAL 1 SECOND WHERE ${key} = ?`, [id]);
+    const expireFlash = () => expire('campaigns', 'campaign_id', campaignId);
+    const expireBanner = () => expire('content_zone_entries', 'content_id', contentId);
+    const soldOut = () => q('UPDATE campaign_items SET sold_qty = max_qty WHERE campaign_id = ?', [campaignId]);
+    // flash 150 and banner 160 both live; no offer ids are ever passed — the server picks the price
+    const resetOffers = async () => {
+      await q('UPDATE campaigns SET end_at = NOW() + INTERVAL 1 DAY WHERE campaign_id = ?', [campaignId]);
+      await q('UPDATE campaign_items SET sold_qty = 0, max_qty = 100 WHERE campaign_id = ?', [campaignId]);
+      await q("UPDATE content_zone_entries SET zone = 'offers_banner', end_at = NOW() + INTERVAL 1 DAY WHERE content_id = ?", [contentId]);
+      await q('UPDATE content_product_offers SET offer_price = 160 WHERE content_id = ?', [contentId]);
+    };
     const offers = {
-      normal: { query: {}, price: 200, redeemable: true },
-      flash: { query: { campaign_id: campaignId }, price: 150, redeemable: false },
-      flashExpired: { query: { campaign_id: campaignId }, price: 200, redeemable: true, before: () => expire('campaigns', 'campaign_id', campaignId) },
-      flashSoldOut: { query: { campaign_id: campaignId }, price: 200, redeemable: true, before: () => q('UPDATE campaign_items SET sold_qty = max_qty WHERE campaign_id = ?', [campaignId]) },
+      noOffer: { price: 200, redeemable: true, before: async () => { await expireFlash(); await expireBanner(); } },
+      flash: { price: 150, redeemable: false, before: expireBanner },
+      flashExpired: { price: 200, redeemable: true, before: async () => { await expireBanner(); await expireFlash(); } },
+      flashSoldOut: { price: 200, redeemable: true, before: async () => { await expireBanner(); await soldOut(); } },
+      flashSoldOutBannerLive: { price: 160, redeemable: false, before: soldOut },
+      bothLiveFlashCheaper: { price: 150, redeemable: false },
+      bothLiveBannerCheaper: { price: 140, redeemable: false, before: () => q('UPDATE content_product_offers SET offer_price = 140 WHERE content_id = ?', [contentId]) },
     };
     for (const zone of ['promotional_banner', 'offers_banner', 'brand_promotional_banner']) {
-      const before = () => q('UPDATE content_zone_entries SET zone = ? WHERE content_id = ?', [zone, contentId]);
-      offers[zone] = { query: { content_id: contentId }, price: 160, redeemable: false, before };
-      offers[`${zone}Expired`] = { query: { content_id: contentId }, price: 200, redeemable: true, before: async () => { await before(); await expire('content_zone_entries', 'content_id', contentId); } };
+      const before = async () => { await expireFlash(); await q('UPDATE content_zone_entries SET zone = ? WHERE content_id = ?', [zone, contentId]); };
+      offers[zone] = { price: 160, redeemable: false, before };
+      offers[`${zone}Expired`] = { price: 200, redeemable: true, before: async () => { await before(); await expireBanner(); } };
     }
 
     for (const [scope, mapping] of Object.entries(scopes)) {
@@ -65,19 +78,16 @@ test('real DB: rewards + flash/content offers across product → cart → checko
       for (const [name, offer] of Object.entries(offers)) {
         await t.test(`${scope} reward, ${name}`, async () => {
           await q('UPDATE product_variants SET stock = 50 WHERE variant_id = ?', [variantId]);
-          await q('UPDATE campaigns SET end_at = NOW() + INTERVAL 1 DAY WHERE campaign_id = ?', [campaignId]);
-          await q('UPDATE campaign_items SET sold_qty = 0 WHERE campaign_id = ?', [campaignId]);
-          await q("UPDATE content_zone_entries SET zone = 'offers_banner', end_at = NOW() + INTERVAL 1 DAY WHERE content_id = ?", [contentId]);
+          await resetOffers();
           if (offer.before) await offer.before();
           const { price } = offer; const qty = 2; const lineTotal = price * qty;
           const redeemable = offer.redeemable && Boolean(mapping);
           const redeem = redeemable ? lineTotal * 0.2 : 0;
           const earn = mapping ? Math.floor((lineTotal - redeem) * 0.1) : 0;
           const total = lineTotal - redeem + shipping;
-          const campaign_id = offer.query.campaign_id ?? null; const content_id = offer.query.content_id ?? null;
 
           const res = response();
-          await productController.getProductById({ params: { productId }, query: offer.query }, res);
+          await productController.getProductById({ params: { productId }, query: {} }, res);
           assert.equal(res.code, 200, JSON.stringify(res.payload));
           const variant = res.payload.product.variants.find(v => Number(v.variant_id) === variantId);
           assert.equal(variant.sale_price, price, 'product page price');
@@ -85,10 +95,7 @@ test('real DB: rewards + flash/content offers across product → cart → checko
           assert.equal(variant.redemption.enabled, redeemable, 'product page redemption');
 
           await q('DELETE FROM cart_items WHERE user_id = ?', [userId]);
-          await cart.addToCart({ userId, productId, variantId, quantity: qty, campaignId: campaign_id, contentId: content_id });
-          const [cartRow] = await q('SELECT flash_sale_campaign_id, promotional_content_id FROM cart_items WHERE user_id = ?', [userId]);
-          assert.equal(cartRow.flash_sale_campaign_id, offer.price === 200 ? null : campaign_id, 'expired flash offer must not be stored on cart');
-          assert.equal(cartRow.promotional_content_id, offer.price === 200 ? null : content_id, 'expired content offer must not be stored on cart');
+          await cart.addToCart({ userId, productId, variantId, quantity: qty });
           assert.equal((await cart.getUserCart(userId)).items[0].sale_price, price, 'cart price');
           const summary = await cart.getCartSummary(userId, true);
           assert.deepEqual([summary.cartTotal, summary.totalRedeemed, summary.totalRewardEarn], [lineTotal, redeem, earn], 'cart summary');
@@ -98,7 +105,7 @@ test('real DB: rewards + flash/content offers across product → cart → checko
           assert.deepEqual(preview.reward, { earnCoins: earn, redeemCoins: redeem });
           assert.equal(preview.payableAmount, total, 'cart checkout payable');
 
-          const input = { userId, productId, variantId, quantity: qty, campaignId: campaign_id, contentId: content_id, addressId, companyId: 1, useRewards: true, expectedTotal: total, expectedRedeemable: redeem };
+          const input = { userId, productId, variantId, quantity: qty, addressId, companyId: 1, useRewards: true, expectedTotal: total, expectedRedeemable: redeem };
           const buyPreview = await checkout.getBuyNowCheckout(input);
           assert.equal(buyPreview.payableAmount, total, 'buy-now payable');
           assert.deepEqual(buyPreview.reward, { earnCoins: earn, redeemCoins: redeem });
@@ -121,10 +128,7 @@ test('real DB: rewards + flash/content offers across product → cart → checko
     await t.test('flash and banner listings show offer price, earning only', async () => {
       await q('INSERT INTO product_reward_settings (reward_rule_id, product_id, can_earn_reward, can_redeem_reward, is_active, priority) VALUES (?, ?, 1, 1, 1, 1)', [ruleId, productId]);
       await q('UPDATE product_variants SET stock = 50 WHERE variant_id = ?', [variantId]);
-      await q('UPDATE campaign_items SET sold_qty = 0 WHERE campaign_id = ?', [campaignId]);
-      await q("UPDATE content_zone_entries SET zone = 'offers_banner' WHERE content_id = ?", [contentId]);
-      await q('UPDATE campaigns SET end_at = NOW() + INTERVAL 1 DAY WHERE campaign_id = ?', [campaignId]);
-      await q('UPDATE content_zone_entries SET end_at = NOW() + INTERVAL 1 DAY WHERE content_id = ?', [contentId]);
+      await resetOffers();
       const flash = response();
       await campaignController.getCampaignProducts({ params: { id: campaignId }, query: {} }, flash);
       assert.equal(flash.code, 200, JSON.stringify(flash.payload));
@@ -138,16 +142,18 @@ test('real DB: rewards + flash/content offers across product → cart → checko
       assert.equal(cms.code, 200, JSON.stringify(cms.payload));
       const cmsItem = cms.payload.data.products.find(p => Number(p.product_id) === productId);
       assert.ok(cmsItem, 'banner listing contains product');
-      assert.equal(Number(cmsItem.offer_price), 160);
-      assert.equal(cmsItem.rewardCoins, 16);
+      assert.equal(Number(cmsItem.offer_price), 150, 'banner listing shows the lower live flash price');
+      assert.equal(cmsItem.rewardCoins, 15);
       assert.equal(cmsItem.redeem_coins, 0);
     });
 
     await t.test('offer expiring after cart add falls back to default price and re-enables redemption', async () => {
       await q('DELETE FROM cart_items WHERE user_id = ?', [userId]);
-      await cart.addToCart({ userId, productId, variantId, quantity: 2, campaignId });
+      await cart.addToCart({ userId, productId, variantId, quantity: 2 });
       assert.equal((await cart.getCartSummary(userId, true)).cartTotal, 300);
-      await q('UPDATE campaigns SET end_at = NOW() - INTERVAL 1 SECOND WHERE campaign_id = ?', [campaignId]);
+      await expireFlash();
+      assert.equal((await cart.getCartSummary(userId, true)).cartTotal, 320, 'falls back to the banner offer');
+      await expireBanner();
       const summary = await cart.getCartSummary(userId, true);
       assert.deepEqual([summary.cartTotal, summary.totalRedeemed, summary.totalRewardEarn], [400, 80, 32]);
       assert.equal((await checkout.getCheckoutCart(userId, true, addressId)).payableAmount, 330);
@@ -158,6 +164,8 @@ test('real DB: rewards + flash/content offers across product → cart → checko
       const soldQty = async () => Number((await q('SELECT sold_qty FROM campaign_items WHERE campaign_id = ? AND variant_id = ?', [campaignId, variantId]))[0].sold_qty);
       await q('UPDATE product_variants SET stock = 50 WHERE variant_id = ?', [variantId]);
       await q('UPDATE campaigns SET end_at = NOW() + INTERVAL 1 DAY WHERE campaign_id = ?', [campaignId]);
+      await resetOffers();
+      await expireBanner();
       await q('UPDATE campaign_items SET sold_qty = 0, max_qty = 3 WHERE campaign_id = ?', [campaignId]);
       await q('DELETE FROM cart_items WHERE user_id = ?', [userId]);
       await q('UPDATE customer_wallet SET balance = 1000 WHERE user_id = ?', [userId]);

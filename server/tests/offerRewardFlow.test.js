@@ -7,18 +7,14 @@ let writes = [];
 let expireOnLock = false;
 let permissions = 'both';
 const active = () => ['flash', 'content'].includes(mode);
-const row = (sql = '') => ({
+const row = () => ({
   product_id: 1, variant_id: 2, category_id: 3, subcategory_id: 4, vendor_id: 5,
   product_name: 'Test product', quantity: 2, cart_item_id: 10, is_discount_eligible: 1,
-  mrp: 250, stock: 20, weight: 1, length: 10, breadth: 10, height: 10,
-  sale_price: sql.includes('COALESCE(csi.offer_price') && active() ? 150 : 200,
-  offer_price: mode === 'flash' ? 150 : null,
-  promotional_offer_price: mode === 'content' ? 150 : null,
-  flash_sale_campaign_id: mode === 'flash' ? 6 : null,
-  promotional_content_id: mode === 'content' ? 7 : null,
+  mrp: 250, stock: 20, weight: 1, length: 10, breadth: 10, height: 10, sale_price: 200,
 });
 async function execute(sql, params = []) {
-  if (sql.includes('FOR UPDATE') && sql.includes('COALESCE(csi.offer_price') && expireOnLock) mode = 'expired';
+  // the order lock re-reads offers with FOR UPDATE; expire the offer at that point
+  if (sql.includes('FOR UPDATE') && sql.includes('FROM campaign_items ci') && expireOnLock) mode = 'expired';
   if (/^\s*(INSERT|UPDATE|DELETE)/.test(sql)) {
     writes.push({ sql, params }); return [{ insertId: 100, affectedRows: 1 }];
   }
@@ -26,12 +22,12 @@ async function execute(sql, params = []) {
   if (sql.includes('FROM vendor_addresses')) return [[{ pincode: '560001' }]];
   if (sql.includes('FROM customer_addresses')) return [[{ zipcode: '560002' }]];
   if (sql.includes('SELECT quantity FROM cart_items')) return [[]];
-  if (sql.includes('AS remaining_qty') && sql.includes('FROM campaign_items')) return [mode === 'flash' ? [{ remaining_qty: 10 }] : []];
-  if (sql.includes('SELECT cpo.offer_price FROM')) return [mode === 'content' ? [{ offer_price: 150 }] : []];
-  if (sql.includes('FROM cart_items') || sql.includes('FROM product_variants')) return [[row(sql)]];
+  if (sql.includes('FROM campaign_items ci') && sql.includes('remaining_qty')) return [mode === 'flash' ? [{ variant_id: 2, campaign_id: 6, offer_price: 150, remaining_qty: 10 }] : []];
+  if (sql.includes('FROM content_effective_product_offers o')) return [mode === 'content' ? [{ variant_id: 2, content_id: 7, offer_price: 150 }] : []];
+  if (sql.includes('FROM cart_items') || sql.includes('FROM product_variants')) return [[row()]];
   throw new Error(`Unexpected SQL: ${sql}`);
 }
-const connection = { execute, beginTransaction: async () => {}, commit: async () => {}, rollback: async () => {}, release() {} };
+const connection = { execute, query: execute, beginTransaction: async () => {}, commit: async () => {}, rollback: async () => {}, release() {} };
 mock('../config/database', { execute, query: execute, getConnection: async () => connection });
 mock('../app/common/models/addressModel', { getAddressById: async () => ({ zipcode: '560002' }) });
 mock('../services/ExpressBees/xpressbees_service', { checkServiceability: async () => ({ status: true, data: [{ id: 1, name: 'Test courier', total_charges: 10, estimated_delivery_days: 3 }] }) });
@@ -50,8 +46,6 @@ mock('../models/rewardModel', { getProductRewards: async (product, variant, cate
 } });
 mock('../app/ecommerce/v1/models/productModel', {
   getProductById: async () => ({ ...row(), variants: [{ variant_id: 2, sale_price: 200, mrp: 250 }] }),
-  getActiveCampaignOfferPrices: async () => new Map(mode === 'flash' ? [[2, 150]] : []),
-  getActiveContentOfferPrices: async () => new Map(mode === 'content' ? [[2, 150]] : []),
 });
 const cart = require('../app/ecommerce/v1/models/cartModel');
 const checkout = require('../app/ecommerce/v1/models/checkoutModel');
@@ -76,7 +70,8 @@ for (const rewardScope of ['product', 'category', 'subcategory']) {
       const earn = isOffer ? 30 : 32;
       const total = price * 2 - redeem + 10;
       const res = response();
-      await productController.getProductById({ params: { productId: 1 }, query: { campaign_id: 6, content_id: 7 } }, res);
+      // no campaign_id/content_id: the server finds the live offer itself
+      await productController.getProductById({ params: { productId: 1 }, query: {} }, res);
       assert.equal(res.code, 200);
       const variant = res.payload.product.variants[0];
       assert.equal(variant.sale_price, price);
@@ -84,8 +79,7 @@ for (const rewardScope of ['product', 'category', 'subcategory']) {
       assert.equal(variant.redemption.enabled, !isOffer);
       await cart.addToCart({ userId: 8, productId: 1, variantId: 2, quantity: 2, campaignId: 6, contentId: 7 });
       const cartWrite = writes.find(write => write.sql?.includes('INSERT INTO cart_items'));
-      assert.equal(cartWrite.params[3], mode === 'flash' ? 6 : null);
-      assert.equal(cartWrite.params[4], mode === 'content' ? 7 : null);
+      assert.deepEqual(cartWrite.params.slice(0, 4), [8, 1, 2, 2]);
       assert.equal((await cart.getUserCart(8)).items[0].sale_price, price);
       const summary = await cart.getCartSummary(8, true);
       assert.equal(summary.cartTotal, price * 2);

@@ -13,6 +13,7 @@ const {
   resolveRedemption,
   calculateRedeemableCoins,
 } = require("../utils/rewardCalculate");
+const { priceLines } = require("../utils/activeOffers");
 const { deliveryChargeForUser } = require("../utils/deliveryFeePolicy");
 
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
@@ -72,9 +73,7 @@ class CheckoutModel {
           ci.product_id,
           ci.variant_id,
           ci.quantity,
-          COALESCE(csi.offer_price, pco.offer_price, v.sale_price) AS sale_price,
-          CASE WHEN csi.offer_price IS NOT NULL THEN csi.campaign_id ELSE NULL END AS flash_sale_campaign_id,
-          CASE WHEN pco.offer_price IS NOT NULL THEN pco.content_id ELSE NULL END AS promotional_content_id,
+          v.sale_price,
           v.mrp,
           v.stock,
           v.weight,
@@ -89,29 +88,13 @@ class CheckoutModel {
         FROM cart_items ci
         JOIN product_variants v ON ci.variant_id = v.variant_id AND ci.product_id = v.product_id
         JOIN eproducts p ON v.product_id = p.product_id
-        LEFT JOIN campaign_items csi
-          ON csi.campaign_id = ci.flash_sale_campaign_id
-          AND csi.product_id = ci.product_id
-          AND csi.variant_id = ci.variant_id
-      AND csi.offer_price > 0 AND csi.max_qty - COALESCE(csi.sold_qty, 0) >= ci.quantity
-          AND EXISTS (
-            SELECT 1 FROM campaigns active_campaign
-            WHERE active_campaign.campaign_id = csi.campaign_id
-              AND active_campaign.campaign_type = 'flash_sale'
-              AND active_campaign.status = 'active'
-              AND NOW() BETWEEN active_campaign.start_at AND active_campaign.end_at
-          )
-        LEFT JOIN content_effective_product_offers pco
-          ON pco.content_id = ci.promotional_content_id AND pco.product_id = ci.product_id AND pco.variant_id = ci.variant_id
-          AND EXISTS (SELECT 1 FROM content_zone_entries cze WHERE cze.content_id = pco.content_id
-            AND cze.module = 'product' AND cze.zone IN ('promotional_banner', 'offers_banner', 'brand_promotional_banner') AND cze.is_published = 1
-            AND (cze.start_at IS NULL OR cze.start_at <= NOW()) AND (cze.end_at IS NULL OR cze.end_at >= NOW()))
 
         WHERE ci.user_id = ?
           AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
         `,
         [userId],
       );
+      await priceLines(cartItems, { conn });
 
       if (!cartItems.length) throw new Error("CART_EMPTY");
 
@@ -350,32 +333,14 @@ class CheckoutModel {
 
       const [lockedCart] = await conn.execute(
         `SELECT ci.variant_id, ci.quantity,
-                COALESCE(csi.offer_price, pco.offer_price, v.sale_price) AS sale_price,
-                CASE WHEN csi.offer_price IS NOT NULL THEN csi.campaign_id ELSE NULL END AS flash_sale_campaign_id,
-                CASE WHEN pco.offer_price IS NOT NULL THEN pco.content_id ELSE NULL END AS promotional_content_id,
+                v.sale_price,
                 v.stock
          FROM cart_items ci
          JOIN product_variants v ON v.variant_id = ci.variant_id
-         LEFT JOIN campaign_items csi
-           ON csi.campaign_id = ci.flash_sale_campaign_id
-           AND csi.product_id = ci.product_id
-           AND csi.variant_id = ci.variant_id
-      AND csi.offer_price > 0 AND csi.max_qty - COALESCE(csi.sold_qty, 0) >= ci.quantity
-           AND EXISTS (
-             SELECT 1 FROM campaigns active_campaign
-             WHERE active_campaign.campaign_id = csi.campaign_id
-               AND active_campaign.campaign_type = 'flash_sale'
-               AND active_campaign.status = 'active'
-               AND NOW() BETWEEN active_campaign.start_at AND active_campaign.end_at
-           )
-         LEFT JOIN content_effective_product_offers pco
-           ON pco.content_id = ci.promotional_content_id AND pco.product_id = ci.product_id AND pco.variant_id = ci.variant_id
-           AND EXISTS (SELECT 1 FROM content_zone_entries cze WHERE cze.content_id = pco.content_id
-             AND cze.module = 'product' AND cze.zone IN ('promotional_banner', 'offers_banner', 'brand_promotional_banner') AND cze.is_published = 1
-             AND (cze.start_at IS NULL OR cze.start_at <= NOW()) AND (cze.end_at IS NULL OR cze.end_at >= NOW()))
          WHERE ci.user_id = ? FOR UPDATE`,
         [userId],
       );
+      await priceLines(lockedCart, { conn, forUpdate: true });
       const cartUnchanged =
         lockedCart.length === cartItems.length &&
         cartItems.every((item) => {
@@ -614,9 +579,7 @@ class CheckoutModel {
       // ===============================
       const pricingSql = `
       SELECT 
-        COALESCE(csi.offer_price, pco.offer_price, v.sale_price) AS sale_price,
-        CASE WHEN csi.offer_price IS NOT NULL THEN csi.campaign_id ELSE NULL END AS flash_sale_campaign_id,
-        CASE WHEN pco.offer_price IS NOT NULL THEN pco.content_id ELSE NULL END AS promotional_content_id,
+        v.sale_price,
         v.mrp,
         v.stock,
         v.weight,
@@ -631,31 +594,15 @@ class CheckoutModel {
 
       FROM product_variants v
       JOIN eproducts p ON v.product_id = p.product_id
-      LEFT JOIN campaign_items csi
-        ON csi.campaign_id = ?
-        AND csi.product_id = ?
-        AND csi.variant_id = v.variant_id
-        AND csi.offer_price > 0 AND csi.max_qty - COALESCE(csi.sold_qty, 0) >= ?
-        AND EXISTS (
-          SELECT 1 FROM campaigns active_campaign
-          WHERE active_campaign.campaign_id = csi.campaign_id
-            AND active_campaign.campaign_type = 'flash_sale'
-            AND active_campaign.status = 'active'
-            AND NOW() BETWEEN active_campaign.start_at AND active_campaign.end_at
-        )
-      LEFT JOIN content_effective_product_offers pco
-        ON pco.content_id = ? AND pco.product_id = ? AND pco.variant_id = v.variant_id
-        AND EXISTS (SELECT 1 FROM content_zone_entries cze WHERE cze.content_id = pco.content_id
-          AND cze.module = 'product' AND cze.zone IN ('promotional_banner', 'offers_banner', 'brand_promotional_banner') AND cze.is_published = 1
-          AND (cze.start_at IS NULL OR cze.start_at <= NOW()) AND (cze.end_at IS NULL OR cze.end_at >= NOW()))
 
       WHERE v.variant_id = ? AND v.product_id = ?
         AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
       `;
-      const pricingParams = [campaignId, productId, quantity, contentId, productId, variantId, productId];
+      const pricingParams = [variantId, productId];
       const [[item]] = await conn.execute(pricingSql, pricingParams);
 
       if (!item) throw new Error("INVALID_VARIANT");
+      await priceLines([Object.assign(item, { variant_id: variantId, quantity })], { conn });
 
 
 
@@ -778,6 +725,12 @@ class CheckoutModel {
         `${pricingSql} FOR UPDATE`,
         pricingParams,
       );
+      if (lockedItem) {
+        await priceLines(
+          [Object.assign(lockedItem, { variant_id: variantId, quantity })],
+          { conn, forUpdate: true },
+        );
+      }
       if (
         !lockedItem ||
         Number(lockedItem.sale_price) !== Number(item.sale_price) ||
@@ -997,9 +950,7 @@ class CheckoutModel {
       v.variant_id,
       v.variant_attributes,
       v.mrp,
-      COALESCE(csi.offer_price, pco.offer_price, v.sale_price) AS sale_price,
-      CASE WHEN csi.offer_price IS NOT NULL THEN csi.campaign_id ELSE NULL END AS flash_sale_campaign_id,
-      CASE WHEN pco.offer_price IS NOT NULL THEN pco.content_id ELSE NULL END AS promotional_content_id,
+      v.sale_price,
       v.stock,
       v.weight,
       v.length,
@@ -1018,23 +969,6 @@ class CheckoutModel {
     FROM cart_items ci
     JOIN eproducts p ON ci.product_id = p.product_id
     JOIN product_variants v ON ci.variant_id = v.variant_id AND ci.product_id = v.product_id
-    LEFT JOIN campaign_items csi
-      ON csi.campaign_id = ci.flash_sale_campaign_id
-      AND csi.product_id = ci.product_id
-      AND csi.variant_id = ci.variant_id
-      AND csi.offer_price > 0 AND csi.max_qty - COALESCE(csi.sold_qty, 0) >= ci.quantity
-      AND EXISTS (
-        SELECT 1 FROM campaigns active_campaign
-        WHERE active_campaign.campaign_id = csi.campaign_id
-          AND active_campaign.campaign_type = 'flash_sale'
-          AND active_campaign.status = 'active'
-          AND NOW() BETWEEN active_campaign.start_at AND active_campaign.end_at
-      )
-    LEFT JOIN content_effective_product_offers pco
-      ON pco.content_id = ci.promotional_content_id AND pco.product_id = ci.product_id AND pco.variant_id = ci.variant_id
-      AND EXISTS (SELECT 1 FROM content_zone_entries cze WHERE cze.content_id = pco.content_id
-        AND cze.module = 'product' AND cze.zone IN ('promotional_banner', 'offers_banner', 'brand_promotional_banner') AND cze.is_published = 1
-        AND (cze.start_at IS NULL OR cze.start_at <= NOW()) AND (cze.end_at IS NULL OR cze.end_at >= NOW()))
 
     WHERE ci.user_id = ?
       AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
@@ -1042,6 +976,7 @@ class CheckoutModel {
     `,
       [userId],
     );
+    await priceLines(rows);
 
     if (!rows.length) throw new Error("CART_EMPTY");
 
@@ -1368,9 +1303,7 @@ class CheckoutModel {
       v.variant_id,
       v.variant_attributes,
       v.mrp,
-      COALESCE(csi.offer_price, pco.offer_price, v.sale_price) AS sale_price,
-      CASE WHEN csi.offer_price IS NOT NULL THEN csi.campaign_id ELSE NULL END AS flash_sale_campaign_id,
-      CASE WHEN pco.offer_price IS NOT NULL THEN pco.content_id ELSE NULL END AS promotional_content_id,
+      v.sale_price,
       v.stock,
       v.weight,
       v.length,
@@ -1388,32 +1321,16 @@ class CheckoutModel {
 
     FROM product_variants v
     JOIN eproducts p ON v.product_id = p.product_id
-    LEFT JOIN campaign_items csi
-      ON csi.campaign_id = ?
-      AND csi.product_id = p.product_id
-      AND csi.variant_id = v.variant_id
-      AND csi.offer_price > 0 AND csi.max_qty - COALESCE(csi.sold_qty, 0) >= ?
-      AND EXISTS (
-        SELECT 1 FROM campaigns active_campaign
-        WHERE active_campaign.campaign_id = csi.campaign_id
-          AND active_campaign.campaign_type = 'flash_sale'
-          AND active_campaign.status = 'active'
-          AND NOW() BETWEEN active_campaign.start_at AND active_campaign.end_at
-      )
-    LEFT JOIN content_effective_product_offers pco
-      ON pco.content_id = ? AND pco.product_id = ? AND pco.variant_id = v.variant_id
-      AND EXISTS (SELECT 1 FROM content_zone_entries cze WHERE cze.content_id = pco.content_id
-        AND cze.module = 'product' AND cze.zone IN ('promotional_banner', 'offers_banner', 'brand_promotional_banner') AND cze.is_published = 1
-        AND (cze.start_at IS NULL OR cze.start_at <= NOW()) AND (cze.end_at IS NULL OR cze.end_at >= NOW()))
 
     WHERE v.variant_id = ? AND p.product_id = ?
       AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
     GROUP BY v.variant_id
     `,
-      [campaignId, quantity, contentId, productId, variantId, productId],
+      [variantId, productId],
     );
 
     if (!row) throw new Error("INVALID_VARIANT");
+    await priceLines([Object.assign(row, { quantity })]);
 
 
 

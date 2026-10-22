@@ -12,6 +12,7 @@ const {
   resolveRedemption,
   calculateRedeemableCoins,
 } = require("../utils/rewardCalculate");
+const { getOfferCandidates, pickOffer } = require("../utils/activeOffers");
 
 async function addWishlistStatus(products, userId) {
   products.forEach((product) => {
@@ -117,10 +118,13 @@ class CampaignController {
   async getCampaignProducts(req, res) {
     try {
       const products = await CampaignModel.getCampaignProducts(req.params.id);
+      const offers = await getOfferCandidates(products.map((product) => product.variant_id));
 
       const data = await Promise.all(
         products.map(async (product) => {
-          const salePrice = Number(product.final_price);
+          // Lowest live offer wins, matching what cart and checkout will charge.
+          const best = pickOffer(offers.get(Number(product.variant_id)));
+          const salePrice = best ? best.price : Number(product.final_price);
           const rules = await RewardModel.getProductRewards(product.product_id, product.variant_id, product.category_id, product.subcategory_id, salePrice, product.is_discount_eligible);
           const earnCoins = calculateReward(salePrice, rules);
           const mrp = Number(product.mrp) || 0;
@@ -139,7 +143,8 @@ class CampaignController {
             originalPrice: mrp ? `₹${mrp.toFixed(2)}` : null,
 
             discount: `${mrpDiscountPercent}%`,
-            campaign_id: product.campaign_id,
+            campaign_id: best ? best.campaignId : product.campaign_id,
+            content_id: best ? best.contentId : null,
 
             reward: {
               enabled: earnCoins > 0,

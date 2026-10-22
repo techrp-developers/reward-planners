@@ -7,6 +7,7 @@ const {
   resolveRedemption,
   calculateRedeemableCoins,
 } = require("../utils/rewardCalculate");
+const { applyActiveOffers } = require("../utils/activeOffers");
 
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
 function getPublicUrl(path, updatedAt) {
@@ -1384,6 +1385,7 @@ class ProductModel {
           created_at: row.created_at,
           avg_rating: Number(row.avg_rating).toFixed(1),
           rating_count: Number(row.total_reviews),
+          variant_id: row.variant_id,
           mrp: row.mrp,
           sale_price: row.sale_price,
           images,
@@ -1770,6 +1772,7 @@ class ProductModel {
         limit,
         offset,
       ]);
+      await applyActiveOffers(rows);
 
       /* ===============================
        CACHE OBJECT (IMPORTANT)
@@ -1827,7 +1830,7 @@ class ProductModel {
           /* ===============================
               REDEMPTION (rule-based)
             =============================== */
-          const redemption = resolveRedemption(salePrice, rules);
+          const redemption = resolveRedemption(salePrice, row.is_offer_price ? [] : rules);
 
           const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
 
@@ -1984,6 +1987,7 @@ class ProductModel {
         limit,
         offset,
       ]);
+      await applyActiveOffers(rows);
 
       /* ===============================
        CACHE
@@ -2036,7 +2040,7 @@ class ProductModel {
           /* ===============================
               REDEMPTION (rule-based)
             =============================== */
-          const redemption = resolveRedemption(salePrice, rules);
+          const redemption = resolveRedemption(salePrice, row.is_offer_price ? [] : rules);
 
           const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
 
@@ -2163,6 +2167,7 @@ class ProductModel {
     `;
 
       const [rows] = await db.execute(query, [search, search, limit, offset]);
+      await applyActiveOffers(rows);
 
       /* ===============================
        CACHE
@@ -2215,7 +2220,7 @@ class ProductModel {
           /* ===============================
                 REDEMPTION (rule-based)
               =============================== */
-          const redemption = resolveRedemption(salePrice, rules);
+          const redemption = resolveRedemption(salePrice, row.is_offer_price ? [] : rules);
 
           const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
 
@@ -2349,6 +2354,7 @@ class ProductModel {
         limit,
         offset,
       ]);
+      await applyActiveOffers(rows);
 
       /* ===============================
        CACHE
@@ -2401,7 +2407,7 @@ class ProductModel {
           /* ===============================
               REDEMPTION (rule-based)
             =============================== */
-          const redemption = resolveRedemption(salePrice, rules);
+          const redemption = resolveRedemption(salePrice, row.is_offer_price ? [] : rules);
 
           const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
 
@@ -2521,6 +2527,7 @@ class ProductModel {
     `;
 
       const [rows] = await db.execute(query, [days, limit, offset]);
+      await applyActiveOffers(rows);
 
       /* ===============================
        CACHE
@@ -2573,7 +2580,7 @@ class ProductModel {
           /* ===============================
               REDEMPTION (rule-based)
             =============================== */
-          const redemption = resolveRedemption(salePrice, rules);
+          const redemption = resolveRedemption(salePrice, row.is_offer_price ? [] : rules);
 
           const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
 
@@ -2697,6 +2704,7 @@ class ProductModel {
     `;
 
       const [rows] = await db.execute(query, [days, search, search, limit, offset]);
+      await applyActiveOffers(rows);
 
       /* ===============================
        CACHE
@@ -2749,7 +2757,7 @@ class ProductModel {
           /* ===============================
               REDEMPTION (rule-based)
             =============================== */
-          const redemption = resolveRedemption(salePrice, rules);
+          const redemption = resolveRedemption(salePrice, row.is_offer_price ? [] : rules);
 
           const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
 
@@ -2868,6 +2876,7 @@ class ProductModel {
     `;
 
       const [rows] = await db.execute(query, [days, search, search, limit, offset]);
+      await applyActiveOffers(rows);
 
       /* ===============================
           CACHE
@@ -2920,7 +2929,7 @@ class ProductModel {
           /* ===============================
             REDEMPTION (rule-based)
           =============================== */
-          const redemption = resolveRedemption(salePrice, rules);
+          const redemption = resolveRedemption(salePrice, row.is_offer_price ? [] : rules);
 
           const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
 
@@ -3026,6 +3035,7 @@ class ProductModel {
     `;
 
       const [rows] = await db.execute(query, [search, search, limit, offset]);
+      await applyActiveOffers(rows);
 
       /* ===============================
        CACHE
@@ -3078,7 +3088,7 @@ class ProductModel {
           /* ===============================
                 REDEMPTION (rule-based)
               =============================== */
-          const redemption = resolveRedemption(salePrice, rules);
+          const redemption = resolveRedemption(salePrice, row.is_offer_price ? [] : rules);
 
           const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
 
