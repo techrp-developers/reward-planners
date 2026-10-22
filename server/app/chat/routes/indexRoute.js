@@ -5,6 +5,7 @@ const imageUpload = require("../middlewares/imageUpload");
 const documentUpload = require("../middlewares/documentUpload");
 
 router.use(auth);
+router.post("/birthday-wishes", controller.sendBirthdayWish);
 router.get("/users", controller.users);
 router.get("/presence", controller.presence);
 router.post("/uploads/images", (req, res, next) => {

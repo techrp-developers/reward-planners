@@ -14,6 +14,36 @@ exports.users = async (req, res) => {
   catch (error) { fail(res, error); }
 };
 
+exports.sendBirthdayWish = async (req, res) => {
+  try {
+    const { employee_id: employeeId, body, client_message_id: clientMessageId } = req.body || {};
+    if (!((typeof employeeId === "number" || (typeof employeeId === "string" && /^\d+$/.test(employeeId)))
+      && Number.isSafeInteger(Number(employeeId)) && Number(employeeId) > 0)) {
+      return res.status(422).json({ success: false, message: "A valid employee_id is required" });
+    }
+    if (body !== undefined && (typeof body !== "string" || !body.trim() || body.trim().length > 5000)) {
+      return res.status(422).json({ success: false, message: "Birthday wishes must contain 1-5000 characters" });
+    }
+    if (clientMessageId !== undefined && (typeof clientMessageId !== "string" || !clientMessageId.trim() || clientMessageId.length > 64)) {
+      return res.status(422).json({ success: false, message: "client_message_id must contain 1-64 characters" });
+    }
+    const recipient = await Chat.birthdayRecipient(req.user.user_id, Number(employeeId));
+    const conversationId = await Chat.createConversation(req.user.user_id, {
+      type: "direct", memberIds: [Number(recipient.user_id)],
+    });
+    // Namespace retry keys by recipient so a reused mobile key cannot resolve to another chat.
+    const retryKey = clientMessageId === undefined ? null : crypto.createHash("sha256")
+      .update(JSON.stringify(["birthday-wish", Number(recipient.user_id), clientMessageId])).digest("hex");
+    const message = await Chat.sendMessage(req.user.user_id, conversationId, {
+      messageType: "text", body: body === undefined ? "Happy birthday! Wishing you a wonderful day and a fantastic year ahead!" : body.trim(),
+      clientMessageId: retryKey,
+    });
+    req.app.locals.chatSocket?.addUsersToConversation([req.user.user_id, recipient.user_id], conversationId);
+    req.app.locals.chatSocket?.broadcastConversation(conversationId, { type: "message:new", data: message });
+    res.status(201).json({ success: true, data: message });
+  } catch (error) { fail(res, error); }
+};
+
 exports.presence = async (req, res) => {
   try {
     const userIds = ids(String(req.query.user_ids || "").split(","));
