@@ -20,6 +20,21 @@ const razorpay = new Razorpay({
   key_secret: process.env.RAZOR_SECRET_KEY,
 });
 
+// Courier errors arrive as strings, { message }, { error: {...} } or arrays;
+// always reduce them to readable text so the client never gets an object.
+function getCourierErrorMessage(result) {
+  const pick = (value) => {
+    if (!value) return null;
+    if (typeof value === "string") return value;
+    if (Array.isArray(value)) return pick(value[0]);
+    if (typeof value === "object") {
+      return pick(value.message) || pick(value.error) || pick(value.data) || JSON.stringify(value);
+    }
+    return String(value);
+  };
+  return pick(result?.error) || pick(result?.message) || pick(result?.data) || "XpressBees rejected the cancellation";
+}
+
 function getServiceCancellationError(error) {
   const errors = {
     CANCELLATION_REQUEST_NOT_FOUND: [404, "Cancellation request not found"],
@@ -500,14 +515,12 @@ class OrderController {
           await xpressService.cancelShipmentExpressBees(
             candidate.awb_number,
           );
-        if (!courierResult?.status) {
-          const reason =
-            courierResult?.error?.message ||
-            courierResult?.error ||
-            courierResult?.message ||
-            "XpressBees rejected the cancellation";
+        const reason = getCourierErrorMessage(courierResult);
+        // A shipment already cancelled at XpressBees is the outcome we need,
+        // so it must not block the refund forever.
+        if (!courierResult?.status && !/already\s+cancel/i.test(reason)) {
           const error = new Error("COURIER_CANCELLATION_FAILED");
-          error.cause = reason;
+          error.cause = `XpressBees: ${reason}`;
           throw error;
         }
         courierCancellationConfirmed = true;
@@ -583,7 +596,7 @@ class OrderController {
         },
       });
     } catch (error) {
-      await conn.rollback();
+      await conn.rollback().catch(() => {});
       const errors = {
         CANCELLATION_REQUEST_NOT_FOUND: [404, "Item cancellation request not found"],
         INVALID_CANCELLATION_STATE: [409, "Cancellation request was already decided"],
@@ -604,16 +617,15 @@ class OrderController {
           "XpressBees cancellation must complete before approving the refund",
         ],
         COURIER_CANCELLATION_FAILED: [
-          409,
-          error.cause ||
-            "XpressBees could not cancel this shipment; no refund was started",
+          502,
+          `${error.cause || "XpressBees could not cancel this shipment"}. No refund was started.`,
         ],
       };
       const [status, message] = errors[error.message] || [
         500,
         "Unable to approve item cancellation",
       ];
-      if (status === 500) console.error("Approve item cancellation error:", error);
+      if (status >= 500) console.error("Approve item cancellation error:", error);
       return res.status(status).json({ success: false, message });
     } finally {
       conn.release();
@@ -644,16 +656,17 @@ class OrderController {
       );
       return res.json({ success: true, message: "Item cancellation rejected" });
     } catch (error) {
-      await conn.rollback();
-      const status =
-        error.message === "CANCELLATION_REQUEST_NOT_FOUND" ? 404 : 409;
-      return res.status(status).json({
-        success: false,
-        message:
-          status === 404
-            ? "Item cancellation request not found"
-            : "Cancellation request was already decided",
-      });
+      await conn.rollback().catch(() => {});
+      const errors = {
+        CANCELLATION_REQUEST_NOT_FOUND: [404, "Item cancellation request not found"],
+        INVALID_CANCELLATION_STATE: [409, "Cancellation request was already decided"],
+      };
+      const [status, message] = errors[error.message] || [
+        500,
+        "Unable to reject item cancellation",
+      ];
+      if (status === 500) console.error("Reject item cancellation error:", error);
+      return res.status(status).json({ success: false, message });
     } finally {
       conn.release();
     }

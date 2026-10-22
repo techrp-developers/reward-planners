@@ -17,21 +17,36 @@ interface DetailData {
   refunds: { refund_amount: number; refund_method: string; status: string }[];
 }
 
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (!axios.isAxiosError<{ message?: unknown }>(error)) {
+    return error instanceof Error && error.message ? error.message : fallback;
+  }
+  if (!error.response) return "Unable to reach the server. Check your connection and try again.";
+  const message = error.response.data?.message;
+  if (typeof message === "string" && message.trim()) return message;
+  if (message) return JSON.stringify(message);
+  return `${fallback} (HTTP ${error.response.status})`;
+};
+
 export default function CancellationDetail() {
   const { orderId: orderItemId } = useParams();
   const navigate = useNavigate();
   const [data, setData] = useState<DetailData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
   const load = useCallback(async () => {
     if (!orderItemId) return;
     try {
       setLoading(true);
+      setLoadError(null);
       const response = await api.get<{ data: DetailData }>(
         `/order/item-cancellation-request/${orderItemId}`,
       );
       setData(response.data.data);
+    } catch (error: unknown) {
+      setLoadError(getErrorMessage(error, "Unable to load this cancellation request."));
     } finally {
       setLoading(false);
     }
@@ -58,10 +73,13 @@ export default function CancellationDetail() {
       await Swal.fire({ icon: "success", title: `Cancellation ${approving ? "approved" : "rejected"}`, timer: 1500, showConfirmButton: false });
       await load();
     } catch (error: unknown) {
-      const message = axios.isAxiosError<{ message?: string }>(error)
-        ? error.response?.data?.message
-        : undefined;
-      await Swal.fire({ icon: "error", title: "Action failed", text: message || "Unable to process this request." });
+      console.error(`Item cancellation ${decision} failed`, error);
+      await Swal.fire({
+        icon: "error",
+        title: `Could not ${decision} cancellation`,
+        text: getErrorMessage(error, `Unable to ${decision} this cancellation.`),
+      });
+      await load();
     } finally {
       setActionLoading(false);
     }
@@ -71,7 +89,7 @@ export default function CancellationDetail() {
   const card = "mb-5 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm";
 
   if (loading) return <div className="p-8 text-gray-500">Loading request…</div>;
-  if (!data) return <div className="p-8 text-red-600">Request not found.</div>;
+  if (!data) return <div className="p-8 text-red-600">{loadError || "Request not found."}</div>;
   const request = data.request;
   const money = data.refunds.filter((r) => r.refund_method === "original").reduce((sum, r) => sum + Number(r.refund_amount), 0);
   const wallet = data.refunds.filter((r) => r.refund_method === "wallet").reduce((sum, r) => sum + Number(r.refund_amount), 0);
