@@ -4,10 +4,9 @@ const ServiceOrderModel = require("../models/serviceOrderModel");
 const crypto = require("crypto");
 const { allocateRedeemedCoins } = require("../utils/serviceRewards");
 const {
-  toContentId,
-  getLiveServiceOfferPrice,
+  getBestServiceOffer,
   serviceOfferRewards,
-  getLiveBundleOfferTotal,
+  getBestBundleOffer,
   splitBundleOffer,
 } = require("../utils/serviceOffers");
 const {
@@ -119,19 +118,18 @@ async function applyRedemptionPreview(userId, items, requestedCoins, summary) {
   };
 }
 
-// A banner offer replaces the full-bundle price only (fixed bundles, or custom
-// bundles with every item selected). Returns the per-item split, or null.
-async function resolveBundleOffer(rawContentId, bundleId, bundleType, isFullBundleSelected, items, conn = db) {
+// The cheapest live banner offer replaces the full-bundle price only (fixed
+// bundles, or custom bundles with every item selected). Returns the split, or null.
+async function resolveBundleOffer(bundleId, bundleType, isFullBundleSelected, items, conn = db) {
   if (bundleType !== "fixed" && !isFullBundleSelected) return null;
-  const contentId = toContentId(rawContentId);
   const prices = items.map((item) => Number(item.bundle_price));
   const bundleTotal = prices.reduce((sum, price) => sum + price, 0);
-  const offerTotal = await getLiveBundleOfferTotal(contentId, bundleId, bundleTotal, conn);
-  if (offerTotal === null) return null;
-  const parts = splitBundleOffer(prices, offerTotal);
+  const offer = await getBestBundleOffer(bundleId, bundleTotal, conn);
+  if (!offer) return null;
+  const parts = splitBundleOffer(prices, offer.total);
   return {
-    contentId,
-    total: offerTotal,
+    contentId: offer.contentId,
+    total: offer.total,
     prices: new Map(items.map((item, index) => [Number(item.id), parts[index]])),
   };
 }
@@ -160,11 +158,17 @@ class ServiceCheckoutController {
       }
 
       const cart = await CartModel.getOrCreateCart(userId);
-      const cartData = await CartModel.getCart(cart.id);
+
+      // Priced inside the transaction so an offer ending mid-checkout charges
+      // the normal price rather than a stale cart price.
+      conn = await db.getConnection();
+      await conn.beginTransaction();
+      const cartData = await CartModel.getCart(cart.id, conn);
 
       const { bundles = [], individual_items = [] } = cartData;
 
       if (!bundles.length && !individual_items.length) {
+        await conn.rollback();
         return res.status(400).json({
           success: false,
           message: "Cart is empty",
@@ -173,9 +177,6 @@ class ServiceCheckoutController {
 
       const createdOrders = [];
       const parentOrderId = crypto.randomUUID();
-
-      conn = await db.getConnection();
-      await conn.beginTransaction();
       const checkoutItems = [
         ...individual_items,
         ...bundles.flatMap((bundle) => bundle.items),
@@ -325,8 +326,8 @@ class ServiceCheckoutController {
       await conn.beginTransaction();
       // Resolved inside the transaction so an offer that ends mid-checkout
       // charges the normal price rather than a stale preview price.
-      const contentId = toContentId(req.body?.content_id);
-      const offerPrice = await getLiveServiceOfferPrice(contentId, variant_id, conn);
+      const offer = await getBestServiceOffer(variant_id, conn);
+      const offerPrice = offer ? offer.price : null;
       const price = offerPrice ?? Number(variant.price);
       const rewards = serviceOfferRewards(price, variant, offerPrice !== null);
       const rewardItem = { price, rewards };
@@ -347,7 +348,7 @@ class ServiceCheckoutController {
         price,
         parent_order_id: parentOrderId,
         bundle_id: null,
-        promotional_content_id: offerPrice === null ? null : contentId,
+        promotional_content_id: offer ? offer.contentId : null,
         status: "pending_payment",
         reward_coins_earned: rewards.earn_coins,
         reward_coins_used: redemption.redeem_coins,
@@ -498,7 +499,7 @@ class ServiceCheckoutController {
       conn = await db.getConnection();
       await conn.beginTransaction();
       const offer = await resolveBundleOffer(
-        req.body?.content_id, bundle_id, bundle.type, isFullBundleSelected, items, conn,
+        bundle_id, bundle.type, isFullBundleSelected, items, conn,
       );
       const walletBalance = await getWalletBalance(conn, userId, true);
       let redeemRemaining = Math.max(0, Math.floor(Number(req.body?.redeem_coins || 0)));
@@ -703,8 +704,8 @@ class ServiceCheckoutController {
 
       // base variant data
       const firstRow = rows[0];
-      const contentId = toContentId(req.query?.content_id);
-      const offerPrice = await getLiveServiceOfferPrice(contentId, variant_id);
+      const offer = await getBestServiceOffer(variant_id);
+      const offerPrice = offer ? offer.price : null;
       const price = offerPrice ?? parseFloat(firstRow.price);
 
       const documents = [];
@@ -737,7 +738,7 @@ class ServiceCheckoutController {
           price,
           regular_price: parseFloat(firstRow.price),
           is_offer: offerPrice !== null,
-          content_id: offerPrice === null ? null : contentId,
+          content_id: offer ? offer.contentId : null,
           quantity: 1,
 
           rewards: serviceOfferRewards(price, firstRow, offerPrice !== null),
@@ -874,7 +875,7 @@ class ServiceCheckoutController {
       const isFullBundleSelected = selectedSet.size === items.length;
 
       const offer = await resolveBundleOffer(
-        req.query?.content_id, bundle_id, bundle.type, isFullBundleSelected, items,
+        bundle_id, bundle.type, isFullBundleSelected, items,
       );
 
       // 5 Build selected items

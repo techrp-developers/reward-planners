@@ -1,8 +1,8 @@
 const db = require("../../../../config/database");
 const {
-  LIVE_SERVICE_OFFER_SQL,
+  getBestServiceOffers,
   serviceOfferRewards,
-  getLiveBundleOfferTotal,
+  getBestBundleOffer,
   splitBundleOffer,
 } = require("../utils/serviceOffers");
 
@@ -71,17 +71,15 @@ class ServiceCartModel {
     );
   }
 
-  // get cart items
-  async getCart(cartId) {
-    const [rows] = await db.execute(
+  // get cart items, priced live (pass the checkout transaction's connection)
+  async getCart(cartId, conn = db) {
+    const [rows] = await conn.execute(
       `
       SELECT 
         ci.id,
         ci.quantity,
         ci.price,
         ci.bundle_id,
-        ci.promotional_content_id,
-        live_offer.offer_price AS promotional_offer_price,
 
         bi.id AS bundle_item_id,
         bi.price AS bundle_price,
@@ -123,10 +121,6 @@ class ServiceCartModel {
         AND bi.service_id = ci.service_id
         AND bi.variant_id = ci.variant_id
       LEFT JOIN service_documents sd ON sd.service_id = s.id
-      LEFT JOIN (${LIVE_SERVICE_OFFER_SQL}) live_offer
-        ON ci.bundle_id IS NULL
-        AND live_offer.content_id = ci.promotional_content_id
-        AND live_offer.variant_id = ci.variant_id
 
       WHERE ci.cart_id = ?
       `,
@@ -135,29 +129,27 @@ class ServiceCartModel {
 
     const itemMap = {};
     const bundles = {};
+    const offers = await getBestServiceOffers(
+      rows.filter((row) => !row.bundle_id).map((row) => row.variant_id),
+      conn,
+    );
 
     rows.forEach((item) => {
       const itemId = item.id;
 
       // build item
       if (!itemMap[itemId]) {
-        // A banner line is priced live: the offer while the banner runs, the
-        // normal variant price once it ends. Other lines keep the cart price.
-        const isOffer = item.promotional_offer_price != null;
-        const price = isOffer
-          ? Number(item.promotional_offer_price)
-          : item.promotional_content_id
-            ? Number(item.individual_price)
-            : Number(item.price);
+        // Standalone lines are priced live: the cheapest live banner offer,
+        // otherwise the current variant price. Bundle pricing is set below.
+        const offer = item.bundle_id ? null : offers.get(Number(item.variant_id));
+        const isOffer = Boolean(offer);
+        const price = isOffer ? offer.price : Number(item.individual_price);
         itemMap[itemId] = {
           id: item.id,
           quantity: item.quantity,
           price,
           is_offer: isOffer,
-          promotional_content_id: isOffer ? Number(item.promotional_content_id) : null,
-          bundle_content_id: item.bundle_id && item.promotional_content_id
-            ? Number(item.promotional_content_id)
-            : null,
+          promotional_content_id: isOffer ? offer.contentId : null,
           regular_price: Number(item.individual_price),
           bundle_id: item.bundle_id,
           bundle_item_id: item.bundle_item_id,
@@ -183,7 +175,7 @@ class ServiceCartModel {
           earn_reward_type: item.earn_reward_type,
           earn_reward_value: Number(item.earn_reward_value || 0),
           max_earn_reward: item.max_earn_reward === null ? null : Number(item.max_earn_reward),
-          can_redeem_reward: Number(item.can_redeem_reward),
+          can_redeem_reward: isOffer && !item.bundle_id ? 0 : Number(item.can_redeem_reward),
           redemption_type: item.redemption_type,
           redemption_value: Number(item.redemption_value || 0),
           max_redemption_amount: item.max_redemption_amount === null ? null : Number(item.max_redemption_amount),
@@ -247,19 +239,19 @@ class ServiceCartModel {
       bundle.is_bundle_applied = shouldApplyBundlePrice;
       bundle.bundle_total = 0;
 
-      // A banner bundle offer replaces the full-bundle price while it is live.
-      const contentId = bundle.items.find((item) => item.bundle_content_id)?.bundle_content_id;
+      // The cheapest live banner bundle offer replaces the full-bundle price.
       const prices = bundle.items.map((item) => Number(item.bundle_price || 0));
-      const offerTotal = shouldApplyBundlePrice && contentId
-        ? await getLiveBundleOfferTotal(
-          contentId,
+      const bundleOffer = shouldApplyBundlePrice
+        ? await getBestBundleOffer(
           bundle.bundle_id,
           prices.reduce((sum, price) => sum + price, 0),
+          conn,
         )
         : null;
+      const offerTotal = bundleOffer ? bundleOffer.total : null;
       const offerParts = offerTotal === null ? [] : splitBundleOffer(prices, offerTotal);
       bundle.is_offer = offerTotal !== null;
-      bundle.content_id = offerTotal === null ? null : contentId;
+      bundle.content_id = bundleOffer ? bundleOffer.contentId : null;
       bundle.regular_bundle_total = prices.reduce((sum, price) => sum + price, 0);
 
       bundle.items.forEach((item, index) => {
@@ -272,6 +264,7 @@ class ServiceCartModel {
         item.price = Number(price);
         item.promotional_content_id = bundle.content_id;
         item.rewards = serviceOfferRewards(item.price, item, offerTotal !== null);
+        if (offerTotal !== null) item.can_redeem_reward = 0;
         bundle.bundle_total += item.price * (item.quantity || 1);
       });
     }

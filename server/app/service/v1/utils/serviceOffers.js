@@ -18,26 +18,61 @@ function toContentId(value) {
   return Number.isInteger(id) && id > 0 ? id : null;
 }
 
-/** Map of variant_id -> live offer price for one service on one banner. */
-async function getLiveServiceOfferPrices(contentId, serviceId, conn = db) {
-  const id = toContentId(contentId);
-  if (!id) return new Map();
-  const [rows] = await conn.execute(
-    `${LIVE_SERVICE_OFFER_SQL} AND cso.content_id = ? AND cso.service_id = ?`,
-    [id, Number(serviceId)],
+const positiveIds = (ids) => [...new Set(ids.map(Number).filter((id) => Number.isInteger(id) && id > 0))];
+
+// Offers apply wherever the service is shown, not only when the app arrives
+// from the banner: the lowest live offer wins, matching ecommerce.
+
+/** Map of variant_id -> { price, contentId } for the cheapest live banner offer. */
+async function getBestServiceOffers(variantIds, conn = db) {
+  const ids = positiveIds(variantIds);
+  const best = new Map();
+  if (!ids.length) return best;
+  const [rows] = await conn.query(
+    `${LIVE_SERVICE_OFFER_SQL} AND cso.variant_id IN (?) AND cso.offer_price > 0
+     ORDER BY cso.offer_price ASC, cso.content_id ASC`,
+    [ids],
   );
-  return new Map(rows.map((row) => [Number(row.variant_id), Number(row.offer_price)]));
+  for (const row of rows) {
+    if (!best.has(Number(row.variant_id))) {
+      best.set(Number(row.variant_id), { price: Number(row.offer_price), contentId: Number(row.content_id) });
+    }
+  }
+  return best;
 }
 
-/** Live offer price for one variant, or null when the banner does not price it. */
-async function getLiveServiceOfferPrice(contentId, variantId, conn = db) {
-  const id = toContentId(contentId);
-  if (!id) return null;
-  const [[row]] = await conn.execute(
-    `${LIVE_SERVICE_OFFER_SQL} AND cso.content_id = ? AND cso.variant_id = ?`,
-    [id, Number(variantId)],
+async function getBestServiceOffer(variantId, conn = db) {
+  return (await getBestServiceOffers([variantId], conn)).get(Number(variantId)) || null;
+}
+
+/**
+ * Adds the lowest live offer across each service's variants to listing rows
+ * ("from ₹x"): offer_price, regular_price (that variant's normal price), content_id.
+ */
+async function attachServiceOffers(services, idKey = "id", conn = db) {
+  const list = (services || []).filter(Boolean);
+  const ids = positiveIds(list.map((service) => service[idKey]));
+  if (!ids.length) return services;
+  const [rows] = await conn.query(
+    `SELECT live.service_id, live.content_id, live.offer_price, v.price AS regular_price
+     FROM (${LIVE_SERVICE_OFFER_SQL}) live
+     JOIN service_variants v ON v.id = live.variant_id
+     WHERE live.service_id IN (?) AND live.offer_price > 0
+     ORDER BY live.offer_price ASC, live.content_id ASC`,
+    [ids],
   );
-  return row ? Number(row.offer_price) : null;
+  const best = new Map();
+  for (const row of rows) {
+    if (!best.has(Number(row.service_id))) best.set(Number(row.service_id), row);
+  }
+  for (const service of list) {
+    const offer = best.get(Number(service[idKey]));
+    service.offer_price = offer ? Number(offer.offer_price) : null;
+    service.regular_price = offer ? Number(offer.regular_price) : null;
+    service.content_id = offer ? Number(offer.content_id) : null;
+    service.is_offer = Boolean(offer);
+  }
+  return services;
 }
 
 // Offer prices bypass the variant price. Coins are still earned on the offer
@@ -52,19 +87,17 @@ function serviceOfferRewards(price, variant, isOffer) {
 const roundMoney = (value) => Math.round(Number(value) * 100) / 100;
 
 /**
- * Live offer total for a whole bundle on a banner, or null. An individual
- * bundle price wins; otherwise the banner's shared discount is applied to the
- * bundle total (a fixed discount comes off once per bundle).
+ * Cheapest live banner offer for a whole bundle: { total, contentId } or null.
+ * Per banner, an individual bundle price wins; otherwise the banner's shared
+ * discount is applied to the bundle total (a fixed discount comes off once).
  */
-async function getLiveBundleOfferTotal(contentId, bundleId, bundleTotal, conn = db) {
-  const id = toContentId(contentId);
-  if (!id || !(Number(bundleTotal) > 0)) return null;
-  const [[row]] = await conn.execute(
-    `SELECT e.discount_type, e.discount_value, o.offer_price
+async function getBestBundleOffer(bundleId, bundleTotal, conn = db) {
+  if (!(Number(bundleTotal) > 0)) return null;
+  const [rows] = await conn.execute(
+    `SELECT e.content_id, e.discount_type, e.discount_value, o.offer_price
      FROM content_zone_entries e
      LEFT JOIN content_bundle_offers o ON o.content_id = e.content_id AND o.bundle_id = ?
-     WHERE e.content_id = ?
-       AND e.module = 'service'
+     WHERE e.module = 'service'
        AND e.zone IN ('promotional_banner', 'offers_banner', 'brand_promotional_banner')
        AND e.is_published = 1
        AND (e.start_at IS NULL OR e.start_at <= NOW())
@@ -73,16 +106,23 @@ async function getLiveBundleOfferTotal(contentId, bundleId, bundleTotal, conn = 
          OR EXISTS (SELECT 1 FROM content_zone_entry_images i
                     WHERE i.content_id = e.content_id AND i.is_active = 1
                       AND i.target_type = 'service_bundle' AND i.target_id = ?))`,
-    [Number(bundleId), id, Number(bundleId), Number(bundleId)],
+    [Number(bundleId), Number(bundleId), Number(bundleId)],
   );
-  if (!row) return null;
-  if (row.offer_price != null) return Number(row.offer_price);
   const total = Number(bundleTotal);
-  const value = Number(row.discount_value || 0);
-  if (!(value > 0)) return null;
-  if (row.discount_type === "percentage") return Math.max(0.01, roundMoney(total * (1 - value / 100)));
-  if (row.discount_type === "fixed") return Math.max(0.01, roundMoney(total - value));
-  return null;
+  let best = null;
+  for (const row of rows) {
+    const value = Number(row.discount_value || 0);
+    let offerTotal = null;
+    if (row.offer_price != null) offerTotal = Number(row.offer_price);
+    else if (value > 0 && row.discount_type === "percentage") offerTotal = Math.max(0.01, roundMoney(total * (1 - value / 100)));
+    else if (value > 0 && row.discount_type === "fixed") offerTotal = Math.max(0.01, roundMoney(total - value));
+    if (offerTotal === null || !(offerTotal > 0)) continue;
+    const contentId = Number(row.content_id);
+    if (!best || offerTotal < best.total || (offerTotal === best.total && contentId < best.contentId)) {
+      best = { total: offerTotal, contentId };
+    }
+  }
+  return best;
 }
 
 /**
@@ -104,9 +144,10 @@ function splitBundleOffer(prices, offerTotal) {
 module.exports = {
   LIVE_SERVICE_OFFER_SQL,
   toContentId,
-  getLiveServiceOfferPrices,
-  getLiveServiceOfferPrice,
+  getBestServiceOffers,
+  getBestServiceOffer,
+  attachServiceOffers,
   serviceOfferRewards,
-  getLiveBundleOfferTotal,
+  getBestBundleOffer,
   splitBundleOffer,
 };

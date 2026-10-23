@@ -8,9 +8,9 @@ const sharp = require("sharp");
 const { uploadToR2 } = require("../../../../utils/r2upload");
 const { deleteFromR2 } = require("../../../../utils/r2delete");
 const {
-  toContentId,
-  getLiveBundleOfferTotal,
+  getBestBundleOffer,
   splitBundleOffer,
+  serviceOfferRewards,
 } = require("../utils/serviceOffers");
 
 const roundTo2 = (value) => Math.round(Number(value) * 100) / 100;
@@ -131,8 +131,8 @@ class ServiceBundleController {
 
       // A banner offer replaces the full-bundle price (fixed bundles, or custom
       // bundles with every item selected); partial selections pay normal prices.
-      const contentId = toContentId(req.query?.content_id);
-      const offerTotal = await getLiveBundleOfferTotal(contentId, id, bundle_total);
+      const offer = await getBestBundleOffer(id, bundle_total);
+      const offerTotal = offer ? offer.total : null;
       const offerParts = offerTotal === null
         ? []
         : splitBundleOffer(items.map((i) => i.bundle_price), offerTotal);
@@ -143,6 +143,12 @@ class ServiceBundleController {
         individual_price: Number(i.price),
         bundle_price: Number(i.bundle_price),
         offer_bundle_price: offerTotal === null ? null : offerParts[index],
+        can_redeem_reward: offerTotal === null ? Number(i.can_redeem_reward) : 0,
+        rewards: serviceOfferRewards(
+          offerTotal === null ? Number(i.bundle_price) : offerParts[index],
+          i,
+          offerTotal !== null,
+        ),
       }));
 
       res.json({
@@ -160,7 +166,7 @@ class ServiceBundleController {
             savings: individual_total - bundle_total,
             offer_price: offerTotal,
             offer_savings: offerTotal === null ? null : roundTo2(individual_total - offerTotal),
-            content_id: offerTotal === null ? null : contentId,
+            content_id: offer ? offer.contentId : null,
           },
         },
       });

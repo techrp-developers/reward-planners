@@ -16,8 +16,8 @@ const ServiceDocumentModel = require("../models/serviceDocumentModel");
 const ServiceFormModel = require("../models/serviceFormModel");
 const ServiceSectionModel = require("../models/serviceSectionModel");
 const {
-  toContentId,
-  getLiveServiceOfferPrices,
+  attachServiceOffers,
+  getBestServiceOffers,
   serviceOfferRewards,
 } = require("../utils/serviceOffers");
 const { UPLOAD_BASE } = require("../../../../config/path");
@@ -106,6 +106,7 @@ class ServiceController {
         limit,
         offset,
       });
+      await attachServiceOffers(services);
 
       res.json({
         success: true,
@@ -401,7 +402,16 @@ class ServiceController {
         const hasVariants = variants && variants.length > 0;
 
         if (hasVariants) {
+          const offers = await getBestServiceOffers(variants.map((v) => v.id));
           for (let v of variants) {
+            const offer = offers.get(Number(v.id));
+            v.regular_price = Number(v.price);
+            v.offer_price = offer ? offer.price : null;
+            v.content_id = offer ? offer.contentId : null;
+            if (offer) v.price = offer.price;
+            v.rewards = serviceOfferRewards(v.price, v, Boolean(offer));
+            if (offer) v.can_redeem_reward = 0;
+
             const sections = await ServiceVariantModel.getSectionsByVariant(
               v.id,
             );
@@ -447,6 +457,7 @@ class ServiceController {
 
       // ================= NORMAL FLOW =================
       const services = await ServiceModel.findByCategoryId(categoryId);
+      await attachServiceOffers(services);
 
       return res.json({
         success: true,
@@ -472,16 +483,17 @@ class ServiceController {
       const service = await ServiceModel.findById(id);
 
       const variants = await ServiceVariantModel.getVariantsByService(id);
-      const contentId = toContentId(req.query?.content_id);
-      const offerPrices = await getLiveServiceOfferPrices(contentId, id);
+      const offers = await getBestServiceOffers(variants.map((v) => v.id));
 
       for (let v of variants) {
-        const offerPrice = offerPrices.get(Number(v.id)) ?? null;
+        const offer = offers.get(Number(v.id));
+        const offerPrice = offer ? offer.price : null;
         v.regular_price = Number(v.price);
         v.offer_price = offerPrice;
-        v.content_id = offerPrice === null ? null : contentId;
+        v.content_id = offer ? offer.contentId : null;
         if (offerPrice !== null) v.price = offerPrice;
         v.rewards = serviceOfferRewards(v.price, v, offerPrice !== null);
+        if (offerPrice !== null) v.can_redeem_reward = 0;
         const sections = await ServiceVariantModel.getSectionsByVariant(v.id);
 
         const formatted = formatVariantSections(sections);
@@ -892,6 +904,10 @@ class ServiceController {
   async getHomeSections(req, res) {
     try {
       const sections = await ServiceModel.getHomeSections();
+      await attachServiceOffers(
+        sections.flatMap((section) => section.items || []),
+        "service_id",
+      );
 
       res.json({
         success: true,
@@ -917,6 +933,7 @@ class ServiceController {
       }
 
       const services = await ServiceModel.getRelatedServices(serviceId);
+      await attachServiceOffers(services, "service_id");
 
       res.json({
         success: true,
@@ -1208,6 +1225,7 @@ class ServiceController {
       const limit = positiveInt(req.query.limit, 10, 50);
 
       const services = await ServiceModel.getTopPicks(limit);
+      await attachServiceOffers(services, "service_id");
 
       res.json({
         success: true,
@@ -1236,6 +1254,7 @@ class ServiceController {
       }
 
       const services = await ServiceModel.getValueAddedServices(serviceId);
+      await attachServiceOffers(services, "service_id");
 
       res.json({
         success: true,
