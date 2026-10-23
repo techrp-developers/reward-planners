@@ -271,7 +271,7 @@ export default function PurchaseHistoryPage() {
                 <th className="px-4 py-3 text-right">Qty</th>
                 <th className="px-4 py-3 text-right">Unit Price</th>
                 <th className="px-4 py-3 text-right">Points Redeemed</th>
-                <th className="px-4 py-3 text-right">Amount Paid</th>
+                <th className="px-4 py-3 text-right">Net Invoiced</th>
                 <th className="px-4 py-3">Invoice #</th>
               </tr>
             </thead>

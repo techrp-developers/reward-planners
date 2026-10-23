@@ -9,30 +9,22 @@ const {
   retryPendingRefunds,
 } = require("../../app/busboooking/services/refundService");
 
-let running = false;
-
-async function runStep(name, step) {
-  try {
-    const count = await step();
-    if (count) console.log(`[BusBooking][cron] ${name}: ${count}`);
-  } catch (error) {
-    console.error(`[BusBooking][cron] ${name} failed`, error.message);
-  }
-}
-
-// Every minute: seat holds are short, so a paid order the app abandoned has
-// to be booked (or refunded) well inside the provider's hold window.
-cron.schedule("* * * * *", async () => {
-  if (running) return;
-  running = true;
-
-  try {
-    await runStep("expired seat holds", expireStaleBlocks);
-    await runStep("abandoned paid orders booked", bookAbandonedPaidOrders);
-    await runStep("stuck bookings escalated", escalateStuckBookings);
-    await runStep("refunds retried", retryPendingRefunds);
-    await cronPing("busbooking_reconcile_cron");
-  } finally {
-    running = false;
-  }
+const { createReconcileRunner } = require('./reconcileRunner');
+const run = createReconcileRunner({
+  steps: [
+    ['expired seat holds', expireStaleBlocks],
+    ['abandoned paid orders booked', bookAbandonedPaidOrders],
+    ['stuck bookings escalated', escalateStuckBookings],
+    ['refunds retried', retryPendingRefunds],
+  ],
+  ping: cronPing,
 });
+
+// Keep the existing minute cadence; never overlap slow provider/refund runs.
+const task = cron.schedule('* * * * *', run, {
+  name: 'busbooking-reconcile', noOverlap: true,
+});
+task.on('execution:missed', context => {
+  console.warn('[BusBooking][cron] Missed scheduled tick', {scheduledAt: context.date});
+});
+module.exports = { task, run };

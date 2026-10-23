@@ -16,28 +16,11 @@ const swaggerSpec = require("./config/swagger");
 // setupTodoReminderDB();
 
 require("dotenv").config();
-require("./app/busboooking/config/productionSafety")
-  .assertProductionConfiguration();
-if (String(process.env.RUN_SCHEDULED_JOBS ?? "true").toLowerCase() === "true") {
-  require("./services/ExpressBees/cron/shipmentCron");
-  require("./services/Status/statusCleanupCron");
-}
-require("./services/Bbps/retryCron");
-require("./services/Bbps/refundCron");
-require("./services/Razorpay/retryCron");
-require("./services/Maintenance/maintenanceCron");
-require("./services/Razorpay/orderExpiryCron");
-require("./services/BusBooking/reconcileCron");
-require("./services/Todo/todoReminderCron");
-require("./services/Todo/birthdayReminderCron");
-require("./services/Ecommerce/cartRecoveryCron");
-require("./services/Todo/fitnessGoalHookCron");
-require("./services/Todo/accountPurgeCron");
-// require("./services/Todo/checkoutAbandonmentCron");
-// require("./services/Todo/serviceCartRecoveryCron");
-// require("./services/Bbps/billDueReminderCron");
-
-
+const busProductionSafety = require("./app/busboooking/config/productionSafety");
+busProductionSafety.assertProductionConfiguration();
+busProductionSafety.warnIfBusConfigurationIncomplete();
+require("./config/scheduledJobs").startScheduledJobs();
+const stopSchedulerDiagnostics = require("./services/schedulerDiagnostics").startSchedulerDiagnostics();
 
 // dashboard Route
 const dashboardRoute = require("./routes/indexRoute");
@@ -133,6 +116,7 @@ app.use(
       "Content-Type",
       "Authorization",
       "X-Location-Id",
+      "X-Schedule-Id",
       "X-Session-Token",
       "Idempotency-Key",
       "X-CSRF-Token",
@@ -204,9 +188,8 @@ app.get("/", (req, res) => {
   });
 });
 
-// Dashboard Routes
-app.use("/api/crm", dashboardRoute);
-app.use("/", dashboardRoute);
+// Both CRM modules share /api/crm; retain their legacy root aliases.
+require("./routes/mountCrmRoutes")(app, dashboardRoute, fleaMarketRoute);
 
 // App Routes 
 app.use("/v1", ecommerceRoute);
@@ -221,23 +204,6 @@ app.use("/api/busbooking", busBookingRoute);
 
 // External App Routes
 app.use("/mps", mpsRoute);
-
-// Flea Market Routes
-app.use(
-  "/",
-  (req, res, next) => {
-    // API responses (especially deployment-time 404s) must never be cached by
-    // Cloudflare, otherwise a newly deployed route can keep appearing missing.
-    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-    res.setHeader("Pragma", "no-cache");
-    res.setHeader("Expires", "0");
-    res.setHeader("CDN-Cache-Control", "no-store");
-    res.setHeader("Cloudflare-CDN-Cache-Control", "no-store");
-    res.setHeader("Surrogate-Control", "no-store");
-    next();
-  },
-  fleaMarketRoute,
-);
 
 // 404 Handler
 app.use((req, res) => {
@@ -268,7 +234,7 @@ server.listen(PORT, () => {
   console.log("Reward Planners Backend Started!");
   console.log(`🔗 Server URL: http://localhost:${PORT}`);
   console.log(`Swagger docs at http://localhost:${PORT}/api-docs`);
-  console.log(`Flea Market API ready at http://localhost:${PORT}`);
+  console.log(`Flea Market API ready at http://localhost:${PORT}/api/crm`);
   console.log("CORS allowed origins (parsed):", allowedOrigins);
   console.log("=================================\n");
 
@@ -284,6 +250,7 @@ let shuttingDown = false;
 async function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
+  stopSchedulerDiagnostics();
   console.log(`Shutting down backend (${signal})...`);
   const deadline = setTimeout(() => {
     console.error("Backend shutdown timed out");

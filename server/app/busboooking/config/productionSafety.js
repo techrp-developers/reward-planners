@@ -49,6 +49,22 @@ function getProductionConfigurationErrors(env) {
   return errors;
 }
 
+// Names of required bus-booking settings that are empty. Values are never returned.
+function getMissingBusConfiguration(env = process.env) {
+  return REQUIRED_KEYS.filter((key) => !String(env[key] || "").trim());
+}
+
+// Outside production the server still starts, but say loudly why bus booking
+// will fail, instead of surfacing only as a 5xx on the first search.
+function warnIfBusConfigurationIncomplete(env = process.env, log = console.warn) {
+  if (String(env.NODE_ENV).toLowerCase() === "production") return [];
+  const missing = getMissingBusConfiguration(env);
+  if (missing.length) {
+    log(`[BusBooking] Provider configuration incomplete (NODE_ENV=${env.NODE_ENV || "unset"}); missing: ${missing.join(", ")}`);
+  }
+  return missing;
+}
+
 function assertProductionConfiguration(env = process.env) {
   const errors = getProductionConfigurationErrors(env);
   if (errors.length) {
@@ -58,5 +74,7 @@ function assertProductionConfiguration(env = process.env) {
 
 module.exports = {
   getProductionConfigurationErrors,
+  getMissingBusConfiguration,
+  warnIfBusConfigurationIncomplete,
   assertProductionConfiguration,
 };

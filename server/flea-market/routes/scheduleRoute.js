@@ -4,6 +4,8 @@ const scheduleController = require("../controllers/scheduleController");
 const poolStockController = require("../controllers/poolStockController");
 const { validateCreateSchedule, validateUpdateSchedule } = require("../middlewares/validators");
 
+router.use("/:scheduleId/manage", require("./eventAssignmentRoute"));
+
 router.get("/today-active", scheduleController.todayActive);
 router.get("/:scheduleId", scheduleController.getById);
 router.get("/", scheduleController.list);

@@ -59,10 +59,7 @@ class ScheduleController {
         startTime,
         endTime,
         notes,
-        // No real operator auth exists on this module yet (see requireFleaMarketSession —
-        // that's customer OTP session auth, not an admin/operator login), so this is
-        // left null until one is wired up.
-        createdBy: null,
+        createdBy: req.user.user_id,
       });
 
       return res.status(201).json({ success: true, data });

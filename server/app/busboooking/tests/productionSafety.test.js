@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   getProductionConfigurationErrors,
+  warnIfBusConfigurationIncomplete,
 } = require("../config/productionSafety");
 
 const productionEnv = {
@@ -46,4 +47,22 @@ test("non-production environments may intentionally use test services", () => {
     getProductionConfigurationErrors({ NODE_ENV: "development" }),
     [],
   );
+});
+
+test("non-production startup warns with the names of missing bus settings, never values", () => {
+  const logs = [];
+  const missing = warnIfBusConfigurationIncomplete(
+    { ...productionEnv, NODE_ENV: "development", SRDV_SEARCH_URL: "", SRDV_PASSWORD: " " },
+    (line) => logs.push(line),
+  );
+  assert.deepEqual(missing, ["SRDV_SEARCH_URL", "SRDV_PASSWORD"]);
+  assert.equal(logs.length, 1);
+  assert.ok(logs[0].includes("SRDV_SEARCH_URL") && !logs[0].includes("access-secret"));
+});
+
+test("complete or production configuration produces no startup warning", () => {
+  const logs = [];
+  assert.deepEqual(warnIfBusConfigurationIncomplete({ ...productionEnv, NODE_ENV: "development" }, (l) => logs.push(l)), []);
+  assert.deepEqual(warnIfBusConfigurationIncomplete({ NODE_ENV: "production" }, (l) => logs.push(l)), []);
+  assert.equal(logs.length, 0);
 });

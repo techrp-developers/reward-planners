@@ -54,7 +54,7 @@ class InvoiceController {
       const invoice = await checkoutModel.findInvoiceById(invoiceId);
 
       // 404 rather than 403 — don't reveal that an invoice id exists to a customer who doesn't own it.
-      if (!invoice || invoice.user_id !== session.userId) {
+      if (!invoice || invoice.source !== "flea_market" || invoice.user_id !== session.userId || invoice.location_id !== session.locationId) {
         return res.status(404).json({ success: false, message: "Invoice not found" });
       }
 
@@ -69,7 +69,7 @@ class InvoiceController {
     try {
       const invoiceId = Number(req.params.invoiceId);
       const invoice = await checkoutModel.findInvoiceById(invoiceId);
-      if (!Number.isInteger(invoiceId) || !invoice || invoice.user_id !== req.fleaMarketSession.userId) {
+      if (!Number.isInteger(invoiceId) || !invoice || invoice.source !== "flea_market" || invoice.location_id !== req.fleaMarketSession.locationId || invoice.user_id !== req.fleaMarketSession.userId) {
         return res.status(404).json({ success: false, message: "Invoice not found" });
       }
       const pdf = await generateInvoicePdf(invoice, await checkoutModel.findInvoiceItems(invoiceId));
@@ -86,7 +86,7 @@ class InvoiceController {
     try {
       const invoiceId = Number(req.params.invoiceId);
       const invoice = await checkoutModel.findInvoiceById(invoiceId);
-      if (!Number.isInteger(invoiceId) || !invoice || invoice.user_id !== req.fleaMarketSession.userId) {
+      if (!Number.isInteger(invoiceId) || !invoice || invoice.source !== "flea_market" || invoice.location_id !== req.fleaMarketSession.locationId || invoice.user_id !== req.fleaMarketSession.userId) {
         return res.status(404).json({ success: false, message: "Invoice not found" });
       }
       if (!invoice.customer_email) {

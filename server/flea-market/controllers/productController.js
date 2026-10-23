@@ -94,7 +94,7 @@ class ProductController {
   async search(req, res) {
     try {
       const query = String(req.query.q || "").trim();
-      const rows = await poolStockModel.findActivePools(query, SEARCH_LIMIT);
+      const rows = (await require("../services/eventAssignmentService").products(req.fleaMarketScheduleId,query)).filter(row=>row.available_qty>0).slice(0,SEARCH_LIMIT);
 
       return res.json({
         success: true,
@@ -106,7 +106,7 @@ class ProductController {
           brand: row.brand_name,
           sku: row.sku,
           mrp: Number(row.mrp),
-          salePrice: row.allocation_price != null ? Number(row.allocation_price) : Number(row.sale_price),
+          salePrice: Number(row.sale_price),
           stock: row.available_qty,
           heroImage: row.hero_image,
         })),
@@ -125,7 +125,10 @@ class ProductController {
         return res.status(400).json({ success: false, message: "variantId must be a positive integer" });
       }
 
-      const eligibility = await rewardEligibilityService.getEligibilityForVariant(variantId);
+      const assignment=(await require("../services/eventAssignmentService").products(req.fleaMarketScheduleId)).find(row=>row.variant_id===variantId);
+      if (!assignment) return res.status(404).json({success:false,message:"Product is not assigned to this event"});
+      const variant=await productModel.findVariantDetail(variantId);
+      const eligibility = await rewardEligibilityService.computeEligibility({...variant,sale_price:assignment.sale_price});
       return res.json(eligibility);
     } catch (error) {
       const statusCode = error.statusCode || 500;

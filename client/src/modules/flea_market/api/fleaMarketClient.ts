@@ -1,4 +1,5 @@
-import axios, { AxiosError } from "axios";
+import { AxiosError } from "axios";
+import { api } from "../../../common/api/api";
 import { SERVER_CONFIG } from "../../../common/config/serverConfig";
 
 export const FLEA_MARKET_API_BASE_URL =
@@ -19,6 +20,8 @@ export class SessionExpiredError extends Error {
 
 let currentSessionToken: string | null = null;
 let currentLocationId: number | null = null;
+let currentScheduleId: number | null = null;
+export function setFleaMarketScheduleId(id:number|null):void { currentScheduleId=id; }
 
 export function setFleaMarketSessionToken(token: string | null): void {
   currentSessionToken = token;
@@ -28,9 +31,7 @@ export function setFleaMarketLocationId(locationId: number | null): void {
   currentLocationId = locationId;
 }
 
-export const fleaMarketClient = axios.create({
-  baseURL: FLEA_MARKET_API_BASE_URL,
-});
+export const fleaMarketClient = api;
 
 // Injects the session/location context on every call instead of every call
 // site threading it through manually.
@@ -47,6 +48,8 @@ fleaMarketClient.interceptors.request.use((config) => {
       config.params = { ...(config.params ?? {}), _: Date.now() };
     }
   }
+
+  if (currentScheduleId !== null) config.headers["X-Schedule-Id"] = String(currentScheduleId);
 
   if (currentSessionToken) {
     config.headers["X-Session-Token"] = currentSessionToken;

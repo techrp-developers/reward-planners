@@ -1,0 +1,194 @@
+{
+  "results": [
+    {
+      "port": 5057,
+      "endpoint": "health",
+      "mode": "anonymous",
+      "status": 200,
+      "success": true
+    },
+    {
+      "port": 5057,
+      "endpoint": "health",
+      "mode": "manager",
+      "status": 200,
+      "success": true
+    },
+    {
+      "port": 5057,
+      "endpoint": "health",
+      "mode": "other-role",
+      "status": 200,
+      "success": true
+    },
+    {
+      "port": 5057,
+      "endpoint": "companies",
+      "mode": "anonymous",
+      "status": 401,
+      "success": false
+    },
+    {
+      "port": 5057,
+      "endpoint": "companies",
+      "mode": "manager",
+      "status": 200,
+      "success": true,
+      "rows": 10
+    },
+    {
+      "port": 5057,
+      "endpoint": "companies",
+      "mode": "other-role",
+      "status": 403,
+      "success": false
+    },
+    {
+      "port": 5057,
+      "endpoint": "schedules",
+      "mode": "anonymous",
+      "status": 401,
+      "success": false
+    },
+    {
+      "port": 5057,
+      "endpoint": "schedules",
+      "mode": "manager",
+      "status": 200,
+      "success": true,
+      "rows": 4
+    },
+    {
+      "port": 5057,
+      "endpoint": "schedules",
+      "mode": "other-role",
+      "status": 403,
+      "success": false
+    },
+    {
+      "port": 5057,
+      "endpoint": "dashboard/summary",
+      "mode": "anonymous",
+      "status": 401,
+      "success": false
+    },
+    {
+      "port": 5057,
+      "endpoint": "dashboard/summary",
+      "mode": "manager",
+      "status": 500,
+      "success": false
+    },
+    {
+      "port": 5057,
+      "endpoint": "dashboard/summary",
+      "mode": "other-role",
+      "status": 403,
+      "success": false
+    },
+    {
+      "port": 5173,
+      "endpoint": "health",
+      "mode": "anonymous",
+      "status": 200,
+      "success": true
+    },
+    {
+      "port": 5173,
+      "endpoint": "health",
+      "mode": "manager",
+      "status": 200,
+      "success": true
+    },
+    {
+      "port": 5173,
+      "endpoint": "health",
+      "mode": "other-role",
+      "status": 200,
+      "success": true
+    },
+    {
+      "port": 5173,
+      "endpoint": "companies",
+      "mode": "anonymous",
+      "status": 401,
+      "success": false
+    },
+    {
+      "port": 5173,
+      "endpoint": "companies",
+      "mode": "manager",
+      "status": 200,
+      "success": true,
+      "rows": 10
+    },
+    {
+      "port": 5173,
+      "endpoint": "companies",
+      "mode": "other-role",
+      "status": 403,
+      "success": false
+    },
+    {
+      "port": 5173,
+      "endpoint": "schedules",
+      "mode": "anonymous",
+      "status": 401,
+      "success": false
+    },
+    {
+      "port": 5173,
+      "endpoint": "schedules",
+      "mode": "manager",
+      "status": 200,
+      "success": true,
+      "rows": 4
+    },
+    {
+      "port": 5173,
+      "endpoint": "schedules",
+      "mode": "other-role",
+      "status": 403,
+      "success": false
+    },
+    {
+      "port": 5173,
+      "endpoint": "dashboard/summary",
+      "mode": "anonymous",
+      "status": 401,
+      "success": false
+    },
+    {
+      "port": 5173,
+      "endpoint": "dashboard/summary",
+      "mode": "manager",
+      "status": 500,
+      "success": false
+    },
+    {
+      "port": 5173,
+      "endpoint": "dashboard/summary",
+      "mode": "other-role",
+      "status": 403,
+      "success": false
+    }
+  ],
+  "history": [
+    {
+      "invoice_id": 34,
+      "source": "flea_market",
+      "invoice_status": "generated"
+    },
+    {
+      "invoice_id": 35,
+      "source": "flea_market",
+      "invoice_status": "generated"
+    },
+    {
+      "invoice_id": 36,
+      "source": "flea_market",
+      "invoice_status": "generated"
+    }
+  ],
+  "businessUpgradeTablesPresent": 0
+}

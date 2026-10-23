@@ -18,6 +18,12 @@ const requireFleaMarketLocation = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "Unknown or inactive location" });
     }
 
+    const scheduleId = Number(req.header("X-Schedule-Id"));
+    if (!Number.isSafeInteger(scheduleId) || scheduleId<=0) return res.status(400).json({success:false,message:"X-Schedule-Id is required"});
+    const [[event]] = await require("../../config/database").execute("SELECT schedule_id FROM flea_market_schedules WHERE schedule_id=? AND location_id=? AND status IN ('scheduled','in_progress')",[scheduleId,locationId]);
+    if (!event) return res.status(409).json({success:false,message:"Selected event does not match the location or is closed"});
+    req.fleaMarketScheduleId=scheduleId;
+
     req.fleaMarketLocation = { locationId: location.location_id, companyId: location.company_id };
     next();
   } catch (err) {

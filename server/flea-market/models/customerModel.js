@@ -4,7 +4,7 @@ class CustomerModel {
   // Tenant-scoped: always filters by company_id — never search across companies.
   async search(companyId, query, limit) {
     const like = `%${query}%`;
-    const [rows] = await db.execute(
+    const [rows] = await db.query(
       `SELECT c.user_id, c.name, c.email, c.phone
        FROM customer c
        WHERE (
