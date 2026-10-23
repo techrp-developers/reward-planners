@@ -15,12 +15,16 @@ class ChatModel {
     const me = await this.identity(userId);
     if (!me) throw Object.assign(new Error("An active company membership is required"), { status: 403 });
     const [[recipient]] = await db.execute(
-      `SELECT c.user_id, c.name FROM customer c
+      `SELECT c.user_id, c.name,
+              (MONTH(cu.dob) = MONTH(CURDATE()) AND DAY(cu.dob) = DAY(CURDATE())) AS is_birthday_today,
+              DATE_FORMAT(CURDATE(), '%Y-%m-%d') AS today
+       FROM customer c
        JOIN company_users cu ON cu.id = c.company_user_id
        WHERE cu.id = ? AND cu.company_id = ? AND cu.status = 1 AND c.status = 1 LIMIT 1`,
       [employeeId, me.company_id]);
     if (!recipient) throw Object.assign(new Error("Employee has no active chat account in your company"), { status: 404 });
     if (Number(recipient.user_id) === Number(userId)) throw Object.assign(new Error("You cannot send a birthday wish to yourself"), { status: 422 });
+    if (!Number(recipient.is_birthday_today)) throw Object.assign(new Error("It is not this employee's birthday today"), { status: 422 });
     return recipient;
   }
 

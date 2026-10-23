@@ -29,7 +29,7 @@
   const {
     enqueueWhatsApp,
   } = require("../../../services/whatsapp/waEnqueueService");
-const { notifyUser, notifyUserAndWait } = require("../utils/notification");
+const { notifyUser } = require("../utils/notification");
 const { uploadToR2 } = require("../../../utils/r2upload");
 const { deleteFromR2 } = require("../../../utils/r2delete");
 const { getPublicUrl } = require("../../../utils/publicUrl");
@@ -1757,66 +1757,6 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
           success: false,
           message: "Failed to fetch user info",
         });
-      }
-    }
-
-    // Send a birthday wish to a coworker (in-app notification + push)
-    async sendBirthdayWish(req, res) {
-      try {
-        const userId = req.user?.user_id;
-        if (!userId) {
-          return res.status(401).json({ success: false, message: "Unauthorized user" });
-        }
-
-        const employeeId = Number(req.body?.employee_id);
-        if (!Number.isSafeInteger(employeeId) || employeeId < 1) {
-          return res.status(400).json({ success: false, message: "Valid employee_id is required" });
-        }
-
-        const target = await AuthModel.findBirthdayWishTarget(userId, employeeId);
-        if (!target) {
-          return res.status(404).json({ success: false, message: "Employee not found" });
-        }
-        if (Number(target.is_self)) {
-          return res.status(400).json({ success: false, message: "You cannot wish yourself" });
-        }
-        if (!Number(target.is_birthday_today)) {
-          return res.status(400).json({ success: false, message: "It is not this employee's birthday today" });
-        }
-        if (!target.recipient_user_id) {
-          return res.status(422).json({ success: false, message: "This employee is not on the app yet" });
-        }
-
-        const firstName = String(target.recipient_name || "").trim().split(/\s+/)[0] || "there";
-        const senderName = target.sender_name || "A colleague";
-
-        const result = await notifyUserAndWait({
-          userId: target.recipient_user_id,
-          module: "birthday",
-          type: "birthday_wish",
-          title: `${senderName} wished you a Happy Birthday! 🎉`,
-          message: `Happy Birthday, ${firstName}! Wishing you a wonderful year filled with success and happiness. 🎂`,
-          icon: "gift",
-          reference_type: "coworker",
-          reference_id: String(userId),
-          idempotency_key: `birthday-wish:${userId}:${target.recipient_user_id}:${target.today}`,
-          action_url: "/notifications",
-          screen: "Notifications",
-          metadata: { sender_user_id: userId, sender_name: senderName },
-        });
-
-        const alreadyWished = result?.reason === "duplicate";
-
-        return res.json({
-          success: true,
-          alreadyWished,
-          message: alreadyWished
-            ? `You have already wished ${target.recipient_name} today`
-            : `Birthday wishes sent to ${target.recipient_name}`,
-        });
-      } catch (error) {
-        console.error("Send Birthday Wish Error:", error);
-        return res.status(500).json({ success: false, message: "Failed to send birthday wish" });
       }
     }
 

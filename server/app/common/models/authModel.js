@@ -593,13 +593,9 @@ class authModel {
       c.updated_at AS user_image_updated_at,
       cu_emp.id = cu_logged.id AS is_self,
       EXISTS (
-        SELECT 1 FROM notifications n
-        WHERE n.user_id = c.user_id
-          AND n.module = 'birthday'
-          AND n.type = 'birthday_wish'
-          AND n.reference_type = 'coworker'
-          AND n.reference_id = (CAST(c_logged.user_id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci)
-          AND n.created_at >= CURDATE()
+        SELECT 1 FROM chat_messages m
+        WHERE m.sender_id = c_logged.user_id
+          AND m.client_message_id = CONCAT('birthday-wish:', c.user_id, ':', DATE_FORMAT(CURDATE(), '%Y-%m-%d'))
       ) AS wished
     FROM customer c_logged
 
@@ -632,40 +628,6 @@ class authModel {
       isSelf: Boolean(emp.is_self),
       wished: Boolean(emp.wished),
     }));
-  }
-
-  // Resolve a coworker the logged-in user may send a birthday wish to.
-  // Scoped to the sender's company; birthday/self checks are left to the caller.
-  async findBirthdayWishTarget(senderUserId, employeeId) {
-    const [rows] = await db.execute(
-      `
-    SELECT
-      cu_emp.id AS employee_id,
-      cu_emp.name AS recipient_name,
-      cu_emp.company_id,
-      c_emp.user_id AS recipient_user_id,
-      cu_logged.name AS sender_name,
-      cu_emp.id = cu_logged.id AS is_self,
-      (MONTH(cu_emp.dob) = MONTH(CURDATE())
-        AND DAY(cu_emp.dob) = DAY(CURDATE())) AS is_birthday_today,
-      DATE_FORMAT(CURDATE(), '%Y-%m-%d') AS today
-    FROM customer c_logged
-    INNER JOIN company_users cu_logged
-      ON c_logged.company_user_id = cu_logged.id
-    INNER JOIN company_users cu_emp
-      ON cu_emp.company_id = cu_logged.company_id
-     AND cu_emp.id = ?
-     AND cu_emp.status = 1
-    LEFT JOIN customer c_emp
-      ON c_emp.company_user_id = cu_emp.id
-     AND c_emp.status = 1
-    WHERE c_logged.user_id = ?
-    LIMIT 1
-    `,
-      [employeeId, senderUserId],
-    );
-
-    return rows[0] || null;
   }
 
   // Delete Customer — soft delete only. The account and its cart/wishlist/

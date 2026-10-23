@@ -5,6 +5,7 @@ const sharp = require("sharp");
 const { uploadToR2 } = require("../../../utils/r2upload");
 const { deleteFromR2 } = require("../../../utils/r2delete");
 const { getPublicUrl } = require("../../../utils/publicUrl");
+const { notifyMessageRecipients } = require("../services/messageNotification");
 
 const ids = (value) => Array.isArray(value) ? [...new Set(value.map(Number).filter(Number.isSafeInteger).filter((id) => id > 0))] : [];
 const fail = (res, error) => res.status(error.status || 500).json({ success: false, message: error.status ? error.message : "Internal server error" });
@@ -32,14 +33,19 @@ exports.sendBirthdayWish = async (req, res) => {
       type: "direct", memberIds: [Number(recipient.user_id)],
     });
     // Namespace retry keys by recipient so a reused mobile key cannot resolve to another chat.
-    const retryKey = clientMessageId === undefined ? null : crypto.createHash("sha256")
-      .update(JSON.stringify(["birthday-wish", Number(recipient.user_id), clientMessageId])).digest("hex");
+    // Without a client key, allow one wish per recipient per day (the dashboard reads this key
+    // back to show the "Wished" state — see AuthModel.getTodayBirthdayEmployees).
+    const retryKey = clientMessageId === undefined
+      ? `birthday-wish:${Number(recipient.user_id)}:${recipient.today}`
+      : crypto.createHash("sha256")
+        .update(JSON.stringify(["birthday-wish", Number(recipient.user_id), clientMessageId])).digest("hex");
     const message = await Chat.sendMessage(req.user.user_id, conversationId, {
       messageType: "text", body: body === undefined ? "Happy birthday! Wishing you a wonderful day and a fantastic year ahead!" : body.trim(),
       clientMessageId: retryKey,
     });
     req.app.locals.chatSocket?.addUsersToConversation([req.user.user_id, recipient.user_id], conversationId);
     req.app.locals.chatSocket?.broadcastConversation(conversationId, { type: "message:new", data: message });
+    notifyMessageRecipients(message).catch((error) => console.error("[Chat] Notification failed:", error.message));
     res.status(201).json({ success: true, data: message });
   } catch (error) { fail(res, error); }
 };
