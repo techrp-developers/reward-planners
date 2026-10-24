@@ -7,6 +7,7 @@ const {
   isBlockExpired,
   isAmbiguousProviderError,
   classifyBookOutcome,
+  classifyCancellationEntry,
   getRefundableAmount,
 } = require("../utils/workflowPolicy");
 
@@ -104,6 +105,28 @@ test("book outcome is unknown whenever a ticket might still exist", () => {
   assert.equal(isAmbiguousProviderError({ response: { status: 401 } }), false);
 });
 
+test("book in-progress and manual-check provider codes never trigger a refund", () => {
+  for (const errorCode of [7031, 7033]) {
+    assert.equal(
+      classifyBookOutcome({
+        data: { Error: { ErrorCode: errorCode, ErrorMessage: "Review required" } },
+      }).outcome,
+      "unknown",
+    );
+    assert.equal(
+      classifyBookOutcome({
+        error: {
+          response: {
+            status: 409,
+            data: { Error: { ErrorCode: errorCode, ErrorMessage: "Review required" } },
+          },
+        },
+      }).outcome,
+      "unknown",
+    );
+  }
+});
+
 test("refunds never exceed what was paid and not yet refunded", () => {
   assert.equal(getRefundableAmount({ requested: 500, paid: 500 }), 500);
   assert.equal(getRefundableAmount({ requested: 450.456, paid: 500 }), 450.46);
@@ -111,4 +134,20 @@ test("refunds never exceed what was paid and not yet refunded", () => {
   assert.equal(getRefundableAmount({ requested: 400, paid: 500, alreadyRefunded: 500 }), 0);
   assert.equal(getRefundableAmount({ requested: -5, paid: 500 }), 0);
   assert.equal(getRefundableAmount({ requested: "abc", paid: 500 }), 0);
+});
+
+test("cancellation status becomes refundable only after the provider refund is final", () => {
+  assert.deepEqual(classifyCancellationEntry({
+    Status: "CANCELLED",
+    RefundStatus: "MANUAL_PENDING",
+  }), { localStatus: "succeeded", terminal: false, refundReady: false });
+  assert.deepEqual(classifyCancellationEntry({
+    Status: "CANCELLED",
+    RefundStatus: "REFUNDED",
+  }), { localStatus: "succeeded", terminal: true, refundReady: true });
+  assert.deepEqual(classifyCancellationEntry({
+    Status: "FAILED",
+    RefundStatus: "REJECTED",
+  }), { localStatus: "failed", terminal: true });
+  assert.equal(classifyCancellationEntry({ Status: "IN_PROCESS" }).localStatus, "processing");
 });

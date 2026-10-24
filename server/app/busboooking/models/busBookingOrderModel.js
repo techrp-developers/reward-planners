@@ -463,6 +463,12 @@ const BusBookingOrderModel = {
           ON c.busbooking_order_id = p.busbooking_order_id
          -- The two tables may be created with different collations.
          AND c.seat_name = p.seat_name COLLATE utf8mb4_general_ci
+         AND c.id = (
+           SELECT MAX(c2.id)
+             FROM busbooking_cancellations c2
+            WHERE c2.busbooking_order_id = p.busbooking_order_id
+              AND c2.seat_name = p.seat_name COLLATE utf8mb4_general_ci
+         )
 
         WHERE p.busbooking_order_id = ?
 
@@ -527,16 +533,16 @@ const BusBookingOrderModel = {
                r.bookings,
                r.min_fare,
                (
-                 SELECT c.cico_id FROM city_codes c
-                  WHERE UPPER(c.cico_type) = 'CITY'
-                    AND LOWER(TRIM(c.cico_city_name)) = LOWER(TRIM(r.source_city))
-                  ORDER BY c.cico_id ASC LIMIT 1
+                 SELECT CAST(c.CityId AS CHAR) FROM bus_cities c
+                  WHERE UPPER(c.Type) = 'CITY'
+                    AND LOWER(TRIM(c.CityName)) = LOWER(TRIM(r.source_city))
+                  ORDER BY c.CityId ASC LIMIT 1
                ) AS source_city_code,
                (
-                 SELECT c.cico_id FROM city_codes c
-                  WHERE UPPER(c.cico_type) = 'CITY'
-                    AND LOWER(TRIM(c.cico_city_name)) = LOWER(TRIM(r.destination_city))
-                  ORDER BY c.cico_id ASC LIMIT 1
+                 SELECT CAST(c.CityId AS CHAR) FROM bus_cities c
+                  WHERE UPPER(c.Type) = 'CITY'
+                    AND LOWER(TRIM(c.CityName)) = LOWER(TRIM(r.destination_city))
+                  ORDER BY c.CityId ASC LIMIT 1
                ) AS destination_city_code
 
         FROM (

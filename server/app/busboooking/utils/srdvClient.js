@@ -8,8 +8,22 @@ const path = require("path");
 // contact details are masked before anything is written.
 
 const LOG_DIR = path.join(__dirname, "../../../logs/srdv");
-const SECRET_KEYS = new Set(["Password", "UserName", "Api-Token", "Authorization"]);
-const PERSONAL_KEYS = new Set(["PhoneNo", "Email", "Address", "IdNumber"]);
+const SECRET_KEYS = new Set(["password", "username", "api-token", "authorization"]);
+const PERSONAL_KEYS = new Set([
+  "phoneno",
+  "email",
+  "address",
+  "idnumber",
+  "idtype",
+  "firstname",
+  "lastname",
+  "title",
+  "gender",
+  "age",
+  "seatname",
+  "gstcompanyaddress",
+  "gstcompanyemail",
+]);
 
 const isEnabled = () =>
   String(process.env.SRDV_EXCHANGE_LOG || "").toLowerCase() === "true";
@@ -20,8 +34,9 @@ function mask(value) {
 
   const copy = {};
   for (const [key, item] of Object.entries(value)) {
-    if (SECRET_KEYS.has(key)) copy[key] = "***REDACTED***";
-    else if (PERSONAL_KEYS.has(key)) copy[key] = item ? "***MASKED***" : item;
+    const normalizedKey = key.toLowerCase();
+    if (SECRET_KEYS.has(normalizedKey)) copy[key] = "***REDACTED***";
+    else if (PERSONAL_KEYS.has(normalizedKey)) copy[key] = item ? "***MASKED***" : item;
     else copy[key] = mask(item);
   }
   return copy;
@@ -84,17 +99,27 @@ function writeExchange(config, { status = null, data, error = null }) {
 
 const srdvClient = axios.create();
 
-// The upgraded (live) SRDV API authenticates with the Api-Token header only and
-// must not receive the legacy credentials, so they are dropped unless set.
-const LEGACY_CREDENTIAL_KEYS = ["ClientId", "UserName", "Password"];
+// The upgraded SRDV API authenticates with the Api-Token header only. Strip
+// legacy credentials defensively so a stale environment or future call site
+// can never send them to either the test or live provider.
+const LEGACY_CREDENTIAL_KEYS = new Set([
+  "clientid",
+  "username",
+  "password",
+]);
+
+function removeLegacyCredentials(data) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return data;
+
+  for (const key of Object.keys(data)) {
+    if (LEGACY_CREDENTIAL_KEYS.has(key.toLowerCase())) delete data[key];
+  }
+  return data;
+}
 
 srdvClient.interceptors.request.use((config) => {
   config.srdvStartedAt = Date.now();
-  if (config.data && typeof config.data === "object") {
-    for (const key of LEGACY_CREDENTIAL_KEYS) {
-      if (!String(config.data[key] ?? "").trim()) delete config.data[key];
-    }
-  }
+  removeLegacyCredentials(config.data);
   return config;
 });
 
@@ -118,3 +143,4 @@ srdvClient.interceptors.response.use(
 
 module.exports = srdvClient;
 module.exports.maskForLog = mask;
+module.exports.removeLegacyCredentials = removeLegacyCredentials;

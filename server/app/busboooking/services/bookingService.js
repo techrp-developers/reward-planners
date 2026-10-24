@@ -5,6 +5,7 @@ const {
   getBookingDecision,
   getBlockTtlMinutes,
   classifyBookOutcome,
+  classifyCancellationEntry,
   getRefundableAmount,
 } = require("../utils/workflowPolicy");
 const { enqueueRefund, processRefund } = require("./refundService");
@@ -65,15 +66,22 @@ async function claimForBooking(orderId) {
 
 async function callProviderBook(order) {
   try {
+    const traceId = Number(String(order.trace_id ?? "").trim());
+    const resultIndex = String(order.result_index ?? "").trim();
+    if (
+      !Number.isSafeInteger(traceId) ||
+      traceId <= 0 ||
+      resultIndex.length < 3 ||
+      resultIndex.length > 500
+    ) {
+      throw new Error("Stored booking has invalid provider identifiers");
+    }
+
     const response = await srdvClient.post(
       process.env.SRDV_BOOK_URL,
       {
-        ClientId: process.env.SRDV_CLIENT_ID,
-        UserName: process.env.SRDV_USERNAME,
-        Password: process.env.SRDV_PASSWORD,
-        TraceId: String(order.trace_id).trim(),
-        SrdvIndex: String(order.srdv_index).trim(),
-        ResultIndex: String(order.result_index).trim(),
+        TraceId: traceId,
+        ResultIndex: resultIndex,
       },
       {
         headers: {
@@ -353,8 +361,9 @@ async function resolveCancellation(orderRef, seatName, resolution) {
     const [[cancellation]] = order
       ? await conn.execute(
           `SELECT id, status
-             FROM busbooking_cancellations
+            FROM busbooking_cancellations
             WHERE busbooking_order_id = ? AND seat_name = ?
+            ORDER BY id DESC
             LIMIT 1
             FOR UPDATE`,
           [order.id, seatName],
@@ -399,6 +408,129 @@ async function resolveCancellation(orderRef, seatName, resolution) {
 
   if (refundId) await processRefund(refundId);
   return { ok: true };
+}
+
+// Applies authoritative cancellation/refund states returned by BookingDetails.
+// One provider cancellation can contain several seats, so it creates at most
+// one idempotent customer refund for the provider CancelId.
+async function reconcileProviderCancellations(orderId, bookingDetails) {
+  const providerEntries = Array.isArray(bookingDetails?.Cancellations)
+    ? bookingDetails.Cancellations
+    : [];
+  if (!providerEntries.length) return { refundIds: [] };
+
+  const conn = await db.getConnection();
+  const refundIds = [];
+  try {
+    await conn.beginTransaction();
+    const [[order]] = await conn.execute(
+      `SELECT id, user_id, seat_count, total_amount, reward_coins_used
+         FROM busbooking_orders
+        WHERE id = ?
+        LIMIT 1
+        FOR UPDATE`,
+      [orderId],
+    );
+    if (!order) {
+      await conn.rollback();
+      return { refundIds };
+    }
+
+    for (const entry of providerEntries) {
+      const cancelId = String(entry?.CancelId ?? "").trim();
+      if (!cancelId) continue;
+
+      const [localRows] = await conn.execute(
+        `SELECT id
+           FROM busbooking_cancellations
+          WHERE busbooking_order_id = ? AND provider_cancel_id = ?
+          ORDER BY id ASC
+          FOR UPDATE`,
+        [order.id, cancelId],
+      );
+      if (!localRows.length) continue;
+
+      const decision = classifyCancellationEntry(entry);
+      const providerStatus = String(entry?.Status || "").trim() || null;
+      const providerRefundStatus = String(entry?.RefundStatus || "").trim() || null;
+      const providerErrorCode = Number(entry?.ErrorCode || 0) || null;
+      const providerErrorMessage = String(entry?.ErrorMessage || "").trim() || null;
+      const rawResponse = JSON.stringify(entry);
+      const ids = localRows.map((row) => row.id);
+      const placeholders = ids.map(() => "?").join(",");
+
+      await conn.execute(
+        `UPDATE busbooking_cancellations
+            SET status = ?, provider_status = ?, provider_refund_status = ?,
+                provider_error_code = ?, provider_error_message = ?, raw_response = ?
+          WHERE id IN (${placeholders})`,
+        [
+          decision.localStatus,
+          providerStatus,
+          providerRefundStatus,
+          providerErrorCode,
+          providerErrorMessage,
+          rawResponse,
+          ...ids,
+        ],
+      );
+
+      if (decision.refundReady) {
+        const [[totals]] = await conn.execute(
+          `SELECT COALESCE(SUM(amount), 0) AS refunded
+             FROM busbooking_refunds
+            WHERE busbooking_order_id = ?`,
+          [order.id],
+        );
+        const refundAmount = getRefundableAmount({
+          requested: Number(entry?.RefundAmount),
+          paid: Number(order.total_amount) - Number(order.reward_coins_used),
+          alreadyRefunded: totals.refunded,
+        });
+        if (refundAmount > 0) {
+          const cancellationId = ids[0];
+          await conn.execute(
+            `UPDATE busbooking_cancellations
+                SET refund_status = 'pending', refund_amount = ?
+              WHERE id = ?`,
+            [refundAmount, cancellationId],
+          );
+          const refundId = await enqueueRefund(conn, {
+            orderId: order.id,
+            userId: order.user_id,
+            reason: "cancellation",
+            refundKey: `busbooking_provider_cancel_${order.id}_${cancelId}`,
+            amount: refundAmount,
+            cancellationId,
+          });
+          refundIds.push(refundId);
+        }
+      }
+    }
+
+    const [[cancelled]] = await conn.execute(
+      `SELECT COUNT(DISTINCT seat_name) AS count
+         FROM busbooking_cancellations
+        WHERE busbooking_order_id = ? AND status = 'succeeded'`,
+      [order.id],
+    );
+    if (Number(cancelled.count) >= Number(order.seat_count)) {
+      await conn.execute(
+        `UPDATE busbooking_orders SET status = 'cancelled' WHERE id = ?`,
+        [order.id],
+      );
+    }
+
+    await conn.commit();
+  } catch (error) {
+    try { await conn.rollback(); } catch {}
+    throw error;
+  } finally {
+    conn.release();
+  }
+
+  for (const refundId of new Set(refundIds)) await processRefund(refundId);
+  return { refundIds };
 }
 
 /*
@@ -464,6 +596,7 @@ module.exports = {
   resolveReviewedBooking,
   applyCancellationSuccess,
   resolveCancellation,
+  reconcileProviderCancellations,
   expireStaleBlocks,
   bookAbandonedPaidOrders,
   escalateStuckBookings,

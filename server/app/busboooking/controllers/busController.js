@@ -21,8 +21,10 @@ const {
   resolveReviewedBooking,
   applyCancellationSuccess,
   resolveCancellation,
+  reconcileProviderCancellations,
 } = require("../services/bookingService");
 const { processRefund } = require("../services/refundService");
+const { validateBlockRequest } = require("../utils/blockRequest");
 const { sendOpsAlert } = require("../../../services/alertService");
 /*
 |--------------------------------------------------------------------------
@@ -105,41 +107,44 @@ const getCities = async (req, res) => {
 */
 
 const isValidDate = (date) => {
+    const value = String(date || "");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
 
-    if (!date) {
-        return false;
-    }
-
-    return /^\d{4}-\d{2}-\d{2}$/
-        .test(date);
+    const [year, month, day] = value.split("-").map(Number);
+    const parsed = new Date(Date.UTC(year, month - 1, day));
+    return parsed.getUTCFullYear() === year &&
+        parsed.getUTCMonth() === month - 1 &&
+        parsed.getUTCDate() === day;
 };
 
 
 /*
 |--------------------------------------------------------------------------
-| Validate Journey Time
+| Current Journey Date and City-Code Validation
 |--------------------------------------------------------------------------
 |
-| Required format:
-|
-| HH:mm
-|
-| Example:
-| 09:30
-| 18:00
-| 22:15
+| Provider city codes must be positive integers. Search dates must be valid
+| YYYY-MM-DD calendar dates and cannot be earlier than today.
 |
 |--------------------------------------------------------------------------
 */
 
-const isValidTime = (time) => {
+const getTodayDate = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+};
 
-    if (!time) {
-        return false;
-    }
+const parsePositiveInteger = (value) => {
+    const normalized = String(value ?? "").trim();
+    if (!/^\d+$/.test(normalized)) return null;
 
-    return /^([01]\d|2[0-3]):([0-5]\d)$/
-        .test(time);
+    const cityCode = Number(normalized);
+    return Number.isSafeInteger(cityCode) && cityCode > 0
+        ? cityCode
+        : null;
 };
 
 const getMissingSearchConfig = () => {
@@ -191,11 +196,12 @@ const searchBuses = async (req, res) => {
 
             destinationCityCode,
 
-            journeyDate,
-
-            journeyTime
+            journeyDate
 
         } = req.body;
+
+        const fromCityCode = parsePositiveInteger(sourceCityCode);
+        const toCityCode = parsePositiveInteger(destinationCityCode);
 
 
         /*
@@ -204,7 +210,7 @@ const searchBuses = async (req, res) => {
         |--------------------------------------------------------------------------
         */
 
-        if (!sourceCityCode) {
+        if (!fromCityCode) {
 
             return res
                 .status(400)
@@ -213,7 +219,7 @@ const searchBuses = async (req, res) => {
                     success: false,
 
                     message:
-                        "Source city is required"
+                        "Source city code must be a positive integer"
                 });
         }
 
@@ -224,7 +230,7 @@ const searchBuses = async (req, res) => {
         |--------------------------------------------------------------------------
         */
 
-        if (!destinationCityCode) {
+        if (!toCityCode) {
 
             return res
                 .status(400)
@@ -233,7 +239,7 @@ const searchBuses = async (req, res) => {
                     success: false,
 
                     message:
-                        "Destination city is required"
+                        "Destination city code must be a positive integer"
                 });
         }
 
@@ -245,8 +251,8 @@ const searchBuses = async (req, res) => {
         */
 
         if (
-            String(sourceCityCode) ===
-            String(destinationCityCode)
+            fromCityCode ===
+            toCityCode
         ) {
 
             return res
@@ -287,7 +293,7 @@ const searchBuses = async (req, res) => {
         |--------------------------------------------------------------------------
         */
 
-        if (!isValidTime(journeyTime)) {
+        if (journeyDate < getTodayDate()) {
 
             return res
                 .status(400)
@@ -296,7 +302,7 @@ const searchBuses = async (req, res) => {
                     success: false,
 
                     message:
-                        "Journey time must be in HH:mm format"
+                        "Journey date cannot be in the past"
                 });
         }
 
@@ -309,13 +315,20 @@ const searchBuses = async (req, res) => {
 
         const sourceCity =
             await getOptionalCityDetails(
-                sourceCityCode
+                fromCityCode
             );
 
         const destinationCity =
             await getOptionalCityDetails(
-                destinationCityCode
+                toCityCode
             );
+
+        if (!sourceCity || !destinationCity) {
+            return res.status(400).json({
+                success: false,
+                message: "Source or destination city code is not present in the current bus city list",
+            });
+        }
 
         const missingConfig =
             getMissingSearchConfig();
@@ -350,22 +363,13 @@ const searchBuses = async (req, res) => {
         const requestBody = {
 
             FromCityCode:
-                String(sourceCityCode).trim(),
+                fromCityCode,
 
             ToCityCode:
-                String(destinationCityCode).trim(),
+                toCityCode,
 
             DepartDate:
-                journeyDate,
-
-            ClientId:
-                process.env.SRDV_CLIENT_ID,
-
-            UserName:
-                process.env.SRDV_USERNAME,
-
-            Password:
-                process.env.SRDV_PASSWORD
+                journeyDate
         };
 
 
@@ -448,12 +452,12 @@ const searchBuses = async (req, res) => {
 
         /*
         |--------------------------------------------------------------------------
-        | Filter Buses According To Selected Time
+        | Return Provider Results Without Client-side Time Filtering
         |--------------------------------------------------------------------------
         |
         | User:
         |
-        | journeyTime = 18:00
+        | The new Search contract accepts the journey date only.
         |
         | API Result:
         |
@@ -464,37 +468,6 @@ const searchBuses = async (req, res) => {
         |
         |--------------------------------------------------------------------------
         */
-
-        const selectedDateTime =
-            new Date(
-                `${journeyDate}T${journeyTime}:00`
-            );
-
-
-        const filteredBuses =
-            allBuses.filter(
-                (bus) => {
-
-                    if (
-                        !bus.DepartureTime
-                    ) {
-                        return false;
-                    }
-
-
-                    const busDeparture =
-                        new Date(
-                            bus.DepartureTime
-                        );
-
-
-                    return (
-                        busDeparture >=
-                        selectedDateTime
-                    );
-                }
-            );
-
 
         /*
         |--------------------------------------------------------------------------
@@ -509,9 +482,9 @@ const searchBuses = async (req, res) => {
                 success: true,
 
                 message:
-                    filteredBuses.length > 0
+                    allBuses.length > 0
                         ? "Buses found successfully"
-                        : "No buses found after selected time",
+                        : "No buses found",
 
 
                 search: {
@@ -519,7 +492,7 @@ const searchBuses = async (req, res) => {
                     source: {
 
                         code:
-                            String(sourceCityCode).trim(),
+                            String(fromCityCode),
 
                         name:
                             sourceCity
@@ -530,7 +503,7 @@ const searchBuses = async (req, res) => {
                     destination: {
 
                         code:
-                            String(destinationCityCode).trim(),
+                            String(toCityCode),
 
                         name:
                             destinationCity
@@ -538,14 +511,12 @@ const searchBuses = async (req, res) => {
                     },
 
 
-                    journeyDate,
-
-                    journeyTime
+                    journeyDate
                 },
 
 
                 traceId:
-                    apiData.TraceId ||
+                    apiData.TraceId ??
                     null,
 
 
@@ -554,11 +525,11 @@ const searchBuses = async (req, res) => {
 
 
                 count:
-                    filteredBuses.length,
+                    allBuses.length,
 
 
                 buses:
-                    filteredBuses
+                    allBuses
             });
 
 
@@ -632,9 +603,8 @@ const searchBuses = async (req, res) => {
 | Frontend sends:
 |
 | {
-|   "traceId": "113855",
-|   "srdvIndex": "39",
-|   "resultIndex": "2000001857050059209"
+|   "traceId": 2620051,
+|   "resultIndex": "39_2000005756960059855"
 | }
 |
 |--------------------------------------------------------------------------
@@ -652,15 +622,30 @@ const getSeatLayout = async (req, res) => {
 
         const {
             traceId,
-            srdvIndex,
-            resultIndex
+            resultIndex,
+            boardingPointId,
+            droppingPointId
         } = req.body;
+
+        const normalizedTraceId = parsePositiveInteger(traceId);
+        const normalizedResultIndex = String(resultIndex ?? "").trim();
+        const normalizePointId = (value) => {
+            if (value === undefined || value === null) return null;
+            if (typeof value !== "string" && typeof value !== "number") return null;
+            const normalized = String(value).trim();
+            return normalized.length >= 1 && normalized.length <= 100
+                ? normalized
+                : null;
+        };
+        const hasBoardingPoint = boardingPointId !== undefined && boardingPointId !== null;
+        const hasDroppingPoint = droppingPointId !== undefined && droppingPointId !== null;
+        const normalizedBoardingPointId = normalizePointId(boardingPointId);
+        const normalizedDroppingPointId = normalizePointId(droppingPointId);
 
 
         console.log("======================================");
         console.log("SEAT LAYOUT REQUEST RECEIVED");
         console.log("TraceId:", traceId);
-        console.log("SrdvIndex:", srdvIndex);
         console.log("ResultIndex:", resultIndex);
         console.log("======================================");
 
@@ -671,7 +656,7 @@ const getSeatLayout = async (req, res) => {
         |--------------------------------------------------------------------------
         */
 
-        if (!traceId) {
+        if (!normalizedTraceId) {
 
             return res
                 .status(400)
@@ -680,12 +665,14 @@ const getSeatLayout = async (req, res) => {
                     success: false,
 
                     message:
-                        "TraceId is required"
+                        "TraceId must be a positive integer"
                 });
         }
 
-
-        if (!srdvIndex) {
+        if (
+            normalizedResultIndex.length < 3 ||
+            normalizedResultIndex.length > 500
+        ) {
 
             return res
                 .status(400)
@@ -694,22 +681,25 @@ const getSeatLayout = async (req, res) => {
                     success: false,
 
                     message:
-                        "SrdvIndex is required"
+                        "ResultIndex must contain between 3 and 500 characters"
                 });
         }
 
+        if (hasBoardingPoint !== hasDroppingPoint) {
+            return res.status(400).json({
+                success: false,
+                message: "BoardingPointId and DroppingPointId must be provided together",
+            });
+        }
 
-        if (!resultIndex) {
-
-            return res
-                .status(400)
-                .json({
-
-                    success: false,
-
-                    message:
-                        "ResultIndex is required"
-                });
+        if (
+            (hasBoardingPoint && !normalizedBoardingPointId) ||
+            (hasDroppingPoint && !normalizedDroppingPointId)
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "BoardingPointId and DroppingPointId must contain between 1 and 100 characters",
+            });
         }
 
 
@@ -768,25 +758,17 @@ const getSeatLayout = async (req, res) => {
         */
 
         const requestBody = {
-
-            ClientId:
-                process.env.SRDV_CLIENT_ID,
-
-            UserName:
-                process.env.SRDV_USERNAME,
-
-            Password:
-                process.env.SRDV_PASSWORD,
-
             TraceId:
-                String(traceId).trim(),
-
-            SrdvIndex:
-                String(srdvIndex).trim(),
+                normalizedTraceId,
 
             ResultIndex:
-                String(resultIndex).trim()
+                normalizedResultIndex
         };
+
+        if (normalizedBoardingPointId && normalizedDroppingPointId) {
+            requestBody.BoardingPointId = normalizedBoardingPointId;
+            requestBody.DroppingPointId = normalizedDroppingPointId;
+        }
 
 
         /*
@@ -812,11 +794,14 @@ const getSeatLayout = async (req, res) => {
             TraceId:
                 requestBody.TraceId,
 
-            SrdvIndex:
-                requestBody.SrdvIndex,
-
             ResultIndex:
-                requestBody.ResultIndex
+                requestBody.ResultIndex,
+
+            BoardingPointId:
+                requestBody.BoardingPointId,
+
+            DroppingPointId:
+                requestBody.DroppingPointId
         });
 
         console.log(
@@ -935,14 +920,19 @@ const getSeatLayout = async (req, res) => {
 
         // The provider sends rows as an array, or as an object keyed by row
         // number when rows are skipped (aisles), so accept both.
+        const normalizeLayoutRows = (layout) =>
+            Object.values(layout || {}).map((row) => {
+                if (row && typeof row === "object" && "SeatName" in row) {
+                    return [row];
+                }
+                return Object.values(row || {});
+            });
+
         const seatLayout =
-            Array.isArray(
-                apiData.Result
-            )
-                ? apiData.Result
-                : Object.values(
-                    apiData.Result || {}
-                );
+            normalizeLayoutRows(apiData.Result);
+
+        const upperSeatLayout =
+            normalizeLayoutRows(apiData.ResultUpperSeat);
 
 
         /*
@@ -969,8 +959,10 @@ const getSeatLayout = async (req, res) => {
         |--------------------------------------------------------------------------
         */
 
-        const seats =
-            seatLayout.flat();
+        const seats = [
+            ...seatLayout.flat(),
+            ...upperSeatLayout.flat(),
+        ];
 
 
         /*
@@ -1010,18 +1002,23 @@ const getSeatLayout = async (req, res) => {
 
 
                 traceId:
-                    apiData.TraceId ||
-                    String(traceId),
+                    apiData.TraceId ??
+                    normalizedTraceId,
 
 
                 srdvIndex:
-                    apiData.SrdvIndex ||
-                    String(srdvIndex),
+                    apiData.SrdvIndex ??
+                    null,
 
 
                 resultIndex:
-                    apiData.ResultIndex ||
-                    String(resultIndex),
+                    apiData.ResultIndex ??
+                    normalizedResultIndex,
+
+
+                providerAvailableSeats:
+                    apiData.AvailableSeats ??
+                    null,
 
 
                 paxIdRequired:
@@ -1042,7 +1039,11 @@ const getSeatLayout = async (req, res) => {
 
 
                 layout:
-                    seatLayout
+                    seatLayout,
+
+
+                upperLayout:
+                    upperSeatLayout
             });
 
 
@@ -1145,9 +1146,8 @@ const getSeatLayout = async (req, res) => {
 | Frontend sends:
 |
 | {
-|   "traceId": "113855",
-|   "srdvIndex": "39",
-|   "resultIndex": "2000001857050059209"
+|   "traceId": 2620039,
+|   "resultIndex": "39_2000000156940117941"
 | }
 |
 |--------------------------------------------------------------------------
@@ -1168,9 +1168,11 @@ const getBoardingDroppingPoints = async (
 
     const {
       traceId,
-      srdvIndex,
       resultIndex,
     } = req.body;
+
+    const normalizedTraceId = parsePositiveInteger(traceId);
+    const normalizedResultIndex = String(resultIndex ?? "").trim();
 
 
     console.log(
@@ -1184,11 +1186,6 @@ const getBoardingDroppingPoints = async (
     console.log(
       "TraceId:",
       traceId
-    );
-
-    console.log(
-      "SrdvIndex:",
-      srdvIndex
     );
 
     console.log(
@@ -1208,9 +1205,7 @@ const getBoardingDroppingPoints = async (
     */
 
     if (
-      traceId === undefined ||
-      traceId === null ||
-      String(traceId).trim() === ""
+      !normalizedTraceId
     ) {
 
       return res
@@ -1220,15 +1215,13 @@ const getBoardingDroppingPoints = async (
           success: false,
 
           message:
-            "traceId is required",
+            "TraceId must be a positive integer",
         });
     }
 
-
     if (
-      srdvIndex === undefined ||
-      srdvIndex === null ||
-      String(srdvIndex).trim() === ""
+      normalizedResultIndex.length < 3 ||
+      normalizedResultIndex.length > 500
     ) {
 
       return res
@@ -1238,25 +1231,7 @@ const getBoardingDroppingPoints = async (
           success: false,
 
           message:
-            "srdvIndex is required",
-        });
-    }
-
-
-    if (
-      resultIndex === undefined ||
-      resultIndex === null ||
-      String(resultIndex).trim() === ""
-    ) {
-
-      return res
-        .status(400)
-        .json({
-
-          success: false,
-
-          message:
-            "resultIndex is required",
+            "ResultIndex must contain between 3 and 500 characters",
         });
     }
 
@@ -1323,33 +1298,11 @@ const getBoardingDroppingPoints = async (
     */
 
     const requestBody = {
-
-      ClientId:
-        process.env
-          .SRDV_CLIENT_ID,
-
-      UserName:
-        process.env
-          .SRDV_USERNAME,
-
-      Password:
-        process.env
-          .SRDV_PASSWORD,
-
       TraceId:
-        String(
-          traceId
-        ).trim(),
-
-      SrdvIndex:
-        String(
-          srdvIndex
-        ).trim(),
+        normalizedTraceId,
 
       ResultIndex:
-        String(
-          resultIndex
-        ).trim(),
+        normalizedResultIndex,
     };
 
 
@@ -1368,9 +1321,6 @@ const getBoardingDroppingPoints = async (
       {
         TraceId:
           requestBody.TraceId,
-
-        SrdvIndex:
-          requestBody.SrdvIndex,
 
         ResultIndex:
           requestBody.ResultIndex,
@@ -1498,24 +1448,18 @@ const getBoardingDroppingPoints = async (
 
 
         traceId:
-          apiData.TraceId ||
-          String(
-            traceId
-          ),
+          apiData.TraceId ??
+          normalizedTraceId,
 
 
         srdvIndex:
-          apiData.SrdvIndex ||
-          String(
-            srdvIndex
-          ),
+          apiData.SrdvIndex ??
+          null,
 
 
         resultIndex:
-          apiData.ResultIndex ||
-          String(
-            resultIndex
-          ),
+          apiData.ResultIndex ??
+          normalizedResultIndex,
 
 
         boardingPointCount:
@@ -1648,9 +1592,6 @@ const blockSeat =
 
       const {
         traceId,
-
-        srdvIndex,
-
         resultIndex,
 
         boardingPointId,
@@ -1660,8 +1601,6 @@ const blockSeat =
         refId,
 
         passengers,
-
-        email,
 
         sourceCity,
 
@@ -1694,6 +1633,22 @@ const blockSeat =
           });
       }
 
+      const validatedBlock = validateBlockRequest({
+        traceId,
+        resultIndex,
+        boardingPointId,
+        droppingPointId,
+        refId,
+        passengers,
+      });
+      if (validatedBlock.error) {
+        return res.status(400).json({
+          success: false,
+          message: validatedBlock.error,
+        });
+      }
+      const normalizedPassengers = validatedBlock.value.Passengers;
+
 
       /*
       |--------------------------------------------------------------------------
@@ -1714,23 +1669,6 @@ const blockSeat =
 
             message:
               "traceId is required",
-          });
-      }
-
-
-      if (
-        !srdvIndex
-      ) {
-
-        return res
-          .status(400)
-          .json({
-
-            success:
-              false,
-
-            message:
-              "srdvIndex is required",
           });
       }
 
@@ -1837,47 +1775,6 @@ const blockSeat =
       |--------------------------------------------------------------------------
       */
 
-      const fallbackEmail =
-        typeof email === "string" &&
-        email.trim()
-          ? email.trim()
-          : null;
-
-
-      const normalizedPassengers =
-        passengers.map(
-          (passenger) => {
-            const phoneDigits =
-              String(
-                passenger?.PhoneNo ||
-                ""
-              )
-                .replace(/\D/g, "")
-                .trim();
-
-            const generatedPassengerEmail =
-              phoneDigits
-                ? `busbooking+${phoneDigits}@rewardplanners.com`
-                : "busbooking@rewardplanners.com";
-
-            const passengerEmail =
-              typeof passenger?.Email === "string" &&
-              passenger.Email.trim()
-                ? passenger.Email.trim()
-                : (
-                    fallbackEmail ||
-                    generatedPassengerEmail
-                  );
-
-            return {
-              ...passenger,
-              Email:
-                passengerEmail,
-            };
-          }
-        );
-
-
       /*
       |--------------------------------------------------------------------------
       | Required Provider Config
@@ -1893,7 +1790,6 @@ const blockSeat =
 
 
 
-        "SRDV_END_USER_IP",
       ];
 
 
@@ -1934,52 +1830,20 @@ const blockSeat =
       */
 
       const requestBody = {
-
-        EndUserIp:
-          process.env
-            .SRDV_END_USER_IP,
-
-        ClientId:
-          process.env
-            .SRDV_CLIENT_ID,
-
-        UserName:
-          process.env
-            .SRDV_USERNAME,
-
-        Password:
-          process.env
-            .SRDV_PASSWORD,
-
         TraceId:
-          String(
-            traceId
-          ).trim(),
-
-        SrdvIndex:
-          String(
-            srdvIndex
-          ).trim(),
+          validatedBlock.value.TraceId,
 
         ResultIndex:
-          String(
-            resultIndex
-          ).trim(),
+          validatedBlock.value.ResultIndex,
 
         BoardingPointId:
-          String(
-            boardingPointId
-          ).trim(),
+          validatedBlock.value.BoardingPointId,
 
         DroppingPointId:
-          String(
-            droppingPointId
-          ).trim(),
+          validatedBlock.value.DroppingPointId,
 
         RefId:
-          String(
-            refId
-          ).trim(),
+          validatedBlock.value.RefId,
 
         Passengers:
           normalizedPassengers,
@@ -1992,9 +1856,6 @@ const blockSeat =
 
           TraceId:
             requestBody.TraceId,
-
-          SrdvIndex:
-            requestBody.SrdvIndex,
 
           ResultIndex:
             requestBody.ResultIndex,
@@ -2082,6 +1943,9 @@ const blockSeat =
                 ?.Error
                 ?.ErrorMessage ||
               "Unable to block bus seat",
+
+            providerError:
+              apiData?.Error || null,
 
           });
       }
@@ -2333,22 +2197,20 @@ const blockSeat =
                 trace_id:
                   String(
                     apiData
-                      ?.TraceId ||
-                    traceId
+                      ?.TraceId ??
+                    validatedBlock.value.TraceId
                   ),
 
                 srdv_index:
-                  String(
-                    apiData
-                      ?.SrdvIndex ||
-                    srdvIndex
-                  ),
+                  apiData?.SrdvIndex == null
+                    ? null
+                    : String(apiData.SrdvIndex),
 
                 result_index:
                   String(
                     apiData
-                      ?.ResultIndex ||
-                    resultIndex
+                      ?.ResultIndex ??
+                    validatedBlock.value.ResultIndex
                   ),
 
                 block_key:
@@ -2386,7 +2248,7 @@ const blockSeat =
                     apiData
                       ?.BoardingPointdetails
                       ?.Id ||
-                    boardingPointId
+                    validatedBlock.value.BoardingPointId
                   ),
 
                 boarding_point_name:
@@ -2400,7 +2262,7 @@ const blockSeat =
                     apiData
                       ?.DroppingPointsDetails
                       ?.Id ||
-                    droppingPointId
+                    validatedBlock.value.DroppingPointId
                   ),
 
                 dropping_point_name:
@@ -2466,22 +2328,20 @@ const blockSeat =
             traceId:
               String(
                 apiData
-                  ?.TraceId ||
-                traceId
+                  ?.TraceId ??
+                validatedBlock.value.TraceId
               ),
 
             srdvIndex:
-              String(
-                apiData
-                  ?.SrdvIndex ||
-                srdvIndex
-              ),
+              apiData?.SrdvIndex == null
+                ? null
+                : String(apiData.SrdvIndex),
 
             resultIndex:
               String(
                 apiData
-                  ?.ResultIndex ||
-                resultIndex
+                  ?.ResultIndex ??
+                validatedBlock.value.ResultIndex
               ),
 
             blockKey,
@@ -3798,11 +3658,146 @@ const bookBusTicket = async (req, res) => {
 };
 
 
+const getProviderBookingDetails = async (req, res) => {
+  const orderRef = String(req.body?.order_ref || "").trim();
+  const requestedCancelId = String(
+    req.body?.cancel_id ?? req.body?.cancelId ?? "",
+  ).trim();
+  if (!orderRef) {
+    return res.status(400).json({
+      success: false,
+      message: "order_ref is required",
+    });
+  }
+
+  const requiredConfig = [
+    "SRDV_BOOKING_DETAILS_URL",
+    "SRDV_API_TOKEN",
+  ];
+  const missingConfig = requiredConfig.filter(
+    (key) => !String(process.env[key] || "").trim(),
+  );
+  if (missingConfig.length) {
+    return res.status(500).json({
+      success: false,
+      message: "Booking details provider configuration is missing",
+      missingConfig,
+    });
+  }
+
+  try {
+    const [[order]] = await db.execute(
+      `SELECT id, trace_id
+         FROM busbooking_orders
+        WHERE order_ref = ? AND user_id = ?
+        LIMIT 1`,
+      [orderRef, req.user.user_id],
+    );
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Booking order not found",
+      });
+    }
+
+    const traceId = parsePositiveInteger(order.trace_id);
+    if (!traceId) {
+      console.error("[BusBooking][BookingDetails] Invalid stored TraceId", {
+        orderRef,
+      });
+      return res.status(500).json({
+        success: false,
+        message: "Booking has an invalid provider reference",
+      });
+    }
+
+    const providerResponse = await srdvClient.post(
+      process.env.SRDV_BOOKING_DETAILS_URL,
+      { TraceId: traceId },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "Api-Token": process.env.SRDV_API_TOKEN,
+        },
+        timeout: 30000,
+      },
+    );
+    const apiData = providerResponse.data;
+    const providerErrorCode = Number(apiData?.Error?.ErrorCode ?? 0);
+
+    if (providerErrorCode !== 0) {
+      return res.status(400).json({
+        success: false,
+        message:
+          String(apiData?.Error?.ErrorMessage || "").trim() ||
+          "Unable to get booking details",
+        providerError: apiData?.Error || null,
+      });
+    }
+
+    const bookingDetails = apiData?.Result ?? null;
+    if (bookingDetails) {
+      await reconcileProviderCancellations(order.id, bookingDetails);
+    }
+    const cancellations = Array.isArray(bookingDetails?.Cancellations)
+      ? bookingDetails.Cancellations
+      : [];
+    const cancellation = requestedCancelId
+      ? cancellations.find(
+          (entry) => String(entry?.CancelId ?? "") === requestedCancelId,
+        ) || null
+      : null;
+
+    if (requestedCancelId && !cancellation) {
+      return res.status(404).json({
+        success: false,
+        message: "Cancellation request was not found in provider booking details",
+        orderRef,
+        traceId: apiData?.TraceId ?? traceId,
+        cancelId: requestedCancelId,
+      });
+    }
+
+    const cancellationStatus = String(cancellation?.Status || "").toUpperCase();
+    const refundStatus = String(cancellation?.RefundStatus || "").toUpperCase();
+    const cancellationTerminal = cancellation
+      ? cancellationStatus === "FAILED" ||
+        (
+          cancellationStatus === "CANCELLED" &&
+          ["REFUNDED", "REJECTED"].includes(refundStatus)
+        )
+      : null;
+
+    return res.status(200).json({
+      success: true,
+      message: "Booking details fetched successfully",
+      orderRef,
+      traceId: apiData?.TraceId ?? traceId,
+      bookingDetails,
+      ...(requestedCancelId
+        ? {
+            cancellation,
+            cancellationTerminal,
+            shouldPollCancellation: !cancellationTerminal,
+          }
+        : {}),
+    });
+  } catch (error) {
+    console.error("[BusBooking][BookingDetails] Error", error.message);
+    return res.status(error.response ? 502 : 500).json({
+      success: false,
+      message:
+        String(error.response?.data?.Error?.ErrorMessage || "").trim() ||
+        "Unable to get booking details",
+    });
+  }
+};
+
 const getProviderBalance = async (req, res) => {
   const requiredConfig = [
     "SRDV_BALANCE_URL",
     "SRDV_API_TOKEN",
-    "SRDV_END_USER_IP",
   ];
   const missingConfig = requiredConfig.filter(
     (key) => !String(process.env[key] || "").trim(),
@@ -3819,12 +3814,7 @@ const getProviderBalance = async (req, res) => {
   try {
     const providerResponse = await srdvClient.post(
       process.env.SRDV_BALANCE_URL,
-      {
-        EndUserIp: process.env.SRDV_END_USER_IP,
-        ClientId: process.env.SRDV_CLIENT_ID,
-        UserName: process.env.SRDV_USERNAME,
-        Password: process.env.SRDV_PASSWORD,
-      },
+      {},
       {
         headers: {
           "Api-Token": process.env.SRDV_API_TOKEN,
@@ -3849,6 +3839,7 @@ const getProviderBalance = async (req, res) => {
     return res.status(200).json({
       success: true,
       data: {
+        availableBalance: apiData?.AvailableBalance ?? null,
         balance: apiData?.Balance ?? null,
         creditLimit: apiData?.CreditLimit ?? null,
       },
@@ -3857,7 +3848,9 @@ const getProviderBalance = async (req, res) => {
     console.error("[BusBooking][Balance] Error", error.message);
     return res.status(error.response ? 502 : 500).json({
       success: false,
-      message: "Unable to fetch provider balance",
+      message:
+        String(error.response?.data?.Error?.ErrorMessage || "").trim() ||
+        "Unable to fetch provider balance",
     });
   }
 };
@@ -3866,7 +3859,6 @@ const getProviderBalanceLog = async (req, res) => {
   const requiredConfig = [
     "SRDV_BALANCE_LOG_URL",
     "SRDV_API_TOKEN",
-    "SRDV_END_USER_IP",
   ];
   const missingConfig = requiredConfig.filter(
     (key) => !String(process.env[key] || "").trim(),
@@ -3883,12 +3875,7 @@ const getProviderBalanceLog = async (req, res) => {
   try {
     const providerResponse = await srdvClient.post(
       process.env.SRDV_BALANCE_LOG_URL,
-      {
-        EndUserIp: process.env.SRDV_END_USER_IP,
-        ClientId: process.env.SRDV_CLIENT_ID,
-        UserName: process.env.SRDV_USERNAME,
-        Password: process.env.SRDV_PASSWORD,
-      },
+      {},
       {
         headers: {
           "Api-Token": process.env.SRDV_API_TOKEN,
@@ -3932,12 +3919,14 @@ const getProviderBalanceLog = async (req, res) => {
     console.error("[BusBooking][BalanceLog] Error", error.message);
     return res.status(error.response ? 502 : 500).json({
       success: false,
-      message: "Unable to fetch provider balance log",
+      message:
+        String(error.response?.data?.Error?.ErrorMessage || "").trim() ||
+        "Unable to fetch provider balance log",
     });
   }
 };
 
-const cancelBusTicket = async (req, res) => {
+const cancelBusTicketLegacy = async (req, res) => {
   const userId = req.user.user_id;
   const orderRef = String(req.body?.order_ref || "").trim();
   const seatName = String(req.body?.seatName || "").trim();
@@ -4083,9 +4072,6 @@ const cancelBusTicket = async (req, res) => {
       const providerResponse = await srdvClient.post(
         process.env.SRDV_CANCEL_URL,
         {
-          ClientId: process.env.SRDV_CLIENT_ID,
-          UserName: process.env.SRDV_USERNAME,
-          Password: process.env.SRDV_PASSWORD,
           TraceId: String(order.trace_id),
           SeatName: seatName,
           Remark: remarks,
@@ -4274,6 +4260,345 @@ const cancelBusTicket = async (req, res) => {
   }
 };
 
+const cancelBusTicket = async (req, res) => {
+  const userId = req.user.user_id;
+  const orderRef = String(req.body?.order_ref || "").trim();
+  const rawSeatNames = req.body?.seatNames ?? req.body?.seatName;
+  const remarks = String(req.body?.remarks || "").trim();
+  const seatNames = (Array.isArray(rawSeatNames)
+    ? rawSeatNames
+    : typeof rawSeatNames === "string"
+      ? rawSeatNames.split(",")
+      : [])
+    .map((seat) => String(seat).trim());
+
+  if (!orderRef) {
+    return res.status(400).json({ success: false, message: "order_ref is required" });
+  }
+  if (
+    seatNames.length < 1 ||
+    seatNames.length > 10 ||
+    seatNames.some((seat) => seat.length < 1 || seat.length > 100) ||
+    new Set(seatNames).size !== seatNames.length
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: "seatNames must contain 1 to 10 unique seat names of at most 100 characters",
+    });
+  }
+  if (remarks.length < 1 || remarks.length > 1000) {
+    return res.status(400).json({
+      success: false,
+      message: "remarks must contain between 1 and 1000 characters",
+    });
+  }
+
+  const requiredConfig = ["SRDV_CANCEL_URL", "SRDV_API_TOKEN"];
+  const missingConfig = requiredConfig.filter(
+    (key) => !String(process.env[key] || "").trim(),
+  );
+  if (missingConfig.length) {
+    return res.status(500).json({
+      success: false,
+      message: "Cancellation provider configuration is missing",
+      missingConfig,
+    });
+  }
+
+  let connection;
+  let order;
+  let cancellationIds = [];
+  let providerCalled = false;
+
+  const updateCancellations = async (sql, params) => {
+    if (!cancellationIds.length) return;
+    const placeholders = cancellationIds.map(() => "?").join(",");
+    await db.execute(
+      `${sql} WHERE id IN (${placeholders})`,
+      [...params, ...cancellationIds],
+    );
+  };
+
+  try {
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+
+    const [[foundOrder]] = await connection.execute(
+      `SELECT id, order_ref, trace_id, status, payment_status, raw_block_response
+         FROM busbooking_orders
+        WHERE order_ref = ? AND user_id = ?
+        LIMIT 1
+        FOR UPDATE`,
+      [orderRef, userId],
+    );
+    order = foundOrder;
+    if (!order) {
+      await connection.rollback();
+      return res.status(404).json({ success: false, message: "Booking order not found" });
+    }
+    if (order.status !== "confirmed" || order.payment_status !== "paid") {
+      await connection.rollback();
+      return res.status(409).json({
+        success: false,
+        message: "Only a confirmed paid booking can be cancelled",
+      });
+    }
+
+    const traceId = parsePositiveInteger(order.trace_id);
+    if (!traceId) {
+      await connection.rollback();
+      return res.status(500).json({
+        success: false,
+        message: "Booking has an invalid provider reference",
+      });
+    }
+
+    const [allPassengers] = await connection.execute(
+      `SELECT p.seat_name, p.lead_passenger,
+              c.status AS cancellation_status
+         FROM busbooking_passengers p
+         LEFT JOIN busbooking_cancellations c
+           ON c.busbooking_order_id = p.busbooking_order_id
+          AND c.seat_name = p.seat_name COLLATE utf8mb4_general_ci
+          AND c.id = (
+            SELECT MAX(c2.id)
+              FROM busbooking_cancellations c2
+             WHERE c2.busbooking_order_id = p.busbooking_order_id
+               AND c2.seat_name = p.seat_name COLLATE utf8mb4_general_ci
+          )
+        WHERE p.busbooking_order_id = ?
+        ORDER BY p.id ASC`,
+      [order.id],
+    );
+    const requestedPassengers = allPassengers.filter((passenger) =>
+      seatNames.includes(String(passenger.seat_name)),
+    );
+    if (requestedPassengers.length !== seatNames.length) {
+      await connection.rollback();
+      return res.status(400).json({
+        success: false,
+        message: "One or more seats do not belong to this booking",
+      });
+    }
+
+    const activeSeats = allPassengers
+      .filter((passenger) => passenger.cancellation_status !== "succeeded")
+      .map((passenger) => String(passenger.seat_name));
+    let blockResponse = order.raw_block_response;
+    if (typeof blockResponse === "string") {
+      try { blockResponse = JSON.parse(blockResponse); } catch { blockResponse = null; }
+    }
+    const partialAllowed = String(
+      blockResponse?.PartialCancellationAllowed ?? "false",
+    ).toLowerCase() === "true";
+    const includesLead = requestedPassengers.some(
+      (passenger) => Number(passenger.lead_passenger) === 1,
+    );
+    if ((!partialAllowed || includesLead) && !activeSeats.every((seat) => seatNames.includes(seat))) {
+      await connection.rollback();
+      return res.status(400).json({
+        success: false,
+        message: includesLead
+          ? "Cancelling the lead passenger requires every remaining seat"
+          : "This booking requires all remaining seats to be cancelled together",
+        remainingSeatNames: activeSeats,
+      });
+    }
+
+    const [existingRows] = await connection.execute(
+      `SELECT id, seat_name, status, provider_cancel_id, provider_status
+         FROM busbooking_cancellations
+        WHERE busbooking_order_id = ?
+          AND seat_name IN (${seatNames.map(() => "?").join(",")})
+          AND id = (
+            SELECT MAX(c2.id)
+              FROM busbooking_cancellations c2
+             WHERE c2.busbooking_order_id = busbooking_cancellations.busbooking_order_id
+               AND c2.seat_name = busbooking_cancellations.seat_name COLLATE utf8mb4_general_ci
+          )
+        FOR UPDATE`,
+      [order.id, ...seatNames],
+    );
+    if (existingRows.length) {
+      const allSucceeded = existingRows.length === seatNames.length &&
+        existingRows.every((row) => row.status === "succeeded");
+      if (allSucceeded) {
+        await connection.commit();
+        return res.status(200).json({
+          success: true,
+          reused: true,
+          message: "Requested seats are already cancelled",
+          data: { order_ref: orderRef, seatNames, status: "succeeded" },
+        });
+      }
+      const hasOpenRequest = existingRows.some(
+        (row) => row.status !== "failed",
+      );
+      if (hasOpenRequest) {
+        await connection.rollback();
+        return res.status(409).json({
+          success: false,
+          message: "A cancellation already exists for one or more requested seats",
+        });
+      }
+    }
+
+    for (const seatName of seatNames) {
+      const [insertResult] = await connection.execute(
+        `INSERT INTO busbooking_cancellations
+          (busbooking_order_id, user_id, seat_name, remarks, status)
+         VALUES (?, ?, ?, ?, 'processing')`,
+        [order.id, userId, seatName, remarks],
+      );
+      cancellationIds.push(insertResult.insertId);
+    }
+    await connection.commit();
+    connection.release();
+    connection = null;
+
+    let apiData;
+    providerCalled = true;
+    try {
+      const providerResponse = await srdvClient.post(
+        process.env.SRDV_CANCEL_URL,
+        { TraceId: traceId, SeatName: seatNames, Remarks: remarks },
+        {
+          headers: {
+            "Api-Token": process.env.SRDV_API_TOKEN,
+            "Content-Type": "application/json",
+          },
+          timeout: 30000,
+        },
+      );
+      apiData = providerResponse.data;
+    } catch (providerError) {
+      const errorData = providerError.response?.data;
+      const errorCode = Number(errorData?.Error?.ErrorCode ?? 0);
+      if (errorCode === 7039 || isAmbiguousProviderError(providerError)) {
+        await updateCancellations(
+          `UPDATE busbooking_cancellations
+              SET provider_cancel_id = ?, provider_status = 'MANUAL_CHECK_REQUIRED',
+                  provider_error_code = ?, provider_error_message = ?, raw_response = ?`,
+          [
+            errorData?.CancelId == null ? null : String(errorData.CancelId),
+            errorCode || null,
+            String(errorData?.Error?.ErrorMessage || "Cancellation outcome is unknown"),
+            errorData ? JSON.stringify(errorData) : null,
+          ],
+        );
+        await sendOpsAlert({
+          level: "critical",
+          category: "busbooking_review",
+          message: `Bus cancellation for ${orderRef} requires provider verification`,
+          meta: { orderId: order.id, cancellationIds, seatNames, errorCode: errorCode || null },
+        });
+        return res.status(202).json({
+          success: true,
+          message: "Cancellation outcome requires verification",
+          data: {
+            order_ref: orderRef,
+            seatNames,
+            cancelId: errorData?.CancelId ?? null,
+            status: "MANUAL_CHECK_REQUIRED",
+            refundStatus: "not_requested",
+          },
+        });
+      }
+
+      await updateCancellations(
+        `UPDATE busbooking_cancellations
+            SET status = 'failed', provider_error_code = ?,
+                provider_error_message = ?, raw_response = ?`,
+        [
+          errorCode || null,
+          String(errorData?.Error?.ErrorMessage || providerError.message),
+          errorData ? JSON.stringify(errorData) : null,
+        ],
+      );
+      return res.status(400).json({
+        success: false,
+        message: String(errorData?.Error?.ErrorMessage || "Cancellation was rejected"),
+        errorCode: errorCode || null,
+      });
+    }
+
+    const providerErrorCode = Number(apiData?.Error?.ErrorCode ?? 0);
+    const providerErrorMessage = String(apiData?.Error?.ErrorMessage || "").trim();
+    const providerCancelId = apiData?.CancelId ?? null;
+    if (providerErrorCode !== 0 && providerErrorCode !== 7039) {
+      await updateCancellations(
+        `UPDATE busbooking_cancellations
+            SET status = 'failed', provider_error_code = ?,
+                provider_error_message = ?, raw_response = ?`,
+        [providerErrorCode, providerErrorMessage || null, JSON.stringify(apiData)],
+      );
+      return res.status(400).json({
+        success: false,
+        message: providerErrorMessage || "Cancellation was rejected",
+        errorCode: providerErrorCode,
+      });
+    }
+
+    const providerStatus = providerErrorCode === 7039
+      ? "MANUAL_CHECK_REQUIRED"
+      : String(apiData?.Status || "In Process").trim();
+    await updateCancellations(
+      `UPDATE busbooking_cancellations
+          SET provider_cancel_id = ?, provider_status = ?,
+              provider_error_code = ?, provider_error_message = ?, raw_response = ?`,
+      [
+        providerCancelId == null ? null : String(providerCancelId),
+        providerStatus,
+        providerErrorCode || null,
+        providerErrorMessage || null,
+        JSON.stringify(apiData),
+      ],
+    );
+    if (providerErrorCode === 7039) {
+      await sendOpsAlert({
+        level: "critical",
+        category: "busbooking_review",
+        message: `Bus cancellation for ${orderRef} requires provider verification`,
+        meta: { orderId: order.id, cancellationIds, seatNames, providerCancelId },
+      });
+    }
+
+    return res.status(202).json({
+      success: true,
+      message: providerErrorCode === 7039
+        ? "Cancellation outcome requires verification"
+        : "Bus cancellation is in process",
+      data: {
+        order_ref: orderRef,
+        seatNames,
+        cancelId: providerCancelId,
+        status: providerStatus,
+        refundAmount: 0,
+        refundStatus: "not_requested",
+      },
+    });
+  } catch (error) {
+    if (connection) {
+      try { await connection.rollback(); } catch {}
+    }
+    if (cancellationIds.length && !providerCalled) {
+      try {
+        await updateCancellations(
+          `UPDATE busbooking_cancellations
+              SET status = 'failed', provider_error_message = ?`,
+          ["Cancellation could not be started"],
+        );
+      } catch (updateError) {
+        console.error("[BusBooking][Cancel] Failed to record failure", updateError.message);
+      }
+    }
+    console.error("[BusBooking][Cancel] Error", error.message);
+    return res.status(500).json({ success: false, message: "Unable to cancel bus seats" });
+  } finally {
+    if (connection) connection.release();
+  }
+};
+
 /*
 |--------------------------------------------------------------------------
 | Admin review
@@ -4403,6 +4728,8 @@ module.exports = {
     verifyPayment,
 
     bookBusTicket,
+
+    getProviderBookingDetails,
 
     cancelBusTicket,
 

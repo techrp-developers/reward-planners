@@ -93,6 +93,8 @@ const {
 
     bookBusTicket,
 
+    getProviderBookingDetails,
+
     cancelBusTicket,
 
     resolveBookingReview,
@@ -282,6 +284,22 @@ router.post(
     checkoutLimiter,
     drainMode,
     bookBusTicket
+);
+
+router.post(
+    "/booking-details",
+    auth,
+    customerOnly,
+    providerReadLimiter,
+    getProviderBookingDetails
+);
+
+router.post(
+    "/cancellation-status",
+    auth,
+    customerOnly,
+    providerReadLimiter,
+    getProviderBookingDetails
 );
 
 router.post(

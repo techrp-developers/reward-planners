@@ -45,10 +45,27 @@ function isAmbiguousProviderError(error) {
   return status >= 500 || status === 408 || status === 429;
 }
 
+const AMBIGUOUS_BOOK_ERROR_CODES = new Set([7031, 7033]);
+
+function getProviderErrorCode(payload) {
+  const value = Number(payload?.Error?.ErrorCode);
+  return Number.isFinite(value) ? value : 0;
+}
+
 // Money is only refunded on a "failed" outcome, so anything that could still
 // have produced a ticket must be classified "unknown" and reviewed instead.
 function classifyBookOutcome({ data, error }) {
   if (error) {
+    const errorCode = getProviderErrorCode(error.response?.data);
+    if (AMBIGUOUS_BOOK_ERROR_CODES.has(errorCode)) {
+      return {
+        outcome: "unknown",
+        errorCode,
+        message:
+          String(error.response?.data?.Error?.ErrorMessage || "").trim() ||
+          "Book request requires provider review",
+      };
+    }
     if (isAmbiguousProviderError(error)) {
       return { outcome: "unknown", message: "Book request outcome is unknown" };
     }
@@ -60,8 +77,17 @@ function classifyBookOutcome({ data, error }) {
     };
   }
 
-  const errorCode = Number(data?.Error?.ErrorCode ?? 0);
+  const errorCode = getProviderErrorCode(data);
   if (errorCode !== 0) {
+    if (AMBIGUOUS_BOOK_ERROR_CODES.has(errorCode)) {
+      return {
+        outcome: "unknown",
+        errorCode,
+        message:
+          String(data?.Error?.ErrorMessage || "").trim() ||
+          "Book request requires provider review",
+      };
+    }
     return {
       outcome: "failed",
       errorCode,
@@ -99,6 +125,21 @@ function getRefundableAmount({ requested, paid, alreadyRefunded = 0 }) {
   return Number(amount.toFixed(2));
 }
 
+function classifyCancellationEntry(entry) {
+  const status = String(entry?.Status || "").trim().toUpperCase();
+  const refundStatus = String(entry?.RefundStatus || "").trim().toUpperCase();
+
+  if (status === "FAILED") return { localStatus: "failed", terminal: true };
+  if (status === "CANCELLED") {
+    return {
+      localStatus: "succeeded",
+      terminal: ["REFUNDED", "REJECTED"].includes(refundStatus),
+      refundReady: refundStatus === "REFUNDED",
+    };
+  }
+  return { localStatus: "processing", terminal: false, refundReady: false };
+}
+
 module.exports = {
   getBookingDecision,
   isExpectedCapturedPayment,
@@ -106,5 +147,6 @@ module.exports = {
   isBlockExpired,
   isAmbiguousProviderError,
   classifyBookOutcome,
+  classifyCancellationEntry,
   getRefundableAmount,
 };
