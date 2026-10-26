@@ -4,6 +4,7 @@ import type { ComponentType } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import QuillEditor from "../components/QuillEditor";
 import CustomAttributeBuilder, { type CustomAttributeRow } from "../components/CustomAttributeBuilder";
+import { RETURN_WINDOW_LABEL } from "../utils/returnPolicy";
 import { FaArrowLeft } from "react-icons/fa";
 // import imageCompression from "browser-image-compression";
 
@@ -774,10 +775,10 @@ export default function EditProductPage() {
       }
 
       /* ================= RETURN WINDOW VALIDATION ================= */
-      if (product.isReturnable === 1) {
+      if (product.isReturnable === 1 || product.isReplaceable === 1) {
         const days = Number(product.returnWindowDays);
         if (!days || days < 1 || days > 30) {
-          throw new Error("Return window must be between 1 and 30 days");
+          throw new Error("Return / replacement window must be between 1 and 30 days");
         }
       }
 
@@ -847,7 +848,7 @@ export default function EditProductPage() {
 
       formData.append("is_replaceable", String(product.isReplaceable));
 
-      if (product.isReturnable === 1) {
+      if (product.isReturnable === 1 || product.isReplaceable === 1) {
         formData.append("return_window_days", product.returnWindowDays);
       }
 
@@ -1445,6 +1446,7 @@ export default function EditProductPage() {
                     value={product.isReturnable}
                     onChange={(e) => {
                       const val = Number(e.target.value) as 1 | 0;
+                      // Turning returns off defaults replacement to off too; the vendor can switch it back on.
                       setProduct((prev) => ({
                         ...prev,
                         isReturnable: val,
@@ -1468,25 +1470,27 @@ export default function EditProductPage() {
                   <select
                     name="isReplaceable"
                     value={product.isReplaceable}
-                    disabled={product.isReturnable === 0}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const val = Number(e.target.value) as 1 | 0;
                       setProduct((prev) => ({
                         ...prev,
-                        isReplaceable: Number(e.target.value) as 1 | 0,
-                      }))
-                    }
-                    className="w-full p-3 border rounded-lg disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        isReplaceable: val,
+                        returnWindowDays:
+                          val === 0 && prev.isReturnable === 0 ? "" : prev.returnWindowDays,
+                      }));
+                    }}
+                    className="w-full p-3 border rounded-lg"
                   >
                     <option value={1}>Yes</option>
                     <option value={0}>No</option>
                   </select>
                 </div>
 
-                {/* Return Window */}
-                {product.isReturnable === 1 && (
+                {/* Return / Replacement Window */}
+                {(product.isReturnable === 1 || product.isReplaceable === 1) && (
                   <FormInput
                     id="returnWindowDays"
-                    label="Return Window (Days)"
+                    label={`${RETURN_WINDOW_LABEL} (Days)`}
                     type="number"
                     value={product.returnWindowDays}
                     onChange={handleFieldChange}

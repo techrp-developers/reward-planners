@@ -7,6 +7,7 @@ import CustomAttributeBuilder, { type CustomAttributeRow } from "../components/C
 import ManualCoverEditor from "../components/ManualCoverEditor";
 import Swal from "sweetalert2";
 import { validateCoverFile, coverImageError, hasExhaustedCoverCredits } from "../utils/coverImage";
+import { RETURN_WINDOW_LABEL } from "../utils/returnPolicy";
 
 type IconComp = ComponentType<any>;
 
@@ -552,10 +553,10 @@ export default function ProductListingDynamic() {
           "Minimum delivery days cannot exceed maximum delivery days",
         );
 
-      if (product.isReturnable === 1) {
+      if (product.isReturnable === 1 || product.isReplaceable === 1) {
         const days = Number(product.returnWindowDays);
         if (!days || days < 1 || days > 30)
-          throw new Error("Return window must be between 1 and 30 days");
+          throw new Error("Return / replacement window must be between 1 and 30 days");
       }
 
       for (const doc of requiredDocs) {
@@ -599,7 +600,7 @@ export default function ProductListingDynamic() {
       );
       formData.append("is_returnable", String(product.isReturnable));
       formData.append("is_replaceable", String(product.isReplaceable));
-      if (product.isReturnable === 1 && product.returnWindowDays)
+      if ((product.isReturnable === 1 || product.isReplaceable === 1) && product.returnWindowDays)
         formData.append("return_window_days", product.returnWindowDays);
       formData.append("delivery_sla_min_days", product.deliveryMinDays);
       formData.append("delivery_sla_max_days", product.deliveryMaxDays);
@@ -1329,6 +1330,7 @@ export default function ProductListingDynamic() {
                 onChange={(e) => {
                   const val = Number(e.target.value) as 1 | 0;
 
+                  // Turning returns off defaults replacement to off too; the vendor can switch it back on.
                   setProduct((prev) => ({
                     ...prev,
                     isReturnable: val,
@@ -1348,23 +1350,27 @@ export default function ProductListingDynamic() {
               <select
                 name="isReplaceable"
                 value={product.isReplaceable}
-                disabled={product.isReturnable === 0}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const val = Number(e.target.value) as 1 | 0;
                   setProduct((prev) => ({
                     ...prev,
-                    isReplaceable: Number(e.target.value) as 1 | 0,
-                  }))
-                }
-                className={`${inputCls} disabled:bg-gray-100 disabled:cursor-not-allowed`}
+                    isReplaceable: val,
+                    returnWindowDays:
+                      val === 0 && prev.isReturnable === 0 ? "" : prev.returnWindowDays,
+                  }));
+                }}
+                className={inputCls}
               >
                 <option value={1}>Yes</option>
                 <option value={0}>No</option>
               </select>
             </div>
 
-            {product.isReturnable === 1 && (
+            {(product.isReturnable === 1 || product.isReplaceable === 1) && (
               <div>
-                <label className={labelCls}>Return Window (Days)</label>
+                <label className={labelCls}>
+                  {RETURN_WINDOW_LABEL} (Days)
+                </label>
                 <input
                   type="number"
                   name="returnWindowDays"

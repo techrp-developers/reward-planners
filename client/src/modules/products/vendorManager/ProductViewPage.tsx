@@ -17,6 +17,7 @@ import {
 
 import { useNavigate, useParams } from "react-router-dom";
 import QuillEditor from "../components/QuillEditor";
+import { RETURN_WINDOW_LABEL, returnWindowLabel } from "../utils/returnPolicy";
 
 // const API_BASE = import.meta.env.VITE_API_URL;
 import { api } from "../../../common/api/api";
@@ -985,11 +986,17 @@ export default function ReviewProductPage() {
             title="Pricing & Commercial Controls"
             description="Discount eligibility and return policy"
           />
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
             <FormInput
               id="isDiscountEligible"
               label="Discount Eligible"
               value={product.isDiscountEligible === 1 ? "Yes" : "No"}
+            />
+
+            <FormInput
+              id="isReturnable"
+              label="Returnable"
+              value={product.isReturnable === 1 ? "Yes" : "No"}
             />
 
             <FormInput
@@ -1000,13 +1007,9 @@ export default function ReviewProductPage() {
             />
 
             <FormInput
-              label="Return Policy"
+              label={RETURN_WINDOW_LABEL}
               id="returnWindowDays"
-              value={
-                product.isReturnable === 1
-                  ? `Returnable (${product.returnWindowDays ?? "-"} days)`
-                  : "Not Returnable"
-              }
+              value={returnWindowLabel(product)}
             />
           </div>
         </div>

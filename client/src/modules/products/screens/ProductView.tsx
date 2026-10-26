@@ -3,6 +3,7 @@ import type { ChangeEvent } from "react";
 import type { ComponentType } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import QuillEditor from "../components/QuillEditor";
+import { RETURN_WINDOW_LABEL, returnWindowLabel } from "../utils/returnPolicy";
 type IconComp = ComponentType<any>;
 
 function SectionHeader({
@@ -898,11 +899,18 @@ export default function ReviewProductPage() {
               description="Discount eligibility and return policy"
             />
 
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
               <FormInput
                 id="isDiscountEligible"
                 label="Discount Eligible"
                 value={product.isDiscountEligible === 1 ? "Yes" : "No"}
+                readOnly
+              />
+
+              <FormInput
+                id="isReturnable"
+                label="Returnable"
+                value={product.isReturnable === 1 ? "Yes" : "No"}
                 readOnly
               />
 
@@ -914,13 +922,9 @@ export default function ReviewProductPage() {
               />
 
               <FormInput
-                label="Return Policy"
+                label={RETURN_WINDOW_LABEL}
                 id="returnWindowDays"
-                value={
-                  product.isReturnable === 1
-                    ? `Returnable (${product.returnWindowDays ?? "-"} days)`
-                    : "Not Returnable"
-                }
+                value={returnWindowLabel(product)}
                 readOnly
               />
             </div>
