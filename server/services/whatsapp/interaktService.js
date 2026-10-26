@@ -56,4 +56,24 @@ async function sendTemplateMessage({
   }
 }
 
-module.exports = { sendTemplateMessage };
+async function sendTextMessage({ phone, message, callbackData }) {
+  const fullPhoneNumber = normalizeIndianMobile(phone);
+  if (!fullPhoneNumber) throw new Error("INTERAKT_PHONE_INVALID");
+  if (!process.env.INTERAKT_API_KEY || !process.env.INTERAKT_BASE_URL) {
+    throw new Error("INTERAKT_CONFIG_MISSING");
+  }
+  const { data } = await axios.post(process.env.INTERAKT_BASE_URL, {
+    userId: "",
+    fullPhoneNumber,
+    callbackData,
+    type: "Text",
+    data: { message },
+  }, {
+    headers: { Authorization: `Basic ${process.env.INTERAKT_API_KEY}`, "Content-Type": "application/json" },
+    timeout: 15000,
+  });
+  if (data?.result !== true) throw new Error("INTERAKT_MESSAGE_REJECTED");
+  return data;
+}
+
+module.exports = { sendTemplateMessage, sendTextMessage };
