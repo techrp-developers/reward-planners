@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import type { ComponentType } from "react";
 // import { useNavigate, useParams } from "react-router-dom";
@@ -12,6 +12,7 @@ import {
   FaUniversity,
   FaFileContract,
   FaFileUpload,
+  FaTimes,
 } from "react-icons/fa";
 import { api } from "../../../common/api/api";
 
@@ -219,18 +220,21 @@ function FileUploadInput(props: {
   label: string;
   file: File | null;
   onChange: (e: ChangeEvent<HTMLInputElement>) => void;
+  onRemove: () => void;
   accept?: string;
   required?: boolean;
   description?: string;
 }) {
-  const { id, label, file, onChange, accept, required, description } = props;
+  const { id, label, file, onChange, onRemove, accept, required, description } = props;
+  const inputRef = useRef<HTMLInputElement>(null);
   return (
     <div className="flex flex-col space-y-1.5">
-      <label className="text-xs font-bold uppercase tracking-wider text-gray-600 ml-1">
+      <label htmlFor={id} className="text-xs font-bold uppercase tracking-wider text-gray-600 ml-1">
         {label} {required && <span className="text-[#FC3F78]">*</span>}
       </label>
       <div className="relative group">
         <input
+          ref={inputRef}
           id={id}
           name={id}
           type="file"
@@ -258,6 +262,20 @@ function FileUploadInput(props: {
             {file ? file.name : "Click to upload document"}
           </span>
         </div>
+        {file && (
+          <button
+            type="button"
+            aria-label={`Remove ${file.name}`}
+            title="Remove selected file"
+            onClick={() => {
+              if (inputRef.current) inputRef.current.value = "";
+              onRemove();
+            }}
+            className="absolute -right-2 -top-2 z-20 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-red-200 bg-white text-red-500 shadow-sm hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-red-500 disabled:hidden"
+          >
+            <FaTimes aria-hidden="true" />
+          </button>
+        )}
       </div>
       {description && (
         <p className="text-[10px] text-gray-400 italic leading-tight">
@@ -274,15 +292,25 @@ function DocumentUploadRow({
   existingDoc,
   file,
   onChange,
+  onRemove,
   required = false,
   accept = "image/*,application/pdf",
 }: DocumentUploadRowProps) {
   // const fileUrl = existingDoc
   //   ? `${BASE_UPLOAD_URL}/${existingDoc.file_path}`
   //   : null;
-  const fileUrl = existingDoc?.url || null;
-
-  const isImage = existingDoc?.mime_type?.startsWith("image/");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!file) {
+      setPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+  const fileUrl = file ? previewUrl : existingDoc?.url || null;
+  const isImage = (file?.type || existingDoc?.mime_type)?.startsWith("image/");
 
   return (
     <div className="space-y-2">
@@ -295,11 +323,9 @@ function DocumentUploadRow({
       <div className="flex items-start gap-4 border border-gray-200 rounded-xl p-4 bg-white min-w-0">
         {/* Existing preview */}
         <div
-          className="flex-shrink-0 w-28 h-28 bg-gray-50 rounded-lg 
-                flex items-center justify-center 
-                overflow-hidden"
+          className="relative flex-shrink-0 w-28 h-28 bg-gray-50 rounded-lg flex items-center justify-center"
         >
-          {existingDoc ? (
+          {fileUrl ? (
             isImage ? (
               <a href={fileUrl!} target="_blank" rel="noreferrer">
                 <img
@@ -323,6 +349,17 @@ function DocumentUploadRow({
               No document
             </span>
           )}
+          {(file || existingDoc) && (
+            <button
+              type="button"
+              aria-label={`Remove ${label}`}
+              title={`Remove ${label}`}
+              onClick={() => onRemove(docKey)}
+              className="absolute -right-2 -top-2 z-20 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-red-200 bg-white text-red-500 shadow-sm hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-red-500 disabled:hidden"
+            >
+              <FaTimes aria-hidden="true" />
+            </button>
+          )}
         </div>
 
         {/* Upload button */}
@@ -332,11 +369,18 @@ function DocumentUploadRow({
             label={`Upload new ${label}`}
             file={file}
             onChange={onChange}
+            onRemove={() => onRemove(docKey)}
             accept={accept}
             required={required}
           />
         </div>
       </div>
+
+      {fileUrl && (
+        <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="inline-block text-sm font-semibold text-[#852BAF] underline hover:text-[#FC3F78]">
+          View document
+        </a>
+      )}
 
       {/* Helper text */}
       {existingDoc && (
@@ -427,6 +471,7 @@ type DocumentUploadRowProps = {
   existingDoc?: ExistingDocument;
   file: File | null;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onRemove: (docKey: string) => void;
   required?: boolean;
   accept?: string;
 };
@@ -439,6 +484,7 @@ export default function Onboarding() {
   const [existingDocs, setExistingDocs] = useState<
     Record<string, ExistingDocument>
   >({});
+  const [removedDocumentKeys, setRemovedDocumentKeys] = useState<string[]>([]);
   const [formData, setFormData] =
     useState<VendorOnboardingData>(initialFormData);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -661,6 +707,21 @@ export default function Onboarding() {
 
   /* ================= HANDLERS ================= */
 
+  const handleRemoveFile = (docKey: string) => {
+    if (!formData[docKey as keyof VendorOnboardingData] && existingDocs[docKey]) {
+      setRemovedDocumentKeys((previous) => [...new Set([...previous, docKey])]);
+      setExistingDocs((previous) => {
+        const next = { ...previous };
+        delete next[docKey];
+        return next;
+      });
+    }
+    const input = document.getElementById(docKey) as HTMLInputElement | null;
+    if (input) input.value = "";
+    setFormData((previous) => ({ ...previous, [docKey]: null }));
+    setErrors((previous) => ({ ...previous, [docKey]: "" }));
+  };
+
   const handleChange = (
     e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
   ) => {
@@ -668,6 +729,7 @@ export default function Onboarding() {
 
     /* FILE */
     if (type === "file") {
+      if (!files?.length) return;
       if (name === "vendorAgreementFile" && !formData.agreementAccepted) {
         Swal.fire({
           icon: "warning",
@@ -675,6 +737,7 @@ export default function Onboarding() {
           text: "Please accept the Vendor Agreement before uploading the signed document.",
           confirmButtonText: "OK",
         });
+        (e.target as HTMLInputElement).value = "";
         return;
       }
 
@@ -880,6 +943,7 @@ export default function Onboarding() {
 
     try {
       const form = new FormData();
+      form.append("removedDocumentKeys", JSON.stringify(removedDocumentKeys));
       Object.entries(formData).forEach(([k, v]) => {
         if (v instanceof File) form.append(k, v);
         else if (v !== null) form.append(k, String(v));
@@ -1102,6 +1166,7 @@ export default function Onboarding() {
                     existingDoc={existingDocs["gstinFile"]}
                     file={formData.gstinFile}
                     onChange={handleChange}
+                    onRemove={handleRemoveFile}
                     required={false}
                   />
                   {/* Pan */}
@@ -1111,6 +1176,7 @@ export default function Onboarding() {
                     existingDoc={existingDocs["panFile"]}
                     file={formData.panFile}
                     onChange={handleChange}
+                    onRemove={handleRemoveFile}
                     required={false}
                   />
                   {/* Noc */}
@@ -1120,6 +1186,7 @@ export default function Onboarding() {
                     existingDoc={existingDocs["nocFile"]}
                     file={formData.nocFile}
                     onChange={handleChange}
+                    onRemove={handleRemoveFile}
                     required={false}
                   />
                   {/* Trademark File */}
@@ -1129,6 +1196,7 @@ export default function Onboarding() {
                     existingDoc={existingDocs["rightsAdvisoryFile"]}
                     file={formData.rightsAdvisoryFile}
                     onChange={handleChange}
+                    onRemove={handleRemoveFile}
                     required={false}
                   />
                   {/* Signatory ID */}
@@ -1138,6 +1206,7 @@ export default function Onboarding() {
                     existingDoc={existingDocs["signatoryIdFile"]}
                     file={formData.signatoryIdFile}
                     onChange={handleChange}
+                    onRemove={handleRemoveFile}
                   />
                   {/* Business profile */}
                   <DocumentUploadRow
@@ -1146,6 +1215,7 @@ export default function Onboarding() {
                     existingDoc={existingDocs["businessProfileFile"]}
                     file={formData.businessProfileFile}
                     onChange={handleChange}
+                    onRemove={handleRemoveFile}
                   />
                   {/* Brand logo - required for Manufacturer and Trader */}
                   <DocumentUploadRow
@@ -1154,6 +1224,7 @@ export default function Onboarding() {
                     existingDoc={existingDocs["brandLogoFile"]}
                     file={formData.brandLogoFile}
                     onChange={handleChange}
+                    onRemove={handleRemoveFile}
                   />
                   {/* Bank proof - cancelled cheque or passbook image */}
                   <DocumentUploadRow
@@ -1162,6 +1233,7 @@ export default function Onboarding() {
                     existingDoc={existingDocs["bankProofFile"]}
                     file={formData.bankProofFile}
                     onChange={handleChange}
+                    onRemove={handleRemoveFile}
                   />
                   {/* Electricity */}
                   <DocumentUploadRow
@@ -1170,6 +1242,7 @@ export default function Onboarding() {
                     existingDoc={existingDocs["electricityBillFile"]}
                     file={formData.electricityBillFile}
                     onChange={handleChange}
+                    onRemove={handleRemoveFile}
                   />
                   {/* Vendor agreement - checkbox + optional upload */}
                   <div className="col-span-1 md:col-span-2 lg:col-span-3">
@@ -1201,6 +1274,7 @@ export default function Onboarding() {
                       existingDoc={existingDocs["vendorAgreementFile"]}
                       file={formData.vendorAgreementFile}
                       onChange={handleChange}
+                      onRemove={handleRemoveFile}
                       required={false}
                     />
 
@@ -1219,6 +1293,7 @@ export default function Onboarding() {
                       existingDoc={existingDocs["authorizationLetterFile"]}
                       file={formData.authorizationLetterFile}
                       onChange={handleChange}
+                      onRemove={handleRemoveFile}
                       required={false}
                     />
                   )}
