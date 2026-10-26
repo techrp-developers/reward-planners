@@ -258,6 +258,9 @@ export default function EmployeeOnboarding() {
                   ))}
                 </select>
               </div>
+              <Link to="/hr/departments" className="inline-block mt-2 text-xs font-semibold text-[#852BAF] hover:underline">
+                Can't find it? Manage departments
+              </Link>
             </div>
 
             {/* Role */}

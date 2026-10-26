@@ -9,6 +9,7 @@ import {
   FiGift,
   FiChevronDown,
   FiBarChart2,
+  FiBriefcase,
 } from "react-icons/fi";
 import { HiOutlineUserCircle } from "react-icons/hi2";
 import { useAuth } from "../../../common/auth/useAuth";
@@ -96,6 +97,12 @@ const navItems: NavItem[] = [
     label: "Polls",
     to: "/hr/polls",
     Icon: FiBarChart2,
+  },
+  {
+    type: "link",
+    label: "Departments",
+    to: "/hr/departments",
+    Icon: FiBriefcase,
   },
 ];
 

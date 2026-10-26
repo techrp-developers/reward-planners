@@ -141,7 +141,7 @@ export const routes = {
     employees: "/hr/employees",
     rewards: "/hr/rewards",
     polls: "/hr/polls",
-
+    departments: "/hr/departments",
   },
   service: {
     dashboard: "/service/dashboard",

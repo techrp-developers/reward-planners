@@ -16,7 +16,8 @@
     "migrate:auth-refresh-tokens": "node scripts/migrate-auth-refresh-tokens.js",
     "migrate:brand-promotional-banner": "node scripts/migrate-brand-promotional-banner.js",
     "migrate:content-gradient-colors": "node scripts/migrate-content-gradient-colors.js",
-    "migrate:content-motion": "node scripts/migrate-content-motion.js"
+    "migrate:content-motion": "node scripts/migrate-content-motion.js",
+    "migrate:company-departments": "node scripts/migrate-company-departments.js"
   },
   "keywords": [
     "rewards",

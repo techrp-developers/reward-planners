@@ -76,6 +76,27 @@ router.get(
   employeeController.departments.bind(employeeController),
 );
 
+// Add a department to the company's list
+router.post(
+  "/departments",
+  ...guard,
+  employeeController.createDepartment.bind(employeeController),
+);
+
+// Rename a department (body: current_name, name); employees move with it
+router.put(
+  "/departments",
+  ...guard,
+  employeeController.renameDepartment.bind(employeeController),
+);
+
+// Delete an unused department (query: name)
+router.delete(
+  "/departments",
+  ...guard,
+  employeeController.deleteDepartment.bind(employeeController),
+);
+
 // Bulk upload employee records
 router.post(
   "/bulk-upload",

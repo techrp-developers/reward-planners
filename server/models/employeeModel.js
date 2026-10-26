@@ -30,21 +30,90 @@ class EmployeeModel {
     return company;
   }
 
+  // Departments HR has configured, plus any free-text values already on employees
+  // (bulk upload, manager edits) so the dropdown never hides an existing value.
   async getDepartments(companyId) {
     const [rows] = await db.execute(
-      `SELECT TRIM(department) AS name, COUNT(*) AS employee_count
-       FROM company_users
-       WHERE company_id = ?
-         AND department IS NOT NULL
-         AND TRIM(department) != ''
-       GROUP BY TRIM(department)
-       ORDER BY name ASC`,
-      [companyId],
+      `SELECT d.name, MAX(cd.department_id) AS department_id, COUNT(cu.id) AS employee_count
+       FROM (
+         SELECT name FROM company_departments WHERE company_id = ?
+         UNION
+         SELECT TRIM(department)
+         FROM company_users
+         WHERE company_id = ? AND department IS NOT NULL AND TRIM(department) != ''
+       ) d
+       LEFT JOIN company_departments cd ON cd.company_id = ? AND cd.name = d.name
+       LEFT JOIN company_users cu ON cu.company_id = ? AND TRIM(cu.department) = d.name
+       GROUP BY d.name
+       ORDER BY d.name ASC`,
+      [companyId, companyId, companyId, companyId],
     );
     return rows.map((row) => ({
+      id: row.department_id ? Number(row.department_id) : null,
       name: row.name,
       employee_count: Number(row.employee_count),
     }));
+  }
+
+  async findDepartmentByName(companyId, name) {
+    const [[department]] = await db.execute(
+      `SELECT department_id, name FROM company_departments WHERE company_id = ? AND name = ? LIMIT 1`,
+      [companyId, name],
+    );
+    return department;
+  }
+
+  async createDepartment(companyId, name, createdBy = null) {
+    const [result] = await db.execute(
+      `INSERT INTO company_departments (company_id, name, created_by) VALUES (?, ?, ?)`,
+      [companyId, name, createdBy],
+    );
+    return result.insertId;
+  }
+
+  // Renames the department and moves its employees along with it.
+  async renameDepartment(companyId, currentName, newName, createdBy = null) {
+    const connection = await db.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [updated] = await connection.execute(
+        `UPDATE company_departments SET name = ? WHERE company_id = ? AND name = ?`,
+        [newName, companyId, currentName],
+      );
+      if (!updated.affectedRows) {
+        await connection.execute(
+          `INSERT INTO company_departments (company_id, name, created_by) VALUES (?, ?, ?)`,
+          [companyId, newName, createdBy],
+        );
+      }
+      const [moved] = await connection.execute(
+        `UPDATE company_users SET department = ? WHERE company_id = ? AND TRIM(department) = ?`,
+        [newName, companyId, currentName],
+      );
+      await connection.commit();
+      return moved.affectedRows;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async countDepartmentEmployees(companyId, name) {
+    const [[row]] = await db.execute(
+      `SELECT COUNT(*) AS total FROM company_users WHERE company_id = ? AND TRIM(department) = ?`,
+      [companyId, name],
+    );
+    return Number(row.total);
+  }
+
+  async deleteDepartment(companyId, name) {
+    const [result] = await db.execute(
+      `DELETE FROM company_departments WHERE company_id = ? AND name = ?`,
+      [companyId, name],
+    );
+    return result.affectedRows;
   }
 
   buildStatusExpression() {

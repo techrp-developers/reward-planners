@@ -127,6 +127,7 @@ const CancellationRequest = lazy(() => import("./modules/products/vendorManager/
 const CancellationDetail = lazy(() => import("./modules/products/vendorManager/order/CancellationDetail.tsx"));
 const ManageRewards = lazy(() => import("./modules/hr/rewards/ManageRewards.tsx"));
 const PollManagement = lazy(() => import("./modules/hr/polls/PollManagement.tsx"));
+const DepartmentManagement = lazy(() => import("./modules/hr/departments/DepartmentManagement.tsx"));
 
 // Service Partners (Services vertical)
 const ServicePartnerList = lazy(() => import("./modules/service/serviceManager/servicePartners/pages/ServicePartnerList.tsx"));
@@ -603,6 +604,7 @@ export default function App() {
         <Route path={routes.hr.profile} element={<EditProfilePage />} />
         <Route path={routes.hr.rewards} element={<ManageRewards />} />
         <Route path={routes.hr.polls} element={<PollManagement />} />
+        <Route path={routes.hr.departments} element={<DepartmentManagement />} />
       </Route>
 
       {/* ========== RM ========== */}
