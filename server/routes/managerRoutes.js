@@ -9,10 +9,15 @@ const employeeController = require("../controllers/employeeController");
 const { sendActivationEmail, sendActivationWhatsApp } = require("../controllers/employeeActivationController");
 const { rateLimit } = require("express-rate-limit");
 const { sendEmployeeWhatsApp } = require("../controllers/employeeWhatsAppController");
+const { sendEmployeeEmail } = require("../controllers/employeeEmailController");
 router.post("/employee-directory/whatsapp",
   authenticateToken, authorizeRoles("rm"),
   rateLimit({ windowMs: 60 * 1000, limit: 10, message: { success: false, message: "Please wait a minute before sending more WhatsApp messages." } }),
   sendEmployeeWhatsApp);
+router.post("/employee-directory/email",
+  authenticateToken, authorizeRoles("rm"),
+  rateLimit({ windowMs: 60 * 1000, limit: 10, message: { success: false, message: "Please wait a minute before sending more emails." } }),
+  sendEmployeeEmail);
 router.post("/employee-directory/companies/:companyId/employees/:employeeId/activation-email",
   authenticateToken, authorizeRoles("admin", "rm"),
   rateLimit({ windowMs: 60 * 1000, limit: 10, message: { success: false, message: "Please wait a minute before sending more activation emails." } }),
