@@ -62,17 +62,22 @@ async function sendTextMessage({ phone, message, callbackData }) {
   if (!process.env.INTERAKT_API_KEY || !process.env.INTERAKT_BASE_URL) {
     throw new Error("INTERAKT_CONFIG_MISSING");
   }
+  // Same recipient shape as sendTemplateMessage, which is proven against this Interakt account.
   const { data } = await axios.post(process.env.INTERAKT_BASE_URL, {
-    userId: "",
-    fullPhoneNumber,
-    callbackData,
+    countryCode: "+91",
+    phoneNumber: fullPhoneNumber.slice(3),
+    ...(callbackData ? { callbackData } : {}),
     type: "Text",
     data: { message },
   }, {
     headers: { Authorization: `Basic ${process.env.INTERAKT_API_KEY}`, "Content-Type": "application/json" },
     timeout: 15000,
   });
-  if (data?.result !== true) throw new Error("INTERAKT_MESSAGE_REJECTED");
+  if (data?.result !== true) {
+    const error = new Error("INTERAKT_MESSAGE_REJECTED");
+    error.providerData = data;
+    throw error;
+  }
   return data;
 }
 

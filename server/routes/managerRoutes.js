@@ -6,7 +6,7 @@ const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 const managerController = require("../controllers/managerController");
 const CategoryAttributeController = require("../controllers/categoryAttributeController");
 const employeeController = require("../controllers/employeeController");
-const { sendActivationEmail } = require("../controllers/employeeActivationController");
+const { sendActivationEmail, sendActivationWhatsApp } = require("../controllers/employeeActivationController");
 const { rateLimit } = require("express-rate-limit");
 const { sendEmployeeWhatsApp } = require("../controllers/employeeWhatsAppController");
 router.post("/employee-directory/whatsapp",
@@ -17,6 +17,10 @@ router.post("/employee-directory/companies/:companyId/employees/:employeeId/acti
   authenticateToken, authorizeRoles("admin", "rm"),
   rateLimit({ windowMs: 60 * 1000, limit: 10, message: { success: false, message: "Please wait a minute before sending more activation emails." } }),
   sendActivationEmail);
+router.post("/employee-directory/companies/:companyId/employees/:employeeId/activation-whatsapp",
+  authenticateToken, authorizeRoles("admin", "rm"),
+  rateLimit({ windowMs: 60 * 1000, limit: 10, message: { success: false, message: "Please wait a minute before sending more activation WhatsApp messages." } }),
+  sendActivationWhatsApp);
 
 const employeeFileUpload = multer({
   storage: multer.memoryStorage(),

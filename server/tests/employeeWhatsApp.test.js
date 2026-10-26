@@ -23,6 +23,8 @@ test("uses stored phone and scopes employee to company; reports queued, not deli
   await t.run({ ...valid, phone: "9123456789" });
   assert.deepEqual(t.queries[0].args, [12, 7]);
   assert.match(t.queries[0].sql, /company_id = \?/);
+  // company_users stores the number in `contact`; there is no `phone` column.
+  assert.match(t.queries[0].sql, /SELECT contact AS phone FROM company_users/);
   assert.equal(t.sent[0].phone, "+919876543210");
   assert.equal(t.sent[0].message, "Hello");
   assert.equal(t.res.body.id, "queued-id");
@@ -48,11 +50,17 @@ for (const [rows, code] of [[[], 404], [[{ phone: null }], 400]]) {
 }
 test("provider rejection is never reported as success", async () => {
   const t = setup(undefined, new Error("rejected")); await t.run(valid);
-  assert.equal(t.res.code, 502); assert.equal(t.res.body.success, false);
+  // 502/504 would be swallowed by Cloudflare's own error page, hiding the reason from the RM.
+  assert.equal(t.res.code, 503); assert.equal(t.res.body.success, false);
 });
 test("timeout warns against blindly retrying", async () => {
   const t = setup(undefined, Object.assign(new Error("timeout"), { code: "ECONNABORTED" })); await t.run(valid);
-  assert.equal(t.res.code, 504); assert.match(t.res.body.message, /before retrying/);
+  assert.equal(t.res.code, 503); assert.match(t.res.body.message, /before retrying/);
+});
+test("provider result:false surfaces the provider reason", async () => {
+  const error = Object.assign(new Error("INTERAKT_MESSAGE_REJECTED"), { providerData: { result: false, message: "Session window expired" } });
+  const t = setup(undefined, error); await t.run(valid);
+  assert.equal(t.res.code, 422); assert.match(t.res.body.message, /Session window expired/);
 });
 test("provider 400 exposes a redacted reason as an application rejection", async () => {
   const error = Object.assign(new Error("bad request"), { response: { status: 400, data: { message: "Window closed for +919876543210 test-secret" } } });
@@ -72,7 +80,9 @@ test("Interakt text payload uses documented format and rejects unsuccessful resu
   const send = context.module.exports.sendTextMessage;
   await send({ phone: "9876543210", message: "Hello", callbackData: "test" });
   assert.equal(posted[1].type, "Text");
-  assert.equal(posted[1].fullPhoneNumber, "+919876543210");
+  assert.equal(posted[1].countryCode, "+91");
+  assert.equal(posted[1].phoneNumber, "9876543210");
+  assert.equal(posted[1].userId, undefined);
   assert.equal(posted[1].data.message, "Hello");
   assert.equal(posted[2].headers.Authorization, "Basic test-key");
   result = false;
