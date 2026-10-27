@@ -1,13 +1,14 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import PortalTopNavbar from "./PortalTopNavbar";
+import "./hrTheme.css";
 
 type PremiumPortalShellProps = {
   sidebar: ReactNode;
   roleLabel: string;
   userLabel?: string;
   children: ReactNode;
-  // "plain" drops the gradient backdrop and decorative header (used by HR).
+  // "plain" uses a simple page backdrop and a compact themed header (used by HR).
   variant?: "premium" | "plain";
 };
 
@@ -15,6 +16,18 @@ export default function PremiumPortalShell({ sidebar, roleLabel, userLabel, chil
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { pathname } = useLocation();
   const plain = variant === "plain";
+  const [darkMode, setDarkMode] = useState(() => {
+    try { return localStorage.getItem("hr-theme") === "dark"; }
+    catch { return false; }
+  });
+
+  useEffect(() => {
+    if (!plain) return;
+    document.body.classList.toggle("hr-dark", darkMode);
+    try { localStorage.setItem("hr-theme", darkMode ? "dark" : "light"); }
+    catch { /* Keep the toggle usable when browser storage is unavailable. */ }
+    return () => document.body.classList.remove("hr-dark");
+  }, [plain, darkMode]);
 
   return (
     <div className={`role-portal min-h-screen ${plain ? "bg-[#f8f6fb] text-slate-900" : "bg-[#f7f6fa] text-slate-900"}`}>
@@ -25,7 +38,7 @@ export default function PremiumPortalShell({ sidebar, roleLabel, userLabel, chil
       </div>
       {sidebarOpen && <button aria-label="Close navigation" onClick={() => setSidebarOpen(false)} className="fixed inset-0 z-40 bg-slate-950/35 backdrop-blur-sm lg:hidden" />}
 
-      <PortalTopNavbar roleLabel={roleLabel} userLabel={userLabel} onOpenSidebar={() => setSidebarOpen(true)} plain={plain} />
+      <PortalTopNavbar roleLabel={roleLabel} userLabel={userLabel} onOpenSidebar={() => setSidebarOpen(true)} plain={plain} darkMode={darkMode} onToggleTheme={() => setDarkMode(value => !value)} />
 
       <main className="relative min-h-screen min-w-0 overflow-x-hidden lg:ml-64">
         <div key={pathname} className="page-enter mx-auto w-full max-w-[1600px] p-4 sm:p-6 lg:p-8">

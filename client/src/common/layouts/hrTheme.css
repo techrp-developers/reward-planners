@@ -1,0 +1,80 @@
+/* Applied only while the HR shell is mounted; includes body-mounted dialogs. */
+body.hr-dark {
+  color-scheme: dark;
+  background: #111018;
+  color: #e8e5ef;
+}
+
+.hr-dark .role-portal {
+  background: #111018;
+  color: #e8e5ef;
+}
+
+.hr-dark .role-portal nav {
+  background: #1c1926;
+}
+
+.hr-dark .role-portal nav [class*="shadow-purple-"] {
+  --tw-shadow-color: transparent;
+}
+
+.hr-dark :is(.bg-white, [class*="bg-white/"], .swal2-popup) {
+  background-color: #1c1926;
+  color: #e8e5ef;
+}
+
+.hr-dark :is([class~="bg-slate-50"], [class~="bg-slate-100"], [class~="bg-gray-50"], [class~="bg-gray-100"], [class*="bg-slate-50/"], [class*="bg-purple-50"], [class~="bg-purple-100"]) {
+  background-color: #292235;
+}
+
+.hr-dark :is([class*="text-slate-9"], [class*="text-slate-8"], [class*="text-slate-7"], [class*="text-gray-9"], [class*="text-gray-8"], [class*="text-gray-7"]) {
+  color: #e8e5ef;
+}
+
+.hr-dark :is([class*="text-slate-6"], [class*="text-slate-5"], [class*="text-slate-4"], [class*="text-gray-6"], [class*="text-gray-5"], [class*="text-gray-4"]) {
+  color: #b1a9c0;
+}
+
+.hr-dark :is([class~="text-[#852BAF]"], [class~="text-[#6E2391]"], [class~="text-purple-600"], [class~="text-purple-700"]) {
+  color: #c99aeb;
+}
+
+.hr-dark :is([class*="border-slate-1"], [class*="border-slate-2"], [class*="border-slate-3"], [class*="border-gray-1"], [class*="border-gray-2"], [class*="border-purple-1"]) {
+  border-color: #3b3249;
+}
+
+.hr-dark [class*="divide-"] > :not(:last-child) {
+  border-color: #3b3249;
+}
+
+.hr-dark .role-portal main thead {
+  background: #292235;
+}
+
+.hr-dark .role-portal main th {
+  color: #b1a9c0;
+}
+
+.hr-dark .role-portal main tbody tr:hover,
+.hr-dark :is([class*="hover:bg-slate-50"], [class*="hover:bg-slate-100"], [class*="hover:bg-gray-50"], [class*="hover:bg-purple-50"], [class*="hover:bg-white"]):hover {
+  background-color: #32283e;
+}
+
+.hr-dark .role-portal main :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
+  background-color: #211c2c;
+  border-color: #493c58;
+  color: #e8e5ef;
+}
+
+.hr-dark .role-portal main :is(input, textarea)::placeholder {
+  color: #a69bb7;
+}
+
+.hr-dark .role-portal main :is(input, select, textarea):focus {
+  border-color: #c99aeb;
+}
+
+.hr-dark .role-portal main ::selection {
+  background: #654279;
+  color: #fff;
+}

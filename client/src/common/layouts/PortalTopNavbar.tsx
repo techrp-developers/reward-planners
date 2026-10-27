@@ -1,4 +1,4 @@
-import { FiMenu } from "react-icons/fi";
+import { FiMenu, FiMoon, FiSun } from "react-icons/fi";
 import NotificationBell from "../notifications/components/NotificationBell";
 
 type PortalTopNavbarProps = {
@@ -6,22 +6,28 @@ type PortalTopNavbarProps = {
   userLabel?: string;
   onOpenSidebar: () => void;
   plain?: boolean;
+  darkMode?: boolean;
+  onToggleTheme?: () => void;
 };
 
-export default function PortalTopNavbar({ roleLabel, userLabel, onOpenSidebar, plain }: PortalTopNavbarProps) {
+export default function PortalTopNavbar({ roleLabel, userLabel, onOpenSidebar, plain, darkMode, onToggleTheme }: PortalTopNavbarProps) {
   if (plain) {
     return (
       <header className="sticky top-0 z-30 border-b border-purple-100/70 bg-white lg:ml-64">
-        <div className="flex h-14 items-center justify-between px-4 sm:px-6 lg:px-8">
+        <div className="flex h-16 items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-3">
-            <button onClick={onOpenSidebar} aria-label="Open navigation" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 lg:hidden">
+            <button type="button" onClick={onOpenSidebar} aria-label="Open navigation" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-600 transition hover:bg-purple-50 hover:text-[#852BAF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#852BAF] lg:hidden">
               <FiMenu size={18} />
             </button>
-            <p className="truncate text-sm text-slate-500">{roleLabel}</p>
+            <span aria-hidden="true" className="h-5 w-1 shrink-0 rounded-full bg-[#852BAF]" />
+            <p className="truncate text-sm font-semibold text-[#852BAF]">{roleLabel}</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-3 sm:gap-4">
+            <button type="button" onClick={onToggleTheme} aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"} title={darkMode ? "Switch to light mode" : "Switch to dark mode"} className="grid h-9 w-9 cursor-pointer place-items-center rounded-lg text-slate-500 transition hover:bg-purple-50 hover:text-[#852BAF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#852BAF]">
+              {darkMode ? <FiSun size={19} /> : <FiMoon size={19} />}
+            </button>
             <NotificationBell />
-            {userLabel && <span className="hidden max-w-48 truncate text-sm font-medium text-slate-700 sm:block">{userLabel}</span>}
+            {userLabel && <span className="hidden max-w-48 truncate border-l border-slate-200 pl-4 text-sm font-medium text-slate-600 sm:block">{userLabel}</span>}
           </div>
         </div>
       </header>
