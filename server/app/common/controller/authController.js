@@ -127,6 +127,16 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
     return null;
   }
 
+  const USER_INACTIVE_MESSAGE = "User inactive. Please contact your HR.";
+
+  function sendUserInactive(res) {
+    return res.status(403).json({
+      success: false,
+      code: "USER_INACTIVE",
+      message: USER_INACTIVE_MESSAGE,
+    });
+  }
+
   function sendActivationOtpNotifications({ email, employee, otp }) {
     setImmediate(() => {
       if (email) {
@@ -356,6 +366,10 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
         const employee = await findEmployeeForActivation(identity);
 
         if (!employee) {
+          if (await AuthModel.isEmployeeInactive(identity)) {
+            return sendUserInactive(res);
+          }
+
           return res.json({
             success: true,
             message: "If your employee account is eligible, a code has been sent.",
@@ -403,6 +417,10 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
         const employee = await findEmployeeForActivation(identity);
 
         if (!employee) {
+          if (await AuthModel.isEmployeeInactive(identity)) {
+            return sendUserInactive(res);
+          }
+
           return res.json({
             success: true,
             message: "If your employee account is eligible, a code has been sent.",
@@ -472,6 +490,10 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
 
         const employee = await findEmployeeForActivation(identity);
         if (!employee) {
+          if (await AuthModel.isEmployeeInactive(identity)) {
+            return sendUserInactive(res);
+          }
+
           return res.status(401).json({
             success: false,
             message: "Invalid or expired OTP",
@@ -488,12 +510,7 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
             existingCustomer.deleted_at,
           );
 
-          if (!reactivated) {
-            return res.status(403).json({
-              success: false,
-              message: "Account inactive",
-            });
-          }
+          if (!reactivated) return sendUserInactive(res);
         }
 
         const { deviceId, deviceName } = readDeviceFields(req.body);
@@ -830,10 +847,7 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
             user.deleted_at,
           );
 
-          if (!reactivated)
-            return res
-              .status(403)
-              .json({ success: false, message: "Account inactive" });
+          if (!reactivated) return sendUserInactive(res);
 
           user.status = 1;
         }

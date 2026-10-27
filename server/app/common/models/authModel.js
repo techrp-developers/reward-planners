@@ -189,6 +189,20 @@ class authModel {
     return rows[0];
   }
 
+  // Employee that exists but was deactivated by HR.
+  async isEmployeeInactive({ email, phone }) {
+    if (!email && !phone) return false;
+
+    const [rows] = await db.execute(
+      email
+        ? `SELECT id FROM company_users WHERE email = ? AND status != 1 LIMIT 1`
+        : `SELECT id FROM company_users WHERE TRIM(contact) = ? AND status != 1 LIMIT 1`,
+      [email ? email.toLowerCase() : phone],
+    );
+
+    return rows.length > 0;
+  }
+
   async storeActivationOTP(email, otp) {
     const expiry = new Date(Date.now() + 10 * 60 * 1000);
     const hashedOtp = await bcrypt.hash(otp.toString(), 10);
