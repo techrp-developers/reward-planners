@@ -116,10 +116,13 @@ class EmployeeModel {
     return result.affectedRows;
   }
 
+  // HR list status. 'pending' = employed but has not activated the app yet;
+  // queries using this must LEFT JOIN customer c.
   buildStatusExpression() {
     return `CASE
-      WHEN cu.status = 1 THEN 'active'
-      ELSE 'inactive'
+      WHEN cu.status != 1 THEN 'inactive'
+      WHEN c.user_id IS NULL THEN 'pending'
+      ELSE 'active'
     END`;
   }
 

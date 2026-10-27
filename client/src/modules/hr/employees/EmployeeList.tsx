@@ -1,4 +1,5 @@
-import { useEffect, useState, useMemo, type FormEvent } from "react";
+import { useEffect, useState, useMemo, useRef, type FormEvent } from "react";
+import { useDebounce } from "../../../common/hooks/useDebounce";
 import { Link } from "react-router-dom";
 import Swal from "sweetalert2";
 import { hrApi } from "../../../common/api/hrApi";
@@ -71,34 +72,52 @@ export default function EmployeeList() {
   const [search, setSearch] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<FilterType>("all");
   const [loading, setLoading] = useState<boolean>(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [editForm, setEditForm] = useState<EmployeeEditForm>(emptyEditForm);
   const [editLoading, setEditLoading] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [departments, setDepartments] = useState<string[]>([]);
+  const [totalEmployees, setTotalEmployees] = useState(0);
+  const [stats, setStats] = useState({ total: 0, active: 0, pending: 0, inactive: 0 });
   const pageSize = 10;
+  const debouncedSearch = useDebounce(search.trim(), 300);
+  const latestRequest = useRef(0);
 
+  // Pagination, search and status filtering run on the server so every
+  // employee is reachable, not just the first batch.
   const fetchEmployees = async () => {
+    const requestId = ++latestRequest.current;
     try {
       setLoading(true);
       const response = await hrApi.get("/employees", {
-        params: { limit: 100 },
+        params: { page: currentPage, limit: pageSize, search: debouncedSearch, status: statusFilter },
       });
+      if (requestId !== latestRequest.current) return;
       setEmployees(response.data?.data || []);
+      setTotalEmployees(Number(response.data?.pagination?.total || 0));
+      if (response.data?.stats) setStats(response.data.stats);
     } catch (error: any) {
+      if (requestId !== latestRequest.current) return;
       await Swal.fire(
         "Unable to load employees",
         error.response?.data?.message || "Please check that the local server is running.",
         "error",
       );
     } finally {
-      setLoading(false);
+      if (requestId === latestRequest.current) {
+        setLoading(false);
+        setHasLoaded(true);
+      }
     }
   };
 
   useEffect(() => {
     void fetchEmployees();
+  }, [currentPage, debouncedSearch, statusFilter]);
+
+  useEffect(() => {
     hrApi
       .get("/employees/departments")
       .then((response) =>
@@ -107,27 +126,14 @@ export default function EmployeeList() {
       .catch((error) => console.error("Unable to load departments:", error));
   }, []);
 
-  const filteredEmployees = useMemo(() => {
-    return employees.filter((emp) => {
-      const matchSearch =
-        emp.name.toLowerCase().includes(search.toLowerCase()) ||
-        (emp.email || "").toLowerCase().includes(search.toLowerCase()) ||
-        (emp.department || "").toLowerCase().includes(search.toLowerCase());
-      const matchStatus = statusFilter === "all" || emp.status === statusFilter;
-      return matchSearch && matchStatus;
-    });
-  }, [employees, search, statusFilter]);
-
-  const totalPages = Math.ceil(filteredEmployees.length / pageSize);
-  const paginatedEmployees = useMemo(
-    () => filteredEmployees.slice((currentPage - 1) * pageSize, currentPage * pageSize),
-    [filteredEmployees, currentPage],
-  );
+  const totalPages = Math.ceil(totalEmployees / pageSize);
+  const pageNumbers = useMemo(() => getPageNumbers(currentPage, totalPages), [currentPage, totalPages]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, statusFilter]);
+  }, [debouncedSearch, statusFilter]);
 
+  // e.g. after deactivating the last employee on the final page
   useEffect(() => {
     if (currentPage > totalPages && totalPages > 0) {
       setCurrentPage(totalPages);
@@ -206,7 +212,9 @@ export default function EmployeeList() {
         role: editForm.role,
       });
 
-      if (editForm.status !== editingEmployee.status) {
+      // "pending" is still employed, so it only changes when toggled to inactive.
+      const currentEmployment = editingEmployee.status === "inactive" ? "inactive" : "active";
+      if (editForm.status !== currentEmployment) {
         await hrApi.patch(`/employees/${editingEmployee.id}/status`, {
           status: editForm.status,
         });
@@ -247,7 +255,8 @@ export default function EmployeeList() {
     }
   };
 
-  if (loading) {
+  // Full-page loader only on first load; later loads keep the search box mounted.
+  if (loading && !hasLoaded) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
@@ -282,7 +291,7 @@ export default function EmployeeList() {
       <div className="grid grid-cols-1 gap-4 mb-6 sm:grid-cols-3">
         <StatCard
           label="Total Employees"
-          value={employees.length}
+          value={stats.total}
           icon={FiUser}
           gradient="from-gray-500 to-gray-700"
           active={statusFilter === "all"}
@@ -290,7 +299,7 @@ export default function EmployeeList() {
         />
         <StatCard
           label="Active"
-          value={employees.filter((e) => e.status === "active").length}
+          value={stats.active}
           icon={FiUserCheck}
           gradient="from-emerald-500 to-emerald-700"
           active={statusFilter === "active"}
@@ -298,7 +307,7 @@ export default function EmployeeList() {
         />
         <StatCard
           label="Pending"
-          value={employees.filter((e) => e.status === "pending").length}
+          value={stats.pending}
           icon={FiClock}
           gradient="from-amber-500 to-amber-700"
           active={statusFilter === "pending"}
@@ -335,8 +344,8 @@ export default function EmployeeList() {
       </div>
 
       {/* TABLE */}
-      <div className="overflow-hidden bg-white border border-gray-200 shadow-lg rounded-2xl">
-        {filteredEmployees.length === 0 ? (
+      <div className={`overflow-hidden bg-white border border-gray-200 shadow-lg rounded-2xl transition-opacity ${loading ? "opacity-60" : ""}`} aria-busy={loading}>
+        {employees.length === 0 ? (
           <div className="px-5 py-12 text-center">
             <FiUser className="w-12 h-12 mx-auto mb-3 text-gray-300" />
             <p className="font-medium text-gray-500">No employees found</p>
@@ -345,7 +354,7 @@ export default function EmployeeList() {
           <>
             {/* Mobile / Tablet card list */}
             <div className="divide-y divide-gray-100 lg:hidden">
-              {paginatedEmployees.map((emp) => (
+              {employees.map((emp) => (
                 <div key={emp.id} className="p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
@@ -424,7 +433,7 @@ export default function EmployeeList() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {paginatedEmployees.map((emp) => (
+                  {employees.map((emp) => (
                     <tr key={emp.id} className="transition-colors hover:bg-gray-50">
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
@@ -489,7 +498,7 @@ export default function EmployeeList() {
         {totalPages > 1 && (
           <div className="flex flex-col gap-3 px-5 py-4 border-t border-gray-100 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-gray-500">
-              Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filteredEmployees.length)} of {filteredEmployees.length} employees
+              Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalEmployees)} of {totalEmployees} employees
             </p>
             <div className="flex items-center gap-1 overflow-x-auto">
               <button
@@ -500,21 +509,25 @@ export default function EmployeeList() {
               >
                 Previous
               </button>
-              {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
-                <button
-                  type="button"
-                  key={page}
-                  onClick={() => setCurrentPage(page)}
-                  aria-current={currentPage === page ? "page" : undefined}
-                  className={`min-w-9 px-3 py-2 text-sm font-semibold rounded-lg border transition-colors cursor-pointer ${
-                    currentPage === page
-                      ? "text-white border-purple-600 bg-purple-600"
-                      : "text-gray-600 border-gray-200 hover:bg-gray-50"
-                  }`}
-                >
-                  {page}
-                </button>
-              ))}
+              {pageNumbers.map((page, index) =>
+                page === "gap" ? (
+                  <span key={`gap-${index}`} className="px-2 text-sm text-gray-400">…</span>
+                ) : (
+                  <button
+                    type="button"
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    aria-current={currentPage === page ? "page" : undefined}
+                    className={`min-w-9 px-3 py-2 text-sm font-semibold rounded-lg border transition-colors cursor-pointer ${
+                      currentPage === page
+                        ? "text-white border-purple-600 bg-purple-600"
+                        : "text-gray-600 border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ),
+              )}
               <button
                 type="button"
                 onClick={() => setCurrentPage((page) => Math.min(page + 1, totalPages))}
@@ -705,6 +718,19 @@ function StatCard({ label, value, icon: Icon, gradient, active, onClick }: StatC
       </div>
     </div>
   );
+}
+
+// Page numbers with gaps, e.g. 1 … 4 5 6 … 20, so the bar stays short.
+function getPageNumbers(current: number, total: number): (number | "gap")[] {
+  if (total <= 7) return Array.from({ length: total }, (_, index) => index + 1);
+  const pages: (number | "gap")[] = [1];
+  const start = Math.max(2, current - 1);
+  const end = Math.min(total - 1, current + 1);
+  if (start > 2) pages.push("gap");
+  for (let page = start; page <= end; page += 1) pages.push(page);
+  if (end < total - 1) pages.push("gap");
+  pages.push(total);
+  return pages;
 }
 
 function StatusBadge({ status }: { status: EmployeeStatus }) {
