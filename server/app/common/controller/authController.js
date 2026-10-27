@@ -129,6 +129,13 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
 
   const USER_INACTIVE_MESSAGE = "User inactive. Please contact your HR.";
 
+  // Deactivated by the platform (RM). Self-deleted accounts (deleted_at set) are
+  // not blocked here: they can still be reactivated within the grace period.
+  async function isAccountDeactivated(employeeId) {
+    const customer = await AuthModel.findByCompanyUserId(employeeId);
+    return !!customer && Number(customer.status) !== 1 && !customer.deleted_at;
+  }
+
   function sendUserInactive(res) {
     return res.status(403).json({
       success: false,
@@ -376,6 +383,8 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
           });
         }
 
+        if (await isAccountDeactivated(employee.id)) return sendUserInactive(res);
+
         await AuthModel.deleteOTPByEmail(identity.otpKey);
 
         const otp = generateOTP();
@@ -426,6 +435,8 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
             message: "If your employee account is eligible, a code has been sent.",
           });
         }
+
+        if (await isAccountDeactivated(employee.id)) return sendUserInactive(res);
 
         await AuthModel.deleteOTPByEmail(identity.otpKey);
 
@@ -862,6 +873,11 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
           : await AuthModel.findEmployeeByEmail(user.email);
 
         if (!employee) {
+          const employmentInactive = await AuthModel.isEmployeeInactive(
+            user.company_user_id ? { id: user.company_user_id } : { email: user.email },
+          );
+          if (employmentInactive) return sendUserInactive(res);
+
           return res.status(404).json({
             success: false,
             message: "Employee not found",

@@ -405,30 +405,25 @@ class EmployeeModel {
     );
   }
 
-  async setStatus(employeeId, companyId, isActive, conn = db) {
-    const status = isActive ? 1 : 0;
-    const connection = conn === db ? await db.getConnection() : conn;
-    const ownsTransaction = conn === db;
+  // Employment status (company_users.status) is owned by company HR. It is kept
+  // separate from the app account status so each side can be traced to who
+  // changed it; login requires both to be active.
+  async setEmploymentStatus(employeeId, companyId, isActive, conn = db) {
+    await conn.execute(
+      `UPDATE company_users SET status = ? WHERE id = ? AND company_id = ?`,
+      [isActive ? 1 : 0, employeeId, companyId],
+    );
+  }
 
-    try {
-      if (ownsTransaction) await connection.beginTransaction();
-      await connection.execute(
-        `UPDATE company_users SET status = ? WHERE id = ? AND company_id = ?`,
-        [status, employeeId, companyId],
-      );
-      await connection.execute(
-        `UPDATE customer
-         SET status = ?
-         WHERE company_user_id = ? AND company_id = ?`,
-        [status, employeeId, companyId],
-      );
-      if (ownsTransaction) await connection.commit();
-    } catch (error) {
-      if (ownsTransaction) await connection.rollback();
-      throw error;
-    } finally {
-      if (ownsTransaction) connection.release();
-    }
+  // App account status (customer.status) is owned by the platform (RM).
+  // Activating also clears any pending self-deletion so the purge cron skips it.
+  async setAccountStatus(employeeId, companyId, isActive, conn = db) {
+    await conn.execute(
+      isActive
+        ? `UPDATE customer SET status = 1, deleted_at = NULL WHERE company_user_id = ? AND company_id = ?`
+        : `UPDATE customer SET status = 0 WHERE company_user_id = ? AND company_id = ?`,
+      [employeeId, companyId],
+    );
   }
 
   async getExportRows(companyId) {

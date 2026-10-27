@@ -557,7 +557,7 @@ class EmployeeController {
         });
       }
 
-      await EmployeeModel.setStatus(req.params.id, companyId, isActive);
+      await EmployeeModel.setEmploymentStatus(req.params.id, companyId, isActive);
       const updated = await EmployeeModel.findById(req.params.id, companyId);
       return res.json({
         success: true,

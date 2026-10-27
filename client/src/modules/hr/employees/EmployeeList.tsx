@@ -419,7 +419,7 @@ export default function EmployeeList() {
                     <th className="px-5 py-4">Contact</th>
                     <th className="px-5 py-4">Department</th>
                     <th className="px-5 py-4">Role</th>
-                    <th className="px-5 py-4">Status</th>
+                    <th className="px-5 py-4">Employment Status</th>
                     <th className="px-5 py-4">Joined</th>
                     <th className="px-5 py-4 text-center">Actions</th>
                   </tr>
@@ -541,7 +541,7 @@ export default function EmployeeList() {
               <div>
                 <h2 className="text-xl font-bold text-gray-900">Edit Employee</h2>
                 <p className="mt-1 text-sm text-gray-500">
-                  Update employee information and account status
+                  Update employee information and employment status
                 </p>
               </div>
               <button
@@ -629,18 +629,18 @@ export default function EmployeeList() {
 
                   <div className="flex items-center justify-between p-4 border border-gray-200 md:col-span-2 rounded-xl">
                     <div>
-                      <p className="text-sm font-semibold text-gray-800">Employee Status</p>
+                      <p className="text-sm font-semibold text-gray-800">Employment Status</p>
                       <p className="text-xs text-gray-500">
                         {editForm.status === "active"
-                          ? "Employee is currently active"
-                          : "Employee is currently inactive"}
+                          ? "Currently employed. Can use the app"
+                          : "Left or inactive. App login is blocked"}
                       </p>
                     </div>
                     <button
                       type="button"
                       role="switch"
                       aria-checked={editForm.status === "active"}
-                      aria-label="Toggle employee status"
+                      aria-label="Toggle employment status"
                       onClick={() =>
                         setEditForm((current) => ({
                           ...current,

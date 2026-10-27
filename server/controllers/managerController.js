@@ -187,6 +187,11 @@ class ManagerController {
       if (!(await EmployeeModel.findById(employeeId, companyId))) {
         return res.status(404).json({ success: false, message: "Employee not found" });
       }
+      // RM manages only the app account status; employment status belongs to company HR.
+      const accountStatus = req.body.account_status;
+      if (accountStatus !== undefined && ![0, 1, "0", "1"].includes(accountStatus)) {
+        return res.status(400).json({ success: false, message: "account_status must be 1 (active) or 0 (inactive)" });
+      }
       const employee = {
         company_id: companyId,
         name: String(req.body.name || "").trim(),
@@ -213,7 +218,7 @@ class ManagerController {
       const duplicate = await EmployeeModel.findDuplicate({ ...employee, excludeId: employeeId });
       if (duplicate) return res.status(409).json({ success: false, message: "Another employee with this email or phone already exists" });
       await EmployeeModel.update(employeeId, companyId, employee);
-      if (req.body.status !== undefined) await EmployeeModel.setStatus(employeeId, companyId, Number(req.body.status) === 1);
+      if (accountStatus !== undefined) await EmployeeModel.setAccountStatus(employeeId, companyId, Number(accountStatus) === 1);
       return res.json({ success: true, message: "Employee updated successfully", data: await EmployeeModel.findById(employeeId, companyId) });
     } catch (error) {
       console.error("Update company employee error:", error);
@@ -379,10 +384,11 @@ class ManagerController {
            cu.address2,
            cu.reporting_manager,
            cu.ctc,
-           cu.status,
+           cu.status AS employment_status,
            cu.created_at,
            c.user_id AS customer_id,
-           c.status AS customer_status,
+           c.status AS account_status,
+           c.deleted_at AS account_deleted_at,
            c.is_verified AS customer_is_verified,
            c.last_login_at,
            c.device_id,

@@ -35,10 +35,11 @@ const auth = async (req, res, next) => {
       });
     }
 
-    if (Number(user.status) !== 1) {
+    if (!AuthModel.isCustomerActive(user)) {
       return res.status(403).json({
         success: false,
-        message: "Account inactive",
+        code: "USER_INACTIVE",
+        message: "User inactive. Please contact your HR.",
       });
     }
 
