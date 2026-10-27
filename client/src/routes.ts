@@ -108,7 +108,8 @@ export const routes = {
       mobileDashboard: "/admin/content/mobile-dashboard",
       appIcons: "/admin/content/app-icons",
     },
-  
+    notifications: "/admin/notifications",
+
   },
   warehouse: {
     dashboard: "/warehouse/dashboard",
@@ -179,6 +180,7 @@ export const routes = {
     clientApprovals: "/rm/client-approvals",
     companyEmployees: "/rm/companies/:companyId/employees",
     supportTickets: "/rm/support-tickets",
+    notifications: "/rm/notifications",
     reports: {
       usage: "/rm/reports/usage",
       inactiveUsers: "/rm/reports/inactive-users",

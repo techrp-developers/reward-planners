@@ -939,10 +939,18 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
         const userId = req.user?.user_id;
         const { fcm_token, device_platform } = req.body;
 
-        if (!fcm_token) {
+        if (!fcm_token || typeof fcm_token !== "string") {
           return res.status(400).json({
             success: false,
             message: "FCM token required",
+          });
+        }
+
+        // user_push_tokens.fcm_token is VARCHAR(512).
+        if (fcm_token.length > 512) {
+          return res.status(400).json({
+            success: false,
+            message: "FCM token is too long",
           });
         }
 
@@ -961,6 +969,7 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
           message: "FCM token updated",
         });
       } catch (err) {
+        console.error("Update FCM Token Error:", err.message);
         return res.status(500).json({
           success: false,
         });
@@ -1064,7 +1073,8 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
       try {
         const userId = req.user?.user_id;
         await revokeCustomerSession(req, res);
-        if (userId) await AuthModel.clearFcmToken(userId);
+        const fcmToken = typeof req.body?.fcm_token === "string" ? req.body.fcm_token : null;
+        if (userId) await AuthModel.clearFcmToken(userId, fcmToken);
 
         return res.json({
           success: true,

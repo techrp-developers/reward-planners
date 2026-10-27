@@ -1,4 +1,6 @@
 const NotificationModel = require("../models/notificationModel");
+const NotificationTemplateModel = require("../models/notificationTemplateModel");
+const { normalizePreferenceUpdate } = require("../utils/notificationTemplate");
 
 function requireUserId(req, res) {
   const userId = req.user?.user_id;
@@ -10,6 +12,56 @@ function requireUserId(req, res) {
 }
 
 class NotificationController {
+  /* ================================
+     PUSH PREFERENCES (language, consent, quiet hours)
+     The app calls PUT whenever the employee changes language so pushes are
+     rendered in it. The user is always the authenticated customer.
+  ================================= */
+  async getPreferences(req, res) {
+    try {
+      const userId = requireUserId(req, res);
+      if (!userId) return;
+
+      const prefs = await NotificationTemplateModel.getPreferences(userId);
+      if (!prefs) {
+        return res.status(503).json({ success: false, message: "Notification preferences are unavailable" });
+      }
+      return res.json({
+        success: true,
+        data: {
+          language: prefs.language || "en",
+          marketing_enabled: Number(prefs.marketing_enabled) === 1,
+          engagement_enabled: Number(prefs.engagement_enabled) === 1,
+          quiet_hours_start: prefs.quiet_hours_start ? String(prefs.quiet_hours_start).slice(0, 5) : null,
+          quiet_hours_end: prefs.quiet_hours_end ? String(prefs.quiet_hours_end).slice(0, 5) : null,
+          stored: !prefs.missing,
+        },
+      });
+    } catch (error) {
+      console.error("Get Notification Preferences Error:", error);
+      return res.status(500).json({ success: false, message: "Failed to load preferences" });
+    }
+  }
+
+  async updatePreferences(req, res) {
+    try {
+      const userId = requireUserId(req, res);
+      if (!userId) return;
+
+      const { update, errors } = normalizePreferenceUpdate(req.body || {});
+      if (errors.length) return res.status(400).json({ success: false, message: errors[0], errors });
+
+      await NotificationTemplateModel.savePreferences(userId, update);
+      return this.getPreferences(req, res);
+    } catch (error) {
+      if (error.code === "ER_NO_SUCH_TABLE") {
+        return res.status(503).json({ success: false, message: "Notification preferences are unavailable" });
+      }
+      console.error("Update Notification Preferences Error:", error);
+      return res.status(500).json({ success: false, message: "Failed to save preferences" });
+    }
+  }
+
   /* ================================
      GET MY NOTIFICATIONS
   ================================= */

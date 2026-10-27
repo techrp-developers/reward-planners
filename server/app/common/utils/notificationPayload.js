@@ -85,11 +85,30 @@ function buildNotificationPayload(data) {
   return payload;
 }
 
+// Notification images are fetched by the phone, so only HTTPS URLs on our own
+// asset hosts are forwarded.
+const IMAGE_HOSTS = String(process.env.NOTIFICATION_IMAGE_HOSTS || "cdn.rewardplanners.com")
+  .split(",").map((host) => host.trim().toLowerCase()).filter(Boolean);
+
+function safeImageUrl(value) {
+  if (!value) return null;
+  try {
+    const url = new URL(String(value));
+    return url.protocol === "https:" && IMAGE_HOSTS.includes(url.hostname.toLowerCase()) ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 function buildPushMessage(data, fcmToken) {
+  const imageUrl = safeImageUrl(data.image_url);
+  const campaignId = data.metadata?.campaign_id;
+
   return {
     notification: {
       title: data.title || "Notification",
       body: data.message || "",
+      ...(imageUrl ? { imageUrl } : {}),
     },
     data: {
       module: String(data.module || ""),
@@ -99,6 +118,7 @@ function buildPushMessage(data, fcmToken) {
       action_url: String(data.action_url || ""),
       screen: String(data.screen || ""),
       priority: String(data.priority || "normal"),
+      ...(campaignId ? { campaign_id: String(campaignId) } : {}),
     },
     android: {
       priority: "high",
@@ -107,9 +127,13 @@ function buildPushMessage(data, fcmToken) {
         sound: "default",
         defaultSound: true,
         vibrateTimingsMillis: [0, 1000, 500, 1000, 500],
+        ...(imageUrl ? { imageUrl } : {}),
       },
     },
-    apns: { payload: { aps: { sound: "default" } } },
+    apns: {
+      payload: { aps: { sound: "default", ...(imageUrl ? { "mutable-content": 1 } : {}) } },
+      ...(imageUrl ? { fcmOptions: { imageUrl } } : {}),
+    },
     token: fcmToken,
   };
 }
@@ -119,4 +143,6 @@ module.exports = {
   buildPushMessage,
   buildWindowedIdempotencyKey,
   inferScreen,
+  safeImageUrl,
+  SCREEN_BY_MODULE,
 };

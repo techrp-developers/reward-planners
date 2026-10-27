@@ -419,7 +419,25 @@ class authModel {
     );
   }
 
-  async clearFcmToken(userId) {
+  // With fcmToken, only that device is signed out of pushes; other phones of
+  // the same employee keep receiving. Without it (older app builds that do not
+  // send their token on logout) every device is deactivated, as before.
+  async clearFcmToken(userId, fcmToken = null) {
+    if (fcmToken) {
+      await db.execute(
+        `UPDATE user_push_tokens SET is_active = 0, updated_at = NOW()
+         WHERE user_id = ? AND fcm_token = ?`,
+        [userId, fcmToken],
+      ).catch((error) => {
+        if (error.code !== "ER_NO_SUCH_TABLE") throw error;
+      });
+      await db.execute(
+        `UPDATE customer SET fcm_token = NULL WHERE user_id = ? AND fcm_token = ?`,
+        [userId, fcmToken],
+      );
+      return;
+    }
+
     await db.execute(
       `UPDATE user_push_tokens SET is_active = 0, updated_at = NOW() WHERE user_id = ?`,
       [userId],
@@ -458,6 +476,13 @@ class authModel {
     ).catch((error) => {
       if (error.code !== "ER_NO_SUCH_TABLE") throw error;
     });
+
+    // A phone that changes hands keeps its FCM token. Drop it from any other
+    // employee's legacy column so their notifications stop reaching this device.
+    await db.execute(
+      `UPDATE customer SET fcm_token = NULL WHERE fcm_token = ? AND user_id <> ?`,
+      [fcmToken, userId],
+    );
 
     await db.execute(
       `UPDATE customer

@@ -190,6 +190,10 @@ app.get("/", (req, res) => {
 
 // Both CRM modules share /api/crm; retain their legacy root aliases.
 require("./routes/mountCrmRoutes")(app, dashboardRoute, fleaMarketRoute);
+// The RM/admin Push Notification Manager is a dashboard feature: the CRM client
+// calls it through the /api/crm proxy. (It is also reachable at /v1/rm/... via
+// commonRoute; both paths use the dashboard session auth.)
+app.use("/api/crm/v1/rm/notifications", require("./app/common/routes/rmNotificationRoute"));
 
 // App Routes 
 app.use("/v1", ecommerceRoute);

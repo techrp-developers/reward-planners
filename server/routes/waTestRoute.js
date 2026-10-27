@@ -4,6 +4,8 @@ const db = require("../config/database");
 const { enqueueWhatsApp } = require("../services/whatsapp/waEnqueueService");
 const { sendBirthdayWishes } = require("../services/Todo/birthdayReminderCron");
 const { sendPushNotification } = require("../app/common/utils/notification");
+const { firebaseStatus } = require("../config/firebase");
+const { maskToken } = require("../app/common/utils/pushDelivery");
 
 const sharedPushModules = [
   "auth/common",
@@ -476,6 +478,19 @@ router.get("/notification-health/:userId", async (req, res) => {
       [userId]
     );
 
+    let devices = [];
+    try {
+      const [deviceRows] = await db.query(
+        `SELECT id, fcm_token, platform, is_active, last_seen_at
+         FROM user_push_tokens WHERE user_id = ? ORDER BY last_seen_at DESC`,
+        [userId],
+      );
+      devices = deviceRows.map(({ fcm_token, ...row }) => ({ ...row, token: maskToken(fcm_token) }));
+    } catch (error) {
+      if (error.code !== "ER_NO_SUCH_TABLE") throw error;
+    }
+    const activeDevices = devices.filter((device) => device.is_active).length;
+
     let testPushResult = null;
 
     if (sendTest) {
@@ -502,21 +517,28 @@ router.get("/notification-health/:userId", async (req, res) => {
         name: user.name,
         email: user.email,
         hasFcmToken: Boolean(user.fcm_token),
-        fcmTokenPreview: user.fcm_token
-          ? `${String(user.fcm_token).slice(0, 16)}...`
-          : null,
+        fcmTokenPreview: user.fcm_token ? maskToken(user.fcm_token) : null,
         lastLoginAt: user.last_login_at,
       },
+      firebase: {
+        enabled: firebaseStatus.enabled,
+        projectId: firebaseStatus.projectId,
+        expectedProjectId: firebaseStatus.expectedProjectId,
+        reason: firebaseStatus.reason,
+      },
+      devices,
       notificationCounts,
       recentNotifications,
       todoReminders: todoReminderRows,
       testPushResult,
       assessment: {
         sharedPathReady: true,
-        canAttemptPushNow: Boolean(user.fcm_token),
-        note: user.fcm_token
-          ? "Backend is structurally ready to send push notifications for all modules that call notifyUser."
-          : "No FCM token is stored for this user, so push delivery cannot work until the app updates the token.",
+        canAttemptPushNow: firebaseStatus.enabled && (activeDevices > 0 || Boolean(user.fcm_token)),
+        note: !firebaseStatus.enabled
+          ? `Firebase is disabled: ${firebaseStatus.reason}`
+          : activeDevices || user.fcm_token
+            ? "Backend can attempt FCM delivery. FCM acceptance does not prove the device displayed the notification."
+            : "No FCM token is stored for this user, so push delivery cannot work until the app updates the token.",
       },
     });
   } catch (e) {

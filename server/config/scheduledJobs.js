@@ -4,7 +4,7 @@ const JOBS = [
   '../services/Razorpay/orderExpiryCron', '../services/BusBooking/reconcileCron',
   '../services/Todo/todoReminderCron', '../services/Todo/birthdayReminderCron',
   '../services/Ecommerce/cartRecoveryCron', '../services/Todo/fitnessGoalHookCron',
-  '../services/Todo/accountPurgeCron',
+  '../services/Todo/accountPurgeCron', '../services/Notifications/campaignWorkerCron',
 ];
 
 function localJobsEnabled(env) {

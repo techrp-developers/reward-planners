@@ -9,6 +9,7 @@ import {
   FiUser,
   FiLogOut,
   FiImage,
+  FiBell,
 } from "react-icons/fi";
 
 import { useAuth } from "../../../common/auth/useAuth";
@@ -63,6 +64,12 @@ export default function AdminNavbar() {
       label: "Services",
       to: routes.admin.services,
       icon: <FiPackage />,
+      type: "link",
+    },
+    {
+      label: "Push Notifications",
+      to: routes.admin.notifications,
+      icon: <FiBell />,
       type: "link",
     },
     {

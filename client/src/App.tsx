@@ -34,6 +34,7 @@ const RmReportPage = lazy(() => import("./modules/rm/reports/RmReportPage.tsx"))
 const InactiveUsersReportPage = lazy(() => import("./modules/rm/reports/InactiveUsersReportPage.tsx"));
 const RmSupportTickets = lazy(() => import("./modules/rm/support/SupportTickets.tsx"));
 const RmClientApprovals = lazy(() => import("./modules/rm/clients/ClientApprovals.tsx"));
+const NotificationManager = lazy(() => import("./modules/rm/notifications/NotificationManager.tsx"));
 const HrDashboard = lazy(() => import("./modules/hr/dashboard/HrDashboard.tsx"));
 const WarehouseDashboard = lazy(() => import("./modules/warehouse_manager/dashboard/WarehouseDashboard.tsx"));
 const FleaMarketDashboard = lazy(() => import("./modules/flea_market/dashboard/FleaMarketDashboard.tsx"));
@@ -410,6 +411,7 @@ export default function App() {
       {/* ========== ADMIN ========== */}
       <Route element={<AdminLayout />}>
         <Route path={routes.admin.dashboard} element={<AdminDashboard />} />
+        <Route path={routes.admin.notifications} element={<NotificationManager />} />
         <Route
           path={routes.admin.vendors}
           element={<AdminVendorApprovalList />}
@@ -614,6 +616,7 @@ export default function App() {
         <Route path={routes.rm.reports.inactiveUsers} element={<InactiveUsersReportPage />} />
         <Route path={routes.rm.supportTickets} element={<RmSupportTickets />} />
         <Route path={routes.rm.clientApprovals} element={<RmClientApprovals />} />
+        <Route path={routes.rm.notifications} element={<NotificationManager />} />
         <Route path={routes.rm.changePassword} element={<ChangePasswordPage />} />
         <Route path={routes.rm.profile} element={<EditProfilePage />} />
       </Route>

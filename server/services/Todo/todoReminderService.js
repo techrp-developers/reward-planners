@@ -307,8 +307,10 @@ async function processDueReminders(limit = 100) {
       // The notification inbox is the durable delivery channel. A user may not
       // have registered an FCM token yet, so persisting the reminder must not
       // depend on push delivery succeeding.
-      await createInAppNotification(payload);
-      const pushResult = await sendPushNotification(payload);
+      const persisted = await createInAppNotification(payload);
+      const pushResult = await sendPushNotification(payload, {
+        notificationId: persisted?.notificationId,
+      });
 
       if (!pushResult.success && !pushResult.skipped) {
         console.warn(

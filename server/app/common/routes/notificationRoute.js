@@ -4,6 +4,10 @@ const router = express.Router();
 const notificationController = require("../controller/notificationController");
 const auth = require("../middlewares/auth");
 
+// push language / consent / quiet hours (synced from the mobile app)
+router.get("/preferences", auth, notificationController.getPreferences.bind(notificationController));
+router.put("/preferences", auth, notificationController.updatePreferences.bind(notificationController));
+
 // my notification details
 router.get("/my-notification", auth, notificationController.getMyNotifications);
 

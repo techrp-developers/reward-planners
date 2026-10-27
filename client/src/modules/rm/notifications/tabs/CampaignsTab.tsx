@@ -1,0 +1,343 @@
+import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
+import { FiEdit2, FiRefreshCw, FiSearch } from "react-icons/fi";
+import { notificationApi, type AttemptRow, type RecipientRow } from "../notificationApi";
+import type { Campaign, Language, ManagerMeta } from "../notificationTypes";
+import { Card, EmptyState, LanguageTabs, Metric, Modal, Notice, Pagination, PushPreview, Spinner, StatusPill, Tag, dangerBtn, inputCls, labelCls, primaryBtn, secondaryBtn } from "../components";
+import { AUDIENCE_LABELS, LANGUAGE_LABELS, SKIP_REASON_LABELS, apiErrorMessage, campaignActions, formatInZone, toNumber, toZonedInputs } from "../notificationUtils";
+import { confirmDialog } from "../../../../common/utils/confirmDialog";
+import type { TabNavigation } from "../NotificationManager";
+
+const LIMIT = 20;
+const SCHEDULED_STATUSES = "pending_approval,approved,scheduled,sending";
+
+export default function CampaignsTab({ meta, nav, mode }: { meta: ManagerMeta; nav: TabNavigation; mode: "scheduled" | "history" }) {
+  const [filters, setFilters] = useState({ status: "", module: "", search: "" });
+  const [page, setPage] = useState(1);
+  const [data, setData] = useState<{ total: number; rows: Campaign[] } | null>(null);
+  const [error, setError] = useState("");
+  const [openId, setOpenId] = useState<number | null>(null);
+
+  const load = useCallback(() => {
+    const params: Record<string, string | number> = { page, limit: LIMIT };
+    params.status = mode === "scheduled" ? (filters.status || SCHEDULED_STATUSES) : filters.status;
+    if (!params.status) delete params.status;
+    if (filters.module) params.module = filters.module;
+    if (filters.search) params.search = filters.search;
+    notificationApi.campaigns(params)
+      .then((result) => { setData(result); setError(""); })
+      .catch((requestError) => setError(apiErrorMessage(requestError)));
+  }, [filters, page, mode]);
+  useEffect(load, [load]);
+
+  // Keep sending campaigns live while the tab is open.
+  useEffect(() => {
+    if (!data?.rows.some((row) => row.status === "sending")) return undefined;
+    const timer = window.setInterval(load, 15000);
+    return () => window.clearInterval(timer);
+  }, [data, load]);
+
+  if (!meta.infrastructure.campaignTables) {
+    return <Card><EmptyState title="Campaign tables are not installed" text="Apply migrations/20261027_01_create_notification_campaigns.sql to enable drafts, scheduling and reports." /></Card>;
+  }
+
+  const update = (key: keyof typeof filters, value: string) => { setPage(1); setFilters({ ...filters, [key]: value }); };
+  const statusOptions = mode === "scheduled"
+    ? ["pending_approval", "approved", "scheduled", "sending"]
+    : ["draft", "pending_approval", "approved", "rejected", "scheduled", "sending", "completed", "partially_failed", "failed", "cancelled", "expired"];
+
+  return (
+    <>
+      <Card
+        title={mode === "scheduled" ? "Scheduled & awaiting approval" : "Campaign history"}
+        subtitle={meta.role === "admin" ? "All campaigns" : "Campaigns you created"}
+        actions={<button type="button" className={secondaryBtn} onClick={load}><FiRefreshCw /> Refresh</button>}
+      >
+        <div className="grid gap-3 border-b border-gray-100 p-4 sm:grid-cols-3">
+          <label className="relative"><span className={labelCls}>Search</span><FiSearch className="absolute bottom-2.5 left-3 text-gray-400" />
+            <input className={`${inputCls} pl-9`} placeholder="Campaign name" value={filters.search} onChange={(event) => update("search", event.target.value)} />
+          </label>
+          <label><span className={labelCls}>Status</span>
+            <select className={inputCls} value={filters.status} onChange={(event) => update("status", event.target.value)}>
+              <option value="">{mode === "scheduled" ? "All upcoming" : "All statuses"}</option>
+              {statusOptions.map((status) => <option key={status} value={status}>{status.replace("_", " ")}</option>)}
+            </select>
+          </label>
+          <label><span className={labelCls}>Module</span>
+            <select className={inputCls} value={filters.module} onChange={(event) => update("module", event.target.value)}>
+              <option value="">All modules</option>
+              {meta.modules.filter((option) => !option.screen).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>
+        </div>
+
+        {error && <div className="p-4"><Notice tone="red">{error}</Notice></div>}
+        {!data && !error && <Spinner />}
+        {data && !data.rows.length && <EmptyState title={mode === "scheduled" ? "Nothing scheduled" : "No campaigns yet"} action={<button type="button" className={primaryBtn} onClick={() => nav.go("compose")}>Create notification</button>} />}
+        {data && data.rows.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1000px] text-left text-sm">
+              <thead className="bg-gray-50 text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                <tr>
+                  <th className="px-4 py-3">Campaign</th><th className="px-4 py-3">Creator</th><th className="px-4 py-3">{mode === "scheduled" ? "Next run" : "Scheduled"}</th>
+                  <th className="px-4 py-3 text-right">Recipients</th><th className="px-4 py-3 text-right">Queued</th><th className="px-4 py-3 text-right">Accepted</th>
+                  <th className="px-4 py-3 text-right">Failed</th><th className="px-4 py-3 text-right">Retrying</th><th className="px-4 py-3">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {data.rows.map((campaign) => (
+                  <tr key={campaign.campaign_id} className="cursor-pointer hover:bg-purple-50/30" onClick={() => setOpenId(campaign.campaign_id)}>
+                    <td className="px-4 py-3"><p className="font-semibold text-gray-900">{campaign.name}</p><p className="text-xs text-gray-500">#{campaign.campaign_id} · {campaign.module} · {campaign.category}</p></td>
+                    <td className="px-4 py-3 text-gray-700">{campaign.created_by_name || "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-600">{formatInZone(mode === "scheduled" ? campaign.next_run_at || campaign.scheduled_at : campaign.scheduled_at, campaign.timezone)}</td>
+                    <td className="px-4 py-3 text-right font-semibold">{toNumber(campaign.recipients) || (campaign.estimated_recipients != null ? `~${campaign.estimated_recipients}` : "—")}</td>
+                    <td className="px-4 py-3 text-right">{toNumber(campaign.queued)}</td>
+                    <td className="px-4 py-3 text-right text-emerald-700">{toNumber(campaign.firebase_accepted)}</td>
+                    <td className="px-4 py-3 text-right text-red-600">{toNumber(campaign.failed)}</td>
+                    <td className="px-4 py-3 text-right text-amber-700">{toNumber(campaign.pending_retry)}</td>
+                    <td className="px-4 py-3"><StatusPill status={campaign.status} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {data && <Pagination page={page} limit={LIMIT} total={data.total} onPage={setPage} />}
+      </Card>
+
+      {openId && <CampaignDetail meta={meta} nav={nav} campaignId={openId} onClose={() => setOpenId(null)} onChanged={load} />}
+    </>
+  );
+}
+
+function CampaignDetail({ meta, nav, campaignId, onClose, onChanged }: { meta: ManagerMeta; nav: TabNavigation; campaignId: number; onClose: () => void; onChanged: () => void }) {
+  const [campaign, setCampaign] = useState<Campaign | null>(null);
+  const [section, setSection] = useState<"overview" | "recipients" | "attempts" | "audit">("overview");
+  const [lang, setLang] = useState<Language>("en");
+  const [busy, setBusy] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [approveLanguages, setApproveLanguages] = useState<Language[]>([]);
+  const [reschedule, setReschedule] = useState({ date: "", time: "" });
+  const [recipients, setRecipients] = useState<{ total: number; rows: RecipientRow[] } | null>(null);
+  const [recipientStatus, setRecipientStatus] = useState("");
+  const [recipientPage, setRecipientPage] = useState(1);
+  const [attempts, setAttempts] = useState<{ available: boolean; rows: AttemptRow[] } | null>(null);
+
+  const load = useCallback(() => {
+    notificationApi.campaign(campaignId).then((result) => {
+      setCampaign(result);
+      setApproveLanguages(result.approved_languages);
+      setReschedule(toZonedInputs(result.scheduled_at, result.timezone));
+    }).catch((error) => toast.error(apiErrorMessage(error)));
+  }, [campaignId]);
+  useEffect(load, [load]);
+
+  useEffect(() => {
+    if (section !== "recipients") return;
+    const params: Record<string, string | number> = { page: recipientPage, limit: 50 };
+    if (recipientStatus) params.status = recipientStatus;
+    notificationApi.recipients(campaignId, params).then(setRecipients).catch((error) => toast.error(apiErrorMessage(error)));
+  }, [section, campaignId, recipientStatus, recipientPage]);
+
+  useEffect(() => {
+    if (section !== "attempts") return;
+    notificationApi.attempts(campaignId, { limit: 100 }).then(setAttempts).catch((error) => toast.error(apiErrorMessage(error)));
+  }, [section, campaignId]);
+
+  const run = async (label: string, action: () => Promise<unknown>) => {
+    setBusy(true);
+    try {
+      await action();
+      toast.success(label);
+      load();
+      onChanged();
+    } catch (error) {
+      toast.error(apiErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!campaign) return <Modal title="Campaign" onClose={onClose}><Spinner /></Modal>;
+  const actions = campaignActions(campaign);
+  const summary = campaign.summary;
+  const showLang: Language = lang !== "en" && campaign[`title_${lang}`] ? lang : "en";
+  const isApproved = lang === "en" || campaign.approved_languages.includes(lang);
+
+  return (
+    <Modal title={`${campaign.name} · #${campaign.campaign_id}`} onClose={onClose} wide>
+      <div className="space-y-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusPill status={campaign.status} />
+          <Tag tone="purple">{campaign.category}</Tag>
+          <Tag>{campaign.module}</Tag>
+          <Tag tone="blue">{AUDIENCE_LABELS[campaign.audience_type]}</Tag>
+          <span className="text-xs text-gray-500">by {campaign.created_by_name || "—"}{campaign.approved_by_name ? ` · approved by ${campaign.approved_by_name}` : ""}</span>
+        </div>
+        {campaign.rejection_reason && <Notice tone="red">{campaign.status === "rejected" ? "Rejected: " : ""}{campaign.rejection_reason}</Notice>}
+
+        <div className="flex gap-1 border-b border-gray-100">
+          {(["overview", "recipients", "attempts", "audit"] as const).map((key) => (
+            <button key={key} type="button" onClick={() => setSection(key)}
+              className={`-mb-px border-b-2 px-3 py-2 text-sm font-bold capitalize ${section === key ? "border-[#852BAF] text-[#852BAF]" : "border-transparent text-gray-500 hover:text-gray-800"}`}>
+              {key === "attempts" ? "Firebase attempts" : key}
+            </button>
+          ))}
+        </div>
+
+        {section === "overview" && (
+          <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <Metric label="Recipients" value={summary?.recipients ?? 0} hint={campaign.estimated_recipients != null ? `~${campaign.estimated_recipients} estimated` : undefined} />
+                <Metric label="Queued" value={summary?.queued ?? 0} tone="bg-blue-600" />
+                <Metric label="Attempted" value={summary?.attempted ?? 0} tone="bg-slate-700" />
+                <Metric label="Accepted by Firebase" value={summary?.firebaseAccepted ?? 0} tone="bg-emerald-600" />
+                <Metric label="Failed" value={summary?.failed ?? 0} tone="bg-red-600" />
+                <Metric label="Skipped" value={summary?.skipped ?? 0} hint={summary?.pendingRetry ? `${summary.pendingRetry} retrying` : "Consent, quiet hours, caps"} tone="bg-amber-500" />
+              </div>
+              <dl className="grid gap-2 rounded-xl bg-gray-50 p-4 text-xs sm:grid-cols-2">
+                <div><dt className="font-bold text-gray-500">Delivery</dt><dd className="text-gray-800">{campaign.delivery_mode === "now" ? "Send after approval" : campaign.delivery_mode === "once" ? "Once" : `Repeats ${campaign.recurrence_type}`}</dd></div>
+                <div><dt className="font-bold text-gray-500">Scheduled ({campaign.timezone})</dt><dd className="text-gray-800">{formatInZone(campaign.scheduled_at, campaign.timezone)}</dd></div>
+                <div><dt className="font-bold text-gray-500">Next run</dt><dd className="text-gray-800">{formatInZone(campaign.next_run_at, campaign.timezone)}</dd></div>
+                <div><dt className="font-bold text-gray-500">Occurrences started</dt><dd className="text-gray-800">{campaign.occurrences_started}{campaign.max_occurrences ? ` / ${campaign.max_occurrences}` : ""}</dd></div>
+                <div><dt className="font-bold text-gray-500">Expires</dt><dd className="text-gray-800">{formatInZone(campaign.expires_at, campaign.timezone)}</dd></div>
+                <div><dt className="font-bold text-gray-500">Opens screen</dt><dd className="text-gray-800">{campaign.target_screen || "Module default"}</dd></div>
+              </dl>
+            </div>
+
+            <div className="space-y-3">
+              <LanguageTabs value={lang} onChange={setLang} approved={campaign.approved_languages} available={{ hi: Boolean(campaign.title_hi), mr: Boolean(campaign.title_mr) }} />
+              <PushPreview title={campaign[`title_${showLang}`] || ""} message={campaign[`body_${showLang}`] || ""} imageUrl={campaign.image_url}
+                note={showLang !== lang ? `No ${LANGUAGE_LABELS[lang]} text: English is sent.` : !isApproved ? `${LANGUAGE_LABELS[lang]} is not approved: English is sent unless approved below.` : "Placeholders are filled per employee at send time."} />
+
+              {actions.approve && (
+                <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/50 p-4">
+                  <p className="text-xs font-extrabold uppercase tracking-wider text-amber-800">Admin review</p>
+                  {(["hi", "mr"] as Language[]).filter((item) => campaign[`title_${item}`]).map((item) => (
+                    <label key={item} className="flex items-center gap-2 text-sm text-gray-700">
+                      <input type="checkbox" checked={approveLanguages.includes(item)} onChange={(event) => setApproveLanguages(event.target.checked ? [...approveLanguages, item] : approveLanguages.filter((value) => value !== item))} />
+                      Approve the {LANGUAGE_LABELS[item]} translation
+                    </label>
+                  ))}
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" className={primaryBtn} disabled={busy} onClick={() => run("Campaign approved. The creator can now schedule it.", () => notificationApi.approveCampaign(campaign.campaign_id, approveLanguages))}>Approve</button>
+                  </div>
+                  <label className="block"><span className={labelCls}>Rejection reason</span><textarea className={`${inputCls} min-h-16`} value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} /></label>
+                  <button type="button" className={dangerBtn} disabled={busy || !rejectReason.trim()} onClick={() => run("Campaign rejected.", () => notificationApi.rejectCampaign(campaign.campaign_id, rejectReason))}>Reject</button>
+                </div>
+              )}
+              {campaign.status === "pending_approval" && !actions.approve && (
+                <Notice tone="blue">{meta.role === "admin" ? "You created this campaign; another admin must approve it." : "Waiting for an admin to approve."}</Notice>
+              )}
+
+              {actions.schedule && (
+                <div className="space-y-3 rounded-xl border border-gray-100 p-4">
+                  <p className="text-xs font-extrabold uppercase tracking-wider text-gray-500">{campaign.status === "scheduled" ? "Reschedule" : "Schedule"}</p>
+                  {campaign.delivery_mode !== "now" && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <input type="date" className={inputCls} value={reschedule.date} onChange={(event) => setReschedule({ ...reschedule, date: event.target.value })} />
+                      <input type="time" className={inputCls} value={reschedule.time} onChange={(event) => setReschedule({ ...reschedule, time: event.target.value })} />
+                    </div>
+                  )}
+                  <button type="button" className={primaryBtn} disabled={busy} onClick={async () => {
+                    const ok = await confirmDialog({
+                      title: campaign.delivery_mode === "now" ? "Queue for sending now?" : "Schedule this campaign?",
+                      text: `It goes to about ${campaign.estimated_recipients ?? "the selected"} employees, minus anyone who has not consented or is in quiet hours.`,
+                      icon: "question",
+                      confirmButtonText: campaign.delivery_mode === "now" ? "Queue now" : "Schedule",
+                    });
+                    if (ok) run("Campaign scheduled.", () => notificationApi.scheduleCampaign(campaign.campaign_id, campaign.delivery_mode === "now" ? {} : { send_date: reschedule.date, send_time: reschedule.time, timezone: campaign.timezone }));
+                  }}>{campaign.delivery_mode === "now" ? "Queue now" : campaign.status === "scheduled" ? "Save new time" : "Schedule"} ({campaign.timezone})</button>
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                {actions.edit && <button type="button" className={secondaryBtn} onClick={() => { onClose(); nav.go("compose", { campaign: String(campaign.campaign_id) }); }}><FiEdit2 /> Edit</button>}
+                {actions.test && <button type="button" className={secondaryBtn} disabled={busy || !meta.testUsers.length} onClick={() => run("Test sent to the configured test users.", () => notificationApi.testCampaign(campaign.campaign_id))}>Send test</button>}
+                {actions.submit && <button type="button" className={secondaryBtn} disabled={busy} onClick={() => run("Submitted for approval.", () => notificationApi.submitCampaign(campaign.campaign_id))}>Submit for approval</button>}
+                {actions.cancel && <button type="button" className={dangerBtn} disabled={busy} onClick={async () => {
+                  const ok = await confirmDialog({ title: "Cancel this campaign?", text: "Unsent notifications are cancelled. Messages already sent cannot be recalled.", confirmButtonText: "Cancel campaign" });
+                  if (ok) run("Campaign cancelled.", () => notificationApi.cancelCampaign(campaign.campaign_id));
+                }}>Cancel campaign</button>}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {section === "recipients" && (
+          <div className="space-y-3">
+            <select className={`${inputCls} max-w-xs`} value={recipientStatus} onChange={(event) => { setRecipientPage(1); setRecipientStatus(event.target.value); }}>
+              <option value="">All recipients</option>
+              {["pending", "processing", "sent", "failed", "skipped", "cancelled"].map((status) => <option key={status} value={status}>{status}</option>)}
+            </select>
+            {!recipients ? <Spinner /> : !recipients.rows.length ? <EmptyState title="No recipients yet" text="Recipients are created when the campaign starts sending." /> : (
+              <div className="overflow-x-auto rounded-xl border border-gray-100">
+                <table className="w-full min-w-[760px] text-left text-sm">
+                  <thead className="bg-gray-50 text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                    <tr><th className="px-3 py-2">Employee</th><th className="px-3 py-2">Run</th><th className="px-3 py-2">Language</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Devices</th><th className="px-3 py-2">Detail</th><th className="px-3 py-2">Inbox</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {recipients.rows.map((row) => (
+                      <tr key={row.recipient_id}>
+                        <td className="px-3 py-2"><p className="font-semibold text-gray-900">{row.name || `User ${row.user_id}`}</p><p className="text-xs text-gray-500">{row.company_name}</p></td>
+                        <td className="px-3 py-2 text-xs">#{row.occurrence_no}</td>
+                        <td className="px-3 py-2 text-xs">{LANGUAGE_LABELS[row.language] || row.language}</td>
+                        <td className="px-3 py-2"><Tag tone={row.status === "sent" ? "green" : row.status === "failed" ? "red" : row.status === "skipped" ? "amber" : "gray"}>{row.status}</Tag></td>
+                        <td className="px-3 py-2 text-xs">{row.devices_accepted}/{row.devices_attempted} accepted · {row.attempts} tries</td>
+                        <td className="px-3 py-2 text-xs text-gray-600">{SKIP_REASON_LABELS[row.skip_reason || ""] || row.skip_reason || row.last_error_code || "—"}</td>
+                        <td className="px-3 py-2 text-xs">{row.is_read === null ? "—" : row.is_read ? "Read" : "Unread"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <Pagination page={recipientPage} limit={50} total={recipients.total} onPage={setRecipientPage} />
+              </div>
+            )}
+          </div>
+        )}
+
+        {section === "attempts" && (
+          !attempts ? <Spinner /> : !attempts.available
+            ? <Notice>Per-device attempts need the <code>notification_push_attempts</code> table (migration 20261026_02).</Notice>
+            : !attempts.rows.length ? <EmptyState title="No Firebase attempts recorded yet" /> : (
+              <div className="overflow-x-auto rounded-xl border border-gray-100">
+                <table className="w-full min-w-[640px] text-left text-sm">
+                  <thead className="bg-gray-50 text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                    <tr><th className="px-3 py-2">Time</th><th className="px-3 py-2">User</th><th className="px-3 py-2">Platform</th><th className="px-3 py-2">Firebase project</th><th className="px-3 py-2">Try</th><th className="px-3 py-2">Result</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {attempts.rows.map((row) => (
+                      <tr key={row.attempt_id}>
+                        <td className="whitespace-nowrap px-3 py-2 text-xs">{formatInZone(row.created_at)}</td>
+                        <td className="px-3 py-2 text-xs">{row.user_id}</td>
+                        <td className="px-3 py-2 text-xs">{row.platform || "—"}</td>
+                        <td className="px-3 py-2 font-mono text-[11px]">{row.firebase_project_id || "—"}</td>
+                        <td className="px-3 py-2 text-xs">{row.attempt_no}</td>
+                        <td className="px-3 py-2">{row.status === "accepted" ? <Tag tone="green">Accepted by FCM</Tag> : <Tag tone="red">{row.error_code || "Failed"}</Tag>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+        )}
+
+        {section === "audit" && (
+          <ol className="space-y-2">
+            {(campaign.audit || []).map((entry) => (
+              <li key={entry.audit_id} className="flex items-start justify-between gap-3 rounded-xl border border-gray-100 px-3 py-2 text-sm">
+                <div>
+                  <p className="font-semibold capitalize text-gray-900">{entry.action.replace(/_/g, " ")} {entry.decision === "denied" && <Tag tone="red">denied</Tag>}</p>
+                  {entry.details && <p className="text-xs text-gray-500">{Object.entries(entry.details).map(([key, value]) => `${key.replace(/_/g, " ")}: ${Array.isArray(value) ? value.join(", ") : String(value)}`).join(" · ")}</p>}
+                </div>
+                <p className="shrink-0 text-right text-xs text-gray-500">{entry.actor_name || entry.actor_role}<br />{formatInZone(entry.created_at)}</p>
+              </li>
+            ))}
+            {!campaign.audit?.length && <EmptyState title="No audit entries" />}
+          </ol>
+        )}
+      </div>
+    </Modal>
+  );
+}
