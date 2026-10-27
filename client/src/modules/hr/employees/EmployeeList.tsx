@@ -1,4 +1,3 @@
-import EmployeeContactActions from "../../../common/components/EmployeeContactActions";
 import { useEffect, useState, useMemo, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import Swal from "sweetalert2";
@@ -354,7 +353,7 @@ export default function EmployeeList() {
                         {emp.name.charAt(0)}
                       </div>
                       <div>
-                        <div className="flex flex-wrap items-center gap-2"><p className="font-semibold text-gray-900">{emp.name}</p><EmployeeContactActions name={emp.name} email={emp.email} phone={emp.phone} activated={!!emp.customer_id && Number(emp.customer_is_active) === 1} endpoint={`/employees/${emp.id}/activation-email`} activationWhatsAppEndpoint={`/employees/${emp.id}/activation-whatsapp`} /></div>
+                        <div className="flex flex-wrap items-center gap-2"><p className="font-semibold text-gray-900">{emp.name}</p><AppActivationBadge employee={emp} /></div>
                         <p className="text-xs text-gray-500">
                           {emp.role || "—"} · {emp.department || "—"}
                         </p>
@@ -432,7 +431,7 @@ export default function EmployeeList() {
                           <div className="flex items-center justify-center w-10 h-10 font-bold text-white rounded-full bg-gradient-to-r from-purple-500 to-pink-500">
                             {emp.name.charAt(0)}
                           </div>
-                          <span className="font-semibold text-gray-900">{emp.name}</span><EmployeeContactActions name={emp.name} email={emp.email} phone={emp.phone} activated={!!emp.customer_id && Number(emp.customer_is_active) === 1} endpoint={`/employees/${emp.id}/activation-email`} activationWhatsAppEndpoint={`/employees/${emp.id}/activation-whatsapp`} />
+                          <span className="font-semibold text-gray-900">{emp.name}</span><AppActivationBadge employee={emp} />
                         </div>
                       </td>
                       <td className="px-5 py-4 text-sm text-gray-600">
@@ -725,6 +724,21 @@ function StatusBadge({ status }: { status: EmployeeStatus }) {
       {status.charAt(0).toUpperCase() + status.slice(1)}
     </span>
   );
+}
+
+// Read-only app status for HR; activation reminders are sent by the RM.
+function AppActivationBadge({ employee }: { employee: Employee }) {
+  const label = !employee.customer_id
+    ? "App not activated"
+    : Number(employee.customer_is_active) === 1
+      ? "App activated"
+      : "App account inactive";
+  const tone = !employee.customer_id
+    ? "bg-amber-50 text-amber-700"
+    : Number(employee.customer_is_active) === 1
+      ? "bg-emerald-50 text-emerald-700"
+      : "bg-gray-100 text-gray-500";
+  return <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${tone}`}>{label}</span>;
 }
 
 function EditField({

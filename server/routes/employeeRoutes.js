@@ -4,14 +4,7 @@ const employeeController = require("../controllers/employeeController");
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 
 const router = express.Router();
-const { sendActivationEmail, sendActivationWhatsApp } = require("../controllers/employeeActivationController");
-const { rateLimit } = require("express-rate-limit");
-router.post("/:id/activation-email", authenticateToken, authorizeRoles("hr"),
-  rateLimit({ windowMs: 60 * 1000, limit: 10, message: { success: false, message: "Please wait a minute before sending more activation emails." } }),
-  sendActivationEmail);
-router.post("/:id/activation-whatsapp", authenticateToken, authorizeRoles("hr"),
-  rateLimit({ windowMs: 60 * 1000, limit: 10, message: { success: false, message: "Please wait a minute before sending more activation WhatsApp messages." } }),
-  sendActivationWhatsApp);
+// Activation email/WhatsApp reminders are RM-only (see managerRoutes.js).
 const guard = [authenticateToken, authorizeRoles("hr", "admin")];
 
 const employeeFileUpload = multer({
