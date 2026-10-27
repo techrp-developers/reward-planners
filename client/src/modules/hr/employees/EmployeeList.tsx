@@ -3,22 +3,9 @@ import { useDebounce } from "../../../common/hooks/useDebounce";
 import { Link } from "react-router-dom";
 import Swal from "sweetalert2";
 import { hrApi } from "../../../common/api/hrApi";
-import {
-  FiSearch,
-  FiPlus,
-  FiMail,
-  FiPhone,
-  FiUser,
-  FiUserCheck,
-  FiClock,
-  FiUpload,
-  FiArrowLeft,
-  FiEdit,
-  FiTrash2,
-  FiBriefcase,
-  FiFileText,
-  FiX,
-} from "react-icons/fi";
+import { FiChevronLeft, FiChevronRight, FiClock, FiDownload, FiEdit2, FiPlus, FiSearch, FiUserCheck, FiUserX, FiUsers, FiX } from "react-icons/fi";
+import { Card, EmptyState, Initials, LoadingRow, PageHeader, Stat, StatStrip, StatusDot } from "../components/ui";
+import { button, field, formatDate, iconButton, label } from "../components/styles";
 
 /* ================= TYPES ================= */
 
@@ -55,15 +42,6 @@ const emptyEditForm: EmployeeEditForm = {
   role: "",
   status: "active",
 };
-
-interface StatCardProps {
-  label: string;
-  value: number;
-  icon: React.ComponentType<{ className?: string }>;
-  gradient: string; // Unified name
-  active?: boolean;
-  onClick?: () => void;
-}
 
 /* ================= COMPONENT ================= */
 
@@ -255,369 +233,211 @@ export default function EmployeeList() {
     }
   };
 
-  // Full-page loader only on first load; later loads keep the search box mounted.
-  if (loading && !hasLoaded) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-4 border-4 border-purple-200 rounded-full border-t-purple-600 animate-spin"></div>
-          <p className="font-medium text-gray-500">Loading employees...</p>
-        </div>
-      </div>
-    );
-  }
+  const startRow = totalEmployees ? (currentPage - 1) * pageSize + 1 : 0;
+  const endRow = Math.min(currentPage * pageSize, totalEmployees);
 
   return (
-    <div className="p-4 md:p-6">
-      {/* HEADER */}
-      <div className="mb-6">
-        <Link to="/hr/dashboard" className="inline-flex items-center gap-1 mb-2 text-sm text-gray-500 hover:text-purple-600">
-          <FiArrowLeft className="w-4 h-4" /> Back to Dashboard
-        </Link>
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 md:text-3xl">
-              Employee <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#852BAF] to-[#FC3F78]">Directory</span>
-            </h1>
-            <p className="mt-1 text-gray-500">Manage and track all team members</p>
-          </div>
-          <Link to="/hr/onboarding" className="flex items-center justify-center gap-2 px-5 py-2.5 text-white font-semibold rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] hover:from-[#9B3DCF] hover:to-[#FD4F88] shadow-lg shadow-purple-500/30 transition-all duration-300">
-            <FiPlus className="w-5 h-5" /> Add Employee
-          </Link>
-        </div>
-      </div>
-
-      {/* STATS CARDS */}
-      <div className="grid grid-cols-1 gap-4 mb-6 sm:grid-cols-3">
-        <StatCard
-          label="Total Employees"
-          value={stats.total}
-          icon={FiUser}
-          gradient="from-gray-500 to-gray-700"
-          active={statusFilter === "all"}
-          onClick={() => setStatusFilter("all")}
-        />
-        <StatCard
-          label="Active"
-          value={stats.active}
-          icon={FiUserCheck}
-          gradient="from-emerald-500 to-emerald-700"
-          active={statusFilter === "active"}
-          onClick={() => setStatusFilter("active")}
-        />
-        <StatCard
-          label="Pending"
-          value={stats.pending}
-          icon={FiClock}
-          gradient="from-amber-500 to-amber-700"
-          active={statusFilter === "pending"}
-          onClick={() => setStatusFilter("pending")}
-        />
-      </div>
-
-      {/* SEARCH & FILTER */}
-      <div className="flex flex-col gap-4 mb-6 md:flex-row">
-        <div className="relative flex-1">
-          <FiSearch className="absolute left-4 top-3.5 text-gray-400 w-5 h-5" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name, email, or department..."
-            className="w-full py-3 pl-12 pr-4 transition-all border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-          />
-        </div>
-        <div className="flex gap-2">
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as FilterType)}
-            className="px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 cursor-pointer"
-          >
-            <option value="all">All Status</option>
-            <option value="active">Active</option>
-            <option value="pending">Pending</option>
-            <option value="inactive">Inactive</option>
-          </select>
-          <button onClick={handleExport} className="flex items-center gap-2 px-4 py-3 transition-colors border border-gray-200 rounded-xl hover:bg-gray-50 cursor-pointer">
-            <FiUpload className="w-5 h-5" /> <span className="hidden sm:inline">Export</span>
-          </button>
-        </div>
-      </div>
-
-      {/* TABLE */}
-      <div className={`overflow-hidden bg-white border border-gray-200 shadow-lg rounded-2xl transition-opacity ${loading ? "opacity-60" : ""}`} aria-busy={loading}>
-        {employees.length === 0 ? (
-          <div className="px-5 py-12 text-center">
-            <FiUser className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-            <p className="font-medium text-gray-500">No employees found</p>
-          </div>
-        ) : (
+    <>
+      <PageHeader
+        title="Employees"
+        description="Everyone on your company roster, and whether they've started using the app."
+        actions={
           <>
-            {/* Mobile / Tablet card list */}
-            <div className="divide-y divide-gray-100 lg:hidden">
-              {employees.map((emp) => (
-                <div key={emp.id} className="p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center justify-center w-10 h-10 font-bold text-white rounded-full shrink-0 bg-gradient-to-r from-purple-500 to-pink-500">
-                        {emp.name.charAt(0)}
-                      </div>
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2"><p className="font-semibold text-gray-900">{emp.name}</p><AppActivationBadge employee={emp} /></div>
-                        <p className="text-xs text-gray-500">
-                          {emp.role || "—"} · {emp.department || "—"}
-                        </p>
-                      </div>
-                    </div>
-                    <StatusBadge status={emp.status} />
-                  </div>
-                  <div className="flex flex-col gap-1 mt-3 text-sm">
-                    {emp.email ? (
-                      <a
-                        href={`mailto:${emp.email}`}
-                        className="flex items-center gap-2 text-gray-600 transition-colors hover:text-purple-600 hover:underline"
-                      >
-                        <FiMail className="w-3.5 h-3.5" /> {emp.email}
-                      </a>
-                    ) : (
-                      <div className="flex items-center gap-2 text-gray-400">
-                        <FiMail className="w-3.5 h-3.5" /> No email
-                      </div>
-                    )}
-                    {emp.phone ? (
-                      <a
-                        href={`tel:${emp.phone}`}
-                        className="flex items-center gap-2 text-gray-400 transition-colors hover:text-emerald-600 hover:underline"
-                      >
-                        <FiPhone className="w-3.5 h-3.5" /> {emp.phone}
-                      </a>
-                    ) : (
-                      <div className="flex items-center gap-2 text-gray-400">
-                        <FiPhone className="w-3.5 h-3.5" /> No phone
-                      </div>
-                    )}
-                    <p className="mt-1 text-xs text-gray-400">Joined {emp.created_at}</p>
-                  </div>
-                  <div className="flex items-center gap-2 pt-3 mt-3 border-t border-gray-50">
-                    <button
-                      onClick={() => void openEditModal(emp)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 border border-gray-200 rounded-lg hover:text-purple-600 hover:border-purple-200 cursor-pointer"
-                    >
-                      <FiEdit className="w-3.5 h-3.5" /> Edit
-                    </button>
-                    {emp.status !== "inactive" && (
-                      <button
-                        onClick={() => void handleDelete(emp)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 border border-gray-200 rounded-lg cursor-pointer hover:text-red-600 hover:border-red-200"
-                        aria-label={`Deactivate ${emp.name}`}
-                      >
-                        <FiTrash2 className="w-3.5 h-3.5" /> Deactivate
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Desktop table */}
-            <div className="hidden overflow-x-auto lg:block">
-              <table className="w-full text-left">
-                <thead className="bg-gray-50">
-                  <tr className="text-xs font-semibold tracking-wider text-gray-500 uppercase">
-                    <th className="px-5 py-4">Employee</th>
-                    <th className="px-5 py-4">Contact</th>
-                    <th className="px-5 py-4">Department</th>
-                    <th className="px-5 py-4">Role</th>
-                    <th className="px-5 py-4">Employment Status</th>
-                    <th className="px-5 py-4">Joined</th>
-                    <th className="px-5 py-4 text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {employees.map((emp) => (
-                    <tr key={emp.id} className="transition-colors hover:bg-gray-50">
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="flex items-center justify-center w-10 h-10 font-bold text-white rounded-full bg-gradient-to-r from-purple-500 to-pink-500">
-                            {emp.name.charAt(0)}
-                          </div>
-                          <span className="font-semibold text-gray-900">{emp.name}</span><AppActivationBadge employee={emp} />
-                        </div>
-                      </td>
-                      <td className="px-5 py-4 text-sm text-gray-600">
-                        {emp.email ? (
-                          <a
-                            href={`mailto:${emp.email}`}
-                            className="flex items-center gap-2 transition-colors hover:text-purple-600 hover:underline"
-                          >
-                            <FiMail className="w-3.5 h-3.5" /> {emp.email}
-                          </a>
-                        ) : (
-                          <div className="flex items-center gap-2 text-gray-400">
-                            <FiMail className="w-3.5 h-3.5" /> No email
-                          </div>
-                        )}
-                        {emp.phone ? (
-                          <a
-                            href={`tel:${emp.phone}`}
-                            className="flex items-center gap-2 mt-0.5 text-gray-400 transition-colors hover:text-emerald-600 hover:underline"
-                          >
-                            <FiPhone className="w-3.5 h-3.5" /> {emp.phone}
-                          </a>
-                        ) : (
-                          <div className="flex items-center gap-2 mt-0.5 text-gray-400">
-                            <FiPhone className="w-3.5 h-3.5" /> No phone
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-5 py-4 text-sm font-medium text-gray-700">{emp.department}</td>
-                      <td className="px-5 py-4 text-sm text-gray-600">{emp.role}</td>
-                      <td className="px-5 py-4"><StatusBadge status={emp.status} /></td>
-                      <td className="px-5 py-4 text-sm text-gray-500">{emp.created_at}</td>
-                      <td className="px-5 py-4">
-                        <div className="flex items-center justify-center gap-2">
-                          <button onClick={() => void openEditModal(emp)} className="p-2 text-gray-400 hover:text-purple-600 cursor-pointer"><FiEdit className="w-4 h-4" /></button>
-                          {emp.status !== "inactive" && (
-                            <button
-                              onClick={() => void handleDelete(emp)}
-                              className="p-2 text-gray-400 cursor-pointer hover:text-red-600"
-                              aria-label={`Deactivate ${emp.name}`}
-                            >
-                              <FiTrash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <button type="button" onClick={() => void handleExport()} className={button.secondary}>
+              <FiDownload className="h-4 w-4" /> Export
+            </button>
+            <Link to="/hr/onboarding" className={button.primary}>
+              <FiPlus className="h-4 w-4" /> Add employee
+            </Link>
           </>
-        )}
+        }
+      />
 
-        {totalPages > 1 && (
-          <div className="flex flex-col gap-3 px-5 py-4 border-t border-gray-100 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-gray-500">
-              Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalEmployees)} of {totalEmployees} employees
+      <StatStrip>
+        <Stat label="All employees" value={stats.total} note="On your roster" icon={FiUsers} active={statusFilter === "all"} onClick={() => setStatusFilter("all")} />
+        <Stat label="Active" value={stats.active} note="Using the app" icon={FiUserCheck} tone="green" active={statusFilter === "active"} onClick={() => setStatusFilter("active")} />
+        <Stat label="Pending" value={stats.pending} note="Haven't activated yet" icon={FiClock} tone="amber" active={statusFilter === "pending"} onClick={() => setStatusFilter("pending")} />
+        <Stat label="Inactive" value={stats.inactive} note="Left the company" icon={FiUserX} tone="grey" active={statusFilter === "inactive"} onClick={() => setStatusFilter("inactive")} />
+      </StatStrip>
+
+      <Card>
+        <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative w-full sm:max-w-xs">
+            <FiSearch className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search name, email, phone or role"
+              aria-label="Search employees"
+              className={`${field} py-1.5 pl-8`}
+            />
+          </div>
+          <p className="text-sm text-slate-500">
+            {statusFilter === "all" ? "Showing everyone" : `Showing ${statusFilter} employees`}
+            {statusFilter !== "all" && (
+              <button type="button" onClick={() => setStatusFilter("all")} className="ml-2 text-[#852BAF] hover:underline cursor-pointer">
+                Clear
+              </button>
+            )}
+          </p>
+        </div>
+
+        <div className={`transition-opacity ${loading && hasLoaded ? "opacity-60" : ""}`} aria-busy={loading}>
+          {!hasLoaded ? (
+            <LoadingRow text="Loading employees…" />
+          ) : employees.length === 0 ? (
+            <EmptyState
+              title={debouncedSearch || statusFilter !== "all" ? "No one matches" : "No employees yet"}
+              hint={debouncedSearch || statusFilter !== "all" ? "Try a different search or filter." : "Add your team and they'll be able to activate the app."}
+              action={!debouncedSearch && statusFilter === "all" ? <Link to="/hr/onboarding" className={button.secondary}>Add employees</Link> : undefined}
+            />
+          ) : (
+            <>
+              {/* Mobile / tablet */}
+              <ul className="divide-y divide-slate-100 lg:hidden">
+                {employees.map((emp) => (
+                  <li key={emp.id} className="flex items-start gap-3 px-4 py-3">
+                    <Initials name={emp.name} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-slate-900">{emp.name}</p>
+                      <p className="truncate text-xs text-slate-500">{emp.email || "No email"}</p>
+                      <p className="mt-1 truncate text-xs text-slate-500">
+                        {[emp.role, emp.department].filter(Boolean).join(" · ") || "No role yet"}
+                      </p>
+                      <div className="mt-2"><EmployeeStatus employee={emp} /></div>
+                    </div>
+                    <div className="flex shrink-0">
+                      <RowActions employee={emp} onEdit={() => void openEditModal(emp)} onDeactivate={() => void handleDelete(emp)} />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+
+              {/* Desktop */}
+              <div className="hidden overflow-x-auto lg:block">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-xs text-slate-500">
+                      <th className="px-4 py-2.5 font-medium">Name</th>
+                      <th className="px-4 py-2.5 font-medium">Phone</th>
+                      <th className="px-4 py-2.5 font-medium">Department</th>
+                      <th className="px-4 py-2.5 font-medium">Status</th>
+                      <th className="px-4 py-2.5 font-medium">Added</th>
+                      <th className="px-4 py-2.5"><span className="sr-only">Actions</span></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {employees.map((emp) => (
+                      <tr key={emp.id} className="group hover:bg-purple-50/30">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <Initials name={emp.name} />
+                            <div className="min-w-0">
+                              <p className="truncate font-medium text-slate-900">{emp.name}</p>
+                              {emp.email ? (
+                                <a href={`mailto:${emp.email}`} className="block truncate text-xs text-slate-500 hover:text-slate-900 hover:underline">{emp.email}</a>
+                              ) : (
+                                <p className="text-xs text-slate-400">No email</p>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 tabular-nums text-slate-600">
+                          {emp.phone || <span className="text-slate-300">—</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <p className="text-slate-800">{emp.department || <span className="text-slate-400">—</span>}</p>
+                          {emp.role && <p className="text-xs text-slate-500">{emp.role}</p>}
+                        </td>
+                        <td className="px-4 py-3"><EmployeeStatus employee={emp} /></td>
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-500">{formatDate(emp.created_at)}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end opacity-70 transition-opacity group-hover:opacity-100">
+                            <RowActions employee={emp} onEdit={() => void openEditModal(emp)} onDeactivate={() => void handleDelete(emp)} />
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+
+        {hasLoaded && totalEmployees > 0 && (
+          <div className="flex flex-col gap-3 border-t border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm tabular-nums text-slate-500">
+              {startRow}–{endRow} of {totalEmployees}
             </p>
-            <div className="flex items-center gap-1 overflow-x-auto">
-              <button
-                type="button"
-                onClick={() => setCurrentPage((page) => Math.max(page - 1, 1))}
-                disabled={currentPage === 1}
-                className="px-3 py-2 text-sm font-semibold text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-              >
-                Previous
-              </button>
-              {pageNumbers.map((page, index) =>
-                page === "gap" ? (
-                  <span key={`gap-${index}`} className="px-2 text-sm text-gray-400">…</span>
-                ) : (
-                  <button
-                    type="button"
-                    key={page}
-                    onClick={() => setCurrentPage(page)}
-                    aria-current={currentPage === page ? "page" : undefined}
-                    className={`min-w-9 px-3 py-2 text-sm font-semibold rounded-lg border transition-colors cursor-pointer ${
-                      currentPage === page
-                        ? "text-white border-purple-600 bg-purple-600"
-                        : "text-gray-600 border-gray-200 hover:bg-gray-50"
-                    }`}
-                  >
-                    {page}
-                  </button>
-                ),
-              )}
-              <button
-                type="button"
-                onClick={() => setCurrentPage((page) => Math.min(page + 1, totalPages))}
-                disabled={currentPage === totalPages}
-                className="px-3 py-2 text-sm font-semibold text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-              >
-                Next
-              </button>
-            </div>
+            {totalPages > 1 && (
+              <nav aria-label="Pagination" className="flex items-center gap-1">
+                <button type="button" aria-label="Previous page" disabled={currentPage === 1} onClick={() => setCurrentPage((page) => Math.max(page - 1, 1))} className={iconButton}>
+                  <FiChevronLeft className="h-4 w-4" />
+                </button>
+                {pageNumbers.map((page, index) =>
+                  page === "gap" ? (
+                    <span key={`gap-${index}`} className="px-1 text-sm text-slate-400">…</span>
+                  ) : (
+                    <button
+                      type="button"
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      aria-current={currentPage === page ? "page" : undefined}
+                      className={`h-8 min-w-8 rounded-md px-2 text-sm tabular-nums transition-colors cursor-pointer ${
+                        currentPage === page ? "bg-gradient-to-r from-[#852BAF] from-60% to-[#C13A8E] text-white" : "text-slate-600 hover:bg-purple-50"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ),
+                )}
+                <button type="button" aria-label="Next page" disabled={currentPage === totalPages} onClick={() => setCurrentPage((page) => Math.min(page + 1, totalPages))} className={iconButton}>
+                  <FiChevronRight className="h-4 w-4" />
+                </button>
+              </nav>
+            )}
           </div>
         )}
-      </div>
+      </Card>
 
+      {/* EDIT MODAL */}
       {editingEmployee && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) closeEditModal();
           }}
         >
-          <div className="w-full max-w-2xl overflow-hidden bg-white shadow-2xl rounded-2xl">
-            <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
-              <div>
-                <h2 className="text-xl font-bold text-gray-900">Edit Employee</h2>
-                <p className="mt-1 text-sm text-gray-500">
-                  Update employee information and employment status
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={closeEditModal}
-                className="p-2 text-gray-400 rounded-lg hover:bg-gray-100 hover:text-gray-700"
-              >
-                <FiX className="w-5 h-5" />
+          <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-xl bg-white shadow-xl" role="dialog" aria-modal="true" aria-labelledby="edit-employee-title">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+              <h2 id="edit-employee-title" className="text-base font-semibold text-slate-900">Edit {editingEmployee.name}</h2>
+              <button type="button" onClick={closeEditModal} aria-label="Close" className={iconButton}>
+                <FiX className="h-4 w-4" />
               </button>
             </div>
 
             {editLoading ? (
-              <div className="flex items-center justify-center h-72">
-                <div className="w-10 h-10 border-4 border-purple-200 rounded-full border-t-purple-600 animate-spin" />
-              </div>
+              <LoadingRow text="Loading…" />
             ) : (
               <form onSubmit={handleEditSubmit}>
-                <div className="grid grid-cols-1 gap-5 p-6 md:grid-cols-2">
-                  <EditField icon={FiUser} label="Full Name" required>
-                    <input
-                      value={editForm.name}
-                      onChange={(event) =>
-                        setEditForm((current) => ({ ...current, name: event.target.value }))
-                      }
-                      required
-                      className="w-full py-3 pl-11 pr-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    />
-                  </EditField>
-
-                  <EditField icon={FiMail} label="Email" required>
-                    <input
-                      type="email"
-                      value={editForm.email}
-                      onChange={(event) =>
-                        setEditForm((current) => ({ ...current, email: event.target.value }))
-                      }
-                      required
-                      className="w-full py-3 pl-11 pr-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    />
-                  </EditField>
-
-                  <EditField icon={FiPhone} label="Phone Number">
-                    <input
-                      type="tel"
-                      value={editForm.phone}
-                      onChange={(event) =>
-                        setEditForm((current) => ({ ...current, phone: event.target.value }))
-                      }
-                      className="w-full py-3 pl-11 pr-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    />
-                  </EditField>
-
-                  <EditField icon={FiBriefcase} label="Department">
-                    <select
-                      value={editForm.department}
-                      onChange={(event) =>
-                        setEditForm((current) => ({
-                          ...current,
-                          department: event.target.value,
-                        }))
-                      }
-                      className="w-full py-3 pl-11 pr-4 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    >
-                      <option value="">Select Department</option>
+                <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="edit-name" className={label}>Full name</label>
+                    <input id="edit-name" value={editForm.name} onChange={(event) => setEditForm((current) => ({ ...current, name: event.target.value }))} required className={field} />
+                  </div>
+                  <div>
+                    <label htmlFor="edit-email" className={label}>Work email</label>
+                    <input id="edit-email" type="email" value={editForm.email} onChange={(event) => setEditForm((current) => ({ ...current, email: event.target.value }))} required className={field} />
+                  </div>
+                  <div>
+                    <label htmlFor="edit-phone" className={label}>Phone</label>
+                    <input id="edit-phone" type="tel" value={editForm.phone} onChange={(event) => setEditForm((current) => ({ ...current, phone: event.target.value }))} className={field} />
+                  </div>
+                  <div>
+                    <label htmlFor="edit-department" className={label}>Department</label>
+                    <select id="edit-department" value={editForm.department} onChange={(event) => setEditForm((current) => ({ ...current, department: event.target.value }))} className={`${field} cursor-pointer`}>
+                      <option value="">No department</option>
                       {departments.map((department) => (
                         <option key={department} value={department}>{department}</option>
                       ))}
@@ -625,69 +445,37 @@ export default function EmployeeList() {
                         <option value={editForm.department}>{editForm.department}</option>
                       )}
                     </select>
-                  </EditField>
-
-                  <div className="md:col-span-2">
-                    <EditField icon={FiFileText} label="Role / Position">
-                      <input
-                        value={editForm.role}
-                        onChange={(event) =>
-                          setEditForm((current) => ({ ...current, role: event.target.value }))
-                        }
-                        className="w-full py-3 pl-11 pr-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      />
-                    </EditField>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label htmlFor="edit-role" className={label}>Job title</label>
+                    <input id="edit-role" value={editForm.role} onChange={(event) => setEditForm((current) => ({ ...current, role: event.target.value }))} className={field} />
                   </div>
 
-                  <div className="flex items-center justify-between p-4 border border-gray-200 md:col-span-2 rounded-xl">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-800">Employment Status</p>
-                      <p className="text-xs text-gray-500">
+                  <label className="flex cursor-pointer items-start justify-between gap-4 rounded-lg border border-slate-200 px-4 py-3 sm:col-span-2">
+                    <span>
+                      <span className="block text-sm font-medium text-slate-800">Still works here</span>
+                      <span className="text-xs text-slate-500">
                         {editForm.status === "active"
-                          ? "Currently employed. Can use the app"
-                          : "Left or inactive. App login is blocked"}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
+                          ? "They can log in and receive rewards."
+                          : "They'll be logged out of the app and can't receive rewards."}
+                      </span>
+                    </span>
+                    <input
+                      type="checkbox"
                       role="switch"
-                      aria-checked={editForm.status === "active"}
-                      aria-label="Toggle employment status"
-                      onClick={() =>
-                        setEditForm((current) => ({
-                          ...current,
-                          status: current.status === "active" ? "inactive" : "active",
-                        }))
-                      }
-                      className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 cursor-pointer ${
-                        editForm.status === "active" ? "bg-emerald-500" : "bg-gray-300"
-                      }`}
-                    >
-                      <span
-                        aria-hidden="true"
-                        className={`pointer-events-none absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200 ${
-                          editForm.status === "active" ? "translate-x-5" : "translate-x-0"
-                        }`}
-                      />
-                    </button>
-                  </div>
+                      checked={editForm.status === "active"}
+                      onChange={(event) => setEditForm((current) => ({ ...current, status: event.target.checked ? "active" : "inactive" }))}
+                      className="mt-1 h-4 w-4 shrink-0 accent-[#852BAF]"
+                    />
+                  </label>
                 </div>
 
-                <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50">
-                  <button
-                    type="button"
-                    onClick={closeEditModal}
-                    disabled={savingEdit}
-                    className="px-5 py-2.5 font-semibold text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-100 disabled:opacity-60 cursor-pointer"
-                  >
+                <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
+                  <button type="button" onClick={closeEditModal} disabled={savingEdit} className={button.ghost}>
                     Cancel
                   </button>
-                  <button
-                    type="submit"
-                    disabled={savingEdit}
-                    className="px-6 py-2.5 font-semibold text-white rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] disabled:opacity-60 cursor-pointer"
-                  >
-                    {savingEdit ? "Saving..." : "Save Changes"}
+                  <button type="submit" disabled={savingEdit} className={button.primary}>
+                    {savingEdit ? "Saving…" : "Save changes"}
                   </button>
                 </div>
               </form>
@@ -695,28 +483,46 @@ export default function EmployeeList() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
 /* ================= HELPER COMPONENTS ================= */
 
-function StatCard({ label, value, icon: Icon, gradient, active, onClick }: StatCardProps) {
-  return (
-    <div
-      onClick={onClick}
-      className={`p-4 rounded-xl text-white bg-gradient-to-br ${gradient} cursor-pointer transition-all duration-300 hover:shadow-lg ${
-        active ? "ring-2 ring-purple-400 ring-offset-2" : ""
-      }`}
-    >
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs font-medium opacity-90">{label}</p>
-          <p className="mt-1 text-2xl font-bold">{value}</p>
-        </div>
-        <Icon className="w-8 h-8 opacity-80" />
+// One status per employee: employment status (HR) plus what it means for the app.
+function EmployeeStatus({ employee }: { employee: Employee }) {
+  if (employee.status === "inactive") {
+    return <StatusDot tone="grey">Inactive</StatusDot>;
+  }
+  if (employee.status === "pending") {
+    return (
+      <div>
+        <StatusDot tone="amber">Pending</StatusDot>
+        <p className="text-xs text-slate-400">Not on the app yet</p>
       </div>
+    );
+  }
+  const appDisabled = Number(employee.customer_is_active) !== 1;
+  return (
+    <div>
+      <StatusDot tone={appDisabled ? "red" : "green"}>Active</StatusDot>
+      {appDisabled && <p className="text-xs text-red-600">App account switched off</p>}
     </div>
+  );
+}
+
+function RowActions({ employee, onEdit, onDeactivate }: { employee: Employee; onEdit: () => void; onDeactivate: () => void }) {
+  return (
+    <>
+      <button type="button" onClick={onEdit} aria-label={`Edit ${employee.name}`} title="Edit" className={iconButton}>
+        <FiEdit2 className="h-3.5 w-3.5" />
+      </button>
+      {employee.status !== "inactive" && (
+        <button type="button" onClick={onDeactivate} aria-label={`Mark ${employee.name} as left`} title="Mark as left" className={`${iconButton} hover:text-red-600`}>
+          <FiUserX className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </>
   );
 }
 
@@ -731,62 +537,4 @@ function getPageNumbers(current: number, total: number): (number | "gap")[] {
   if (end < total - 1) pages.push("gap");
   pages.push(total);
   return pages;
-}
-
-function StatusBadge({ status }: { status: EmployeeStatus }) {
-  const isActive = status === "active";
-  const isPending = status === "pending";
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
-        isActive
-          ? "bg-emerald-100 text-emerald-700"
-          : isPending
-            ? "bg-amber-100 text-amber-700"
-            : "bg-red-100 text-red-700"
-      }`}
-    >
-      {isActive ? <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> : <FiClock className="w-3 h-3" />}
-      {status.charAt(0).toUpperCase() + status.slice(1)}
-    </span>
-  );
-}
-
-// Read-only app status for HR; activation reminders are sent by the RM.
-function AppActivationBadge({ employee }: { employee: Employee }) {
-  const label = !employee.customer_id
-    ? "App not activated"
-    : Number(employee.customer_is_active) === 1
-      ? "App activated"
-      : "App account inactive";
-  const tone = !employee.customer_id
-    ? "bg-amber-50 text-amber-700"
-    : Number(employee.customer_is_active) === 1
-      ? "bg-emerald-50 text-emerald-700"
-      : "bg-gray-100 text-gray-500";
-  return <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${tone}`}>{label}</span>;
-}
-
-function EditField({
-  icon: Icon,
-  label,
-  required,
-  children,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="block">
-      <span className="block mb-2 text-sm font-semibold text-gray-700">
-        {label} {required && <span className="text-red-500">*</span>}
-      </span>
-      <span className="relative block">
-        <Icon className="absolute z-10 w-5 h-5 text-gray-400 left-3.5 top-3.5" />
-        {children}
-      </span>
-    </label>
-  );
 }

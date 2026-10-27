@@ -9,8 +9,10 @@ export default function HrLayout() {
   if (!user || user.role !== "hr") return <Navigate to="/login" replace />;
 
   return (
-    <PremiumPortalShell sidebar={<HrNavbar closeSidebar={() => undefined} />} roleLabel="HR workspace" userLabel={user.name || user.email}>
-      <Outlet />
+    <PremiumPortalShell variant="plain" sidebar={<HrNavbar closeSidebar={() => undefined} />} roleLabel="HR portal" userLabel={user.name || user.email}>
+      <div className="mx-auto max-w-7xl">
+        <Outlet />
+      </div>
     </PremiumPortalShell>
   );
 }

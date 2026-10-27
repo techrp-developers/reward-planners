@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { FiInfo, FiUsers } from "react-icons/fi";
 import Swal from "sweetalert2";
 import { hrApi } from "../../../../common/api/hrApi";
+import { button, field, label } from "../../components/styles";
 
 interface Employee {
   id: number;
@@ -78,71 +78,67 @@ export default function CompanyForm({
   };
 
   return (
-    <div className="space-y-7 duration-500 animate-in fade-in slide-in-from-bottom-2">
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <label className="space-y-2">
-          <span className="text-sm font-bold text-gray-700">Points per Employee</span>
-          <input
-            type="number"
-            min="1"
-            step="1"
-            value={points}
-            onChange={(event) => setPoints(event.target.value)}
-            placeholder="Enter points"
-            className="w-full px-4 py-3 font-medium text-gray-900 transition-all border border-gray-100 outline-none bg-gray-50 rounded-2xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
-          />
-        </label>
-        <div className="p-4 border border-purple-100 bg-purple-50/50 rounded-2xl">
-          <p className="text-xs font-bold tracking-wide text-purple-500 uppercase">Active Recipients</p>
-          <p className="mt-1 text-2xl font-black text-purple-800">{loading ? "..." : employees.length}</p>
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <div>
+          <label htmlFor="company-points" className={label}>Points for each person</label>
+          <div className="relative">
+            <input
+              id="company-points"
+              type="number"
+              min="1"
+              step="1"
+              value={points}
+              onChange={(event) => setPoints(event.target.value)}
+              placeholder="100"
+              className={`${field} pr-12 tabular-nums`}
+            />
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">pts</span>
+          </div>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5">
+          <p className="text-xs text-slate-500">Recipients</p>
+          <p className="text-lg font-semibold tabular-nums text-slate-900">{loading ? "—" : employees.length}</p>
+          <p className="text-xs text-slate-400">Everyone who has activated the app</p>
         </div>
       </div>
 
-      <label className="block space-y-2">
-        <span className="text-sm font-bold text-gray-700">Appreciation Note (Optional)</span>
+      <div>
+        <label htmlFor="company-note" className={label}>
+          Note to everyone <span className="font-normal text-slate-400">(optional)</span>
+        </label>
         <textarea
+          id="company-note"
           value={note}
           onChange={(event) => setNote(event.target.value)}
           rows={3}
-          className="w-full px-4 py-3 font-medium text-gray-900 transition-all border border-gray-100 outline-none resize-none bg-gray-50 rounded-2xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+          placeholder="Thank you for a great year."
+          className={`${field} resize-none`}
         />
-      </label>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="flex items-center gap-3 p-5 border border-purple-100 bg-purple-50/50 rounded-2xl">
-          <FiUsers className="w-6 h-6 text-purple-600" />
-          <div><p className="text-xs text-gray-500">Employees</p><p className="font-bold text-gray-900">{employees.length}</p></div>
-        </div>
-        <div className="p-5 border border-amber-100 bg-amber-50/50 rounded-2xl">
-          <p className="text-xs text-gray-500">Total Wallet Deduction</p>
-          <p className="font-bold text-amber-700">{totalCost.toLocaleString()} points</p>
-        </div>
       </div>
 
-      <div className="flex items-center gap-3 p-4 text-xs leading-tight text-amber-800 border border-amber-100 bg-amber-50/50 rounded-2xl">
-        <FiInfo className="w-5 h-5 shrink-0" />
-        Only active employees are included. Every recipient must have an active customer account.
-      </div>
-
-      <div className="flex items-center justify-end gap-4 pt-6 border-t border-gray-50">
-        <button
-          type="button"
-          onClick={() => {
-            setPoints("");
-            setNote("");
-          }}
-          className="px-6 py-2.5 text-sm font-semibold text-gray-500 transition-colors cursor-pointer hover:text-gray-700"
-        >
-          Discard
-        </button>
-        <button
-          type="button"
-          onClick={() => void distribute()}
-          disabled={submitting || loading || !employees.length}
-          className="px-10 py-3 bg-gray-900 text-white text-sm font-bold rounded-2xl shadow-lg shadow-gray-200 hover:bg-black hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
-        >
-          {submitting ? "Distributing..." : "Confirm Allocation"}
-        </button>
+      <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-slate-600">
+          Total: <span className="font-medium tabular-nums text-slate-900">{totalCost.toLocaleString()} pts</span>
+          {employees.length > 0 && pointValue > 0 && (
+            <span className="text-slate-400"> ({employees.length} × {pointValue.toLocaleString()})</span>
+          )}
+        </p>
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setPoints("");
+              setNote("");
+            }}
+            className={button.ghost}
+          >
+            Clear
+          </button>
+          <button type="button" onClick={() => void distribute()} disabled={submitting || loading || !employees.length} className={button.primary}>
+            {submitting ? "Sending…" : "Send to everyone"}
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -1,272 +1,140 @@
 import { Link, useLocation } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
-  FiGrid,
-  FiUsers,
-  FiUserPlus,
-  FiUser,
-  FiLogOut,
-  FiGift,
-  FiChevronDown,
   FiBarChart2,
   FiBriefcase,
+  FiChevronUp,
+  FiGift,
+  FiGrid,
+  FiKey,
+  FiLogOut,
+  FiUser,
+  FiUserPlus,
+  FiUsers,
 } from "react-icons/fi";
-import { HiOutlineUserCircle } from "react-icons/hi2";
 import { useAuth } from "../../../common/auth/useAuth";
 import { hrApi } from "../../../common/api/hrApi";
-
-/* ================= TYPES ================= */
-
-type IconType = React.ElementType;
+import { Initials } from "../components/ui";
 
 interface NavLink {
-  type: "link";
   label: string;
   to: string;
-  Icon: IconType;
-  isDisabled?: boolean;
+  Icon: React.ElementType;
 }
 
-interface NavDropdown {
-  type: "dropdown";
-  label: string;
-  Icon: IconType;
-  children: NavLink[];
-}
-
-type NavItem = NavLink | NavDropdown;
+const navGroups: { title: string; links: NavLink[] }[] = [
+  {
+    title: "Team",
+    links: [
+      { label: "Overview", to: "/hr/dashboard", Icon: FiGrid },
+      { label: "Employees", to: "/hr/employees", Icon: FiUsers },
+      { label: "Add employees", to: "/hr/onboarding", Icon: FiUserPlus },
+      { label: "Departments", to: "/hr/departments", Icon: FiBriefcase },
+    ],
+  },
+  {
+    title: "Engagement",
+    links: [
+      { label: "Rewards", to: "/hr/rewards", Icon: FiGift },
+      { label: "Polls", to: "/hr/polls", Icon: FiBarChart2 },
+    ],
+  },
+];
 
 interface HrNavbarProps {
   closeSidebar?: () => void;
 }
 
-/* ================= COMPONENT ================= */
-
 export default function HrNavbar({ closeSidebar }: HrNavbarProps) {
   const { user, logout } = useAuth();
   const { pathname } = useLocation();
-
-  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  const [isProfileOpen, setIsProfileOpen] = useState(true);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [company, setCompany] = useState<{
-    company_name: string;
-    company_logo: string | null;
-  } | null>(null);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [company, setCompany] = useState<{ company_name: string; company_logo: string | null } | null>(null);
 
   useEffect(() => {
     hrApi
       .get("/employees/company-profile")
       .then((response) => setCompany(response.data?.data || null))
-      .catch((error) => console.error("Unable to load company branding:", error))
-      .finally(() => setLoading(false));
+      .catch((error) => console.error("Unable to load company branding:", error));
   }, []);
 
-  const isActive = (path: string): boolean => pathname === path;
+  const linkClass = (active: boolean) =>
+    `group flex items-center gap-3 rounded-xl px-2 py-1.5 text-sm transition ${
+      active
+        ? "bg-gradient-to-r from-[#852BAF] from-60% to-[#C13A8E] font-medium text-white shadow-md shadow-purple-200"
+        : "text-slate-600 hover:bg-purple-50/70 hover:text-[#6E2391]"
+    }`;
 
-
-const navItems: NavItem[] = [
-  {
-    type: "link",
-    label: "Dashboard",
-    to: "/hr/dashboard",
-    Icon: FiGrid,
-  },
-  {
-    type: "link",
-    label: "Onboarding",
-    to: "/hr/onboarding",
-    Icon: FiUserPlus,
-  },
-  {
-    type: "link",
-    label: "Employees List",
-    to: "/hr/employees",
-    Icon: FiUsers,
-  },
-
-  // ✅ NEW MENU
-  {
-    type: "link",
-    label: "Manage Rewards",
-    to: "/hr/rewards",
-    Icon: FiGift,
-  },
-  {
-    type: "link",
-    label: "Polls",
-    to: "/hr/polls",
-    Icon: FiBarChart2,
-  },
-  {
-    type: "link",
-    label: "Departments",
-    to: "/hr/departments",
-    Icon: FiBriefcase,
-  },
-];
-
-  if (loading) return null;
+  const iconClass = (active: boolean) =>
+    `flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${
+      active ? "bg-white/20 text-white" : "bg-purple-50 text-[#852BAF] group-hover:bg-white"
+    }`;
 
   return (
-    <nav className="premium-role-sidebar fixed top-0 left-0 flex flex-col w-64 h-full bg-white border-r border-gray-100 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
-      {/* Branding */}
-      <div className="px-8 py-10">
-        <div className="flex items-center gap-3">
-          {company?.company_logo ? (
-            <img
-              src={company.company_logo}
-              alt={`${company.company_name} logo`}
-              className="object-contain w-10 h-10 p-1 bg-white border border-gray-100 rounded-lg shadow-sm"
-            />
-          ) : (
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#852BAF] to-[#FC3F78] shadow-lg flex items-center justify-center text-white font-black italic">
-              R
-            </div>
-          )}
-          <div>
-            <h1 className="text-xl font-black text-gray-900">REWARDS</h1>
-            <p className="text-[10px] uppercase font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#852BAF] to-[#FC3F78]">
-              HR Portal
-            </p>
-          </div>
+    <nav className="flex h-full w-64 flex-col border-r border-purple-100 bg-gradient-to-b from-white via-white to-[#fbf7fd]">
+      {/* Company */}
+      <div className="flex h-16 items-center gap-3 border-b border-purple-100 px-4">
+        {company?.company_logo ? (
+          <img src={company.company_logo} alt="" className="h-9 w-9 rounded-xl border border-purple-100 bg-white object-contain p-0.5" />
+        ) : (
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#852BAF] from-55% to-[#C13A8E] text-sm font-semibold text-white shadow-md shadow-purple-200">
+            {(company?.company_name || "R").charAt(0).toUpperCase()}
+          </span>
+        )}
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-slate-900">{company?.company_name || "Reward Planners"}</p>
+          <p className="text-[11px] font-medium text-[#852BAF]">HR portal</p>
         </div>
       </div>
 
       {/* Navigation */}
-      <div className="flex-1 px-4 space-y-1.5 overflow-y-auto">
-        {navItems.map((item) => {
-          if (item.type === "dropdown") {
-            return (
-              <div key={item.label} className="space-y-1">
-                <button
-                  onClick={() =>
-                    setOpenDropdown(
-                      openDropdown === item.label ? null : item.label
-                    )
-                  }
-                  className={`flex items-center justify-between w-full px-4 py-3 text-sm font-bold rounded-xl transition-all ${
-                    openDropdown === item.label
-                      ? "text-[#852BAF] bg-purple-50/50"
-                      : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
-                  }`}
-                >
-                  <span className="flex items-center gap-3">
-                    <item.Icon className="text-lg" />
-                    {item.label}
-                  </span>
-                </button>
-              </div>
-            );
-          }
-
-          // LINK TYPE
-          const isItemActive = isActive(item.to);
-          return (
-            <Link
-              key={item.to}
-              to={item.to}
-              onClick={closeSidebar}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${
-                isItemActive
-                  ? "bg-gradient-to-r from-[#852BAF] to-[#FC3F78] text-white shadow-md"
-                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
-              }`}
-            >
-              <item.Icon className="text-lg" />
-              {item.label}
-            </Link>
-          );
-        })}
+      <div className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
+        {navGroups.map((group) => (
+          <div key={group.title}>
+            <p className="mb-1.5 px-2 text-[11px] font-medium text-slate-400">{group.title}</p>
+            <div className="space-y-1">
+              {group.links.map(({ label, to, Icon }) => {
+                const active = pathname === to;
+                return (
+                  <Link key={to} to={to} onClick={closeSidebar} aria-current={active ? "page" : undefined} className={linkClass(active)}>
+                    <span className={iconClass(active)}><Icon className="h-4 w-4" /></span>
+                    {label}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
 
-      {/* ── PROFILE SECTION ── */}
-      <div
-        className="p-3 m-3 rounded-2xl"
-        style={{
-          background:
-            "linear-gradient(135deg, rgba(133,43,175,0.06) 0%, rgba(252,63,120,0.04) 100%)",
-          border: "1px solid rgba(133,43,175,0.12)",
-        }}
-      >
-        <button
-          onClick={() => setIsProfileOpen((prev) => !prev)}
-          className="flex items-center w-full gap-3 group cursor-pointer"
-        >
-          <div className="relative shrink-0">
-            <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white text-[15px] transition-transform duration-200 group-hover:scale-105"
-              style={{
-                background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
-                boxShadow: "0 4px 12px rgba(133,43,175,0.3)",
-              }}
-            >
-              {user?.email?.charAt(0).toUpperCase() || "M"}
-            </div>
-            <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-white rounded-full flex items-center justify-center shadow-sm">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-              </span>
-            </div>
-          </div>
-
-          <div className="flex-1 min-w-0 overflow-hidden text-left">
-            <p className="text-[13px] font-semibold text-gray-900 truncate leading-tight">
-              {user?.name || user?.email}
-            </p>
-            <p className="text-[10px] text-[#852BAF] font-bold uppercase tracking-wider mt-0.5">
-              HR Admin
-            </p>
-          </div>
-
-          <FiChevronDown
-            className={`text-gray-400 shrink-0 transition-transform duration-300 ${
-              isProfileOpen ? "rotate-180" : ""
-            }`}
-          />
-        </button>
-
-        <div
-          className={`overflow-hidden transition-all duration-300 ${
-            isProfileOpen ? "max-h-44 mt-3 opacity-100" : "max-h-0 opacity-0"
-          }`}
-        >
-          <div
-            className="w-full h-px mb-2"
-            style={{
-              background:
-                "linear-gradient(90deg, rgba(133,43,175,0.2), transparent)",
-            }}
-          />
-          <div className="space-y-0.5">
-            <Link
-              to="/hr/profile"
-              onClick={closeSidebar}
-              className="flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-white/80 hover:text-[#852BAF] rounded-xl transition-all duration-150"
-            >
-              <FiUser className="text-base text-gray-400 shrink-0" />
-              Profile
+      {/* Account */}
+      <div className="m-3 rounded-2xl border border-purple-100 bg-purple-50/50 p-2">
+        {accountOpen && (
+          <div className="mb-2 space-y-1 border-b border-purple-100 pb-2">
+            <Link to="/hr/profile" onClick={closeSidebar} className={linkClass(pathname === "/hr/profile")}>
+              <span className={iconClass(pathname === "/hr/profile")}><FiUser className="h-4 w-4" /></span> Profile
             </Link>
-
-            <Link
-              to="/hr/change-password"
-              onClick={closeSidebar}
-              className="flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-white/80 hover:text-[#852BAF] rounded-xl transition-all duration-150"
-            >
-              <HiOutlineUserCircle className="text-base text-gray-400 shrink-0" />
-              Change Password
+            <Link to="/hr/change-password" onClick={closeSidebar} className={linkClass(pathname === "/hr/change-password")}>
+              <span className={iconClass(pathname === "/hr/change-password")}><FiKey className="h-4 w-4" /></span> Change password
             </Link>
-
-            <button
-              onClick={logout}
-              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm font-medium text-red-500 hover:bg-red-50 hover:text-red-600 rounded-xl transition-all duration-150 cursor-pointer"
-            >
-              <FiLogOut className="text-base shrink-0" />
-              Sign Out
+            <button type="button" onClick={logout} className="flex w-full items-center gap-3 rounded-xl px-2 py-1.5 text-sm text-red-600 transition-colors hover:bg-red-50 cursor-pointer">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-50"><FiLogOut className="h-4 w-4" /></span> Sign out
             </button>
           </div>
-        </div>
+        )}
+        <button
+          type="button"
+          onClick={() => setAccountOpen((open) => !open)}
+          aria-expanded={accountOpen}
+          className="flex w-full items-center gap-2.5 rounded-xl px-1.5 py-1.5 text-left transition-colors hover:bg-white cursor-pointer"
+        >
+          <Initials name={user?.name || user?.email} size="sm" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium text-slate-800">{user?.name || user?.email}</span>
+            {user?.name && <span className="block truncate text-[11px] text-slate-500">{user.email}</span>}
+          </span>
+          <FiChevronUp className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${accountOpen ? "" : "rotate-180"}`} />
+        </button>
       </div>
     </nav>
   );

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { FiBriefcase, FiCheck, FiEdit2, FiPlus, FiSearch, FiTrash2, FiX } from "react-icons/fi";
+import { FiCheck, FiEdit2, FiSearch, FiTrash2, FiX } from "react-icons/fi";
 import { toast } from "sonner";
 import { hrApi } from "../../../common/api/hrApi";
+import { Card, EmptyState, LoadingRow, PageHeader } from "../components/ui";
+import { button, field, iconButton } from "../components/styles";
 
 interface Department {
   id: number | null;
@@ -49,7 +51,7 @@ export default function DepartmentManagement() {
     try {
       await hrApi.post("/employees/departments", { name });
       setNewName("");
-      toast.success("Department added");
+      toast.success(`Added ${name}`);
       await loadDepartments();
     } catch (error) {
       toast.error(errorMessage(error));
@@ -91,7 +93,7 @@ export default function DepartmentManagement() {
     try {
       await hrApi.delete("/employees/departments", { params: { name: department.name } });
       setDepartments((current) => current.filter((item) => item.name !== department.name));
-      toast.success("Department deleted");
+      toast.success(`Deleted ${department.name}`);
     } catch (error) {
       toast.error(errorMessage(error));
     }
@@ -102,133 +104,100 @@ export default function DepartmentManagement() {
   );
 
   return (
-    <main className="min-h-screen bg-slate-50/70 p-5 md:p-8">
-      <div className="mx-auto max-w-5xl">
-        <div className="mb-7">
-          <p className="mb-1 text-xs font-bold uppercase tracking-[0.2em] text-[#852BAF]">Settings</p>
-          <h1 className="text-3xl font-black tracking-tight text-slate-900">Departments</h1>
-          <p className="mt-2 text-sm text-slate-500">
-            Departments added here appear in the dropdown when onboarding or editing employees.
-          </p>
-        </div>
+    <div className="max-w-3xl">
+      <PageHeader
+        title="Departments"
+        description="These show up as options when you add or edit an employee, and let you reward a whole team at once."
+      />
 
-        <form onSubmit={addDepartment} className="mb-6 rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
-          <label htmlFor="new-department" className="mb-2 block text-sm font-semibold text-gray-700">
-            Add a department
-          </label>
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <div className="relative flex-1">
-              <FiBriefcase className="absolute left-4 top-3.5 h-5 w-5 text-gray-400" />
-              <input
-                id="new-department"
-                value={newName}
-                maxLength={NAME_MAX}
-                onChange={(event) => setNewName(event.target.value)}
-                placeholder="e.g. Customer Success"
-                className="w-full rounded-xl border border-gray-200 py-3 pl-12 pr-4 transition-all focus:border-transparent focus:ring-2 focus:ring-purple-500"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={saving || !newName.trim()}
-              className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-6 py-3 text-sm font-bold text-white shadow-md transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <FiPlus /> Add Department
-            </button>
-          </div>
+      <Card>
+        <form onSubmit={addDepartment} className="flex flex-col gap-2 border-b border-slate-200 p-4 sm:flex-row">
+          <label htmlFor="new-department" className="sr-only">New department name</label>
+          <input
+            id="new-department"
+            value={newName}
+            maxLength={NAME_MAX}
+            onChange={(event) => setNewName(event.target.value)}
+            placeholder="New department, e.g. Customer Success"
+            className={field}
+          />
+          <button type="submit" disabled={saving || !newName.trim()} className={`${button.primary} shrink-0`}>
+            Add department
+          </button>
         </form>
 
-        <section className="rounded-3xl border border-slate-100 bg-white shadow-sm">
-          <div className="flex flex-col gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="font-bold text-slate-900">
-              All departments <span className="font-medium text-slate-400">({departments.length})</span>
-            </h2>
-            <div className="relative sm:w-64">
-              <FiSearch className="absolute left-3 top-3 text-gray-400" />
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search departments..."
-                className="w-full rounded-xl border border-gray-200 py-2 pl-9 pr-3 text-sm focus:border-transparent focus:ring-2 focus:ring-purple-500"
-              />
+        <div className="flex items-center justify-between gap-3 px-4 py-3">
+          <p className="text-sm text-slate-500">
+            {departments.length} {departments.length === 1 ? "department" : "departments"}
+          </p>
+          {departments.length > 6 && (
+            <div className="relative w-56">
+              <FiSearch className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Filter" aria-label="Filter departments" className={`${field} py-1.5 pl-8`} />
             </div>
-          </div>
+          )}
+        </div>
 
-          {loading ? (
-            <p className="p-8 text-center text-sm text-slate-400">Loading departments...</p>
-          ) : filtered.length === 0 ? (
-            <p className="p-8 text-center text-sm text-slate-400">
-              {departments.length ? "No departments match your search." : "No departments yet. Add your first one above."}
-            </p>
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {filtered.map((department) => (
-                <li key={department.name} className="flex items-center gap-3 px-5 py-4">
-                  {editing === department.name ? (
-                    <>
-                      <input
-                        autoFocus
-                        value={editName}
-                        maxLength={NAME_MAX}
-                        onChange={(event) => setEditName(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") void saveRename(department);
-                          if (event.key === "Escape") setEditing(null);
-                        }}
-                        className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-transparent focus:ring-2 focus:ring-purple-500"
-                      />
-                      <button
-                        type="button"
-                        disabled={saving}
-                        onClick={() => void saveRename(department)}
-                        className="cursor-pointer rounded-lg p-2 text-emerald-600 hover:bg-emerald-50"
-                        aria-label="Save"
-                      >
-                        <FiCheck />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditing(null)}
-                        className="cursor-pointer rounded-lg p-2 text-slate-400 hover:bg-slate-100"
-                        aria-label="Cancel"
-                      >
-                        <FiX />
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-slate-800">{department.name}</p>
-                        <p className="text-xs text-slate-400">
-                          {department.employee_count} employee{department.employee_count === 1 ? "" : "s"}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => startEdit(department)}
-                        className="cursor-pointer rounded-lg p-2 text-slate-500 hover:bg-purple-50 hover:text-[#852BAF]"
-                        aria-label={`Rename ${department.name}`}
-                      >
-                        <FiEdit2 />
+        {loading ? (
+          <LoadingRow text="Loading departments…" />
+        ) : filtered.length === 0 ? (
+          <EmptyState
+            title={departments.length ? "No departments match" : "No departments yet"}
+            hint={departments.length ? "Try a different name." : "Add your first one above. You can rename it later."}
+          />
+        ) : (
+          <ul className="divide-y divide-slate-100 border-t border-slate-100">
+            {filtered.map((department) => (
+              <li key={department.name} className="flex min-h-14 items-center gap-3 px-4 py-2.5">
+                {editing === department.name ? (
+                  <>
+                    <input
+                      autoFocus
+                      value={editName}
+                      maxLength={NAME_MAX}
+                      aria-label={`New name for ${department.name}`}
+                      onChange={(event) => setEditName(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") void saveRename(department);
+                        if (event.key === "Escape") setEditing(null);
+                      }}
+                      className={`${field} py-1.5`}
+                    />
+                    <button type="button" disabled={saving} onClick={() => void saveRename(department)} className={iconButton} aria-label="Save">
+                      <FiCheck className="h-4 w-4" />
+                    </button>
+                    <button type="button" onClick={() => setEditing(null)} className={iconButton} aria-label="Cancel">
+                      <FiX className="h-4 w-4" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p className="min-w-0 flex-1 truncate text-sm text-slate-900">{department.name}</p>
+                    <span className="text-sm tabular-nums text-slate-500">
+                      {department.employee_count} {department.employee_count === 1 ? "person" : "people"}
+                    </span>
+                    <div className="flex">
+                      <button type="button" onClick={() => startEdit(department)} className={iconButton} aria-label={`Rename ${department.name}`} title="Rename">
+                        <FiEdit2 className="h-3.5 w-3.5" />
                       </button>
                       <button
                         type="button"
                         onClick={() => void removeDepartment(department)}
                         disabled={department.employee_count > 0}
-                        title={department.employee_count > 0 ? "Move its employees before deleting" : "Delete"}
-                        className="cursor-pointer rounded-lg p-2 text-slate-500 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+                        title={department.employee_count > 0 ? "Move its employees to another department first" : "Delete"}
+                        className={`${iconButton} hover:text-red-600`}
                         aria-label={`Delete ${department.name}`}
                       >
-                        <FiTrash2 />
+                        <FiTrash2 className="h-3.5 w-3.5" />
                       </button>
-                    </>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </div>
-    </main>
+                    </div>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    </div>
   );
 }

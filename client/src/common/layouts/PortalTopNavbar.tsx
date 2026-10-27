@@ -5,9 +5,29 @@ type PortalTopNavbarProps = {
   roleLabel: string;
   userLabel?: string;
   onOpenSidebar: () => void;
+  plain?: boolean;
 };
 
-export default function PortalTopNavbar({ roleLabel, userLabel, onOpenSidebar }: PortalTopNavbarProps) {
+export default function PortalTopNavbar({ roleLabel, userLabel, onOpenSidebar, plain }: PortalTopNavbarProps) {
+  if (plain) {
+    return (
+      <header className="sticky top-0 z-30 border-b border-purple-100/70 bg-white lg:ml-64">
+        <div className="flex h-14 items-center justify-between px-4 sm:px-6 lg:px-8">
+          <div className="flex min-w-0 items-center gap-3">
+            <button onClick={onOpenSidebar} aria-label="Open navigation" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 lg:hidden">
+              <FiMenu size={18} />
+            </button>
+            <p className="truncate text-sm text-slate-500">{roleLabel}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <NotificationBell />
+            {userLabel && <span className="hidden max-w-48 truncate text-sm font-medium text-slate-700 sm:block">{userLabel}</span>}
+          </div>
+        </div>
+      </header>
+    );
+  }
+
   return (
     <header className="sticky top-0 z-30 border-b border-purple-100/70 bg-white/85 backdrop-blur-xl lg:ml-64">
       <div className="flex h-[72px] items-center justify-between px-4 sm:px-6 lg:px-8">

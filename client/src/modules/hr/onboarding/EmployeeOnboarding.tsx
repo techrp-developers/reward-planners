@@ -1,17 +1,10 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type DragEvent, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import Swal from "sweetalert2";
+import { FiFile, FiUpload, FiX } from "react-icons/fi";
 import { hrApi } from "../../../common/api/hrApi";
-import {
-  FiUser,
-  FiMail,
-  FiPhone,
-  FiBriefcase,
-  FiUpload,
-  FiCheck,
-  FiArrowLeft,
-  FiFileText,
-} from "react-icons/fi";
+import { Card, PageHeader } from "../components/ui";
+import { button, field, label } from "../components/styles";
 
 /* ================= TYPES ================= */
 
@@ -41,6 +34,7 @@ export default function EmployeeOnboarding() {
   const [activeTab, setActiveTab] = useState<TabType>("form");
   const [formData, setFormData] = useState<EmployeeForm>(initialForm);
   const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [dragging, setDragging] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [departments, setDepartments] = useState<string[]>([]);
   const [departmentsLoading, setDepartmentsLoading] = useState(true);
@@ -79,8 +73,8 @@ export default function EmployeeOnboarding() {
     try {
       await hrApi.post("/employees", formData);
       await Swal.fire({
-        title: "Success!",
-        text: "Employee has been onboarded successfully!",
+        title: "Employee added",
+        text: `${formData.fullName} can now activate their account in the Reward Planners app.`,
         icon: "success",
         confirmButtonColor: "#852BAF",
       });
@@ -109,7 +103,7 @@ export default function EmployeeOnboarding() {
       uploadData.append("file", csvFile);
       const response = await hrApi.post("/employees/bulk-upload", uploadData);
       await Swal.fire({
-        title: "Success!",
+        title: "Upload complete",
         text: response.data?.message || `Successfully uploaded ${csvFile.name}`,
         icon: "success",
         confirmButtonColor: "#852BAF",
@@ -126,257 +120,139 @@ export default function EmployeeOnboarding() {
     }
   };
 
+  const handleDrop = (event: DragEvent<HTMLLabelElement>) => {
+    event.preventDefault();
+    setDragging(false);
+    const file = event.dataTransfer.files?.[0];
+    if (file) setCsvFile(file);
+  };
+
   /* ================= UI ================= */
 
+  const tabClass = (tab: TabType) =>
+    `rounded-md px-3 py-1.5 text-sm transition-colors cursor-pointer ${
+      activeTab === tab ? "bg-white font-medium text-[#6E2391] shadow-sm" : "text-slate-500 hover:text-slate-800"
+    }`;
+
   return (
-    <div className="max-w-5xl p-4 mx-auto md:p-6">
+    <div className="max-w-3xl">
+      <PageHeader
+        title="Add employees"
+        description="Add one person at a time, or upload a spreadsheet for a whole team. They'll be able to activate the Reward Planners app with the email or phone you enter."
+        backTo={{ to: "/hr/employees", label: "Employees" }}
+      />
 
-      {/* HEADER */}
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-        <div>
-          <Link
-            to="/hr/dashboard"
-            className="inline-flex items-center gap-1 mb-2 text-sm text-gray-500 hover:text-purple-600"
-          >
-            <FiArrowLeft className="w-4 h-4" />
-            Back to Dashboard
-          </Link>
-          <h1 className="text-2xl font-bold text-gray-800 md:text-3xl">
-            Employee <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#852BAF] to-[#FC3F78]">Onboarding</span>
-          </h1>
-          <p className="mt-1 text-gray-500">Add new employees to your organization</p>
-        </div>
-      </div>
-
-      {/* TAB SWITCH */}
-      <div className="inline-flex flex-wrap gap-2 p-1 mb-6 bg-gray-100 rounded-xl">
-        <button
-          onClick={() => setActiveTab("form")}
-          className={`px-4 sm:px-5 py-2.5 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
-            activeTab === "form"
-              ? "bg-white text-purple-600 shadow-md"
-              : "text-gray-600 hover:text-gray-900"
-          }`}
-        >
-          <FiUser className="inline w-4 h-4 mr-2" />
-          Manual Entry
+      <div className="mb-4 inline-flex rounded-lg bg-purple-50 p-1" role="tablist">
+        <button type="button" role="tab" aria-selected={activeTab === "form"} onClick={() => setActiveTab("form")} className={tabClass("form")}>
+          One employee
         </button>
-
-        <button
-          onClick={() => setActiveTab("bulk")}
-          className={`px-4 sm:px-5 py-2.5 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
-            activeTab === "bulk"
-              ? "bg-white text-purple-600 shadow-md"
-              : "text-gray-600 hover:text-gray-900"
-          }`}
-        >
-          <FiUpload className="inline w-4 h-4 mr-2" />
-          Bulk Upload
+        <button type="button" role="tab" aria-selected={activeTab === "bulk"} onClick={() => setActiveTab("bulk")} className={tabClass("bulk")}>
+          Upload a file
         </button>
       </div>
 
       {/* ================= FORM ================= */}
       {activeTab === "form" && (
-        <form
-          onSubmit={handleSubmit}
-          className="p-6 space-y-6 bg-white border border-gray-100 shadow-lg md:p-8 rounded-2xl"
-        >
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            {/* Full Name */}
-            <div>
-              <label className="block mb-2 text-sm font-semibold text-gray-700">
-                Full Name <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <FiUser className="absolute left-4 top-3.5 text-gray-400 w-5 h-5" />
-                <input
-                  name="fullName"
-                  placeholder="Enter full name"
-                  value={formData.fullName}
-                  onChange={handleChange}
-                  required
-                  className="w-full py-3 pl-12 pr-4 transition-all border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                />
+        <Card>
+          <form onSubmit={handleSubmit}>
+            <div className="grid grid-cols-1 gap-5 p-5 sm:grid-cols-2 sm:p-6">
+              <div>
+                <label htmlFor="fullName" className={label}>Full name</label>
+                <input id="fullName" name="fullName" value={formData.fullName} onChange={handleChange} required autoComplete="off" className={field} />
               </div>
-            </div>
 
-            {/* Email */}
-            <div>
-              <label className="block mb-2 text-sm font-semibold text-gray-700">
-                Email <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <FiMail className="absolute left-4 top-3.5 text-gray-400 w-5 h-5" />
-                <input
-                  name="email"
-                  type="email"
-                  placeholder="Enter email address"
-                  value={formData.email}
-                  onChange={handleChange}
-                  required
-                  className="w-full py-3 pl-12 pr-4 transition-all border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                />
+              <div>
+                <label htmlFor="email" className={label}>Work email</label>
+                <input id="email" name="email" type="email" placeholder="name@company.com" value={formData.email} onChange={handleChange} required className={field} />
               </div>
-            </div>
 
-            {/* Phone */}
-            <div>
-              <label className="block mb-2 text-sm font-semibold text-gray-700">
-                Phone Number
-              </label>
-              <div className="relative">
-                <FiPhone className="absolute left-4 top-3.5 text-gray-400 w-5 h-5" />
-                <input
-                  name="phone"
-                  type="tel"
-                  placeholder="+91 9876543210"
-                  value={formData.phone}
-                  onChange={handleChange}
-                  className="w-full py-3 pl-12 pr-4 transition-all border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                />
+              <div>
+                <label htmlFor="phone" className={label}>
+                  Phone <span className="font-normal text-slate-400">(optional)</span>
+                </label>
+                <input id="phone" name="phone" type="tel" placeholder="+91 98765 43210" value={formData.phone} onChange={handleChange} className={field} />
               </div>
-            </div>
 
-            {/* Department */}
-            <div>
-              <label className="block mb-2 text-sm font-semibold text-gray-700">
-                Department
-              </label>
-              <div className="relative">
-                <FiBriefcase className="absolute left-4 top-3.5 text-gray-400 w-5 h-5" />
-                <select
-                  name="department"
-                  value={formData.department}
-                  onChange={handleChange}
-                  className="w-full py-3 pl-12 pr-4 transition-all bg-white border border-gray-200 appearance-none rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent cursor-pointer"
-                >
-                  <option value="">
-                    {departmentsLoading ? "Loading Departments..." : "Select Department"}
-                  </option>
+              <div>
+                <label htmlFor="department" className={label}>Department</label>
+                <select id="department" name="department" value={formData.department} onChange={handleChange} className={`${field} cursor-pointer`}>
+                  <option value="">{departmentsLoading ? "Loading…" : "No department"}</option>
                   {departments.map((department) => (
                     <option key={department} value={department}>{department}</option>
                   ))}
                 </select>
+                <p className="mt-1.5 text-xs text-slate-500">
+                  Missing one? <Link to="/hr/departments" className="text-[#852BAF] hover:underline">Add a department</Link>
+                </p>
               </div>
-              <Link to="/hr/departments" className="inline-block mt-2 text-xs font-semibold text-[#852BAF] hover:underline">
-                Can't find it? Manage departments
-              </Link>
-            </div>
 
-            {/* Role */}
-            <div className="md:col-span-2">
-              <label className="block mb-2 text-sm font-semibold text-gray-700">
-                Role / Position
-              </label>
-              <div className="relative">
-                <FiFileText className="absolute left-4 top-3.5 text-gray-400 w-5 h-5" />
-                <input
-                  name="role"
-                  placeholder="e.g., Software Engineer, Marketing Manager"
-                  value={formData.role}
-                  onChange={handleChange}
-                  className="w-full py-3 pl-12 pr-4 transition-all border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                />
+              <div className="sm:col-span-2">
+                <label htmlFor="role" className={label}>
+                  Job title <span className="font-normal text-slate-400">(optional)</span>
+                </label>
+                <input id="role" name="role" placeholder="e.g. Account Manager" value={formData.role} onChange={handleChange} className={field} />
               </div>
             </div>
-          </div>
 
-          {/* Submit Button */}
-          <div className="flex justify-end pt-4">
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="flex items-center gap-2 px-8 py-3 font-semibold text-white transition-all duration-300 shadow-lg rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] hover:from-[#9B3DCF] hover:to-[#FD4F88] shadow-purple-500/30 hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
-            >
-              {isSubmitting ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white rounded-full border-t-transparent animate-spin"></div>
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <FiCheck className="w-5 h-5" />
-                  Add Employee
-                </>
-              )}
-            </button>
-          </div>
-        </form>
+            <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3 sm:px-6">
+              <button type="button" onClick={() => setFormData(initialForm)} disabled={isSubmitting} className={button.ghost}>
+                Clear
+              </button>
+              <button type="submit" disabled={isSubmitting} className={button.primary}>
+                {isSubmitting ? "Adding…" : "Add employee"}
+              </button>
+            </div>
+          </form>
+        </Card>
       )}
 
       {/* ================= CSV UPLOAD ================= */}
       {activeTab === "bulk" && (
-        <div className="p-6 space-y-6 bg-white border border-gray-100 shadow-lg md:p-8 rounded-2xl">
-
-          {/* Upload Area */}
-          <div className="p-8 text-center transition-colors border-2 border-gray-300 border-dashed rounded-2xl hover:border-purple-400">
-            <div className="flex items-center justify-center w-16 h-16 mx-auto mb-4 bg-gradient-to-r from-[#852BAF] to-[#FC3F78] rounded-full">
-              <FiUpload className="w-8 h-8 text-white" />
-            </div>
-            
+        <Card>
+          <div className="space-y-5 p-5 sm:p-6">
             {csvFile ? (
-              <div className="flex items-center justify-center gap-2 font-medium text-green-600">
-                <FiCheck className="w-5 h-5" />
-                {csvFile.name}
+              <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                <FiFile className="h-5 w-5 shrink-0 text-slate-400" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-slate-900">{csvFile.name}</p>
+                  <p className="text-xs text-slate-500">{(csvFile.size / 1024).toFixed(1)} KB</p>
+                </div>
+                <button type="button" onClick={() => setCsvFile(null)} aria-label="Remove file" className="rounded-md p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 cursor-pointer">
+                  <FiX className="h-4 w-4" />
+                </button>
               </div>
             ) : (
-              <>
-                <p className="mb-2 font-medium text-gray-700">
-                  Drag & drop your CSV file here
-                </p>
-                <p className="mb-4 text-sm text-gray-500">
-                  or click to browse files
-                </p>
-              </>
+              <label
+                htmlFor="csv-upload"
+                onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={handleDrop}
+                className={`flex cursor-pointer flex-col items-center rounded-lg border border-dashed px-6 py-10 text-center transition-colors ${
+                  dragging ? "border-[#852BAF] bg-purple-50/40" : "border-slate-300 hover:border-slate-400 hover:bg-slate-50"
+                }`}
+              >
+                <FiUpload className="mb-3 h-5 w-5 text-slate-400" />
+                <span className="text-sm font-medium text-slate-800">Drop your CSV here, or click to choose a file</span>
+                <span className="mt-1 text-xs text-slate-500">One row per employee</span>
+              </label>
             )}
-            
-            <input
-              type="file"
-              accept=".csv"
-              onChange={(e) => setCsvFile(e.target.files?.[0] || null)}
-              className="hidden"
-              id="csv-upload"
-            />
-            <label
-              htmlFor="csv-upload"
-              className="inline-block px-5 py-2.5 text-purple-600 font-semibold border border-purple-200 rounded-lg hover:bg-purple-50 cursor-pointer transition-colors"
-            >
-              Choose File
-            </label>
-          </div>
+            <input type="file" accept=".csv" onChange={(e) => setCsvFile(e.target.files?.[0] || null)} className="hidden" id="csv-upload" />
 
-          {/* Sample Format */}
-          <div className="p-5 bg-gray-50 rounded-xl">
-            <h3 className="mb-3 font-semibold text-gray-800">CSV Format Required</h3>
-            <div className="p-4 overflow-x-auto font-mono text-sm text-gray-600 bg-white rounded-lg">
-              fullName,email,phone,department,role
+            <div>
+              <p className="mb-2 text-sm font-medium text-slate-700">Columns, in this order</p>
+              <pre className="overflow-x-auto rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 font-mono text-xs leading-relaxed text-slate-700">
+{`fullName,email,phone,department,role
+Priya Nair,priya@company.com,+91 98765 43210,Finance,Analyst`}
+              </pre>
             </div>
-            <p className="mt-3 text-sm text-gray-500">
-              Example: John Doe,john@company.com,+91 9876543210,Engineering,Developer
-            </p>
           </div>
 
-          {/* Upload Button */}
-          <div className="flex justify-end">
-            <button
-              onClick={handleCSVUpload}
-              disabled={isSubmitting || !csvFile}
-              className="flex items-center gap-2 px-8 py-3 font-semibold text-white transition-all duration-300 shadow-lg rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 shadow-emerald-500/30 hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
-            >
-              {isSubmitting ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white rounded-full border-t-transparent animate-spin"></div>
-                  Uploading...
-                </>
-              ) : (
-                <>
-                  <FiUpload className="w-5 h-5" />
-                  Upload CSV
-                </>
-              )}
+          <div className="flex justify-end border-t border-slate-200 px-5 py-3 sm:px-6">
+            <button type="button" onClick={() => void handleCSVUpload()} disabled={isSubmitting || !csvFile} className={button.primary}>
+              {isSubmitting ? "Uploading…" : "Upload employees"}
             </button>
           </div>
-        </div>
+        </Card>
       )}
     </div>
   );

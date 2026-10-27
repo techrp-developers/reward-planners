@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { FiUsers, FiLayers, FiChevronDown, FiAlertCircle } from "react-icons/fi";
 import Swal from "sweetalert2";
 import { hrApi } from "../../../../common/api/hrApi";
+import { Initials } from "../../components/ui";
+import { button, field, label } from "../../components/styles";
 
 interface Employee {
   id: number;
@@ -84,96 +85,92 @@ export default function TeamForm({
   };
 
   return (
-    <div className="space-y-7 duration-500 animate-in fade-in slide-in-from-bottom-2">
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <label className="space-y-2">
-          <span className="text-sm font-bold text-gray-700">Target Department</span>
-          <span className="relative block">
-            <FiLayers className="absolute text-gray-400 left-4 top-3.5" />
-            <select
-              value={department}
-              onChange={(event) => setDepartment(event.target.value)}
-              disabled={loading}
-              className="w-full py-3 pl-11 pr-10 font-medium text-gray-900 transition-all border border-gray-100 outline-none appearance-none cursor-pointer bg-gray-50 rounded-2xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-            >
-              <option value="">{loading ? "Loading departments..." : "Select a Department"}</option>
-              {departments.map((name) => <option key={name} value={name}>{name}</option>)}
-            </select>
-            <FiChevronDown className="absolute text-gray-400 pointer-events-none right-4 top-3.5" />
-          </span>
-        </label>
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <div>
+          <label htmlFor="team-department" className={label}>Department</label>
+          <select
+            id="team-department"
+            value={department}
+            onChange={(event) => setDepartment(event.target.value)}
+            disabled={loading}
+            className={`${field} cursor-pointer`}
+          >
+            <option value="">{loading ? "Loading…" : "Choose a department"}</option>
+            {departments.map((name) => <option key={name} value={name}>{name}</option>)}
+          </select>
+        </div>
 
-        <label className="space-y-2">
-          <span className="text-sm font-bold text-gray-700">Points per Employee</span>
-          <input
-            type="number"
-            min="1"
-            step="1"
-            value={points}
-            onChange={(event) => setPoints(event.target.value)}
-            placeholder="Enter points"
-            className="w-full px-4 py-3 font-medium text-gray-900 transition-all border border-gray-100 outline-none bg-gray-50 rounded-2xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-          />
-        </label>
+        <div>
+          <label htmlFor="team-points" className={label}>Points for each person</label>
+          <div className="relative">
+            <input
+              id="team-points"
+              type="number"
+              min="1"
+              step="1"
+              value={points}
+              onChange={(event) => setPoints(event.target.value)}
+              placeholder="200"
+              className={`${field} pr-12 tabular-nums`}
+            />
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">pts</span>
+          </div>
+        </div>
       </div>
 
-      <div className="overflow-hidden border border-gray-100 rounded-2xl">
-        <div className="flex items-center justify-between p-4 bg-indigo-50/50">
-          <span className="text-sm font-bold text-gray-700">Active Members</span>
-          <span className="text-xs font-bold text-indigo-600">{members.length} recipients</span>
-        </div>
-        <div className="overflow-y-auto divide-y divide-gray-50 max-h-60">
-          {!department ? (
-            <p className="p-6 text-sm text-center text-gray-400">Select a department to view members</p>
-          ) : members.length === 0 ? (
-            <p className="p-6 text-sm text-center text-gray-400">No active employees found</p>
-          ) : members.map((member) => (
-            <div key={member.id} className="flex items-center justify-between gap-3 p-4">
-              <div className="flex items-center gap-3 min-w-0">
-                <span className="flex items-center justify-center w-9 h-9 text-sm font-bold text-indigo-600 bg-indigo-100 rounded-full shrink-0">
-                  {member.name?.charAt(0).toUpperCase()}
-                </span>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-gray-800 truncate">{member.name}</p>
-                  <p className="text-xs text-gray-400 truncate">{member.role || "Employee"} · {member.email || "No email"}</p>
+      {department && (
+        <div className="rounded-lg border border-slate-200">
+          <p className="border-b border-slate-200 px-4 py-2 text-xs text-slate-500">
+            {members.length} {members.length === 1 ? "person" : "people"} in {department} will receive points
+          </p>
+          <ul className="max-h-60 divide-y divide-slate-100 overflow-y-auto">
+            {members.length === 0 ? (
+              <li className="px-4 py-6 text-center text-sm text-slate-500">Nobody in this department is on the app yet</li>
+            ) : members.map((member) => (
+              <li key={member.id} className="flex items-center gap-3 px-4 py-2">
+                <Initials name={member.name} size="sm" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm text-slate-900">{member.name}</p>
+                  <p className="truncate text-xs text-slate-500">{member.role || member.email || "Employee"}</p>
                 </div>
-              </div>
-              <span className="text-sm font-bold text-indigo-600 shrink-0">{pointValue.toLocaleString()} pts</span>
-            </div>
-          ))}
+                {pointValue > 0 && <span className="text-sm tabular-nums text-slate-500">{pointValue.toLocaleString()} pts</span>}
+              </li>
+            ))}
+          </ul>
         </div>
+      )}
+
+      <div>
+        <label htmlFor="team-note" className={label}>
+          Note to the team <span className="font-normal text-slate-400">(optional)</span>
+        </label>
+        <textarea id="team-note" value={note} onChange={(event) => setNote(event.target.value)} rows={3} placeholder="Great work on the launch, everyone." className={`${field} resize-none`} />
       </div>
 
-      <label className="block space-y-2">
-        <span className="text-sm font-bold text-gray-700">Appreciation Note (Optional)</span>
-        <textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} className="w-full px-4 py-3 font-medium text-gray-900 transition-all border border-gray-100 outline-none resize-none bg-gray-50 rounded-2xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500" />
-      </label>
-
-      <div className="flex items-center justify-between p-4 border border-amber-100 bg-amber-50/50 rounded-2xl">
-        <span className="flex items-center gap-2 text-sm text-amber-800"><FiAlertCircle /> Total wallet deduction</span>
-        <strong className="text-amber-700">{totalCost.toLocaleString()} points</strong>
-      </div>
-
-      <div className="flex items-center justify-end gap-4 pt-6 border-t border-gray-50">
-        <button
-          type="button"
-          onClick={() => {
-            setDepartment("");
-            setPoints("");
-            setNote("");
-          }}
-          className="px-6 py-2.5 text-sm font-semibold text-gray-500 transition-colors cursor-pointer hover:text-gray-700"
-        >
-          Discard
-        </button>
-        <button
-          type="button"
-          onClick={() => void distribute()}
-          disabled={submitting || !members.length}
-          className="flex items-center gap-2 px-8 py-3 bg-gray-900 text-white text-sm font-bold rounded-2xl shadow-lg shadow-gray-200 hover:bg-black hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
-        >
-          <FiUsers className="w-4 h-4" /> {submitting ? "Distributing..." : "Distribute to Team"}
-        </button>
+      <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-slate-600">
+          Total: <span className="font-medium tabular-nums text-slate-900">{totalCost.toLocaleString()} pts</span>
+          {members.length > 0 && pointValue > 0 && (
+            <span className="text-slate-400"> ({members.length} × {pointValue.toLocaleString()})</span>
+          )}
+        </p>
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setDepartment("");
+              setPoints("");
+              setNote("");
+            }}
+            className={button.ghost}
+          >
+            Clear
+          </button>
+          <button type="button" onClick={() => void distribute()} disabled={submitting || !members.length} className={button.primary}>
+            {submitting ? "Sending…" : "Send to team"}
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { FiBarChart2, FiCheckCircle, FiChevronDown, FiClock, FiPlus, FiTrash2, FiUsers, FiX } from "react-icons/fi";
+import { FiChevronDown, FiPlus, FiTrash2, FiX } from "react-icons/fi";
 import { toast } from "sonner";
 import { hrApi } from "../../../common/api/hrApi";
+import { Card, EmptyState, Initials, LoadingRow, PageHeader, StatusDot } from "../components/ui";
+import { button, field, iconButton, label } from "../components/styles";
 
 interface PollOption {
   option_id: number;
@@ -127,98 +129,187 @@ export default function PollManagement() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50/70 p-5 md:p-8">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-7">
-          <p className="mb-1 text-xs font-bold uppercase tracking-[0.2em] text-[#852BAF]">Employee engagement</p>
-          <h1 className="text-3xl font-black tracking-tight text-slate-900">Company polls</h1>
-          <p className="mt-2 text-sm text-slate-500">Create quick, WhatsApp-style polls for everyone in your company.</p>
-        </div>
+    <>
+      <PageHeader
+        title="Polls"
+        description="Ask your company a quick question. Everyone in the company can vote from the app."
+      />
 
-        <div className="grid items-start gap-6 xl:grid-cols-[390px_1fr]">
-          <form onSubmit={publish} className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm xl:sticky xl:top-6">
-            <div className="mb-6 flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-purple-50 text-[#852BAF]"><FiBarChart2 size={21} /></div>
-              <div><h2 className="font-extrabold text-slate-900">Create a poll</h2><p className="text-xs text-slate-500">Visible only inside your company</p></div>
+      <div className="grid items-start gap-6 xl:grid-cols-[360px_1fr]">
+        <Card className="xl:sticky xl:top-20">
+          <form onSubmit={publish}>
+            <div className="border-b border-slate-200 px-5 py-4">
+              <h2 className="text-sm font-semibold text-slate-900">New poll</h2>
+              <p className="mt-0.5 text-xs text-slate-500">Only people in your company will see it</p>
             </div>
 
-            <label className="mb-2 block text-sm font-bold text-slate-700">Question</label>
-            <textarea value={question} onChange={(e) => setQuestion(e.target.value)} maxLength={500} rows={3} placeholder="Ask a question…" className="w-full resize-none rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-[#852BAF] focus:ring-4 focus:ring-purple-50" />
-            <p className="mt-1 text-right text-[11px] text-slate-400">{question.length}/500</p>
+            <div className="space-y-4 p-5">
+              <div>
+                <label htmlFor="poll-question" className={label}>Question</label>
+                <textarea id="poll-question" value={question} onChange={(e) => setQuestion(e.target.value)} maxLength={500} rows={3} placeholder="Where should we go for the team lunch?" className={`${field} resize-none`} />
+                {question.length > 400 && <p className="mt-1 text-right text-xs text-slate-400">{question.length}/500</p>}
+              </div>
 
-            <div className="mt-3 space-y-2">
-              <label className="block text-sm font-bold text-slate-700">Options</label>
-              {options.map((option, index) => (
-                <div key={index} className="flex gap-2">
-                  <input value={option} onChange={(e) => setOptions((current) => current.map((item, i) => i === index ? e.target.value : item))} maxLength={250} placeholder={`Option ${index + 1}`} className="min-w-0 flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-[#852BAF] focus:ring-4 focus:ring-purple-50" />
-                  {options.length > 2 && <button type="button" onClick={() => setOptions((current) => current.filter((_, i) => i !== index))} aria-label={`Remove option ${index + 1}`} className="rounded-xl px-3 text-slate-400 hover:bg-red-50 hover:text-red-500"><FiX /></button>}
-                </div>
-              ))}
-              {options.length < 12 && <button type="button" onClick={() => setOptions((current) => [...current, ""])} className="flex items-center gap-2 py-2 text-sm font-bold text-[#852BAF]"><FiPlus /> Add option</button>}
-            </div>
-
-            <label className="mt-3 flex cursor-pointer items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
-              <span><span className="block text-sm font-bold text-slate-700">Allow multiple answers</span><span className="text-xs text-slate-500">People can select more than one</span></span>
-              <input type="checkbox" checked={allowMultiple} onChange={(e) => setAllowMultiple(e.target.checked)} className="h-5 w-5 accent-[#852BAF]" />
-            </label>
-
-            <label className="mt-4 block text-sm font-bold text-slate-700">Automatically close <span className="font-normal text-slate-400">(optional)</span></label>
-            <input type="datetime-local" value={closesAt} min={new Date(Date.now() + 60000).toISOString().slice(0, 16)} onChange={(e) => setClosesAt(e.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-[#852BAF]" />
-
-            <button disabled={saving} className="mt-6 w-full rounded-2xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-purple-200 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60">
-              {saving ? "Publishing…" : "Publish poll"}
-            </button>
-          </form>
-
-          <section>
-            <div className="mb-4 flex items-center justify-between"><h2 className="text-lg font-extrabold text-slate-900">Your polls</h2><span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-500 shadow-sm">{polls.length} total</span></div>
-            {loading ? <div className="rounded-3xl bg-white p-12 text-center text-sm text-slate-500">Loading polls…</div> : polls.length === 0 ? (
-              <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-14 text-center"><FiBarChart2 className="mx-auto mb-3 text-3xl text-slate-300" /><h3 className="font-bold text-slate-700">No polls yet</h3><p className="mt-1 text-sm text-slate-400">Your published polls will appear here.</p></div>
-            ) : <div className="space-y-4">{polls.map((poll) => {
-              const totalVotes = poll.options.reduce((sum, option) => sum + option.vote_count, 0);
-              const expired = Boolean(poll.closes_at && new Date(poll.closes_at).getTime() <= Date.now());
-              const active = poll.status === "published" && !expired;
-              return <article key={poll.poll_id} className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm">
-                <div className="p-5 md:p-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div><div className="mb-2 flex flex-wrap items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-[11px] font-extrabold ${active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{active ? "Live" : "Closed"}</span>{poll.allow_multiple && <span className="rounded-full bg-purple-50 px-2.5 py-1 text-[11px] font-bold text-[#852BAF]">Multiple answers</span>}</div><h3 className="text-lg font-extrabold text-slate-900">{poll.question}</h3></div>
-                    <button onClick={() => void removePoll(poll)} aria-label="Delete poll" className="shrink-0 rounded-xl p-2.5 text-slate-400 hover:bg-red-50 hover:text-red-500"><FiTrash2 /></button>
-                  </div>
-                  <div className="mt-5 space-y-3">{poll.options.map((option) => {
-                    const percentage = totalVotes ? Math.round((option.vote_count / totalVotes) * 100) : 0;
-                    return <div key={option.option_id}><div className="mb-1.5 flex justify-between text-sm"><span className="font-semibold text-slate-700">{option.option_text}</span><span className="font-bold text-slate-500">{percentage}%</span></div><div className="h-2.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-gradient-to-r from-[#852BAF] to-[#FC3F78] transition-all" style={{ width: `${percentage}%` }} /></div></div>;
-                  })}</div>
-                  <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-500"><span className="flex items-center gap-1.5"><FiUsers /> {poll.participant_count} participants</span><span className="flex items-center gap-1.5"><FiCheckCircle /> {totalVotes} votes</span><span className="flex items-center gap-1.5"><FiClock /> {poll.closes_at ? `Closes ${new Date(poll.closes_at).toLocaleString()}` : "No closing date"}</span></div>
-                  <button type="button" onClick={() => void toggleParticipants(poll.poll_id)} className="mt-4 flex w-full items-center justify-between rounded-xl bg-purple-50/70 px-4 py-3 text-sm font-extrabold text-[#852BAF] transition hover:bg-purple-100">
-                    <span className="flex items-center gap-2"><FiUsers /> View votes by participant</span>
-                    <FiChevronDown className={`transition-transform ${openParticipants === poll.poll_id ? "rotate-180" : ""}`} />
-                  </button>
-                  {openParticipants === poll.poll_id && (
-                    <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
-                      {participantsLoading === poll.poll_id ? <p className="py-4 text-center text-sm text-slate-400">Loading participants...</p> : (
-                        <div className="space-y-5">{(participantData[poll.poll_id] || []).map((option) => (
-                          <div key={option.option_id}>
-                            <div className="mb-2 flex items-center justify-between"><h4 className="text-sm font-extrabold text-slate-700">{option.option_text}</h4><span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-slate-500">{option.participants.length}</span></div>
-                            {option.participants.length === 0 ? <p className="rounded-xl bg-white px-3 py-2 text-xs text-slate-400">No votes for this option</p> : (
-                              <div className="grid gap-2 sm:grid-cols-2">{option.participants.map((participant) => (
-                                <div key={`${option.option_id}-${participant.user_id}`} className="flex items-center gap-3 rounded-xl bg-white p-3 shadow-sm">
-                                  {participant.user_image ? <img src={participant.user_image} alt="" className="h-9 w-9 rounded-full object-cover" /> : <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#852BAF] to-[#FC3F78] text-xs font-black text-white">{participant.name?.charAt(0).toUpperCase() || "E"}</div>}
-                                  <div className="min-w-0"><p className="truncate text-sm font-bold text-slate-700">{participant.name}</p><p className="truncate text-[11px] text-slate-400">{participant.email}</p></div>
-                                </div>
-                              ))}</div>
-                            )}
-                          </div>
-                        ))}</div>
+              <div>
+                <p className={label}>Options</p>
+                <div className="space-y-2">
+                  {options.map((option, index) => (
+                    <div key={index} className="flex gap-1.5">
+                      <input value={option} onChange={(e) => setOptions((current) => current.map((item, i) => i === index ? e.target.value : item))} maxLength={250} placeholder={`Option ${index + 1}`} aria-label={`Option ${index + 1}`} className={field} />
+                      {options.length > 2 && (
+                        <button type="button" onClick={() => setOptions((current) => current.filter((_, i) => i !== index))} aria-label={`Remove option ${index + 1}`} className={`${iconButton} h-9 w-9 shrink-0`}>
+                          <FiX className="h-4 w-4" />
+                        </button>
                       )}
                     </div>
-                  )}
+                  ))}
                 </div>
-                <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/60 px-5 py-3"><span className="text-[11px] text-slate-400">Created {new Date(poll.created_at).toLocaleDateString()}</span><button onClick={() => void changeStatus(poll)} className="text-xs font-extrabold text-[#852BAF] hover:underline">{poll.status === "published" ? "Close poll" : "Reopen poll"}</button></div>
-              </article>;
-            })}</div>}
-          </section>
-        </div>
+                {options.length < 12 && (
+                  <button type="button" onClick={() => setOptions((current) => [...current, ""])} className="mt-2 inline-flex items-center gap-1.5 text-sm text-[#852BAF] hover:underline cursor-pointer">
+                    <FiPlus className="h-3.5 w-3.5" /> Add another option
+                  </button>
+                )}
+              </div>
+
+              <label className="flex cursor-pointer items-start gap-2.5">
+                <input type="checkbox" checked={allowMultiple} onChange={(e) => setAllowMultiple(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[#852BAF]" />
+                <span>
+                  <span className="block text-sm text-slate-800">Allow more than one answer</span>
+                  <span className="text-xs text-slate-500">Voters can tick several options</span>
+                </span>
+              </label>
+
+              <div>
+                <label htmlFor="poll-closes" className={label}>
+                  Close automatically <span className="font-normal text-slate-400">(optional)</span>
+                </label>
+                <input id="poll-closes" type="datetime-local" value={closesAt} min={new Date(Date.now() + 60000).toISOString().slice(0, 16)} onChange={(e) => setClosesAt(e.target.value)} className={field} />
+              </div>
+            </div>
+
+            <div className="border-t border-slate-200 px-5 py-3">
+              <button disabled={saving} className={`${button.primary} w-full`}>
+                {saving ? "Publishing…" : "Publish poll"}
+              </button>
+            </div>
+          </form>
+        </Card>
+
+        <section>
+          <div className="mb-3 flex items-baseline justify-between">
+            <h2 className="text-sm font-semibold text-slate-900">Your polls</h2>
+            {polls.length > 0 && <span className="text-sm text-slate-500">{polls.length} total</span>}
+          </div>
+
+          {loading ? (
+            <Card><LoadingRow text="Loading polls…" /></Card>
+          ) : polls.length === 0 ? (
+            <Card><EmptyState title="No polls yet" hint="Write a question on the left and publish it. Results will show up here as people vote." /></Card>
+          ) : (
+            <div className="space-y-4">
+              {polls.map((poll) => {
+                const totalVotes = poll.options.reduce((sum, option) => sum + option.vote_count, 0);
+                const expired = Boolean(poll.closes_at && new Date(poll.closes_at).getTime() <= Date.now());
+                const active = poll.status === "published" && !expired;
+                const leading = Math.max(...poll.options.map((option) => option.vote_count), 0);
+                return (
+                  <Card key={poll.poll_id}>
+                    <div className="p-5">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <div className="mb-1.5 flex flex-wrap items-center gap-3">
+                            <StatusDot tone={active ? "green" : "grey"}>{active ? "Open" : "Closed"}</StatusDot>
+                            {poll.allow_multiple && <span className="text-xs text-slate-500">Multiple answers</span>}
+                          </div>
+                          <h3 className="text-base font-medium text-slate-900">{poll.question}</h3>
+                        </div>
+                        <button onClick={() => void removePoll(poll)} aria-label="Delete poll" title="Delete poll" className={`${iconButton} hover:text-red-600`}>
+                          <FiTrash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                      <ul className="mt-4 space-y-3">
+                        {poll.options.map((option) => {
+                          const percentage = totalVotes ? Math.round((option.vote_count / totalVotes) * 100) : 0;
+                          const isLeading = totalVotes > 0 && option.vote_count === leading;
+                          return (
+                            <li key={option.option_id}>
+                              <div className="mb-1 flex justify-between gap-3 text-sm">
+                                <span className={isLeading ? "font-medium text-slate-900" : "text-slate-700"}>{option.option_text}</span>
+                                <span className="shrink-0 tabular-nums text-slate-500">
+                                  {option.vote_count} · {percentage}%
+                                </span>
+                              </div>
+                              <div className="h-1.5 rounded-full bg-slate-100">
+                                <div className={`h-full rounded-full transition-all ${isLeading ? "bg-gradient-to-r from-[#852BAF] from-60% to-[#C13A8E]" : "bg-purple-200"}`} style={{ width: `${percentage}%` }} />
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+
+                      <p className="mt-4 text-xs text-slate-500">
+                        {poll.participant_count} {poll.participant_count === 1 ? "person" : "people"} voted · {totalVotes} {totalVotes === 1 ? "vote" : "votes"} ·{" "}
+                        {poll.closes_at ? `${expired ? "Closed" : "Closes"} ${new Date(poll.closes_at).toLocaleString()}` : "No closing date"}
+                      </p>
+
+                      {openParticipants === poll.poll_id && (
+                        <div className="mt-4 rounded-lg border border-slate-200">
+                          {participantsLoading === poll.poll_id ? (
+                            <LoadingRow text="Loading votes…" />
+                          ) : (
+                            <div className="divide-y divide-slate-100">
+                              {(participantData[poll.poll_id] || []).map((option) => (
+                                <div key={option.option_id} className="px-4 py-3">
+                                  <p className="mb-2 text-xs font-medium text-slate-500">
+                                    {option.option_text} · {option.participants.length}
+                                  </p>
+                                  {option.participants.length === 0 ? (
+                                    <p className="text-sm text-slate-400">Nobody picked this</p>
+                                  ) : (
+                                    <ul className="grid gap-2 sm:grid-cols-2">
+                                      {option.participants.map((participant) => (
+                                        <li key={`${option.option_id}-${participant.user_id}`} className="flex items-center gap-2.5">
+                                          {participant.user_image ? (
+                                            <img src={participant.user_image} alt="" className="h-7 w-7 rounded-full object-cover" />
+                                          ) : (
+                                            <Initials name={participant.name} size="sm" />
+                                          )}
+                                          <div className="min-w-0">
+                                            <p className="truncate text-sm text-slate-800">{participant.name}</p>
+                                            <p className="truncate text-xs text-slate-400">{participant.email}</p>
+                                          </div>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-5 py-2.5">
+                      <button type="button" onClick={() => void toggleParticipants(poll.poll_id)} aria-expanded={openParticipants === poll.poll_id} className="inline-flex items-center gap-1 text-sm text-slate-600 hover:text-slate-900 cursor-pointer">
+                        {openParticipants === poll.poll_id ? "Hide who voted" : "See who voted"}
+                        <FiChevronDown className={`h-4 w-4 transition-transform ${openParticipants === poll.poll_id ? "rotate-180" : ""}`} />
+                      </button>
+                      <div className="flex items-center gap-3">
+                        <span className="hidden text-xs text-slate-400 sm:inline">Posted {new Date(poll.created_at).toLocaleDateString()}</span>
+                        <button onClick={() => void changeStatus(poll)} className={button.secondary}>
+                          {poll.status === "published" ? "Close poll" : "Reopen"}
+                        </button>
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </section>
       </div>
-    </main>
+    </>
   );
 }
