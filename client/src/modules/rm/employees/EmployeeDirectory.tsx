@@ -1,3 +1,5 @@
+import ListPagination from "../../../common/components/ListPagination";
+import { useListPagination } from "../../../common/hooks/useListPagination";
 import EmployeeContactActions from "../../../common/components/EmployeeContactActions";
 import { useEffect, useMemo, useState } from "react";
 import { FiBriefcase, FiDownload, FiEdit2, FiEye, FiPlus, FiSearch, FiTrash2, FiUploadCloud, FiUsers, FiX } from "react-icons/fi";
@@ -189,6 +191,10 @@ export default function EmployeeDirectory() {
       .some((value) => text(value).includes(query))), [customers, query]);
 
   const visibleCount = tab === "companies" ? filteredCompanies.length : filteredCustomers.length;
+  const pagination = useListPagination(visibleCount, JSON.stringify([tab, query]));
+  const start = (pagination.page - 1) * pagination.pageSize;
+  const pagedCompanies = filteredCompanies.slice(start, start + pagination.pageSize);
+  const pagedCustomers = filteredCustomers.slice(start, start + pagination.pageSize);
 
   function openCreateCompany() {
     setEditingCompany(null);
@@ -440,7 +446,7 @@ export default function EmployeeDirectory() {
           </div>
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-gray-900">Employee Directory</h1>
-            <p className="mt-0.5 text-xs font-medium text-gray-500">View companies and registered customer accounts</p>
+            <p className="mt-0.5 text-xs font-medium text-gray-500">Manage company staff and review registered app accounts</p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -457,24 +463,25 @@ export default function EmployeeDirectory() {
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-        <div className="flex flex-col gap-4 border-b border-gray-100 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="inline-flex w-fit rounded-xl bg-gray-100 p-1">
+        <div className="flex flex-col gap-4 border-b border-gray-100 p-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="inline-flex w-fit flex-wrap rounded-xl bg-gray-100 p-1">
             {(["companies", "employees"] as Tab[]).map((item) => (
-              <button key={item} onClick={() => { setTab(item); setSearch(""); }} className={`rounded-lg px-5 py-2 text-sm font-bold capitalize transition ${tab === item ? "bg-white text-[#852BAF] shadow-sm" : "text-gray-500 hover:text-gray-800"}`}>
-                {item === "employees" ? "Activated Employees" : "Companies"}
+              <button key={item} onClick={() => { setTab(item); setSearch(""); }} className={`rounded-lg px-5 py-2 text-sm font-bold transition ${tab === item ? "bg-white text-[#852BAF] shadow-sm" : "text-gray-500 hover:text-gray-800"}`}>
+                {item === "employees" ? "Registered app accounts" : "Employees by company"}
               </button>
             ))}
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <label className="relative block sm:w-72">
               <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${tab}...`} className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-[#852BAF] focus:bg-white focus:ring-4 focus:ring-purple-100" />
+              <input value={search} onChange={(event) => setSearch(event.target.value)} aria-label={tab === "companies" ? "Search companies" : "Search app accounts"} placeholder={tab === "companies" ? "Search companies..." : "Search name, company or email..."} className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-[#852BAF] focus:bg-white focus:ring-4 focus:ring-purple-100" />
             </label>
             {tab === "companies" && <button onClick={openCreateCompany} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#852BAF] hover:bg-[#702393] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition "><FiPlus /> Add Company</button>}
             {tab === "employees" && <><button onClick={openImport} className="inline-flex items-center justify-center gap-2 rounded-xl border border-purple-200 bg-white px-4 py-2.5 text-sm font-bold text-[#852BAF] transition hover:bg-purple-50"><FiUploadCloud /> Import</button><button onClick={openCreateEmployee} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#852BAF] hover:bg-[#702393] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition "><FiPlus /> Add Employee</button></>}
           </div>
         </div>
 
+        <p className="border-b border-gray-100 px-5 py-3 text-xs text-gray-500">{tab === "companies" ? "Choose a company to view its current staff, app activation progress and former staff." : "Registered app accounts across companies, including enabled and disabled accounts. For staff awaiting activation or employment status, open Employees by company."}</p>
         {loading ? (
           <div className="flex min-h-72 items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-3 border-transparent border-r-[#FC3F78] border-t-[#852BAF]" /></div>
         ) : error ? (
@@ -484,7 +491,7 @@ export default function EmployeeDirectory() {
             <table className="w-full text-left text-sm">
               <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="px-5 py-3">Company</th><th className="px-5 py-3">Contact</th><th className="px-5 py-3">Total employees</th><th className="px-5 py-3">Active employees</th><th className="px-5 py-3">Mobile users</th><th className="px-5 py-3">Status</th><th className="px-5 py-3 text-right">Action</th></tr></thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredCompanies.map((company) => <tr key={company.company_id} className="hover:bg-purple-50/30">
+                {pagedCompanies.map((company) => <tr key={company.company_id} className="hover:bg-purple-50/30">
                   <td className="px-5 py-4"><div className="flex items-center gap-3">{company.company_logo ? <img src={company.company_logo} alt="" className="h-10 w-10 rounded-xl border border-gray-100 object-contain" /> : <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50 text-[#852BAF]"><FiBriefcase /></span>}<div><p className="font-bold text-gray-900">{company.company_name}</p><p className="text-xs text-gray-400">ID #{company.company_id}</p></div></div></td>
                   <td className="px-5 py-4"><p className="text-gray-700">{company.company_email || "—"}</p><p className="text-xs text-gray-400">{company.company_phone || "—"}</p></td>
                   <td className="px-5 py-4 font-semibold text-gray-700">{company.total_employee_count}</td><td className="px-5 py-4 font-semibold text-gray-700">{company.active_employee_count}</td><td className="px-5 py-4"><div className="flex gap-2 whitespace-nowrap"><span className="rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">Android {company.android_user_count}</span><span className="rounded-lg bg-slate-900 px-2.5 py-1 text-xs font-bold text-white">iOS {company.ios_user_count}</span></div></td>
@@ -500,7 +507,7 @@ export default function EmployeeDirectory() {
             <table className="w-full text-left text-sm">
               <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="px-5 py-3">Employee</th><th className="px-5 py-3">Company</th><th className="px-5 py-3">Role / Department</th><th className="px-5 py-3">Platform</th><th className="px-5 py-3">Account</th><th className="px-5 py-3">Last login</th></tr></thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredCustomers.map((customer) => <tr key={customer.user_id} className="hover:bg-purple-50/30">
+                {pagedCustomers.map((customer) => <tr key={customer.user_id} className="hover:bg-purple-50/30">
                   <td className="px-5 py-4"><div className="flex items-center gap-2"><p className="font-bold text-gray-900">{customer.name}</p><EmployeeContactActions phone={customer.phone} messageRecipient={{ recipientType: "customer", recipientId: Number(customer.user_id) }} name={customer.name} email={customer.email} activated={Number(customer.status) === 1} endpoint={customer.company_id && customer.company_user_id ? `/manager/employee-directory/companies/${customer.company_id}/employees/${customer.company_user_id}/activation-email` : undefined} activationWhatsAppEndpoint={customer.company_id && customer.company_user_id ? `/manager/employee-directory/companies/${customer.company_id}/employees/${customer.company_user_id}/activation-whatsapp` : undefined} /></div><p className="text-xs text-gray-500">{customer.email || "No email"}</p><p className="text-xs text-gray-400">{customer.phone || "No phone"}</p></td>
                   <td className="px-5 py-4"><p className="font-semibold text-gray-700">{customer.company_name || "Unassigned"}</p><p className="text-xs text-gray-400">Customer #{customer.user_id}</p></td>
                   <td className="px-5 py-4"><p className="text-gray-700">{customer.company_role || "—"}</p><p className="text-xs text-gray-400">{customer.department || "No department"}</p></td>
@@ -510,9 +517,10 @@ export default function EmployeeDirectory() {
                 </tr>)}
               </tbody>
             </table>
-            {!filteredCustomers.length && <p className="p-12 text-center text-sm text-gray-500">No employees found.</p>}
+            {!filteredCustomers.length && <p className="p-12 text-center text-sm text-gray-500">No registered app accounts found.</p>}
           </div>
         )}
+        {!loading && !error && <ListPagination {...pagination} />}
       </section>
 
       {companyModalOpen && (

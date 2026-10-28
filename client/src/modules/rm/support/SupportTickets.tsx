@@ -244,7 +244,7 @@ export default function SupportTickets() {
                   <th className="px-6 py-4 text-xs font-bold tracking-wider text-left text-gray-400 uppercase">Company</th>
                   <th className="px-6 py-4 text-xs font-bold tracking-wider text-left text-gray-400 uppercase">Category / Module</th>
                   <th className="px-6 py-4 text-xs font-bold tracking-wider text-left text-gray-400 uppercase">Status</th>
-                  <th className="px-6 py-4 text-xs font-bold tracking-wider text-left text-gray-400 uppercase">Actions</th>
+                  <th className="w-64 px-4 py-4 text-xs font-bold tracking-wider text-left text-gray-400 uppercase">Actions</th>
                 </tr>
               </thead>
 
@@ -291,21 +291,22 @@ export default function SupportTickets() {
                       <StatusChip status={ticket.status} />
                     </td>
 
-                    <td className="px-6 py-4">
-                      <div className="flex flex-wrap items-center gap-2">
+                    <td className="w-64 px-4 py-4 align-middle">
+                      <div className="grid w-60 grid-cols-2 gap-2">
                         <button
+                          type="button"
                           onClick={() => setSelectedTicket(ticket)}
-                          className="flex items-center gap-1.5 rounded-xl border border-purple-200 px-3.5 py-2 text-xs font-bold text-[#852BAF] transition-all hover:bg-purple-50 active:scale-95"
+                          className="inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-purple-200 px-2 text-xs font-medium text-[#852BAF] transition-colors hover:bg-purple-50"
                         >
                           <FiEye size={14} /> View
                         </button>
                         {nextActions[ticket.status].map((action) => (
                           <button
+                            type="button"
                             key={action.status}
                             disabled={updatingId === ticket.ticket_id}
                             onClick={() => void updateStatus(ticket, action.status)}
-                            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white rounded-xl cursor-pointer transition-all hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
-                            style={{ background: "#852BAF" }}
+                            className={`inline-flex h-9 cursor-pointer items-center justify-center whitespace-nowrap rounded-lg border px-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${action.status === "closed" ? "border-gray-200 text-gray-600 hover:bg-gray-50" : "border-purple-200 bg-purple-50 text-[#852BAF] hover:bg-purple-100"}`}
                           >
                             {updatingId === ticket.ticket_id ? "…" : action.label}
                           </button>
@@ -403,13 +404,14 @@ export default function SupportTickets() {
                 </a>
               )}
 
-              <div className="flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 pt-5">
+              <div className="flex flex-col gap-2 border-t border-gray-100 pt-5 sm:flex-row sm:flex-wrap sm:justify-end">
                 {nextActions[selectedTicket.status].map((action) => (
                   <button
+                    type="button"
                     key={action.status}
                     disabled={updatingId === selectedTicket.ticket_id}
                     onClick={() => void updateStatus(selectedTicket, action.status)}
-                    className="rounded-xl px-4 py-2.5 text-sm font-bold text-white transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="min-h-10 cursor-pointer whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                     style={{ background: "#852BAF" }}
                   >
                     {updatingId === selectedTicket.ticket_id ? "Updating..." : action.label}
