@@ -88,6 +88,33 @@ export default function AnalyticsTab({ meta }: { meta: ManagerMeta }) {
             </Card>
           </div>
 
+          <Card title="By content & destination" subtitle={data.opensAvailable ? "Opens are reported by the app when a notification is tapped (needs the updated mobile build)." : "Needs migration 20261028_01 for content, image and open metrics."}>
+            {!data.byContent?.length ? <EmptyState title="No data" /> : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[820px] text-left text-sm">
+                  <thead className="bg-gray-50 text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                    <tr><th className="px-4 py-3">Content</th><th className="px-4 py-3">Destination</th><th className="px-4 py-3 text-right">Recipients</th><th className="px-4 py-3 text-right">Accepted by Firebase</th><th className="px-4 py-3 text-right">Failed</th><th className="px-4 py-3 text-right">Retried</th><th className="px-4 py-3 text-right">Image fallbacks</th><th className="px-4 py-3 text-right">Opened</th><th className="px-4 py-3 text-right">Deep-link fallbacks</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {data.byContent.map((row) => (
+                      <tr key={`${row.content_type}-${row.destination_type}`}>
+                        <td className="px-4 py-3 font-semibold capitalize">{row.content_type}</td>
+                        <td className="px-4 py-3 text-gray-700">{meta.destinations.find((item) => item.key === row.destination_type)?.label || "Module default"}</td>
+                        <td className="px-4 py-3 text-right">{toNumber(row.recipients)}</td>
+                        <td className="px-4 py-3 text-right text-emerald-700">{toNumber(row.firebase_accepted)}</td>
+                        <td className="px-4 py-3 text-right text-red-600">{toNumber(row.failed)}</td>
+                        <td className="px-4 py-3 text-right">{toNumber(row.retried)}</td>
+                        <td className="px-4 py-3 text-right text-amber-700">{toNumber(row.image_fallbacks)}</td>
+                        <td className="px-4 py-3 text-right">{toNumber(row.opened_target)}</td>
+                        <td className="px-4 py-3 text-right text-amber-700">{toNumber(row.opened_fallback)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+
           <Card title="Daily results" subtitle="Last 31 days with activity">
             {!data.byDay.length ? <EmptyState title="No data" /> : (
               <table className="w-full text-left text-sm">

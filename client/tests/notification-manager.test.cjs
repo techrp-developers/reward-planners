@@ -20,16 +20,28 @@ test("first_name is filled per employee; other placeholders need values", () => 
   assert.deepEqual([...helpers.campaignVariablesNeeded("Hi {{first_name}}", "Use {{coupon}} by {{ end_date }}")], ["coupon", "end_date"]);
 });
 
-test("offered actions follow the campaign workflow", () => {
-  const base = { can_manage: true, can_approve: false, audience_type: "company", occurrences_started: 0 };
+test("RMs send drafts directly: no submit or approve step", () => {
+  const base = { can_manage: true, can_send: true, audience_type: "company", occurrences_started: 0 };
   const draft = helpers.campaignActions({ ...base, status: "draft" });
-  assert.equal(draft.submit, true);
-  assert.equal(draft.schedule, false);
-  assert.equal(helpers.campaignActions({ ...base, status: "draft", audience_type: "test" }).submit, false);
-  assert.equal(helpers.campaignActions({ ...base, status: "approved" }).schedule, true);
+  assert.equal(draft.sendNow, true);
+  assert.equal(draft.schedule, true);
+  assert.equal("submit" in draft || "approve" in draft, false);
+  assert.equal(helpers.campaignActions({ ...base, status: "draft", audience_type: "test" }).sendNow, false, "test audiences use Send test");
+  assert.equal(helpers.campaignActions({ ...base, status: "draft", can_send: false }).sendNow, false, "no send permission");
+  for (const legacy of ["pending_approval", "approved", "rejected"]) {
+    assert.equal(helpers.campaignActions({ ...base, status: legacy }).sendNow, true, `${legacy} campaigns can be sent directly`);
+  }
+});
+
+test("scheduled campaigns can be rescheduled until they start; finished ones can retry failures", () => {
+  const base = { can_manage: true, can_send: true, audience_type: "company", occurrences_started: 0 };
+  assert.equal(helpers.campaignActions({ ...base, status: "scheduled" }).schedule, true);
   const started = helpers.campaignActions({ ...base, status: "scheduled", occurrences_started: 1 });
   assert.equal(started.edit, false);
+  assert.equal(started.sendNow, false);
   assert.equal(started.cancel, true);
   assert.equal(helpers.campaignActions({ ...base, status: "completed" }).cancel, false);
+  assert.equal(helpers.campaignActions({ ...base, status: "partially_failed", failed: 3 }).retry, true);
+  assert.equal(helpers.campaignActions({ ...base, status: "completed", failed: 0 }).retry, false);
   assert.equal(helpers.campaignActions({ ...base, can_manage: false, status: "draft" }).edit, false);
 });

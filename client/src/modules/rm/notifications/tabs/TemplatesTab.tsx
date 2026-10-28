@@ -171,7 +171,13 @@ function TemplateEditor({ meta, state, onClose, onSaved }: { meta: ManagerMeta; 
   });
   const [lang, setLang] = useState<Language>("en");
   const [saving, setSaving] = useState(false);
-  const locked = state.mode === "edit" && !isAdmin && Boolean(original.is_enabled);
+  // The server decides per template: admins manage everything; an RM manages
+  // the marketing/engagement templates they created (edit, approve their own
+  // translations, publish). System templates stay admin-managed.
+  const perms = state.mode === "create"
+    ? { edit: true, publish: meta.permissions.send, approveTranslations: meta.permissions.send }
+    : original.permissions ?? { edit: isAdmin, publish: isAdmin, approveTranslations: isAdmin };
+  const locked = !perms.edit;
 
   const setText = (field: string, value: string) => {
     const language = field.slice(-2) as Language;
@@ -187,11 +193,13 @@ function TemplateEditor({ meta, state, onClose, onSaved }: { meta: ManagerMeta; 
         title_en: form.title_en, body_en: form.body_en,
         title_hi: form.title_hi, body_hi: form.body_hi,
         title_mr: form.title_mr, body_mr: form.body_mr,
-        ...(isAdmin ? { approved_languages: form.approved_languages, is_enabled: form.is_enabled, deep_link_pattern: form.deep_link_pattern || null } : {}),
+        ...(perms.approveTranslations ? { approved_languages: form.approved_languages } : {}),
+        ...(perms.publish ? { is_enabled: form.is_enabled } : {}),
+        ...(isAdmin && state.mode === "edit" ? { deep_link_pattern: form.deep_link_pattern || null } : {}),
       };
       if (state.mode === "create") {
-        await notificationApi.createTemplate({ ...content, template_key: form.template_key, module: form.module, notification_type: form.notification_type, notes: form.notes });
-        toast.success("Template created (disabled until an admin enables it).");
+        const created = await notificationApi.createTemplate({ ...content, template_key: form.template_key, module: form.module, notification_type: form.notification_type, notes: form.notes });
+        toast.success(created.is_enabled ? "Template published and ready to use." : "Template saved as a draft.");
       } else {
         await notificationApi.updateTemplate(original.template_id as number, content);
         toast.success("Template saved.");
@@ -211,7 +219,7 @@ function TemplateEditor({ meta, state, onClose, onSaved }: { meta: ManagerMeta; 
     <Modal title={state.mode === "create" ? "New template" : `Edit · ${original.name}`} onClose={onClose} wide>
       <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
         <div className="space-y-4">
-          {locked && <Notice>This template is enabled and may already be used for live sends. Only an admin can edit it.</Notice>}
+          {locked && <Notice>This is a system template or another person's template. Only an admin can change it; use Duplicate to make your own copy.</Notice>}
           {state.mode === "create" && (
             <div className="grid gap-3 sm:grid-cols-3">
               <label className="sm:col-span-3"><span className={labelCls}>Template key</span><input className={`${inputCls} font-mono`} value={form.template_key} onChange={(event) => setForm({ ...form, template_key: event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "_") })} /></label>
@@ -239,12 +247,12 @@ function TemplateEditor({ meta, state, onClose, onSaved }: { meta: ManagerMeta; 
           <label className="block"><span className={labelCls}>{LANGUAGE_LABELS[lang]} message</span>
             <textarea className={`${inputCls} min-h-28`} disabled={locked} maxLength={1000} value={form[bodyField]} onChange={(event) => setText(bodyField, event.target.value)} />
           </label>
-          {lang !== "en" && <p className="text-xs text-gray-500">Leave both empty to always send English. Machine translations must be reviewed by an admin before they are used.</p>}
+          {lang !== "en" && <p className="text-xs text-gray-500">Leave both empty to always send English. Translations are used only after you tick “I reviewed” below; check machine translations carefully.</p>}
 
-          {isAdmin ? (
+          {perms.approveTranslations || perms.publish ? (
             <div className="space-y-3 rounded-xl border border-gray-100 bg-gray-50 p-4">
-              <p className="text-xs font-extrabold uppercase tracking-wider text-gray-500">Admin review</p>
-              {(["hi", "mr"] as Language[]).map((language) => {
+              <p className="text-xs font-extrabold uppercase tracking-wider text-gray-500">Review & publish</p>
+              {perms.approveTranslations && (["hi", "mr"] as Language[]).map((language) => {
                 const written = Boolean(form[`title_${language}`] && form[`body_${language}`]);
                 return (
                   <label key={language} className="flex items-center gap-2 text-sm text-gray-700">
@@ -254,16 +262,18 @@ function TemplateEditor({ meta, state, onClose, onSaved }: { meta: ManagerMeta; 
                   </label>
                 );
               })}
-              <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
-                <input type="checkbox" checked={form.is_enabled} onChange={(event) => setForm({ ...form, is_enabled: event.target.checked })} /> Enabled for sending
-              </label>
-              {state.mode === "edit" && (
+              {perms.publish && (
+                <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+                  <input type="checkbox" checked={form.is_enabled} onChange={(event) => setForm({ ...form, is_enabled: event.target.checked })} /> Published (usable for sending)
+                </label>
+              )}
+              {isAdmin && state.mode === "edit" && (
                 <label className="block"><span className={labelCls}>Deep link pattern (stored only; the app does not open rp:// links yet)</span>
                   <input className={`${inputCls} font-mono`} value={form.deep_link_pattern} onChange={(event) => setForm({ ...form, deep_link_pattern: event.target.value })} />
                 </label>
               )}
             </div>
-          ) : <p className="text-xs text-gray-500">An admin enables templates and approves Hindi/Marathi translations.</p>}
+          ) : <p className="text-xs text-gray-500">An admin publishes system templates and approves their translations. Duplicate a template to make your own editable copy.</p>}
         </div>
 
         <div className="space-y-3">

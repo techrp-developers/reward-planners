@@ -12,6 +12,11 @@ const {
   resolveModule,
 } = require("./notificationTemplate");
 const { DEFAULT_TIMEZONE, isValidTimezone, localToUtc } = require("./campaignSchedule");
+const { validateDestination } = require("./notificationDestinations");
+
+const CONTENT_TYPES = ["standard", "image", "catalog"];
+const MEDIA_SLOTS = ["default", "en", "hi", "mr"];
+const MAX_CATALOG_PRODUCTS = 20;
 
 // Dashboard module options -> notifications.module values the backend already
 // writes. "Support" has no module of its own (support events are stored as
@@ -55,6 +60,50 @@ const RECIPIENT_PLACEHOLDERS = new Set(["first_name"]);
 // Transactional catalog templates describe backend events (order paid, OTP,
 // refunds). Campaigns must not impersonate them; only these may be reused.
 const ANNOUNCEMENT_TEMPLATE_KEYS = new Set(["hr_announcement"]);
+
+// "Announcement" skips marketing consent, so it is limited to genuine
+// organisational information. Anything selling something is marketing.
+const ANNOUNCEMENT_TYPES = {
+  company_update: "Company update",
+  hr_policy: "HR / policy",
+  event: "Event or holiday",
+  service_disruption: "Service disruption",
+  system_maintenance: "App maintenance",
+  safety_notice: "Safety notice",
+};
+const ANNOUNCEMENT_DESTINATIONS = new Set(["home", "notifications", "announcements", "events", "support"]);
+// (\b does not match before "₹", so the currency sign is matched on its own.)
+const PROMOTIONAL_WORDING = /(\d+\s*%\s*off|\bdiscount|\boffers?\b|\bsale\b|\bcoupon|\bcashback|\bbuy now\b|\bshop now\b|\bdeals?\b|(?:\brs\.?|\binr|₹)\s*\d)/i;
+
+/**
+ * Announcement guard. Returns error strings; empty when the content is a
+ * permissible announcement.
+ */
+function validateAnnouncement(value) {
+  if (value.category !== "announcement") return [];
+  const errors = [];
+  if (!ANNOUNCEMENT_TYPES[value.announcement_type]) errors.push("Choose the announcement type (company update, HR/policy, event, disruption, maintenance or safety).");
+  if (value.module !== "common") errors.push("Announcements use the Common / General or Support module. Module promotions must be sent as Marketing.");
+  if (value.content_type === "catalog") errors.push("Product catalogs are promotions: send them as Marketing.");
+  if (value.destination_type && !ANNOUNCEMENT_DESTINATIONS.has(value.destination_type)) {
+    errors.push("Announcements may only open Home, Announcements, Events, Support or the inbox.");
+  }
+  const text = ["title_en", "body_en", "title_hi", "body_hi", "title_mr", "body_mr"].map((key) => value[key] || "").join(" ");
+  if (PROMOTIONAL_WORDING.test(text)) {
+    errors.push("This text reads like a promotion (offers, discounts, prices). Send it as Marketing so employee consent applies.");
+  }
+  return errors;
+}
+
+/**
+ * notifications.send: role-based (there is no permission table). Admins and
+ * RMs may send; NOTIFICATION_RM_SEND_ENABLED=false switches RM sending off.
+ * Used by the API and again by the scheduler when a job runs.
+ */
+function canSendNotifications(user) {
+  if (user?.role === "admin") return true;
+  return user?.role === "rm" && String(process.env.NOTIFICATION_RM_SEND_ENABLED ?? "true").toLowerCase() !== "false";
+}
 
 function campaignCategoryForTemplate(template) {
   if (["marketing", "engagement"].includes(template.notification_type)) return template.notification_type;
@@ -104,6 +153,7 @@ function validateCampaignInput(body = {}) {
 
   value.category = CATEGORIES.includes(body.category) ? body.category : null;
   if (!value.category) errors.push("Select a notification category.");
+  value.announcement_type = value.category === "announcement" && ANNOUNCEMENT_TYPES[body.announcement_type] ? body.announcement_type : null;
   value.priority = PRIORITIES.includes(body.priority) ? body.priority : "normal";
 
   value.title_en = cleanText(body.title_en, 255);
@@ -124,7 +174,7 @@ function validateCampaignInput(body = {}) {
     .map(([key, item]) => [key, cleanText(item, 200)]));
 
   value.target_screen = body.target_screen ? String(body.target_screen) : moduleOption?.screen || null;
-  if (value.target_screen && !TARGET_SCREENS.includes(value.target_screen)) {
+  if (value.target_screen && !TARGET_SCREENS.includes(value.target_screen) && !body.destination_type && body.content_type !== "catalog") {
     errors.push("Target screen is not an available app screen.");
   }
   value.reference_type = cleanText(body.reference_type, 30) || null;
@@ -135,8 +185,41 @@ function validateCampaignInput(body = {}) {
     errors.push(`${value.target_screen} needs a reference ID.`);
   }
 
-  value.image_url = cleanText(body.image_url, 500) || null;
-  if (value.image_url && !/^https:\/\//i.test(value.image_url)) errors.push("Image URL must use https.");
+  // Rich content. Images are referenced by notification_media ids only: the
+  // URL is resolved from the approved library at send time, never typed in.
+  value.content_type = CONTENT_TYPES.includes(body.content_type) ? body.content_type : "standard";
+  const media = body.media && typeof body.media === "object" && !Array.isArray(body.media) ? body.media : {};
+  value.media = value.content_type === "standard" ? null : Object.fromEntries(MEDIA_SLOTS
+    .map((slot) => [slot, Number(media[slot])])
+    .filter(([, id]) => Number.isSafeInteger(id) && id > 0));
+  if (value.content_type !== "standard" && !value.media.default && !value.media.en) {
+    errors.push("Add an image (a default image, or one for English).");
+  }
+  value.image_url = null;
+
+  value.catalog_product_ids = value.content_type === "catalog" ? toIdList(body.catalog_product_ids, MAX_CATALOG_PRODUCTS) : null;
+  value.destination_type = body.destination_type ? String(body.destination_type) : null;
+  value.destination_id = body.destination_id == null || body.destination_id === "" ? null : cleanText(body.destination_id, 64);
+  if (value.content_type === "catalog") {
+    if (value.module !== "ecommerce") errors.push("Product catalog notifications belong to the Products & E-commerce module.");
+    if (!value.catalog_product_ids.length) errors.push("Select at least one product.");
+    // One product opens its page; several open the collection screen.
+    value.destination_type = value.catalog_product_ids.length === 1 ? "product" : "product_collection";
+    value.destination_id = value.catalog_product_ids.length === 1 ? String(value.catalog_product_ids[0]) : null;
+  }
+  if (value.destination_type) {
+    const { destination, errors: destinationErrors } = validateDestination({
+      module: value.module,
+      destinationType: value.destination_type,
+      destinationId: value.destination_id,
+      productIds: value.catalog_product_ids || [],
+    });
+    errors.push(...destinationErrors);
+    if (destination) {
+      value.target_screen = destination.screen;
+      if (!destination.entity || destination.entity === "product_list" || destination.entity === "published_quiz") value.destination_id = null;
+    }
+  }
 
   value.audience_type = AUDIENCE_TYPES.includes(body.audience_type) ? body.audience_type : "test";
   const filter = body.audience_filter && typeof body.audience_filter === "object" ? body.audience_filter : {};
@@ -182,6 +265,7 @@ function validateCampaignInput(body = {}) {
   }
 
   value.approved_languages = parseApprovedLanguages(body.approved_languages);
+  errors.push(...validateAnnouncement(value));
   return { value, errors };
 }
 
@@ -259,6 +343,32 @@ function campaignPlaceholders(campaign) {
   return [...names];
 }
 
+/** The image a recipient in `language` receives: localized, else default. */
+function mediaIdForLanguage(media, language) {
+  if (!media) return null;
+  return media[language] || media.default || media.en || null;
+}
+
+/**
+ * Warn when a language would receive an image whose built-in text is in a
+ * different language (e.g. an English banner on a Marathi notification).
+ */
+function mediaLanguageWarnings(campaign, mediaById) {
+  if (!campaign.media || campaign.content_type === "standard") return [];
+  const approved = new Set(parseApprovedLanguages(campaign.approved_languages));
+  const warnings = [];
+  for (const language of ["en", "hi", "mr"]) {
+    if (language !== "en" && !(approved.has(language) && campaign[`title_${language}`])) continue;
+    const media = mediaById.get(Number(mediaIdForLanguage(campaign.media, language)));
+    if (!media) {
+      warnings.push(`The image for ${language.toUpperCase()} recipients is missing or archived.`);
+    } else if (media.language && media.language !== language) {
+      warnings.push(`${language.toUpperCase()} recipients will see an image containing ${media.language.toUpperCase()} text. Add a ${language.toUpperCase()} image or use a language-neutral one.`);
+    }
+  }
+  return warnings;
+}
+
 /**
  * Translation approvals survive an edit only when that language's text is
  * unchanged, so an approved translation can never be silently replaced.
@@ -271,8 +381,14 @@ function carryApprovedLanguages(previous, next, requestedApprovals, canApprove) 
 }
 
 module.exports = {
+  ANNOUNCEMENT_TYPES,
   AUDIENCE_TYPES,
   CATEGORIES,
+  CONTENT_TYPES,
+  canSendNotifications,
+  validateAnnouncement,
+  mediaIdForLanguage,
+  mediaLanguageWarnings,
   MODULE_OPTIONS,
   RECIPIENT_PLACEHOLDERS,
   TARGET_SCREENS,

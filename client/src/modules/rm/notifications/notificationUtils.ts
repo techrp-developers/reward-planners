@@ -3,10 +3,11 @@
 
 export const STATUS_META: Record<string, { label: string; cls: string }> = {
   draft: { label: "Draft", cls: "bg-gray-100 text-gray-700" },
-  pending_approval: { label: "Pending approval", cls: "bg-amber-100 text-amber-800" },
-  approved: { label: "Approved", cls: "bg-sky-100 text-sky-800" },
-  rejected: { label: "Rejected", cls: "bg-red-100 text-red-700" },
-  scheduled: { label: "Scheduled", cls: "bg-violet-100 text-violet-800" },
+  // Legacy approval-era statuses: still readable and sendable directly.
+  pending_approval: { label: "Draft (legacy review)", cls: "bg-gray-100 text-gray-700" },
+  approved: { label: "Ready (legacy)", cls: "bg-sky-100 text-sky-800" },
+  rejected: { label: "Draft (legacy rejected)", cls: "bg-gray-100 text-gray-700" },
+  scheduled: { label: "Scheduled / queued", cls: "bg-violet-100 text-violet-800" },
   sending: { label: "Sending", cls: "bg-blue-100 text-blue-800" },
   completed: { label: "Completed", cls: "bg-emerald-100 text-emerald-800" },
   partially_failed: { label: "Partially failed", cls: "bg-orange-100 text-orange-800" },
@@ -37,7 +38,9 @@ export const SKIP_REASON_LABELS: Record<string, string> = {
   campaign_expired: "Campaign expired",
   campaign_cancelled: "Campaign cancelled",
   missing_template_values: "Missing placeholder values",
-  no_active_device: "Saved to inbox; no active device",
+  no_active_device: "Inbox only: no registered device (not sent to Firebase)",
+  destination_unavailable: "Destination no longer available",
+  manual_retry: "Queued again by retry",
   firebase_disabled: "Firebase not configured",
 };
 
@@ -86,18 +89,29 @@ export function toNumber(value: unknown): number {
   return Number.isFinite(number) ? number : 0;
 }
 
-/** Which actions the UI offers; the backend enforces the same rules. */
-export function campaignActions(campaign: { status: string; can_manage: boolean; can_approve: boolean; audience_type: string; occurrences_started: number }) {
+const UNSENT = ["draft", "rejected", "pending_approval", "approved"];
+
+/**
+ * Which actions the UI offers; the backend enforces the same rules. There is
+ * no approval step: the sender sends or schedules directly.
+ */
+export function campaignActions(campaign: { status: string; can_manage: boolean; can_send?: boolean; audience_type: string; occurrences_started: number; failed?: number | string | null }) {
   const { status } = campaign;
   const notStarted = Number(campaign.occurrences_started || 0) === 0;
+  const sendable = Boolean(campaign.can_send) && campaign.audience_type !== "test" && (UNSENT.includes(status) || (status === "scheduled" && notStarted));
   return {
-    edit: campaign.can_manage && (["draft", "rejected", "pending_approval", "approved"].includes(status) || (status === "scheduled" && notStarted)),
+    edit: campaign.can_manage && (UNSENT.includes(status) || (status === "scheduled" && notStarted)),
     test: campaign.can_manage && !["cancelled", "expired"].includes(status),
-    submit: campaign.can_manage && ["draft", "rejected"].includes(status) && campaign.audience_type !== "test",
-    approve: campaign.can_approve,
-    schedule: campaign.can_manage && (status === "approved" || (status === "scheduled" && notStarted)),
+    sendNow: sendable,
+    schedule: sendable,
+    retry: Boolean(campaign.can_send) && ["completed", "partially_failed", "failed"].includes(status) && Number(campaign.failed || 0) > 0,
     cancel: campaign.can_manage && ["draft", "pending_approval", "approved", "scheduled", "sending"].includes(status),
   };
+}
+
+export function newClientRequestId(): string {
+  const random = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+  return random.replace(/[^A-Za-z0-9-]/g, "").slice(0, 64);
 }
 
 export function apiErrorMessage(error: unknown, fallback = "Something went wrong. Please try again."): string {

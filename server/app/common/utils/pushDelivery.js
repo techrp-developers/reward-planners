@@ -32,7 +32,9 @@ function getErrorCode(error) {
 function classifyFcmError(error) {
   const code = getErrorCode(error);
   if (INVALID_TOKEN_CODES.has(code)) return "invalid_token";
-  if (code === "messaging/mismatched-credential" && SENDER_ID_MISMATCH.test(String(error?.message || ""))) {
+  // The FCM reason can be in the message or in errorInfo, depending on the SDK path.
+  const reason = `${error?.message || ""} ${error?.errorInfo?.message || ""}`;
+  if (code === "messaging/mismatched-credential" && SENDER_ID_MISMATCH.test(reason)) {
     return "project_mismatch";
   }
   if (TRANSIENT_CODES.has(code)) return "transient";
@@ -62,7 +64,7 @@ function selectDeliveryTokens({ deviceRows = [], legacyToken = null, legacyToken
   for (const row of deviceRows) {
     if (!row?.fcm_token || seen.has(row.fcm_token)) continue;
     seen.add(row.fcm_token);
-    targets.push({ token: row.fcm_token, tokenId: row.id ?? null, platform: row.platform ?? null });
+    targets.push({ token: row.fcm_token, tokenId: row.id ?? null, platform: row.platform ?? null, firebaseProjectId: row.firebase_project_id ?? null });
   }
 
   if (legacyToken && !legacyTokenTracked && !seen.has(legacyToken)) {

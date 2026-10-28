@@ -1,10 +1,17 @@
--- PROPOSAL: review before running. Additive only; touches no existing table.
+-- =====================================================================
+-- Reward Planners - Push Notification Manager: push attempt log
+-- Step 1 of 3. Run before 20261027_01 and 20261028_01.
 --
--- One row per FCM send attempt (retries included). status 'accepted' means
--- FCM accepted the message, NOT that the device displayed it. Raw tokens are
--- never stored: token_hash links rows to a device, token_preview is masked.
--- Until this table exists, app/common/utils/notification.js sends normally
--- and only skips the audit trail.
+-- PROPOSAL: review before running. Additive only; touches no existing
+-- table. Safe to re-run (CREATE TABLE IF NOT EXISTS).
+--
+-- One row per FCM send attempt (retries included). status 'accepted'
+-- means Firebase accepted the message, NOT that the device displayed it.
+-- Raw tokens are never stored: token_hash links rows to a device and
+-- token_preview is masked. Until this table exists the backend still
+-- sends normally and only skips the audit trail.
+-- =====================================================================
+
 CREATE TABLE IF NOT EXISTS notification_push_attempts (
   attempt_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   notification_id INT NULL,

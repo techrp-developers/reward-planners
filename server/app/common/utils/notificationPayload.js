@@ -1,4 +1,5 @@
 const crypto = require("node:crypto");
+const { legacyRouteForScreen } = require("./notificationDestinations");
 
 const SCREEN_BY_MODULE = {
   bbps: "BbpsHome",
@@ -100,9 +101,23 @@ function safeImageUrl(value) {
   }
 }
 
+// Optional routing/media keys. Existing app builds ignore unknown keys and
+// keep using `screen`; new builds read the destination fields.
+const OPTIONAL_DATA_KEYS = ["destination_type", "target_id", "deep_link", "fallback_screen", "language"];
+
 function buildPushMessage(data, fcmToken) {
   const imageUrl = safeImageUrl(data.image_url);
   const campaignId = data.metadata?.campaign_id;
+  const optional = {};
+  for (const key of OPTIONAL_DATA_KEYS) {
+    if (data[key] !== undefined && data[key] !== null && data[key] !== "") optional[key] = String(data[key]);
+  }
+  if (data.target_params && Object.keys(data.target_params).length) optional.target_params = JSON.stringify(data.target_params);
+  // Full navigator path for new app builds; system notifications derive it
+  // from their existing screen name. Old builds ignore these keys.
+  const targetRoute = data.target_route || legacyRouteForScreen(data.screen);
+  if (targetRoute) optional.target_route = JSON.stringify(targetRoute);
+  if (data.fallback_route) optional.fallback_route = JSON.stringify(data.fallback_route);
 
   return {
     notification: {
@@ -110,6 +125,7 @@ function buildPushMessage(data, fcmToken) {
       body: data.message || "",
       ...(imageUrl ? { imageUrl } : {}),
     },
+    // FCM data values must all be strings.
     data: {
       module: String(data.module || ""),
       type: String(data.type || ""),
@@ -117,8 +133,13 @@ function buildPushMessage(data, fcmToken) {
       reference_id: String(data.reference_id || ""),
       action_url: String(data.action_url || ""),
       screen: String(data.screen || ""),
+      target_screen: String(data.screen || ""),
       priority: String(data.priority || "normal"),
+      media_type: imageUrl ? "image" : "standard",
+      ...(imageUrl ? { image_url: imageUrl } : {}),
+      ...(data.notification_id ? { notification_id: String(data.notification_id) } : {}),
       ...(campaignId ? { campaign_id: String(campaignId) } : {}),
+      ...optional,
     },
     android: {
       priority: "high",
@@ -142,6 +163,7 @@ module.exports = {
   buildNotificationPayload,
   buildPushMessage,
   buildWindowedIdempotencyKey,
+  IMAGE_HOSTS,
   inferScreen,
   safeImageUrl,
   SCREEN_BY_MODULE,

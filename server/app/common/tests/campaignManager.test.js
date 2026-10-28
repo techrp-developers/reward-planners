@@ -90,13 +90,20 @@ test("required fields, translation pairs and screens are enforced", () => {
 
   assert.ok(validateCampaignInput(manual({ target_screen: "rp://anything" })).errors.some((e) => /not an available app screen/.test(e)));
   assert.ok(validateCampaignInput(manual({ target_screen: "OrderDetails" })).errors.some((e) => /needs a reference ID/.test(e)));
-  assert.ok(validateCampaignInput(manual({ image_url: "http://cdn.rewardplanners.com/a.png" })).errors.some((e) => /https/.test(e)));
+  // Free-text image URLs are ignored; images come only from the media library.
+  assert.equal(validateCampaignInput(manual({ image_url: "https://evil.example.com/a.png" })).value.image_url, null);
 });
 
 test("Support maps to the existing common module, not a new identifier", () => {
   const { value } = validateCampaignInput(manual({ module: "support" }));
   assert.equal(value.module, "common");
   assert.equal(value.target_screen, "Support");
+});
+
+test("a missing or empty timezone defaults to Asia/Kolkata (column is NOT NULL)", () => {
+  assert.equal(validateCampaignInput(manual()).value.timezone, "Asia/Kolkata");
+  assert.equal(validateCampaignInput(manual({ timezone: "" })).value.timezone, "Asia/Kolkata");
+  assert.equal(validateCampaignInput(manual({ timezone: "Not/AZone" })).value.timezone, "Asia/Kolkata");
 });
 
 test("schedule inputs are converted from the chosen timezone", () => {
@@ -234,7 +241,7 @@ test("worker sends in the employee's language with a stable idempotency key", as
   let payload;
   const update = await processRecipient(recipient, campaign, optedIn, noon, {
     deliver: async (data, options) => { payload = { data, options }; return accepted(); },
-    countPromotional: async () => 0,
+    countToday: async () => 0,
   });
   assert.equal(update.status, "sent");
   assert.equal(update.language, "hi");
@@ -246,28 +253,28 @@ test("worker sends in the employee's language with a stable idempotency key", as
 
 test("worker enforces opt-outs, missing consent and daily caps", async () => {
   const never = async () => { throw new Error("must not send"); };
-  assert.equal((await processRecipient(recipient, campaign, { ...optedIn, marketing_enabled: 0 }, noon, { deliver: never, countPromotional: async () => 0 })).skip_reason, "opted_out");
+  assert.equal((await processRecipient(recipient, campaign, { ...optedIn, marketing_enabled: 0 }, noon, { deliver: never, countToday: async () => 0 })).skip_reason, "opted_out");
   assert.equal((await processRecipient(recipient, campaign, undefined, noon, { deliver: never })).skip_reason, "no_consent_record");
-  assert.equal((await processRecipient(recipient, campaign, optedIn, noon, { deliver: never, countPromotional: async () => 2 })).skip_reason, "daily_cap_reached");
+  assert.equal((await processRecipient(recipient, campaign, optedIn, noon, { deliver: never, countToday: async () => 2 })).skip_reason, "daily_cap_reached");
 });
 
 test("quiet hours defer delivery until they end", async () => {
   const prefs = { ...optedIn, quiet_hours_start: "11:00:00", quiet_hours_end: "13:00:00" };
-  const update = await processRecipient(recipient, campaign, prefs, noon, { deliver: async () => { throw new Error("must not send"); }, countPromotional: async () => 0 });
+  const update = await processRecipient(recipient, campaign, prefs, noon, { deliver: async () => { throw new Error("must not send"); }, countToday: async () => 0 });
   assert.equal(update.status, "pending");
   assert.equal(update.next_attempt_at.toISOString(), "2026-11-02T07:30:00.000Z");
 });
 
 test("transient Firebase failures retry with backoff, then fail", async () => {
   const transient = async () => ({ success: false, sent: 0, notificationId: 900, results: [{ success: false, classification: "transient", errorCode: "messaging/internal-error" }] });
-  const first = await processRecipient(recipient, campaign, optedIn, noon, { deliver: transient, countPromotional: async () => 0 });
+  const first = await processRecipient(recipient, campaign, optedIn, noon, { deliver: transient, countToday: async () => 0 });
   assert.equal(first.status, "pending");
   assert.equal(first.attempts, 1);
   assert.equal(first.notification_id, 900);
 
-  // The retry skips eligibility (its own inbox row would count towards the cap).
+  // The retry re-checks eligibility; its own inbox row is excluded from the count.
   const last = await processRecipient({ ...recipient, attempts: 2, notification_id: 900 }, campaign, optedIn, noon, {
-    deliver: transient, countPromotional: async () => 99,
+    deliver: transient, countToday: async (_user, _cats, exclude) => (exclude === 900 ? 1 : 2),
   });
   assert.equal(last.status, "failed");
   assert.equal(last.last_error_code, "messaging/internal-error");
@@ -282,7 +289,7 @@ test("employees without a device still get the inbox entry", async () => {
   const update = await processRecipient(recipient, { ...campaign, category: "announcement" }, undefined, noon, {
     deliver: async () => ({ success: false, skipped: true, reason: "missing_fcm_token", notificationId: 901 }),
   });
-  assert.equal(update.status, "sent");
+  assert.equal(update.status, "inbox_only", "no device: inbox only, never reported as Firebase-sent");
   assert.equal(update.skip_reason, "no_active_device");
 });
 

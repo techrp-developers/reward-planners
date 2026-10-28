@@ -1,4 +1,5 @@
 const db = require("../../../config/database");
+const { startOfDayUtc } = require("../utils/campaignSchedule");
 
 // Templates change rarely and are read on every templated send. A short cache
 // keeps admin edits visible within a minute without a query per notification.
@@ -78,18 +79,30 @@ class NotificationTemplateModel {
     );
   }
 
-  async countPromotionalToday(userId) {
-    const [[row]] = await db.execute(
+  /**
+   * Notifications of `categories` the employee received since `sinceUtc`
+   * (local midnight in the employee timezone, converted to UTC). created_at
+   * is in the MySQL session zone, so it is converted before comparing.
+   */
+  async countCategoryToday(userId, categories, { sinceUtc, excludeNotificationId = null }) {
+    const since = sinceUtc instanceof Date ? sinceUtc.toISOString().slice(0, 19).replace("T", " ") : sinceUtc;
+    const [[row]] = await db.query(
       `
       SELECT COUNT(*) AS total
       FROM notifications
       WHERE user_id = ?
-        AND created_at >= CURDATE()
-        AND JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.category')) IN ('marketing', 'engagement')
+        AND CONVERT_TZ(created_at, @@session.time_zone, '+00:00') >= ?
+        AND JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.category')) IN (?)
+        AND notification_id <> ?
       `,
-      [userId],
+      [userId, since, categories, excludeNotificationId || 0],
     );
     return Number(row?.total || 0);
+  }
+
+  /** Back-compatible wrapper: marketing + engagement received today. */
+  async countPromotionalToday(userId, excludeNotificationId = null) {
+    return this.countCategoryToday(userId, ["marketing", "engagement"], { sinceUtc: startOfDayUtc(), excludeNotificationId });
   }
 }
 

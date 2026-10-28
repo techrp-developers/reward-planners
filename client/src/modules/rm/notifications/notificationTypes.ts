@@ -9,12 +9,55 @@ export type CampaignStatus =
 
 export interface ModuleOption { value: string; label: string; module: string; screen: string | null }
 
+export type ContentType = "standard" | "image" | "catalog";
+export type MediaSlot = "default" | "en" | "hi" | "mr";
+export type MediaMap = Partial<Record<MediaSlot, number>>;
+
+export interface Destination {
+  key: string;
+  module: string;
+  label: string;
+  screen: string;
+  entity: "product" | "category" | "product_list" | "service" | "service_category" | "published_quiz" | null;
+  mobileRoute: "existing_payload" | "proposed";
+  campaignAllowed: boolean;
+}
+
+export interface MediaAsset {
+  media_id: number;
+  source: "upload" | "product" | "service" | "service_banner" | "category";
+  source_ref_id: string | null;
+  label: string | null;
+  language: Language | null;
+  public_url: string;
+  width: number;
+  height: number;
+  bytes: number;
+  created_by_name?: string | null;
+}
+
+export interface CatalogProduct {
+  product_id: number;
+  product_name: string;
+  brand_name: string | null;
+  category_name: string | null;
+  image_url: string | null;
+  price_from: number | null;
+  mrp_from: number | null;
+  stock: number;
+  available: boolean;
+}
+
 export interface ManagerMeta {
   role: "admin" | "rm";
   modules: ModuleOption[];
   categories: Category[];
   audienceTypes: AudienceType[];
   targetScreens: string[];
+  contentTypes: ContentType[];
+  announcementTypes: { value: string; label: string }[];
+  destinations: Destination[];
+  imageHosts: string[];
   defaultTimezone: string;
   scope: { global: boolean; companyCount: number; assignmentsAvailable: boolean };
   testUsers: { user_id: number; name: string; language: Language; has_device: boolean }[];
@@ -22,8 +65,11 @@ export interface ManagerMeta {
     enabled: boolean; projectId: string | null; expectedProjectId: string | null; reason: string | null;
     legacyEnabled: boolean; legacyProjectId: string | null;
   };
-  limits: { promotionalDailyCap: number; selfApproval: boolean; employeeTimezone: string };
-  infrastructure: { campaignTables: boolean; attemptsTable: boolean };
+  permissions: { send: boolean; sendAllCompanies: boolean; approveTranslations: boolean };
+  limits: { promotionalDailyCap: number; largeSendThreshold: number; employeeTimezone: string };
+  infrastructure: { campaignTables: boolean; attemptsTable: boolean; mediaTables: boolean };
+  /** Set by the client when the backend omits fields (restart the server). */
+  serverOutdated?: boolean;
 }
 
 export interface Template {
@@ -49,12 +95,21 @@ export interface Template {
   notes: string | null;
   is_enabled: boolean;
   placeholders: string[];
+  created_by?: number | null;
+  /** What the current user may do: admins everything; RMs their own promotional templates. */
+  permissions?: { edit: boolean; publish: boolean; approveTranslations: boolean; owned: boolean } | null;
 }
 
 export interface AudienceFilter { user_ids?: number[]; company_ids?: number[]; module?: string | null }
 
+/**
+ * Delivery states are separate, never merged: queued -> inbox created ->
+ * accepted by Firebase | inbox only (no device) | failed; skipped = consent,
+ * quiet hours or limits; opened = taps reported by the app (null if untracked).
+ */
 export interface CampaignSummary {
   recipients: number; queued: number; pendingRetry: number; attempted: number; sent: number;
+  inboxCreated?: number; inboxOnly?: number; opened?: number | null;
   firebaseAccepted: number; failed: number; skipped: number; cancelled: number;
 }
 
@@ -65,6 +120,7 @@ export interface Campaign {
   template_id: number | null;
   module: string;
   category: Category;
+  announcement_type?: string | null;
   priority: "low" | "normal" | "high";
   title_en: string; body_en: string;
   title_hi: string | null; body_hi: string | null;
@@ -75,6 +131,15 @@ export interface Campaign {
   reference_type: string | null;
   reference_id: string | null;
   image_url: string | null;
+  content_type: ContentType;
+  destination_type: string | null;
+  destination_id: string | null;
+  catalog_product_ids: number[];
+  media: MediaMap | null;
+  media_assets?: MediaAsset[];
+  catalog_products?: CatalogProduct[];
+  destination?: Destination | null;
+  warnings?: string[];
   audience_type: AudienceType;
   audience_filter: AudienceFilter;
   delivery_mode: DeliveryMode;
@@ -97,7 +162,7 @@ export interface Campaign {
   created_at: string;
   placeholders: string[];
   can_manage: boolean;
-  can_approve: boolean;
+  can_send: boolean;
   // list rows carry recipient counts
   recipients?: number | string | null;
   queued?: number | string | null;

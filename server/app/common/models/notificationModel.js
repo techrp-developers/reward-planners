@@ -117,6 +117,33 @@ class NotificationModel {
   }
 
   /* ================================
+     RECORD PUSH OPEN
+     null = not this user's notification; false = already recorded or the
+     open-events table is not installed (migration 20261028_01).
+  ================================= */
+  async recordOpen(userId, notificationId, { appState = null, outcome = "opened_target", destinationType = null } = {}) {
+    const [[owned]] = await db.execute(
+      `SELECT notification_id, JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.campaign_id')) AS campaign_id
+       FROM notifications WHERE notification_id = ? AND user_id = ?`,
+      [notificationId, userId],
+    );
+    if (!owned) return null;
+    const campaignId = /^\d+$/.test(String(owned.campaign_id || "")) ? Number(owned.campaign_id) : null;
+    try {
+      const [result] = await db.execute(
+        `INSERT IGNORE INTO notification_open_events
+         (notification_id, user_id, campaign_id, app_state, outcome, destination_type)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [notificationId, userId, campaignId, appState, outcome, destinationType],
+      );
+      return result.affectedRows === 1;
+    } catch (error) {
+      if (error.code === "ER_NO_SUCH_TABLE") return false;
+      throw error;
+    }
+  }
+
+  /* ================================
      FETCH USER NOTIFICATIONS
   ================================= */
   async getByUser(userId, limit = 50) {

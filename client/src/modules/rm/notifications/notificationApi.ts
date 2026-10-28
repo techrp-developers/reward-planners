@@ -1,5 +1,5 @@
 import { api } from "../../../common/api/api";
-import type { AudienceFilter, AudiencePreview, Campaign, ManagerMeta, Paged, RenderedPreview, Template } from "./notificationTypes";
+import type { AudienceFilter, AudiencePreview, Campaign, CatalogProduct, Language, ManagerMeta, MediaAsset, MediaMap, Paged, RenderedPreview, Template } from "./notificationTypes";
 
 const BASE = "/v1/rm/notifications";
 
@@ -9,6 +9,7 @@ const unwrap = <T,>(promise: Promise<{ data: Envelope<T> }>) => promise.then((re
 export type CampaignInput = Partial<Omit<Campaign, "approved_languages" | "scheduled_at">> & {
   module?: string; // module option value (e.g. "support"), not the stored module
   approved_languages?: string[];
+  client_request_id?: string; // same value for repeated create clicks -> one campaign
   send_date?: string; send_time?: string; end_date?: string; expiry_date?: string; expiry_time?: string;
 };
 
@@ -42,6 +43,7 @@ export interface AttemptRow {
 
 export interface TestResult {
   user_id: number; name: string; language: string; inbox_saved: boolean;
+  image_sent?: boolean; image_fallback?: boolean; destination?: string | null; destination_blocked?: string | null;
   devices_attempted: number; firebase_accepted: number; skipped_reason: string | null; errors: string[];
 }
 
@@ -50,7 +52,14 @@ export interface AnalyticsData {
   byLanguage: { language: string; recipients: number; sent: number }[];
   skipReasons: { reason: string | null; status: string; total: number }[];
   byDay: { day: string; sent: number; firebase_accepted: number; failed: number }[];
+  byContent: {
+    content_type: string; destination_type: string; campaigns: number; recipients: number; firebase_accepted: number;
+    failed: number; retried: number; image_fallbacks: number; opened_target: number; opened_fallback: number;
+  }[];
+  opensAvailable: boolean;
 }
+
+export interface CatalogOption { category_id?: number; service_id?: number; banner_id?: number; name?: string; category_name?: string; title?: string; price?: number | null; image_url?: string | null; service_image?: string | null; cover_image?: string | null }
 
 export const notificationApi = {
   meta: () => unwrap<ManagerMeta>(api.get(`${BASE}/meta`)),
@@ -70,16 +79,33 @@ export const notificationApi = {
   employees: (params: Record<string, string | number>) =>
     unwrap<{ user_id: number; name: string; email: string | null; company_id: number; company_name: string | null }[]>(api.get(`${BASE}/audience/employees`, { params })),
 
+  catalogProducts: (params: Record<string, string | number>) => unwrap<CatalogProduct[]>(api.get(`${BASE}/catalog/products`, { params })),
+  catalogOptions: (kind: "categories" | "services" | "service-categories" | "service-banners", params: Record<string, string> = {}) =>
+    unwrap<CatalogOption[]>(api.get(`${BASE}/catalog/${kind}`, { params })),
+  media: (params: Record<string, string | number>) => unwrap<Paged<MediaAsset>>(api.get(`${BASE}/media`, { params })),
+  uploadMedia: (file: File, language: Language | "", label: string) => {
+    const form = new FormData();
+    form.append("image", file);
+    if (language) form.append("language", language);
+    if (label) form.append("label", label);
+    return unwrap<MediaAsset>(api.post(`${BASE}/media/upload`, form));
+  },
+  importMedia: (body: { source: "product" | "service" | "service_banner" | "category"; id: number; language?: string; label?: string }) =>
+    unwrap<MediaAsset>(api.post(`${BASE}/media/import`, body)),
+  previewMedia: (body: { media: MediaMap; content_type: string; approved_languages: string[]; title_hi?: string; title_mr?: string }) =>
+    unwrap<{ perLanguage: Record<Language, MediaAsset | null>; warnings: string[] }>(api.post(`${BASE}/media/preview`, body)),
+  checkMedia: (id: number) => unwrap<{ ok: boolean; reason?: string }>(api.get(`${BASE}/media/${id}/check`)),
+  archiveMedia: (id: number) => api.post(`${BASE}/media/${id}/archive`),
+
   campaigns: (params: Record<string, string | number>) => unwrap<Paged<Campaign>>(api.get(`${BASE}/campaigns`, { params })),
   campaign: (id: number) => unwrap<Campaign>(api.get(`${BASE}/campaigns/${id}`)),
   createCampaign: (body: CampaignInput) => unwrap<Campaign>(api.post(`${BASE}/campaigns`, body)),
   updateCampaign: (id: number, body: CampaignInput) => unwrap<Campaign>(api.put(`${BASE}/campaigns/${id}`, body)),
   testCampaign: (id: number, body: { language?: string } = {}) => unwrap<TestResult[]>(api.post(`${BASE}/campaigns/${id}/test`, body)),
-  submitCampaign: (id: number) => unwrap<Campaign>(api.post(`${BASE}/campaigns/${id}/submit`)),
-  approveCampaign: (id: number, approved_languages: string[]) => unwrap<Campaign>(api.post(`${BASE}/campaigns/${id}/approve`, { approved_languages })),
-  rejectCampaign: (id: number, reason: string) => unwrap<Campaign>(api.post(`${BASE}/campaigns/${id}/reject`, { reason })),
-  scheduleCampaign: (id: number, body: { send_date?: string; send_time?: string; timezone?: string } = {}) =>
-    unwrap<Campaign>(api.post(`${BASE}/campaigns/${id}/schedule`, body)),
+  /** Direct send (no approval): mode "now" or "schedule"; confirm_recipients for large sends. */
+  sendCampaign: (id: number, body: { mode: "now" | "schedule"; send_date?: string; send_time?: string; timezone?: string; confirm_recipients?: number }) =>
+    api.post<{ success: boolean; data: Campaign; warning?: string | null }>(`${BASE}/campaigns/${id}/send`, body).then((response) => response.data),
+  retryCampaign: (id: number) => api.post<{ success: boolean; requeued: number; data: Campaign }>(`${BASE}/campaigns/${id}/retry`).then((response) => response.data),
   cancelCampaign: (id: number) => unwrap<Campaign>(api.post(`${BASE}/campaigns/${id}/cancel`)),
   recipients: (id: number, params: Record<string, string | number>) =>
     unwrap<Paged<RecipientRow>>(api.get(`${BASE}/campaigns/${id}/recipients`, { params })),

@@ -149,6 +149,62 @@ export function PushPreview({ title, message, imageUrl, note }: { title?: string
   );
 }
 
+function AppBadge({ size = "h-5 w-5" }: { size?: string }) {
+  return <span className={`flex ${size} shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-[#852BAF] to-[#FC3F78] text-[10px] text-white`}><FiBell /></span>;
+}
+
+/**
+ * Approximate Android collapsed / expanded (BigPicture) and iOS renderings.
+ * Real presentation depends on OS version, device and notification settings.
+ */
+export function NotificationPreviews({ title, message, imageUrl, note }: { title?: string; message?: string; imageUrl?: string | null; note?: string }) {
+  const heading = title || "Notification title";
+  const body = message || "Notification message";
+  return (
+    <div className="space-y-3">
+      <div className="space-y-3 rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 p-4">
+        <div>
+          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Android · collapsed</p>
+          <div className="flex items-start gap-2.5 rounded-2xl bg-white/95 p-3 shadow-lg">
+            <AppBadge />
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] text-gray-500">Reward Planners · now</p>
+              <p className="truncate text-sm font-bold text-gray-900">{heading}</p>
+              <p className="truncate text-xs text-gray-600">{body}</p>
+            </div>
+            {imageUrl && <img src={imageUrl} alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover" />}
+          </div>
+        </div>
+        <div>
+          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Android · expanded{imageUrl ? " (big picture)" : ""}</p>
+          <div className="rounded-2xl bg-white/95 p-3 shadow-lg">
+            <div className="flex items-center gap-2 text-[11px] text-gray-500"><AppBadge /> Reward Planners · now</div>
+            <p className="mt-2 text-sm font-bold text-gray-900">{heading}</p>
+            <p className="mt-0.5 whitespace-pre-line text-xs text-gray-600">{body}</p>
+            {imageUrl && <img src={imageUrl} alt="" className="mt-2 aspect-[2/1] w-full rounded-lg object-cover" />}
+          </div>
+        </div>
+      </div>
+      <div className="rounded-2xl bg-gradient-to-br from-sky-200 via-indigo-200 to-purple-200 p-4">
+        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-600">iOS · lock screen</p>
+        <div className="rounded-[18px] bg-white/80 p-3 shadow-md backdrop-blur">
+          <div className="flex items-start gap-2.5">
+            <AppBadge size="h-8 w-8 rounded-lg" />
+            <div className="min-w-0 flex-1">
+              <div className="flex justify-between text-[11px] text-gray-500"><span className="font-semibold uppercase">Reward Planners</span><span>now</span></div>
+              <p className="text-sm font-semibold text-gray-900">{heading}</p>
+              <p className="line-clamp-2 text-xs text-gray-700">{body}</p>
+            </div>
+            {imageUrl && <img src={imageUrl} alt="" className="h-9 w-9 shrink-0 rounded-md object-cover" />}
+          </div>
+        </div>
+        {imageUrl && <p className="mt-1.5 text-[10px] text-slate-600">Long-press on iOS shows the full image (needs the Notification Service Extension).</p>}
+      </div>
+      <p className="text-[11px] text-gray-500">Approximate previews. Actual appearance depends on the phone, OS version and notification settings.{note ? ` ${note}` : ""}</p>
+    </div>
+  );
+}
+
 export const inputCls = "w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-[#852BAF] focus:ring-2 focus:ring-purple-100 disabled:bg-gray-50 disabled:text-gray-500";
 export const labelCls = "mb-1 block text-xs font-bold text-gray-600";
 export const primaryBtn = "inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#C64EFE] px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md disabled:translate-y-0 disabled:opacity-50";

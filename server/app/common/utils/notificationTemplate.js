@@ -197,6 +197,16 @@ function isWithinQuietHours(start, end, nowMinutes) {
  * and are capped per employee per day.
  */
 function checkPromotionalEligibility({ category, preferences, sentToday = 0, dailyCap = 2, nowMinutes = 0 }) {
+  // Announcements need no marketing consent, but they are not a way around
+  // quiet hours or frequency limits.
+  if (category === "announcement") {
+    if (preferences && !preferences.missing &&
+        isWithinQuietHours(preferences.quiet_hours_start, preferences.quiet_hours_end, nowMinutes)) {
+      return { allowed: false, reason: "quiet_hours" };
+    }
+    if (sentToday >= dailyCap) return { allowed: false, reason: "daily_cap_reached" };
+    return { allowed: true };
+  }
   if (category !== "marketing" && category !== "engagement") return { allowed: true };
   if (!preferences) return { allowed: false, reason: "preferences_unavailable" };
   if (preferences.missing) return { allowed: false, reason: "no_consent_record" };

@@ -3,13 +3,13 @@ import { toast } from "sonner";
 import { FiEdit2, FiRefreshCw, FiSearch } from "react-icons/fi";
 import { notificationApi, type AttemptRow, type RecipientRow } from "../notificationApi";
 import type { Campaign, Language, ManagerMeta } from "../notificationTypes";
-import { Card, EmptyState, LanguageTabs, Metric, Modal, Notice, Pagination, PushPreview, Spinner, StatusPill, Tag, dangerBtn, inputCls, labelCls, primaryBtn, secondaryBtn } from "../components";
+import { Card, EmptyState, LanguageTabs, Metric, Modal, Notice, NotificationPreviews, Pagination, Spinner, StatusPill, Tag, dangerBtn, inputCls, labelCls, primaryBtn, secondaryBtn } from "../components";
 import { AUDIENCE_LABELS, LANGUAGE_LABELS, SKIP_REASON_LABELS, apiErrorMessage, campaignActions, formatInZone, toNumber, toZonedInputs } from "../notificationUtils";
 import { confirmDialog } from "../../../../common/utils/confirmDialog";
 import type { TabNavigation } from "../NotificationManager";
 
 const LIMIT = 20;
-const SCHEDULED_STATUSES = "pending_approval,approved,scheduled,sending";
+const SCHEDULED_STATUSES = "scheduled,sending";
 
 export default function CampaignsTab({ meta, nav, mode }: { meta: ManagerMeta; nav: TabNavigation; mode: "scheduled" | "history" }) {
   const [filters, setFilters] = useState({ status: "", module: "", search: "" });
@@ -43,13 +43,13 @@ export default function CampaignsTab({ meta, nav, mode }: { meta: ManagerMeta; n
 
   const update = (key: keyof typeof filters, value: string) => { setPage(1); setFilters({ ...filters, [key]: value }); };
   const statusOptions = mode === "scheduled"
-    ? ["pending_approval", "approved", "scheduled", "sending"]
+    ? ["scheduled", "sending"]
     : ["draft", "pending_approval", "approved", "rejected", "scheduled", "sending", "completed", "partially_failed", "failed", "cancelled", "expired"];
 
   return (
     <>
       <Card
-        title={mode === "scheduled" ? "Scheduled & awaiting approval" : "Campaign history"}
+        title={mode === "scheduled" ? "Scheduled & queued" : "Campaign history"}
         subtitle={meta.role === "admin" ? "All campaigns" : "Campaigns you created"}
         actions={<button type="button" className={secondaryBtn} onClick={load}><FiRefreshCw /> Refresh</button>}
       >
@@ -115,8 +115,6 @@ function CampaignDetail({ meta, nav, campaignId, onClose, onChanged }: { meta: M
   const [section, setSection] = useState<"overview" | "recipients" | "attempts" | "audit">("overview");
   const [lang, setLang] = useState<Language>("en");
   const [busy, setBusy] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
-  const [approveLanguages, setApproveLanguages] = useState<Language[]>([]);
   const [reschedule, setReschedule] = useState({ date: "", time: "" });
   const [recipients, setRecipients] = useState<{ total: number; rows: RecipientRow[] } | null>(null);
   const [recipientStatus, setRecipientStatus] = useState("");
@@ -126,7 +124,6 @@ function CampaignDetail({ meta, nav, campaignId, onClose, onChanged }: { meta: M
   const load = useCallback(() => {
     notificationApi.campaign(campaignId).then((result) => {
       setCampaign(result);
-      setApproveLanguages(result.approved_languages);
       setReschedule(toZonedInputs(result.scheduled_at, result.timezone));
     }).catch((error) => toast.error(apiErrorMessage(error)));
   }, [campaignId]);
@@ -158,11 +155,37 @@ function CampaignDetail({ meta, nav, campaignId, onClose, onChanged }: { meta: M
     }
   };
 
+  // One confirmation per send. If the audience changed since the estimate,
+  // the server asks for the new count and the RM confirms again.
+  const sendFromDetail = async (mode: "now" | "schedule") => {
+    if (!campaign) return;
+    const confirm = async (recipients: number | null) => confirmDialog({
+      title: mode === "now" ? "Send this notification now?" : "Schedule this notification?",
+      text: `${campaign.title_en}\n\nAbout ${recipients ?? "the selected"} employees (minus anyone without consent or in quiet hours). ` +
+        `${mode === "now" ? "Sends immediately." : `Sends ${reschedule.date} ${reschedule.time} (${campaign.timezone}).`} No admin approval is involved.`,
+      icon: "question",
+      confirmButtonText: mode === "now" ? "Send now" : "Schedule",
+    });
+    if (!(await confirm(campaign.estimated_recipients))) return;
+    const body = { mode, ...(mode === "schedule" ? { send_date: reschedule.date, send_time: reschedule.time, timezone: campaign.timezone } : {}) };
+    await run(mode === "now" ? "Queued for sending now." : "Campaign scheduled.", async () => {
+      try {
+        return await notificationApi.sendCampaign(campaign.campaign_id, { ...body, confirm_recipients: campaign.estimated_recipients ?? undefined });
+      } catch (error) {
+        const data = (error as { response?: { data?: { code?: string; recipients?: number } } }).response?.data;
+        if (data?.code !== "CONFIRMATION_REQUIRED" || !(await confirm(data.recipients ?? null))) throw error;
+        return notificationApi.sendCampaign(campaign.campaign_id, { ...body, confirm_recipients: data.recipients });
+      }
+    });
+  };
+
   if (!campaign) return <Modal title="Campaign" onClose={onClose}><Spinner /></Modal>;
   const actions = campaignActions(campaign);
   const summary = campaign.summary;
   const showLang: Language = lang !== "en" && campaign[`title_${lang}`] ? lang : "en";
   const isApproved = lang === "en" || campaign.approved_languages.includes(lang);
+  const mediaId = campaign.content_type !== "standard" && campaign.media ? campaign.media[lang] || campaign.media.default || campaign.media.en : null;
+  const imageUrl = mediaId ? campaign.media_assets?.find((asset) => asset.media_id === Number(mediaId))?.public_url || null : campaign.image_url;
 
   return (
     <Modal title={`${campaign.name} · #${campaign.campaign_id}`} onClose={onClose} wide>
@@ -175,6 +198,7 @@ function CampaignDetail({ meta, nav, campaignId, onClose, onChanged }: { meta: M
           <span className="text-xs text-gray-500">by {campaign.created_by_name || "—"}{campaign.approved_by_name ? ` · approved by ${campaign.approved_by_name}` : ""}</span>
         </div>
         {campaign.rejection_reason && <Notice tone="red">{campaign.status === "rejected" ? "Rejected: " : ""}{campaign.rejection_reason}</Notice>}
+        {(campaign.warnings || []).map((warning) => <Notice key={warning}>{warning}</Notice>)}
 
         <div className="flex gap-1 border-b border-gray-100">
           {(["overview", "recipients", "attempts", "audit"] as const).map((key) => (
@@ -192,70 +216,70 @@ function CampaignDetail({ meta, nav, campaignId, onClose, onChanged }: { meta: M
                 <Metric label="Recipients" value={summary?.recipients ?? 0} hint={campaign.estimated_recipients != null ? `~${campaign.estimated_recipients} estimated` : undefined} />
                 <Metric label="Queued" value={summary?.queued ?? 0} tone="bg-blue-600" />
                 <Metric label="Attempted" value={summary?.attempted ?? 0} tone="bg-slate-700" />
-                <Metric label="Accepted by Firebase" value={summary?.firebaseAccepted ?? 0} tone="bg-emerald-600" />
+                <Metric label="Inbox created" value={summary?.inboxCreated ?? 0} hint={summary?.inboxOnly ? `${summary.inboxOnly} inbox only (no device)` : "Saved in the employees' inbox"} tone="bg-sky-600" />
+                <Metric label="Accepted by Firebase" value={summary?.firebaseAccepted ?? 0} hint="Not proof of display on the phone" tone="bg-emerald-600" />
+                <Metric label="Opened" value={summary?.opened ?? "Not tracked"} hint={summary?.opened == null ? "Needs the updated app" : "Taps reported by the app"} tone="bg-violet-600" />
                 <Metric label="Failed" value={summary?.failed ?? 0} tone="bg-red-600" />
                 <Metric label="Skipped" value={summary?.skipped ?? 0} hint={summary?.pendingRetry ? `${summary.pendingRetry} retrying` : "Consent, quiet hours, caps"} tone="bg-amber-500" />
               </div>
               <dl className="grid gap-2 rounded-xl bg-gray-50 p-4 text-xs sm:grid-cols-2">
-                <div><dt className="font-bold text-gray-500">Delivery</dt><dd className="text-gray-800">{campaign.delivery_mode === "now" ? "Send after approval" : campaign.delivery_mode === "once" ? "Once" : `Repeats ${campaign.recurrence_type}`}</dd></div>
+                <div><dt className="font-bold text-gray-500">Delivery</dt><dd className="text-gray-800">{campaign.delivery_mode === "now" ? "Immediately" : campaign.delivery_mode === "once" ? "Once" : `Repeats ${campaign.recurrence_type}`}</dd></div>
                 <div><dt className="font-bold text-gray-500">Scheduled ({campaign.timezone})</dt><dd className="text-gray-800">{formatInZone(campaign.scheduled_at, campaign.timezone)}</dd></div>
                 <div><dt className="font-bold text-gray-500">Next run</dt><dd className="text-gray-800">{formatInZone(campaign.next_run_at, campaign.timezone)}</dd></div>
                 <div><dt className="font-bold text-gray-500">Occurrences started</dt><dd className="text-gray-800">{campaign.occurrences_started}{campaign.max_occurrences ? ` / ${campaign.max_occurrences}` : ""}</dd></div>
                 <div><dt className="font-bold text-gray-500">Expires</dt><dd className="text-gray-800">{formatInZone(campaign.expires_at, campaign.timezone)}</dd></div>
-                <div><dt className="font-bold text-gray-500">Opens screen</dt><dd className="text-gray-800">{campaign.target_screen || "Module default"}</dd></div>
+                <div><dt className="font-bold text-gray-500">Content</dt><dd className="capitalize text-gray-800">{campaign.content_type || "standard"}</dd></div>
+                <div><dt className="font-bold text-gray-500">Opens on tap</dt><dd className="text-gray-800">
+                  {campaign.destination ? `${campaign.destination.label}${campaign.destination_id ? ` #${campaign.destination_id}` : ""}` : campaign.target_screen || "Module default"}
+                  {campaign.destination?.mobileRoute === "proposed" && <span className="block text-[11px] text-amber-700">App route pending; falls back to module home</span>}
+                </dd></div>
               </dl>
+              {(campaign.catalog_products || []).length > 0 && (
+                <div className="rounded-xl border border-gray-100 p-3">
+                  <p className="mb-2 text-xs font-extrabold uppercase tracking-wider text-gray-500">Products (live)</p>
+                  <div className="space-y-1.5">
+                    {campaign.catalog_products!.map((product) => (
+                      <div key={product.product_id} className="flex items-center gap-2 text-sm">
+                        {product.image_url && <img src={product.image_url} alt="" className="h-8 w-8 rounded object-cover" />}
+                        <span className="min-w-0 flex-1 truncate">{product.product_name}</span>
+                        <span className={`text-xs ${product.available ? "text-gray-600" : "font-semibold text-red-600"}`}>{product.available ? `₹${product.price_from} · ${product.stock} in stock` : "unavailable"}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="space-y-3">
               <LanguageTabs value={lang} onChange={setLang} approved={campaign.approved_languages} available={{ hi: Boolean(campaign.title_hi), mr: Boolean(campaign.title_mr) }} />
-              <PushPreview title={campaign[`title_${showLang}`] || ""} message={campaign[`body_${showLang}`] || ""} imageUrl={campaign.image_url}
+              <NotificationPreviews title={campaign[`title_${showLang}`] || ""} message={campaign[`body_${showLang}`] || ""} imageUrl={imageUrl}
                 note={showLang !== lang ? `No ${LANGUAGE_LABELS[lang]} text: English is sent.` : !isApproved ? `${LANGUAGE_LABELS[lang]} is not approved: English is sent unless approved below.` : "Placeholders are filled per employee at send time."} />
 
-              {actions.approve && (
-                <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/50 p-4">
-                  <p className="text-xs font-extrabold uppercase tracking-wider text-amber-800">Admin review</p>
-                  {(["hi", "mr"] as Language[]).filter((item) => campaign[`title_${item}`]).map((item) => (
-                    <label key={item} className="flex items-center gap-2 text-sm text-gray-700">
-                      <input type="checkbox" checked={approveLanguages.includes(item)} onChange={(event) => setApproveLanguages(event.target.checked ? [...approveLanguages, item] : approveLanguages.filter((value) => value !== item))} />
-                      Approve the {LANGUAGE_LABELS[item]} translation
-                    </label>
-                  ))}
-                  <div className="flex flex-wrap gap-2">
-                    <button type="button" className={primaryBtn} disabled={busy} onClick={() => run("Campaign approved. The creator can now schedule it.", () => notificationApi.approveCampaign(campaign.campaign_id, approveLanguages))}>Approve</button>
-                  </div>
-                  <label className="block"><span className={labelCls}>Rejection reason</span><textarea className={`${inputCls} min-h-16`} value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} /></label>
-                  <button type="button" className={dangerBtn} disabled={busy || !rejectReason.trim()} onClick={() => run("Campaign rejected.", () => notificationApi.rejectCampaign(campaign.campaign_id, rejectReason))}>Reject</button>
-                </div>
-              )}
-              {campaign.status === "pending_approval" && !actions.approve && (
-                <Notice tone="blue">{meta.role === "admin" ? "You created this campaign; another admin must approve it." : "Waiting for an admin to approve."}</Notice>
+              {["pending_approval", "approved", "rejected"].includes(campaign.status) && (
+                <Notice tone="blue">Created under the old approval workflow. No approval is needed any more: you can send or schedule it directly.</Notice>
               )}
 
-              {actions.schedule && (
+              {(actions.sendNow || actions.schedule) && (
                 <div className="space-y-3 rounded-xl border border-gray-100 p-4">
-                  <p className="text-xs font-extrabold uppercase tracking-wider text-gray-500">{campaign.status === "scheduled" ? "Reschedule" : "Schedule"}</p>
-                  {campaign.delivery_mode !== "now" && (
-                    <div className="grid grid-cols-2 gap-2">
-                      <input type="date" className={inputCls} value={reschedule.date} onChange={(event) => setReschedule({ ...reschedule, date: event.target.value })} />
-                      <input type="time" className={inputCls} value={reschedule.time} onChange={(event) => setReschedule({ ...reschedule, time: event.target.value })} />
-                    </div>
-                  )}
-                  <button type="button" className={primaryBtn} disabled={busy} onClick={async () => {
-                    const ok = await confirmDialog({
-                      title: campaign.delivery_mode === "now" ? "Queue for sending now?" : "Schedule this campaign?",
-                      text: `It goes to about ${campaign.estimated_recipients ?? "the selected"} employees, minus anyone who has not consented or is in quiet hours.`,
-                      icon: "question",
-                      confirmButtonText: campaign.delivery_mode === "now" ? "Queue now" : "Schedule",
-                    });
-                    if (ok) run("Campaign scheduled.", () => notificationApi.scheduleCampaign(campaign.campaign_id, campaign.delivery_mode === "now" ? {} : { send_date: reschedule.date, send_time: reschedule.time, timezone: campaign.timezone }));
-                  }}>{campaign.delivery_mode === "now" ? "Queue now" : campaign.status === "scheduled" ? "Save new time" : "Schedule"} ({campaign.timezone})</button>
+                  <p className="text-xs font-extrabold uppercase tracking-wider text-gray-500">{campaign.status === "scheduled" ? "Change delivery" : "Send"}</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input type="date" className={inputCls} value={reschedule.date} onChange={(event) => setReschedule({ ...reschedule, date: event.target.value })} aria-label="Send date" />
+                    <input type="time" className={inputCls} value={reschedule.time} onChange={(event) => setReschedule({ ...reschedule, time: event.target.value })} aria-label="Send time" />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" className={primaryBtn} disabled={busy || !meta.firebase.enabled} title={meta.firebase.enabled ? undefined : "Push sending is not configured on the server"}
+                      onClick={() => sendFromDetail("now")}>Send now</button>
+                    <button type="button" className={secondaryBtn} disabled={busy || !reschedule.date || !reschedule.time}
+                      onClick={() => sendFromDetail("schedule")}>{campaign.status === "scheduled" ? "Save new time" : "Schedule"} ({campaign.timezone})</button>
+                  </div>
+                  {!meta.firebase.enabled && <p className="text-xs text-amber-700">Firebase is not configured: scheduled campaigns wait until it is.</p>}
                 </div>
               )}
 
               <div className="flex flex-wrap gap-2">
                 {actions.edit && <button type="button" className={secondaryBtn} onClick={() => { onClose(); nav.go("compose", { campaign: String(campaign.campaign_id) }); }}><FiEdit2 /> Edit</button>}
                 {actions.test && <button type="button" className={secondaryBtn} disabled={busy || !meta.testUsers.length} onClick={() => run("Test sent to the configured test users.", () => notificationApi.testCampaign(campaign.campaign_id))}>Send test</button>}
-                {actions.submit && <button type="button" className={secondaryBtn} disabled={busy} onClick={() => run("Submitted for approval.", () => notificationApi.submitCampaign(campaign.campaign_id))}>Submit for approval</button>}
+                {actions.retry && <button type="button" className={secondaryBtn} disabled={busy || !meta.firebase.enabled} onClick={() => run("Retryable failures were queued again.", () => notificationApi.retryCampaign(campaign.campaign_id))}>Retry failed</button>}
                 {actions.cancel && <button type="button" className={dangerBtn} disabled={busy} onClick={async () => {
                   const ok = await confirmDialog({ title: "Cancel this campaign?", text: "Unsent notifications are cancelled. Messages already sent cannot be recalled.", confirmButtonText: "Cancel campaign" });
                   if (ok) run("Campaign cancelled.", () => notificationApi.cancelCampaign(campaign.campaign_id));
@@ -269,7 +293,7 @@ function CampaignDetail({ meta, nav, campaignId, onClose, onChanged }: { meta: M
           <div className="space-y-3">
             <select className={`${inputCls} max-w-xs`} value={recipientStatus} onChange={(event) => { setRecipientPage(1); setRecipientStatus(event.target.value); }}>
               <option value="">All recipients</option>
-              {["pending", "processing", "sent", "failed", "skipped", "cancelled"].map((status) => <option key={status} value={status}>{status}</option>)}
+              {["pending", "processing", "sent", "inbox_only", "failed", "skipped", "cancelled"].map((status) => <option key={status} value={status}>{status === "sent" ? "accepted by Firebase" : status.replace("_", " ")}</option>)}
             </select>
             {!recipients ? <Spinner /> : !recipients.rows.length ? <EmptyState title="No recipients yet" text="Recipients are created when the campaign starts sending." /> : (
               <div className="overflow-x-auto rounded-xl border border-gray-100">
@@ -283,7 +307,7 @@ function CampaignDetail({ meta, nav, campaignId, onClose, onChanged }: { meta: M
                         <td className="px-3 py-2"><p className="font-semibold text-gray-900">{row.name || `User ${row.user_id}`}</p><p className="text-xs text-gray-500">{row.company_name}</p></td>
                         <td className="px-3 py-2 text-xs">#{row.occurrence_no}</td>
                         <td className="px-3 py-2 text-xs">{LANGUAGE_LABELS[row.language] || row.language}</td>
-                        <td className="px-3 py-2"><Tag tone={row.status === "sent" ? "green" : row.status === "failed" ? "red" : row.status === "skipped" ? "amber" : "gray"}>{row.status}</Tag></td>
+                        <td className="px-3 py-2"><Tag tone={row.status === "sent" ? "green" : row.status === "failed" ? "red" : row.status === "skipped" ? "amber" : row.status === "inbox_only" ? "blue" : "gray"}>{row.status === "sent" ? "accepted by Firebase" : row.status.replace("_", " ")}</Tag></td>
                         <td className="px-3 py-2 text-xs">{row.devices_accepted}/{row.devices_attempted} accepted · {row.attempts} tries</td>
                         <td className="px-3 py-2 text-xs text-gray-600">{SKIP_REASON_LABELS[row.skip_reason || ""] || row.skip_reason || row.last_error_code || "—"}</td>
                         <td className="px-3 py-2 text-xs">{row.is_read === null ? "—" : row.is_read ? "Read" : "Unread"}</td>

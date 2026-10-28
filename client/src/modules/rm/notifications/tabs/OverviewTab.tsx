@@ -55,7 +55,7 @@ export default function OverviewTab({ meta, nav }: { meta: ManagerMeta; nav: Tab
             {data.campaigns ? (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <Metric label="Scheduled / sending" value={data.campaigns.scheduled} tone="bg-violet-600" />
-                <Metric label="Pending approval" value={data.campaigns.pendingApproval} hint={meta.role === "admin" ? "Awaiting your review" : "Awaiting admin review"} tone="bg-amber-500" />
+                <Metric label="Drafts" value={data.campaigns.drafts + data.campaigns.pendingApproval + data.campaigns.approved} hint="Not sent yet (includes legacy reviewed items)" tone="bg-amber-500" />
                 <Metric label="Completed" value={data.campaigns.completed} tone="bg-emerald-600" />
                 <Metric label="Failed" value={data.campaigns.failed} tone="bg-red-600" />
               </div>

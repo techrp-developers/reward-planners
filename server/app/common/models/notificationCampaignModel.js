@@ -7,12 +7,13 @@ const { fromSqlUtc, toSqlUtc } = require("../utils/campaignSchedule");
 // explicitly. Display reads convert the NOW() columns so the API is all UTC.
 const UTC = (column) => `CONVERT_TZ(${column}, @@session.time_zone, '+00:00')`;
 
-const JSON_COLUMNS = ["variables", "audience_filter"];
+const JSON_COLUMNS = ["variables", "audience_filter", "catalog_product_ids", "media"];
 const DATE_COLUMNS = ["scheduled_at", "recurrence_end_at", "expires_at", "next_run_at", "submitted_at", "approved_at", "cancelled_at"];
 const WRITABLE = [
   "name", "source", "template_id", "module", "category", "priority",
   "title_en", "body_en", "title_hi", "body_hi", "title_mr", "body_mr", "approved_languages",
   "variables", "target_screen", "reference_type", "reference_id", "image_url",
+  "content_type", "destination_type", "destination_id", "catalog_product_ids", "media", "announcement_type",
   "audience_type", "audience_filter", "delivery_mode", "timezone", "scheduled_at",
   "recurrence_type", "recurrence_end_at", "max_occurrences", "expires_at", "estimated_recipients",
 ];
@@ -30,6 +31,9 @@ function toRow(values) {
     const value = values[key];
     if (JSON_COLUMNS.includes(key)) row[key] = value == null ? null : JSON.stringify(value);
     else if (DATE_COLUMNS.includes(key)) row[key] = value instanceof Date ? toSqlUtc(value) : value || null;
+    // mysql2 expands arrays into value lists (an empty one breaks the SQL);
+    // list columns such as approved_languages are stored comma-separated.
+    else if (Array.isArray(value)) row[key] = value.join(",");
     else row[key] = value === undefined ? null : value;
   }
   return row;
@@ -40,20 +44,29 @@ function hydrate(row) {
   const campaign = { ...row };
   campaign.variables = parseJson(row.variables, {});
   campaign.audience_filter = parseJson(row.audience_filter, {});
+  campaign.catalog_product_ids = parseJson(row.catalog_product_ids, []) || [];
+  campaign.media = parseJson(row.media, null);
+  campaign.content_type = row.content_type || "standard";
   for (const key of DATE_COLUMNS) campaign[key] = fromSqlUtc(row[key]);
   delete campaign.lock_token;
   delete campaign.locked_until;
   return campaign;
 }
 
+// Delivery states are reported separately and never merged:
+// queued -> inbox_created (row in notifications) -> firebase_accepted (FCM took
+// it for >= 1 device) | inbox_only (no device) | failed; skipped = policy;
+// opened comes from the app's tap events.
 const RECIPIENT_COUNTS = `
   SELECT campaign_id,
     COUNT(*) AS recipients,
     SUM(status IN ('pending','processing')) AS queued,
     SUM(status = 'pending' AND attempts > 0) AS pending_retry,
     SUM(attempts > 0) AS attempted,
+    SUM(notification_id IS NOT NULL) AS inbox_created,
     SUM(status = 'sent') AS sent,
     SUM(status = 'sent' AND devices_accepted > 0) AS firebase_accepted,
+    SUM(status = 'inbox_only') AS inbox_only,
     SUM(status = 'failed') AS failed,
     SUM(status = 'skipped') AS skipped,
     SUM(status = 'cancelled') AS cancelled
@@ -61,8 +74,19 @@ const RECIPIENT_COUNTS = `
 `;
 
 class NotificationCampaignModel {
-  async create(values, actor) {
-    const row = { ...toRow(values), created_by: actor.user_id, created_by_role: actor.role, updated_by: actor.user_id, status: "draft" };
+  async findByClientRequest(createdBy, clientRequestId) {
+    const [[row]] = await db.query(
+      "SELECT campaign_id FROM notification_campaigns WHERE created_by = ? AND client_request_id = ? LIMIT 1",
+      [createdBy, clientRequestId],
+    );
+    return row?.campaign_id || null;
+  }
+
+  async create(values, actor, { clientRequestId = null } = {}) {
+    const row = {
+      ...toRow(values), created_by: actor.user_id, created_by_role: actor.role, updated_by: actor.user_id, status: "draft",
+      ...(clientRequestId ? { client_request_id: clientRequestId } : {}),
+    };
     const columns = Object.keys(row);
     const [result] = await db.query(
       `INSERT INTO notification_campaigns (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`,
@@ -150,11 +174,24 @@ class NotificationCampaignModel {
 
   async recipientSummary(campaignId) {
     const [[row]] = await db.query(`${RECIPIENT_COUNTS} WHERE campaign_id = ? GROUP BY campaign_id`, [campaignId]);
+    let opened = null;
+    try {
+      const [[openRow]] = await db.query(
+        `SELECT COUNT(*) AS total FROM notification_open_events oe
+         JOIN notification_campaign_recipients r ON r.notification_id = oe.notification_id
+         WHERE r.campaign_id = ?`,
+        [campaignId],
+      );
+      opened = Number(openRow?.total || 0);
+    } catch (error) {
+      if (error.code !== "ER_NO_SUCH_TABLE") throw error;
+    }
     const n = (value) => Number(value || 0);
     return {
       recipients: n(row?.recipients), queued: n(row?.queued), pendingRetry: n(row?.pending_retry),
-      attempted: n(row?.attempted), sent: n(row?.sent), firebaseAccepted: n(row?.firebase_accepted),
-      failed: n(row?.failed), skipped: n(row?.skipped), cancelled: n(row?.cancelled),
+      attempted: n(row?.attempted), inboxCreated: n(row?.inbox_created), sent: n(row?.sent),
+      firebaseAccepted: n(row?.firebase_accepted), inboxOnly: n(row?.inbox_only),
+      failed: n(row?.failed), skipped: n(row?.skipped), cancelled: n(row?.cancelled), opened,
     };
   }
 
@@ -312,6 +349,19 @@ class NotificationCampaignModel {
     );
   }
 
+  /** Put retryable failures of the latest occurrence back in the queue. */
+  async requeueFailedRecipients(campaignId, occurrenceNo, retryableCodes) {
+    const [result] = await db.query(
+      `UPDATE notification_campaign_recipients
+       SET status = 'pending', attempts = 0, next_attempt_at = UTC_TIMESTAMP(), skip_reason = 'manual_retry',
+           lock_token = NULL, locked_until = NULL
+       WHERE campaign_id = ? AND occurrence_no = ? AND status = 'failed'
+         AND last_error_code IN (${retryableCodes.map(() => "?").join(",")})`,
+      [campaignId, occurrenceNo, ...retryableCodes],
+    );
+    return result.affectedRows;
+  }
+
   async cancelPendingRecipients(campaignId) {
     const [result] = await db.query(
       `UPDATE notification_campaign_recipients SET status = 'cancelled', skip_reason = 'campaign_cancelled'
@@ -328,12 +378,17 @@ class NotificationCampaignModel {
        LEFT JOIN (
          SELECT campaign_id, occurrence_no,
            SUM(status IN ('pending','processing')) AS queued,
-           SUM(status = 'sent') AS sent, SUM(status = 'failed') AS failed, SUM(status = 'skipped') AS skipped
+           SUM(status = 'sent') AS sent, SUM(status = 'inbox_only') AS inbox_only,
+           SUM(status = 'failed') AS failed, SUM(status = 'skipped') AS skipped
          FROM notification_campaign_recipients GROUP BY campaign_id, occurrence_no
        ) rc ON rc.campaign_id = nc.campaign_id AND rc.occurrence_no = nc.occurrences_started
        WHERE nc.status = 'sending'`,
     );
-    return rows.map((row) => ({ ...hydrate(row), queued: Number(row.queued || 0), sent: Number(row.sent || 0), failed: Number(row.failed || 0), skipped: Number(row.skipped || 0) }));
+    return rows.map((row) => ({
+      ...hydrate(row),
+      queued: Number(row.queued || 0), sent: Number(row.sent || 0), inboxOnly: Number(row.inbox_only || 0),
+      failed: Number(row.failed || 0), skipped: Number(row.skipped || 0),
+    }));
   }
 }
 

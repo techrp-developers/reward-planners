@@ -25,6 +25,28 @@ const TABS = [
 ] as const;
 export type TabKey = (typeof TABS)[number]["key"];
 
+// An older backend build may omit newer fields; default them so a version
+// mismatch shows reduced features instead of crashing a tab.
+function normalizeMeta(data: Partial<ManagerMeta>): ManagerMeta {
+  const meta = data as ManagerMeta;
+  return {
+    ...meta,
+    modules: meta.modules ?? [],
+    categories: meta.categories ?? ["marketing", "engagement", "announcement"],
+    audienceTypes: meta.audienceTypes ?? ["test"],
+    targetScreens: meta.targetScreens ?? [],
+    contentTypes: meta.contentTypes ?? ["standard"],
+    announcementTypes: meta.announcementTypes ?? [],
+    destinations: meta.destinations ?? [],
+    imageHosts: meta.imageHosts ?? [],
+    testUsers: meta.testUsers ?? [],
+    permissions: meta.permissions ?? { send: false, sendAllCompanies: false, approveTranslations: false },
+    limits: { promotionalDailyCap: 2, largeSendThreshold: 200, employeeTimezone: "Asia/Kolkata", ...(data.limits ?? {}) },
+    infrastructure: { campaignTables: false, attemptsTable: false, mediaTables: false, ...(data.infrastructure ?? {}) },
+    serverOutdated: !data.destinations || !data.permissions,
+  };
+}
+
 export interface TabNavigation {
   go: (tab: TabKey, params?: Record<string, string>) => void;
 }
@@ -36,7 +58,7 @@ export default function NotificationManager() {
   const [error, setError] = useState("");
 
   const loadMeta = useCallback(() => {
-    notificationApi.meta().then(setMeta).catch((requestError) => setError(apiErrorMessage(requestError, "The Notification Manager could not be loaded.")));
+    notificationApi.meta().then((data) => setMeta(normalizeMeta(data))).catch((requestError) => setError(apiErrorMessage(requestError, "The Notification Manager could not be loaded.")));
   }, []);
   useEffect(loadMeta, [loadMeta]);
 
@@ -73,6 +95,12 @@ export default function NotificationManager() {
       {!meta && !error && <Spinner />}
       {meta && (
         <>
+          {meta.serverOutdated && (
+            <Notice tone="red">The backend is running an older version than this dashboard, so some features are hidden. Restart the server (npm run dev) and reload.</Notice>
+          )}
+          {!meta.permissions.send && !meta.serverOutdated && (
+            <Notice tone="blue">Your account can prepare notifications and send tests, but not send campaigns.</Notice>
+          )}
           {!meta.infrastructure.campaignTables && (
             <Notice>Campaign tables are not installed yet, so drafts, scheduling and reports are unavailable. An admin must apply <code>migrations/20261027_01_create_notification_campaigns.sql</code>. Templates, history and overview still work.</Notice>
           )}

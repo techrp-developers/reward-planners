@@ -63,6 +63,33 @@ class NotificationController {
   }
 
   /* ================================
+     NOTIFICATION OPENED (push tap)
+     Reported by the app's notification dispatcher. Only the owner's own
+     notification is accepted; repeated taps are recorded once.
+  ================================= */
+  async recordOpened(req, res) {
+    try {
+      const userId = requireUserId(req, res);
+      if (!userId) return;
+      const notificationId = Number(req.params.notification_id);
+      if (!Number.isSafeInteger(notificationId) || notificationId <= 0) {
+        return res.status(400).json({ success: false, message: "Invalid notification" });
+      }
+      const body = req.body || {};
+      const appState = ["foreground", "background", "terminated", "inbox"].includes(body.app_state) ? body.app_state : null;
+      const outcome = ["opened_target", "fallback", "login_required"].includes(body.outcome) ? body.outcome : "opened_target";
+      const destinationType = typeof body.destination_type === "string" && /^[a-z_]{1,40}$/.test(body.destination_type) ? body.destination_type : null;
+
+      const recorded = await NotificationModel.recordOpen(userId, notificationId, { appState, outcome, destinationType });
+      if (recorded === null) return res.status(404).json({ success: false, message: "Notification not found" });
+      return res.json({ success: true, recorded });
+    } catch (error) {
+      console.error("Record Notification Open Error:", error.message);
+      return res.status(500).json({ success: false, message: "Failed to record notification open" });
+    }
+  }
+
+  /* ================================
      GET MY NOTIFICATIONS
   ================================= */
   async getMyNotifications(req, res) {

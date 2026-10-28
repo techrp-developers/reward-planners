@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { FiCheckCircle, FiSave, FiSend, FiUsers, FiX, FiZap } from "react-icons/fi";
+import { FiCalendar, FiCheckCircle, FiSave, FiSend, FiUsers, FiX, FiZap } from "react-icons/fi";
 import { notificationApi, type CampaignInput, type TestResult } from "../notificationApi";
-import type { AudiencePreview, AudienceType, Campaign, Category, DeliveryMode, Language, ManagerMeta, RecurrenceType, RenderedPreview, Template } from "../notificationTypes";
-import { Card, LanguageTabs, Modal, Notice, PushPreview, Spinner, Tag, inputCls, labelCls, primaryBtn, secondaryBtn } from "../components";
-import { AUDIENCE_LABELS, LANGUAGE_LABELS, SKIP_REASON_LABELS, apiErrorMessage, campaignVariablesNeeded, toZonedInputs } from "../notificationUtils";
-import { confirmDialog } from "../../../../common/utils/confirmDialog";
+import type { AudiencePreview, AudienceType, Campaign, Category, ContentType, DeliveryMode, Language, ManagerMeta, MediaAsset, MediaMap, RecurrenceType, RenderedPreview, Template } from "../notificationTypes";
+import { Card, LanguageTabs, Modal, Notice, NotificationPreviews, Spinner, Tag, inputCls, labelCls, primaryBtn, secondaryBtn } from "../components";
+import MediaDestinationSection, { type MediaDestinationValue } from "./MediaDestinationSection";
+import { AUDIENCE_LABELS, LANGUAGE_LABELS, SKIP_REASON_LABELS, apiErrorMessage, campaignVariablesNeeded, newClientRequestId, toZonedInputs } from "../notificationUtils";
 import type { TabNavigation } from "../NotificationManager";
 
 const TIMEZONES = ["Asia/Kolkata", "UTC", "Asia/Dubai", "Asia/Singapore", "Europe/London", "America/New_York"];
@@ -16,6 +16,7 @@ interface FormState {
   template_id: number | null;
   module: string;
   category: Category;
+  announcement_type: string;
   priority: "low" | "normal" | "high";
   title_en: string; body_en: string; title_hi: string; body_hi: string; title_mr: string; body_mr: string;
   approved_languages: Language[];
@@ -23,7 +24,11 @@ interface FormState {
   target_screen: string;
   reference_type: string;
   reference_id: string;
-  image_url: string;
+  content_type: ContentType;
+  destination_type: string;
+  destination_id: string;
+  catalog_product_ids: number[];
+  media: MediaMap;
   audience_type: AudienceType;
   user_ids: number[];
   company_ids: number[];
@@ -35,9 +40,10 @@ interface FormState {
 }
 
 const EMPTY: FormState = {
-  name: "", source: "manual", template_id: null, module: "common", category: "marketing", priority: "normal",
+  name: "", source: "manual", template_id: null, module: "common", category: "marketing", announcement_type: "", priority: "normal",
   title_en: "", body_en: "", title_hi: "", body_hi: "", title_mr: "", body_mr: "",
-  approved_languages: [], variables: {}, target_screen: "", reference_type: "", reference_id: "", image_url: "",
+  approved_languages: [], variables: {}, target_screen: "", reference_type: "", reference_id: "",
+  content_type: "standard", destination_type: "", destination_id: "", catalog_product_ids: [], media: {},
   audience_type: "test", user_ids: [], company_ids: [], audience_module: "",
   delivery_mode: "once", send_date: "", send_time: "09:00", timezone: "Asia/Kolkata",
   recurrence_type: "none", end_date: "", max_occurrences: "", expiry_date: "", expiry_time: "",
@@ -55,12 +61,14 @@ function fromCampaign(meta: ManagerMeta, campaign: Campaign): FormState {
   return {
     ...EMPTY,
     name: campaign.name, source: campaign.source, template_id: campaign.template_id,
-    module: moduleValueFor(meta, campaign), category: campaign.category, priority: campaign.priority,
+    module: moduleValueFor(meta, campaign), category: campaign.category, announcement_type: campaign.announcement_type || "", priority: campaign.priority,
     title_en: campaign.title_en, body_en: campaign.body_en,
     title_hi: campaign.title_hi || "", body_hi: campaign.body_hi || "", title_mr: campaign.title_mr || "", body_mr: campaign.body_mr || "",
     approved_languages: campaign.approved_languages, variables: campaign.variables || {},
     target_screen: campaign.target_screen || "", reference_type: campaign.reference_type || "", reference_id: campaign.reference_id || "",
-    image_url: campaign.image_url || "", audience_type: campaign.audience_type,
+    content_type: campaign.content_type || "standard", destination_type: campaign.destination_type || "", destination_id: campaign.destination_id || "",
+    catalog_product_ids: (campaign.catalog_product_ids || []).map(Number), media: campaign.media || {},
+    audience_type: campaign.audience_type,
     user_ids: campaign.audience_filter?.user_ids || [], company_ids: campaign.audience_filter?.company_ids || [],
     audience_module: meta.modules.find((option) => option.module === campaign.audience_filter?.module && !option.screen)?.value || "",
     delivery_mode: campaign.delivery_mode, send_date: send.date, send_time: send.time || "09:00", timezone: campaign.timezone,
@@ -72,10 +80,14 @@ function fromCampaign(meta: ManagerMeta, campaign: Campaign): FormState {
 function toInput(form: FormState): CampaignInput {
   return {
     name: form.name, source: form.source, template_id: form.template_id, module: form.module, category: form.category, priority: form.priority,
+    announcement_type: form.category === "announcement" ? form.announcement_type || null : null,
     title_en: form.title_en, body_en: form.body_en, title_hi: form.title_hi, body_hi: form.body_hi, title_mr: form.title_mr, body_mr: form.body_mr,
     approved_languages: form.approved_languages, variables: form.variables,
     target_screen: form.target_screen || null, reference_type: form.reference_type || null, reference_id: form.reference_id || null,
-    image_url: form.image_url || null, audience_type: form.audience_type,
+    content_type: form.content_type, media: form.content_type === "standard" ? null : form.media,
+    destination_type: form.destination_type || null, destination_id: form.destination_id || null,
+    catalog_product_ids: form.content_type === "catalog" ? form.catalog_product_ids : [],
+    audience_type: form.audience_type,
     audience_filter: { user_ids: form.user_ids, company_ids: form.company_ids, module: form.audience_module || null },
     delivery_mode: form.delivery_mode, timezone: form.timezone,
     send_date: form.delivery_mode === "now" ? undefined : form.send_date, send_time: form.delivery_mode === "now" ? undefined : form.send_time,
@@ -87,7 +99,6 @@ function toInput(form: FormState): CampaignInput {
 }
 
 export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta: ManagerMeta; nav: TabNavigation; campaignId: number | null; templateId: number | null }) {
-  const isAdmin = meta.role === "admin";
   const tablesReady = meta.infrastructure.campaignTables;
   const [form, setForm] = useState<FormState>(EMPTY);
   const [campaign, setCampaign] = useState<Campaign | null>(null);
@@ -104,6 +115,10 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [employeeResults, setEmployeeResults] = useState<{ user_id: number; name: string; company_name: string | null }[]>([]);
   const [selectedNames, setSelectedNames] = useState<Record<number, string>>({});
+  const [assets, setAssets] = useState<Record<number, MediaAsset>>({});
+  const [confirmSend, setConfirmSend] = useState<{ mode: "now" | "schedule"; campaign: Campaign } | null>(null);
+  const [clientRequestId, setClientRequestId] = useState(newClientRequestId);
+  const addAssets = (list: MediaAsset[]) => setAssets((current) => ({ ...current, ...Object.fromEntries(list.map((asset) => [asset.media_id, asset])) }));
 
   const editable = !campaign || (campaign.can_manage && (
     ["draft", "rejected", "pending_approval", "approved"].includes(campaign.status) ||
@@ -122,7 +137,7 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
     if (campaignId) {
       setLoading(true);
       notificationApi.campaign(campaignId)
-        .then((result) => { if (active) { setCampaign(result); setForm(fromCampaign(meta, result)); } })
+        .then((result) => { if (active) { setCampaign(result); setForm(fromCampaign(meta, result)); addAssets(result.media_assets || []); } })
         .catch((error) => toast.error(apiErrorMessage(error, "Campaign could not be loaded.")))
         .finally(() => { if (active) setLoading(false); });
     } else {
@@ -190,13 +205,19 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
     return () => window.clearTimeout(timer);
   }, [employeeSearch, form.audience_type]);
 
-  const audienceOptions = meta.audienceTypes.filter((type) => (type === "all_companies" ? isAdmin : type === "assigned_companies" ? !isAdmin : true));
+  // all_companies needs notifications.send_all_companies (admins, or RMs on the
+  // server's explicit global-sender list); RMs otherwise target assigned companies.
+  const audienceOptions = meta.audienceTypes.filter((type) => (
+    type === "all_companies" ? meta.permissions.sendAllCompanies : type === "assigned_companies" ? !meta.scope.global : true
+  ));
 
-  const save = async (): Promise<Campaign | null> => {
+  const save = async (overrides: Partial<FormState> = {}): Promise<Campaign | null> => {
     setBusy("save");
     try {
-      const input = toInput(form);
-      const saved = campaign ? await notificationApi.updateCampaign(campaign.campaign_id, input) : await notificationApi.createCampaign(input);
+      const input = toInput({ ...form, ...overrides });
+      const saved = campaign
+        ? await notificationApi.updateCampaign(campaign.campaign_id, input)
+        : await notificationApi.createCampaign({ ...input, client_request_id: clientRequestId });
       if (saveAsTemplate) {
         try {
           await notificationApi.createTemplate({
@@ -237,21 +258,31 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
     }
   };
 
-  const submit = async () => {
-    const ok = await confirmDialog({
-      title: "Submit for approval?",
-      text: `An admin will review this campaign for ${audience?.eligible ?? "the selected"} eligible employees. Nothing is sent until it is approved and scheduled.`,
-      icon: "question",
-      confirmButtonText: "Submit",
-    });
-    if (!ok) return;
-    const saved = await save();
-    if (!saved) return;
-    setBusy("submit");
+  // Send Now / Schedule: save, then one confirmation (not an approval).
+  const startSend = async (mode: "now" | "schedule") => {
+    if (mode === "schedule" && (form.delivery_mode === "now" || !form.send_date || !form.send_time)) {
+      toast.error("Choose “Schedule once” or “Recurring” and a send date and time first.");
+      return;
+    }
+    const saved = await save(mode === "now" ? { delivery_mode: "now" } : {});
+    if (saved) setConfirmSend({ mode, campaign: saved });
+  };
+
+  const confirmAndSend = async () => {
+    if (!confirmSend) return;
+    setBusy("send");
     try {
-      await notificationApi.submitCampaign(saved.campaign_id);
-      toast.success("Submitted for approval.");
-      nav.go("campaigns");
+      const { campaign: target, mode } = confirmSend;
+      const result = await notificationApi.sendCampaign(target.campaign_id, {
+        mode,
+        ...(mode === "schedule" ? { send_date: form.send_date, send_time: form.send_time, timezone: form.timezone } : {}),
+        confirm_recipients: audience?.total,
+      });
+      if (result.warning) toast.warning(result.warning);
+      toast.success(mode === "now" ? "Queued for sending now." : "Campaign scheduled.");
+      setConfirmSend(null);
+      setClientRequestId(newClientRequestId());
+      nav.go(mode === "now" ? "campaigns" : "scheduled");
     } catch (error) {
       toast.error(apiErrorMessage(error));
     } finally {
@@ -264,7 +295,14 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
   const titleField = `title_${lang}` as const;
   const bodyField = `body_${lang}` as const;
   const shown = rendered?.[previewLang];
-  const detailScreen = form.target_screen === "OrderDetails" || form.target_screen === "ServiceOrderDetails";
+  // The image this language's recipients get: localized, else default. The
+  // text may fall back to English (shown.language) independently.
+  const previewMediaId = form.content_type === "standard" ? null : form.media[previewLang] || form.media.default || form.media.en || null;
+  const previewImage = previewMediaId ? assets[previewMediaId]?.public_url || null : null;
+  const mediaValue: MediaDestinationValue = {
+    content_type: form.content_type, destination_type: form.destination_type, destination_id: form.destination_id,
+    catalog_product_ids: form.catalog_product_ids, media: form.media,
+  };
 
   return (
     <div className="grid gap-5 xl:grid-cols-[1.5fr_1fr]">
@@ -274,7 +312,7 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
           <Notice tone={campaign.status === "rejected" ? "red" : "blue"}>
             Editing campaign #{campaign.campaign_id} ({campaign.status.replace("_", " ")}).
             {campaign.status === "rejected" && campaign.rejection_reason && <> Rejected: “{campaign.rejection_reason}”.</>}
-            {campaign.status !== "draft" && editable && " Saving changes returns it to draft and needs a new approval."}
+            {campaign.status === "scheduled" && editable && " Saving changes takes it off the schedule until you send or schedule it again."}
             {!editable && " This campaign can no longer be edited."}
           </Notice>
         )}
@@ -300,7 +338,7 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
                   <option value="">Select a template…</option>
                   {templates.map((template) => <option key={template.template_id} value={template.template_id}>{template.name} ({template.notification_type}){template.is_enabled ? "" : " · disabled"}</option>)}
                 </select>
-                {selectedTemplate && !selectedTemplate.is_enabled && <p className="mt-1 text-xs font-semibold text-amber-700">This template is disabled: you can draft and test, but it cannot be submitted until an admin enables it.</p>}
+                {selectedTemplate && !selectedTemplate.is_enabled && <p className="mt-1 text-xs font-semibold text-amber-700">This template is disabled: you can draft and test, but not send it until an admin enables it. To send now, choose “Write a new notification”.</p>}
                 <p className="mt-1 text-xs text-gray-500">System event templates (orders, payments, OTPs) are not listed: campaigns cannot imitate them.</p>
               </label>
             )}
@@ -320,29 +358,38 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
               <select className={inputCls} disabled={!editable || form.source === "template"} value={form.category} onChange={(event) => set("category", event.target.value as Category)}>
                 <option value="marketing">Marketing (needs employee opt-in)</option>
                 <option value="engagement">Engagement (needs employee opt-in)</option>
-                <option value="announcement">Announcement (company information)</option>
+                <option value="announcement">Announcement (company information, no offers)</option>
               </select>
             </label>
+            {form.category === "announcement" && (
+              <label><span className={labelCls}>Announcement type *</span>
+                <select className={inputCls} disabled={!editable} value={form.announcement_type} onChange={(event) => set("announcement_type", event.target.value)}>
+                  <option value="">Select…</option>
+                  {meta.announcementTypes.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
+                </select>
+                <span className="mt-1 block text-[11px] text-gray-400">Announcements use the Common or Support module, open Home/Announcements/Events/Support/inbox, and must not promote offers. Quiet hours and a daily limit still apply.</span>
+              </label>
+            )}
             <label><span className={labelCls}>Priority</span>
               <select className={inputCls} disabled={!editable} value={form.priority} onChange={(event) => set("priority", event.target.value as FormState["priority"])}>
                 <option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option>
               </select>
             </label>
-            <label><span className={labelCls}>Opens app screen</span>
-              <select className={inputCls} disabled={!editable} value={form.target_screen} onChange={(event) => set("target_screen", event.target.value)}>
-                <option value="">Default for module</option>
-                {meta.targetScreens.map((screen) => <option key={screen} value={screen}>{screen}</option>)}
-              </select>
-            </label>
-            {detailScreen && (
-              <>
-                <label><span className={labelCls}>Reference type</span><input className={inputCls} disabled={!editable} placeholder={form.target_screen === "OrderDetails" ? "order" : "service_order"} value={form.reference_type} onChange={(event) => set("reference_type", event.target.value)} /></label>
-                <label><span className={labelCls}>Reference ID *</span><input className={inputCls} disabled={!editable} value={form.reference_id} onChange={(event) => set("reference_id", event.target.value)} /></label>
-              </>
-            )}
-            <label className="sm:col-span-2"><span className={labelCls}>Image URL (optional, https on an approved host)</span><input className={inputCls} disabled={!editable} placeholder="https://cdn.rewardplanners.com/…" value={form.image_url} onChange={(event) => set("image_url", event.target.value)} /></label>
           </div>
         </Card>
+
+        <MediaDestinationSection
+          meta={meta}
+          editable={editable}
+          module={form.module}
+          value={mediaValue}
+          onChange={(patch) => setForm((current) => ({ ...current, ...patch }))}
+          assets={assets}
+          onAssets={addAssets}
+          approvedLanguages={form.approved_languages}
+          hasHindi={Boolean(form.title_hi && form.body_hi)}
+          hasMarathi={Boolean(form.title_mr && form.body_mr)}
+        />
 
         <Card title="3. Message" subtitle="Employees receive the language chosen in their app. Unapproved or missing translations fall back to English.">
           <div className="space-y-3 p-5">
@@ -357,13 +404,16 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
             </label>
             <p className="text-xs text-gray-500">Use <code>{"{{first_name}}"}</code> to greet each employee by name.</p>
             {lang !== "en" && (
-              isAdmin ? (
-                <label className="flex items-center gap-2 text-sm text-gray-700">
-                  <input type="checkbox" disabled={!editable || !(form[titleField] && form[bodyField])} checked={form.approved_languages.includes(lang)}
-                    onChange={(event) => set("approved_languages", event.target.checked ? [...form.approved_languages, lang] : form.approved_languages.filter((item) => item !== lang))} />
-                  I reviewed and approve this {LANGUAGE_LABELS[lang]} translation
-                </label>
-              ) : <p className="text-xs text-amber-700">{form.approved_languages.includes(lang) ? `${LANGUAGE_LABELS[lang]} is approved.` : `An admin reviews the ${LANGUAGE_LABELS[lang]} text during approval. Until then, employees who chose it receive English.`}</p>
+              meta.permissions.approveTranslations ? (
+                <div className="space-y-1">
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input type="checkbox" disabled={!editable || !(form[titleField] && form[bodyField])} checked={form.approved_languages.includes(lang)}
+                      onChange={(event) => set("approved_languages", event.target.checked ? [...form.approved_languages, lang] : form.approved_languages.filter((item) => item !== lang))} />
+                    I reviewed this {LANGUAGE_LABELS[lang]} translation and approve it for sending
+                  </label>
+                  <p className="text-[11px] text-gray-500">Unchecked or edited translations are never sent; those employees receive English. Check machine translations carefully.</p>
+                </div>
+              ) : <p className="text-xs text-amber-700">{form.approved_languages.includes(lang) ? `${LANGUAGE_LABELS[lang]} is approved.` : `${LANGUAGE_LABELS[lang]} is not approved, so employees who chose it receive English.`}</p>
             )}
             {variablesNeeded.length > 0 && (
               <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
@@ -389,7 +439,7 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
             </label>
 
             {form.audience_type === "test" && (
-              <p className="text-sm text-gray-600">Test users: {meta.testUsers.length ? meta.testUsers.map((user) => user.name).join(", ") : <span className="font-semibold text-amber-700">none configured (an admin sets NOTIFICATION_TEST_USER_IDS)</span>}. Use “Send test”; test-only campaigns are not submitted.</p>
+              <p className="text-sm text-gray-600">Test users: {meta.testUsers.length ? meta.testUsers.map((user) => user.name).join(", ") : <span className="font-semibold text-amber-700">none configured (an admin sets NOTIFICATION_TEST_USER_IDS)</span>}. Use “Send test”. To send to employees, choose a real audience.</p>
             )}
 
             {(form.audience_type === "company" || form.audience_type === "module_users") && (
@@ -468,7 +518,7 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
         <Card title="5. Delivery">
           <div className="space-y-4 p-5">
             <div className="grid gap-2 sm:grid-cols-3">
-              {([["now", "Send after approval"], ["once", "Schedule once"], ["recurring", "Recurring"]] as const).map(([mode, label]) => (
+              {([["now", "Send immediately"], ["once", "Schedule once"], ["recurring", "Recurring"]] as const).map(([mode, label]) => (
                 <button key={mode} type="button" disabled={!editable} onClick={() => setForm((current) => ({ ...current, delivery_mode: mode, recurrence_type: mode === "recurring" && current.recurrence_type === "none" ? "daily" : current.recurrence_type }))}
                   className={`rounded-xl border px-3 py-2.5 text-sm font-bold transition ${form.delivery_mode === mode ? "border-[#852BAF] bg-purple-50 text-[#852BAF]" : "border-gray-200 text-gray-600 hover:border-purple-200"}`}>
                   {label}
@@ -512,8 +562,8 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
             <LanguageTabs value={previewLang} onChange={setPreviewLang} approved={form.approved_languages} available={{ hi: Boolean(form.title_hi && form.body_hi), mr: Boolean(form.title_mr && form.body_mr) }} />
             {shown?.error
               ? <Notice tone="red">{shown.error}</Notice>
-              : <PushPreview title={shown?.title || form.title_en} message={shown?.message || form.body_en} imageUrl={form.image_url || null}
-                  note={shown?.fallback ? `An employee who chose ${LANGUAGE_LABELS[previewLang]} receives English (translation missing or not approved).` : "{{first_name}} is shown as “Asha”."} />}
+              : <NotificationPreviews title={shown?.title || form.title_en} message={shown?.message || form.body_en} imageUrl={previewImage}
+                  note={shown?.fallback ? `An employee who chose ${LANGUAGE_LABELS[previewLang]} receives English text (translation missing or not approved).` : "{{first_name}} is shown as “Asha”."} />}
           </div>
         </Card>
 
@@ -528,15 +578,53 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
                 title={meta.testUsers.length ? "Saves, then sends to the configured test users only" : "No test users are configured"}>
                 <FiZap /> {busy === "test" ? "Sending test…" : `Send test${previewLang !== "en" ? ` (${LANGUAGE_LABELS[previewLang]})` : ""}`}
               </button>
-              <button type="button" className={primaryBtn} disabled={!tablesReady || !editable || busy !== null || form.audience_type === "test" || !audience?.allowed} onClick={submit}
-                title={form.audience_type === "test" ? "Choose a real audience to submit" : undefined}>
-                <FiSend /> {busy === "submit" ? "Submitting…" : "Submit for approval"}
-              </button>
+              {meta.permissions.send && (
+                <>
+                  <button type="button" className={primaryBtn} disabled={!tablesReady || !editable || busy !== null || form.audience_type === "test" || !audience?.allowed || !meta.firebase.enabled}
+                    onClick={() => startSend("now")}
+                    title={!meta.firebase.enabled ? "Push sending is not configured on the server" : form.audience_type === "test" ? "Choose a real audience, or use Send test" : undefined}>
+                    <FiSend /> Send now
+                  </button>
+                  <button type="button" className={secondaryBtn} disabled={!tablesReady || !editable || busy !== null || form.audience_type === "test" || !audience?.allowed || form.delivery_mode === "now"}
+                    onClick={() => startSend("schedule")}
+                    title={form.delivery_mode === "now" ? "Choose “Schedule once” or “Recurring” in Delivery" : undefined}>
+                    <FiCalendar /> Schedule
+                  </button>
+                </>
+              )}
             </div>
+            {!meta.firebase.enabled && meta.permissions.send && (
+              <p className="text-xs text-amber-700">Push sending is not configured on the server ({meta.firebase.reason || "Firebase disabled"}). You can save drafts and schedule; scheduled campaigns wait until Firebase is configured.</p>
+            )}
             {campaign && <button type="button" className="w-full text-center text-xs font-bold text-[#852BAF] hover:underline" onClick={() => nav.go("compose")}>Start a new notification</button>}
           </div>
         </Card>
       </aside>
+
+      {confirmSend && (
+        <Modal title={confirmSend.mode === "now" ? "Send this notification now?" : "Schedule this notification?"} onClose={() => (busy ? undefined : setConfirmSend(null))}>
+          <div className="space-y-4">
+            <dl className="grid gap-3 text-sm sm:grid-cols-2">
+              <div className="sm:col-span-2"><dt className="text-xs font-bold text-gray-500">Title (English)</dt><dd className="font-semibold text-gray-900">{confirmSend.campaign.title_en}</dd></div>
+              <div><dt className="text-xs font-bold text-gray-500">Module</dt><dd>{meta.modules.find((option) => option.value === form.module)?.label || confirmSend.campaign.module}</dd></div>
+              <div><dt className="text-xs font-bold text-gray-500">Audience</dt><dd>{AUDIENCE_LABELS[confirmSend.campaign.audience_type]}</dd></div>
+              <div><dt className="text-xs font-bold text-gray-500">Recipients</dt><dd><span className="text-lg font-black">{audience?.eligible ?? "—"}</span> eligible of {audience?.total ?? "—"} active employees</dd></div>
+              <div><dt className="text-xs font-bold text-gray-500">Delivery</dt><dd>{confirmSend.mode === "now" ? "Immediately" : `${form.send_date} ${form.send_time} (${form.timezone})${form.delivery_mode === "recurring" ? `, repeats ${form.recurrence_type}` : ""}`}</dd></div>
+              <div><dt className="text-xs font-bold text-gray-500">Languages</dt><dd>English{confirmSend.campaign.approved_languages.map((code) => `, ${LANGUAGE_LABELS[code]}`).join("")}{confirmSend.campaign.approved_languages.length < 2 ? " (others receive English)" : ""}</dd></div>
+              <div><dt className="text-xs font-bold text-gray-500">Image</dt><dd>{confirmSend.campaign.content_type === "standard" ? "None (text only)" : previewImage ? "Yes" : "Selected; checked again before sending"}</dd></div>
+            </dl>
+            {form.category !== "announcement" && <Notice tone="blue">Only employees who opted in to {form.category} notifications receive it; quiet hours and daily limits are applied.</Notice>}
+            {audience?.total && audience.total > meta.limits.largeSendThreshold ? <Notice>This is a large send ({audience.total} employees). Confirming sends it to this exact audience.</Notice> : null}
+            <p className="text-xs text-gray-500">This confirms your own send; no admin approval is involved. Your name is recorded in the campaign audit log.</p>
+            <div className="flex justify-end gap-2">
+              <button type="button" className={secondaryBtn} disabled={busy !== null} onClick={() => setConfirmSend(null)}>Back</button>
+              <button type="button" className={primaryBtn} disabled={busy !== null} onClick={confirmAndSend}>
+                {busy === "send" ? "Working…" : confirmSend.mode === "now" ? "Send now" : "Schedule"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {testResults && (
         <Modal title="Test send results" onClose={() => setTestResults(null)}>
@@ -548,6 +636,11 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
                   <p className="font-bold text-gray-900">{result.name}</p>
                   <p className="text-xs text-gray-500">{LANGUAGE_LABELS[result.language]} · inbox {result.inbox_saved ? "saved" : "not saved"}</p>
                   {result.skipped_reason && <p className="text-xs text-amber-700">{SKIP_REASON_LABELS[result.skipped_reason] || result.skipped_reason.replace(/_/g, " ")}</p>}
+                  <p className="text-xs text-gray-500">
+                    {result.image_sent ? "Sent with image" : result.image_fallback ? "Image unavailable: sent as text only" : "Text only"}
+                    {result.destination ? ` · opens ${result.destination}` : ""}
+                    {result.destination_blocked ? " · destination unavailable (real sends would skip)" : ""}
+                  </p>
                   {result.errors.length > 0 && <p className="text-xs text-red-600">{result.errors.join(", ")}</p>}
                 </div>
                 {result.firebase_accepted > 0

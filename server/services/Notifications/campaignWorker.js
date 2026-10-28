@@ -6,26 +6,32 @@ const CampaignModel = require("../../app/common/models/notificationCampaignModel
 const AudienceModel = require("../../app/common/models/notificationAudienceModel");
 const NotificationTemplateModel = require("../../app/common/models/notificationTemplateModel");
 const { deliverNotification } = require("../../app/common/utils/notification");
-const { checkAudiencePermission, renderCampaignForRecipient } = require("../../app/common/utils/campaignRules");
+const NotificationMediaModel = require("../../app/common/models/notificationMediaModel");
+const { checkAudiencePermission, mediaIdForLanguage, renderCampaignForRecipient } = require("../../app/common/utils/campaignRules");
+const { getDestination, resolveDestination } = require("../../app/common/utils/notificationDestinations");
+const { checkImageAvailable } = require("../../app/common/utils/notificationImage");
 const {
   TemplateRenderError,
   checkPromotionalEligibility,
   minutesUntilQuietHoursEnd,
 } = require("../../app/common/utils/notificationTemplate");
-const { hasMoreOccurrences, nextOccurrence, zonedParts } = require("../../app/common/utils/campaignSchedule");
+const {
+  EMPLOYEE_TIMEZONE,
+  hasMoreOccurrences,
+  minutesInZone,
+  nextOccurrence,
+  startOfDayUtc,
+  zonedParts,
+} = require("../../app/common/utils/campaignSchedule");
+const { CAPS } = require("../../app/common/utils/notificationPolicy");
+const { canSendNotifications } = require("../../app/common/utils/campaignRules");
+const { firebaseStatus } = require("../../config/firebase");
 
 const SYSTEM_ACTOR = { user_id: 0, role: "system" };
 const MAX_ATTEMPTS = 3;
 const RETRY_DELAYS_MIN = [5, 15];
 const BATCH_SIZE = Number(process.env.NOTIFICATION_CAMPAIGN_BATCH_SIZE || 100);
 const CONCURRENCY = 5;
-const PROMO_DAILY_CAP = Number(process.env.NOTIFICATION_PROMO_DAILY_CAP || 2);
-const EMPLOYEE_TIMEZONE = process.env.SCHEDULE_TIMEZONE || "Asia/Kolkata";
-
-function minutesNow(timeZone, now = new Date()) {
-  const p = zonedParts(now, timeZone);
-  return p.hour * 60 + p.minute;
-}
 
 const addMinutes = (date, minutes) => new Date(date.getTime() + minutes * 60 * 1000);
 
@@ -44,9 +50,9 @@ function upcomingRun(campaign, fromUtc, occurrenceNo, now) {
   return allowed ? next : null;
 }
 
-async function currentCreatorScope(campaign) {
+async function currentCreator(campaign) {
   const [[creator]] = await db.query("SELECT user_id, role FROM eusers WHERE user_id = ? LIMIT 1", [campaign.created_by]);
-  return AudienceModel.getScope(creator || { role: null });
+  return creator || { user_id: campaign.created_by, role: null };
 }
 
 async function activateDueCampaigns(now = new Date()) {
@@ -69,9 +75,16 @@ async function activateDueCampaigns(now = new Date()) {
         }
       }
 
-      // Re-check scope at send time: an RM whose assignment was removed after
-      // approval must not reach that company's employees.
-      const scope = await currentCreatorScope(campaign);
+      // Re-check the creator's authority when the job runs: an RM whose sending
+      // permission or company assignment was removed after scheduling must not
+      // reach employees.
+      const creator = await currentCreator(campaign);
+      if (!canSendNotifications(creator)) {
+        await CampaignModel.releaseCampaign(campaign, "failed", { rejection_reason: "The creator is no longer allowed to send notifications." });
+        await CampaignModel.audit({ campaignId: campaign.campaign_id, actor: SYSTEM_ACTOR, action: "send_blocked", decision: "denied", details: { reason: "sender_not_authorised", role: creator.role } });
+        continue;
+      }
+      const scope = await AudienceModel.getScope(creator);
       const permission = checkAudiencePermission(campaign.audience_type, campaign.audience_filter || {}, scope);
       if (!permission.allowed) {
         await CampaignModel.releaseCampaign(campaign, "failed", { rejection_reason: permission.reason.slice(0, 500) });
@@ -111,7 +124,66 @@ async function loadPreferences(userIds) {
   return new Map(rows.map((row) => [Number(row.user_id), row]));
 }
 
-function buildCampaignPayload(campaign, recipient, rendered) {
+/**
+ * Everything about a campaign that is the same for all recipients and must be
+ * re-verified close to send time: destination entity availability, current
+ * catalog products, and whether each image is reachable the way a phone
+ * fetches it. Cached briefly so a batch costs one check, not one per user.
+ */
+const DELIVERY_CONTEXT_TTL_MS = 10 * 60 * 1000;
+const deliveryContextCache = new Map();
+
+async function buildDeliveryContext(campaign, deps = {}) {
+  const media = deps.media || NotificationMediaModel;
+  const checkImage = deps.checkImage || checkImageAvailable;
+  const context = { blocked: null, destination: null, images: {}, imageFallback: {} };
+
+  if (campaign.destination_type) {
+    const destination = getDestination(campaign.destination_type);
+    let productIds = (campaign.catalog_product_ids || []).map(Number);
+    if (destination?.entity) {
+      const status = await media.entityStatus(destination.entity, campaign.destination_id, productIds);
+      if (!status.ok) context.blocked = "destination_unavailable";
+      // Never advertise products that went out of stock or were delisted.
+      if (status.products) productIds = status.products.filter((product) => product.available).map((product) => Number(product.product_id));
+    }
+    context.destination = resolveDestination({
+      module: campaign.module,
+      destinationType: campaign.destination_type,
+      destinationId: campaign.destination_id,
+      productIds,
+    });
+  }
+
+  if (campaign.content_type && campaign.content_type !== "standard" && campaign.media) {
+    const rows = await media.findActiveByIds(Object.values(campaign.media));
+    const byId = new Map(rows.map((row) => [Number(row.media_id), row]));
+    const checked = new Map();
+    for (const language of ["en", "hi", "mr"]) {
+      const row = byId.get(Number(mediaIdForLanguage(campaign.media, language)));
+      if (!row) { context.images[language] = null; context.imageFallback[language] = true; continue; }
+      if (!checked.has(row.public_url)) checked.set(row.public_url, await checkImage(row.public_url));
+      const ok = checked.get(row.public_url).ok;
+      context.images[language] = ok ? { url: row.public_url, mediaId: row.media_id } : null;
+      context.imageFallback[language] = !ok;
+    }
+  }
+  return context;
+}
+
+async function deliveryContextFor(campaign, now = Date.now()) {
+  const cached = deliveryContextCache.get(campaign.campaign_id);
+  if (cached && cached.expiresAt > now) return cached.context;
+  const context = await buildDeliveryContext(campaign);
+  deliveryContextCache.set(campaign.campaign_id, { context, expiresAt: now + DELIVERY_CONTEXT_TTL_MS });
+  return context;
+}
+
+function buildCampaignPayload(campaign, recipient, rendered, delivery = null) {
+  const destination = delivery?.destination || null;
+  const image = delivery ? delivery.images?.[rendered.language] || null : null;
+  const imageFallback = Boolean(delivery?.imageFallback?.[rendered.language]);
+
   return {
     userId: recipient.user_id,
     module: campaign.module,
@@ -122,8 +194,20 @@ function buildCampaignPayload(campaign, recipient, rendered) {
     priority: campaign.priority,
     reference_type: campaign.reference_type || "campaign",
     reference_id: campaign.reference_id || String(campaign.campaign_id),
-    screen: campaign.target_screen || undefined,
-    image_url: campaign.image_url || undefined,
+    screen: destination?.screen || campaign.target_screen || undefined,
+    // Rich campaigns only use verified library images; a broken image sends
+    // the text alone. Legacy campaigns keep their stored image_url.
+    image_url: delivery && campaign.content_type && campaign.content_type !== "standard" ? image?.url : campaign.image_url || undefined,
+    language: rendered.language,
+    ...(destination ? {
+      destination_type: destination.destination_type,
+      target_id: destination.target_id,
+      target_params: destination.target_params,
+      target_route: destination.target_route,
+      fallback_route: destination.fallback_route,
+      deep_link: destination.deep_link,
+      fallback_screen: destination.fallback_screen,
+    } : {}),
     idempotency_key: `campaign:${campaign.campaign_id}:${recipient.occurrence_no}:${recipient.user_id}`,
     metadata: {
       source: "campaign",
@@ -131,8 +215,12 @@ function buildCampaignPayload(campaign, recipient, rendered) {
       occurrence_no: recipient.occurrence_no,
       category: campaign.category,
       language: rendered.language,
+      content_type: campaign.content_type || "standard",
       ...(campaign.template_id ? { template_id: campaign.template_id } : {}),
-      ...(campaign.image_url ? { image_url: campaign.image_url } : {}),
+      // Inbox history keeps a stable media reference, never image bytes.
+      ...(image ? { image_url: image.url, media_id: image.mediaId } : campaign.image_url && !delivery ? { image_url: campaign.image_url } : {}),
+      ...(imageFallback ? { image_fallback: true } : {}),
+      ...(destination ? { destination_type: destination.destination_type, target_route: destination.target_route, deep_link: destination.deep_link } : {}),
     },
   };
 }
@@ -151,26 +239,30 @@ function retryOrFail(recipient, now, errorCode) {
 /** Decide and perform delivery for one claimed recipient. Returns the row update. */
 async function processRecipient(recipient, campaign, preferences, now = new Date(), deps = {}) {
   const deliver = deps.deliver || deliverNotification;
-  const countPromotional = deps.countPromotional || ((userId) => NotificationTemplateModel.countPromotionalToday(userId));
+  const countToday = deps.countToday || ((userId, categories, excludeNotificationId, at) =>
+    NotificationTemplateModel.countCategoryToday(userId, categories, { sinceUtc: startOfDayUtc(at, EMPLOYEE_TIMEZONE), excludeNotificationId }));
 
   if (!campaign || ["cancelled", "expired"].includes(campaign.status)) {
     return { status: "cancelled", skip_reason: "campaign_cancelled" };
   }
   if (campaign.expires_at && campaign.expires_at <= now) return { status: "skipped", skip_reason: "campaign_expired" };
+  const delivery = deps.delivery === undefined ? null : deps.delivery;
+  if (delivery?.blocked) return { status: "skipped", skip_reason: delivery.blocked };
 
-  const firstAttempt = Number(recipient.attempts || 0) === 0 && !recipient.notification_id;
-  const isPromotional = campaign.category === "marketing" || campaign.category === "engagement";
-
-  // Consent, quiet hours and the cap are decided once, on the first attempt;
-  // a retry must not be blocked by its own already-stored inbox row.
-  if (isPromotional && firstAttempt) {
+  // Consent, quiet hours and the daily limit are checked on EVERY attempt, so
+  // an opt-out or quiet hours that began after the first try are respected.
+  // The campaign's own inbox row (created by an earlier attempt) is excluded
+  // from the daily count so a retry is not blocked by itself.
+  if (["marketing", "engagement", "announcement"].includes(campaign.category)) {
     const prefs = preferences || { missing: true };
-    const nowMinutes = minutesNow(EMPLOYEE_TIMEZONE, now);
+    const counted = campaign.category === "announcement" ? ["announcement"] : ["marketing", "engagement"];
+    const needsCount = campaign.category === "announcement" || !prefs.missing;
+    const nowMinutes = minutesInZone(now, EMPLOYEE_TIMEZONE);
     const eligibility = checkPromotionalEligibility({
       category: campaign.category,
       preferences: prefs,
-      sentToday: prefs.missing ? 0 : await countPromotional(recipient.user_id),
-      dailyCap: PROMO_DAILY_CAP,
+      sentToday: needsCount ? await countToday(recipient.user_id, counted, recipient.notification_id || null, now) : 0,
+      dailyCap: campaign.category === "announcement" ? CAPS.announcement : CAPS.promotional,
       nowMinutes,
     });
     if (!eligibility.allowed && eligibility.reason === "quiet_hours") {
@@ -192,11 +284,19 @@ async function processRecipient(recipient, campaign, preferences, now = new Date
     return { status: "skipped", skip_reason: "missing_template_values" };
   }
 
-  const result = await deliver(buildCampaignPayload(campaign, recipient, rendered), { pushIfDuplicate: true });
-  const base = { language: rendered.language, notification_id: result.notificationId ?? recipient.notification_id ?? null, skip_reason: null };
+  const payload = buildCampaignPayload(campaign, recipient, rendered, delivery);
+  // policy "checked": the same consent/quiet-hours/limit policy ran above.
+  const result = await deliver(payload, { pushIfDuplicate: true, policy: "checked" });
+  const base = {
+    language: rendered.language,
+    notification_id: result.notificationId ?? recipient.notification_id ?? null,
+    skip_reason: null,
+    ...(payload.metadata.image_fallback ? { image_fallback: 1 } : {}),
+  };
 
+  // No registered device: the inbox row exists but nothing went to Firebase.
   if (result.skipped && result.reason === "missing_fcm_token") {
-    return { ...base, status: "sent", attempts: Number(recipient.attempts || 0) + 1, devices_attempted: 0, devices_accepted: 0, skip_reason: "no_active_device" };
+    return { ...base, status: "inbox_only", attempts: Number(recipient.attempts || 0) + 1, devices_attempted: 0, devices_accepted: 0, skip_reason: "no_active_device" };
   }
   if (result.skipped && result.reason === "firebase_disabled") {
     return { ...base, ...retryOrFail(recipient, now, "firebase_disabled") };
@@ -221,12 +321,25 @@ async function processDueRecipients(now = new Date()) {
   const campaigns = new Map();
   for (const id of new Set(claimed.map((row) => row.campaign_id))) campaigns.set(id, await CampaignModel.findById(id));
   const preferences = await loadPreferences([...new Set(claimed.map((row) => Number(row.user_id)))]);
+  const contexts = new Map();
+  for (const [id, campaign] of campaigns) {
+    if (!campaign) continue;
+    try {
+      contexts.set(id, await deliveryContextFor(campaign));
+    } catch (error) {
+      // A failed check must not block delivery: send text-only, default screen.
+      console.error(`[Campaign Worker] Delivery checks failed for campaign ${id}:`, error.message);
+      contexts.set(id, { blocked: null, destination: null, images: {}, imageFallback: { en: true, hi: true, mr: true } });
+    }
+  }
 
   for (let index = 0; index < claimed.length; index += CONCURRENCY) {
     await Promise.all(claimed.slice(index, index + CONCURRENCY).map(async (recipient) => {
       let update;
       try {
-        update = await processRecipient(recipient, campaigns.get(recipient.campaign_id), preferences.get(Number(recipient.user_id)), now);
+        update = await processRecipient(recipient, campaigns.get(recipient.campaign_id), preferences.get(Number(recipient.user_id)), now, {
+          delivery: contexts.get(recipient.campaign_id) || null,
+        });
       } catch (error) {
         console.error(`[Campaign Worker] Recipient ${recipient.recipient_id} failed:`, error.message);
         update = retryOrFail(recipient, now, "internal_error");
@@ -247,29 +360,46 @@ async function finalizeCampaigns() {
       await CampaignModel.transition(campaign.campaign_id, ["sending"], "scheduled");
       continue;
     }
-    const status = campaign.failed > 0 && campaign.sent === 0 ? "failed" : campaign.failed > 0 ? "partially_failed" : "completed";
+    // Inbox-only recipients (no device) are delivered to the inbox, not failed.
+    const delivered = campaign.sent + (campaign.inboxOnly || 0);
+    const status = campaign.failed > 0 && delivered === 0 ? "failed" : campaign.failed > 0 ? "partially_failed" : "completed";
     if (await CampaignModel.transition(campaign.campaign_id, ["sending"], status)) {
       await CampaignModel.audit({
         campaignId: campaign.campaign_id,
         actor: SYSTEM_ACTOR,
         action: "completed",
-        details: { status, sent: campaign.sent, failed: campaign.failed, skipped: campaign.skipped },
+        details: { status, firebase_accepted: campaign.sent, inbox_only: campaign.inboxOnly || 0, failed: campaign.failed, skipped: campaign.skipped },
       });
     }
   }
 }
 
-async function runCampaignWorkerOnce({ maxBatches = 10 } = {}) {
+let firebaseWaitLogged = false;
+
+async function runCampaignWorkerOnce({ maxBatches = 10, firebase = firebaseStatus } = {}) {
+  // Without Firebase credentials nothing can be pushed. Leave queued
+  // campaigns and recipients untouched (not failed, not discarded) so they
+  // are sent once push sending is configured.
+  if (!firebase.enabled) {
+    if (!firebaseWaitLogged) {
+      console.warn("[Campaign Worker] Firebase is not configured; queued campaigns are waiting.");
+      firebaseWaitLogged = true;
+    }
+    return { waiting: "firebase_disabled" };
+  }
+  firebaseWaitLogged = false;
   await activateDueCampaigns();
   for (let batch = 0; batch < maxBatches; batch += 1) {
     if (!(await processDueRecipients())) break;
   }
   await finalizeCampaigns();
+  return { waiting: null };
 }
 
 module.exports = {
   activateDueCampaigns,
   buildCampaignPayload,
+  buildDeliveryContext,
   finalizeCampaigns,
   processDueRecipients,
   processRecipient,

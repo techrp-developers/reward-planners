@@ -3,8 +3,8 @@ const NotificationTemplateModel = require("../models/notificationTemplateModel")
 const {
   TemplateRenderError,
   buildTemplateNotification,
-  checkPromotionalEligibility,
 } = require("./notificationTemplate");
+const { evaluateDeliveryPolicy, notificationCategory } = require("./notificationPolicy");
 const { runNonBlocking } = require("../../../utils/nonBlocking");
 const db = require("../../../config/database");
 const { getMessaging } = require("firebase-admin/messaging");
@@ -92,6 +92,39 @@ async function recordPushAttempts(rows) {
   }
 }
 
+// user_push_tokens.firebase_project_id (migration 20261028_01) remembers which
+// Firebase project accepted each device, so old-build devices go straight to
+// the legacy project. Without the column every device tries the primary first.
+let tokenProjectColumn = true;
+
+async function selectDeviceRows(userId) {
+  if (tokenProjectColumn) {
+    try {
+      const [rows] = await db.query(
+        `SELECT id, fcm_token, platform, firebase_project_id FROM user_push_tokens
+         WHERE user_id = ? AND is_active = 1 AND fcm_token IS NOT NULL`,
+        [userId],
+      );
+      return rows;
+    } catch (error) {
+      if (error.code !== "ER_BAD_FIELD_ERROR") throw error;
+      tokenProjectColumn = false;
+    }
+  }
+  const [rows] = await db.query(
+    `SELECT id, fcm_token, platform FROM user_push_tokens
+     WHERE user_id = ? AND is_active = 1 AND fcm_token IS NOT NULL`,
+    [userId],
+  );
+  return rows;
+}
+
+async function rememberTokenProject(tokenId, projectId) {
+  if (!tokenProjectColumn || !tokenId || !projectId) return;
+  await db.query("UPDATE user_push_tokens SET firebase_project_id = ? WHERE id = ?", [projectId, tokenId])
+    .catch((error) => console.error("[FCM Push] Could not record token project:", error.message));
+}
+
 async function getDeliveryTargets(userId) {
   const [[user]] = await db.query(
     "SELECT fcm_token FROM customer WHERE user_id = ? LIMIT 1",
@@ -101,11 +134,7 @@ async function getDeliveryTargets(userId) {
   let deviceRows = [];
   let legacyTokenTracked = false;
   try {
-    [deviceRows] = await db.query(
-      `SELECT id, fcm_token, platform FROM user_push_tokens
-       WHERE user_id = ? AND is_active = 1 AND fcm_token IS NOT NULL`,
-      [userId],
-    );
+    deviceRows = await selectDeviceRows(userId);
 
     if (user?.fcm_token) {
       const [[tracked]] = await db.query(
@@ -149,23 +178,28 @@ async function sendPushNotification(data, { notificationId = null } = {}) {
 
   const attemptRows = [];
   const results = await Promise.all(targets.map(async (target) => {
-    const message = buildPushMessage(data, target.token);
-    let projectId = firebaseStatus.projectId;
-    let outcome = await sendWithRetry(() => getMessaging().send(message));
-    for (const attempt of outcome.attempts) {
-      attemptRows.push({ ...target, ...attempt, userId, notificationId, projectId });
+    // notification_id lets the app report the tap and open the inbox item.
+    const message = buildPushMessage(notificationId ? { ...data, notification_id: notificationId } : data, target.token);
+
+    // Try the project this device is known to belong to first; on a
+    // SenderId mismatch try the other one. Tokens are never deactivated for
+    // belonging to another project.
+    const primary = { projectId: firebaseStatus.projectId, send: () => getMessaging().send(message) };
+    const legacy = legacyFirebaseStatus.enabled
+      ? { projectId: legacyFirebaseStatus.projectId, send: () => getMessaging(getApp(legacyFirebaseStatus.appName)).send(message) }
+      : null;
+    const order = legacy && target.firebaseProjectId === legacy.projectId ? [legacy, primary] : [primary, legacy].filter(Boolean);
+
+    let projectId = order[0].projectId;
+    let outcome = await sendWithRetry(order[0].send);
+    for (const attempt of outcome.attempts) attemptRows.push({ ...target, ...attempt, userId, notificationId, projectId });
+    if (!outcome.success && outcome.classification === "project_mismatch" && order[1]) {
+      projectId = order[1].projectId;
+      outcome = await sendWithRetry(order[1].send);
+      for (const attempt of outcome.attempts) attemptRows.push({ ...target, ...attempt, userId, notificationId, projectId });
     }
 
-    // Device still registered with the previous Firebase project: keep the
-    // token and deliver through the legacy app when one is configured.
-    if (!outcome.success && outcome.classification === "project_mismatch" && legacyFirebaseStatus.enabled) {
-      projectId = legacyFirebaseStatus.projectId;
-      outcome = await sendWithRetry(() => getMessaging(getApp(legacyFirebaseStatus.appName)).send(message));
-      for (const attempt of outcome.attempts) {
-        attemptRows.push({ ...target, ...attempt, userId, notificationId, projectId });
-      }
-    }
-
+    if (outcome.success && target.firebaseProjectId !== projectId) await rememberTokenProject(target.tokenId, projectId);
     if (!outcome.success && outcome.classification === "invalid_token") {
       await clearInvalidFcmToken(userId, target.token, getErrorCode(outcome.error) || outcome.error?.message);
     }
@@ -196,42 +230,79 @@ async function createInAppNotification(data) {
   return NotificationModel.create(buildNotificationPayload(data));
 }
 
+/**
+ * Tag promotional automatic events with their category so the daily limit
+ * counts them, exactly like campaign and template notifications.
+ */
+function withCategory(data) {
+  const category = notificationCategory(data);
+  if (category === "transactional" || data?.metadata?.category === category) return data;
+  return { ...data, metadata: { ...(data.metadata && typeof data.metadata === "object" ? data.metadata : {}), category } };
+}
+
+/** Pushes already accepted by FCM for this inbox row (attempt log). */
+async function acceptedPushCount(notificationId) {
+  if (!attemptLogAvailable || !notificationId) return 0;
+  try {
+    const [[row]] = await db.query(
+      "SELECT COUNT(*) AS total FROM notification_push_attempts WHERE notification_id = ? AND status = 'accepted'",
+      [notificationId],
+    );
+    return Number(row?.total || 0);
+  } catch (error) {
+    if (error.code === "ER_NO_SUCH_TABLE") return 0;
+    throw error;
+  }
+}
+
 function notifyUser(data, label = "notification") {
   const userId = data?.userId || data?.user_id;
   if (!userId) return;
 
-  const payload = buildNotificationPayload(data);
-
-  runNonBlocking(async () => {
-    const persisted = await createInAppNotification(payload);
-    // A duplicate terminal event should not produce another push either.
-    if (persisted?.created === false) return;
-    await sendPushNotification(payload, { notificationId: persisted?.notificationId });
-  }, label);
+  runNonBlocking(() => deliverNotification(data), label);
 }
 
 /**
- * Shared dispatch used by automatic module events, RM campaigns and the
- * campaign scheduler: persist the inbox row (idempotently), then push.
+ * Shared dispatch used by automatic module events, template sends, RM
+ * campaigns and the campaign scheduler: apply the delivery policy, persist the
+ * inbox row (idempotently), then push.
  *
- * `pushIfDuplicate` is for callers that track push state themselves (the
- * campaign queue): a retried recipient already has its inbox row, but its push
- * has not been accepted yet, so it must be attempted again without creating a
- * second notification.
+ * Options:
+ *  - policy: "enforce" (default) applies consent, quiet hours and daily limits
+ *    to promotional/announcement categories; "checked" is for callers that
+ *    already evaluated the same policy (the campaign worker, test sends).
+ *  - pushIfDuplicate: the campaign queue tracks push state itself, so a
+ *    retried recipient re-pushes for its existing inbox row ...
+ *  - ... unless that row already has an accepted push (a worker that crashed
+ *    after FCM accepted but before recording the result): no second push.
  */
-async function deliverNotification(data, { pushIfDuplicate = false } = {}) {
+async function deliverNotification(data, { pushIfDuplicate = false, policy = "enforce" } = {}) {
   const userId = data?.userId || data?.user_id;
   if (!userId) {
     return { success: false, skipped: true, reason: "missing_user_id" };
   }
 
-  const payload = buildNotificationPayload(data);
+  const tagged = withCategory(data);
+  if (policy === "enforce") {
+    const decision = await evaluateDeliveryPolicy(tagged);
+    if (!decision.allowed) {
+      return { success: false, skipped: true, reason: decision.reason, category: decision.category, resumeAt: decision.resumeAt };
+    }
+  }
+
+  const payload = buildNotificationPayload(tagged);
   const persisted = await createInAppNotification(payload);
   if (!persisted) {
     return { success: false, skipped: true, reason: "invalid_notification" };
   }
   if (persisted.created === false && !pushIfDuplicate) {
     return { success: false, skipped: true, reason: "duplicate", notificationId: persisted.notificationId };
+  }
+  if (persisted.created === false) {
+    const accepted = await acceptedPushCount(persisted.notificationId);
+    if (accepted) {
+      return { success: true, sent: accepted, failed: 0, results: [], alreadyAccepted: true, notificationId: persisted.notificationId, created: false };
+    }
   }
 
   const push = await sendPushNotification(payload, { notificationId: persisted.notificationId });
@@ -243,19 +314,6 @@ async function deliverNotification(data, { pushIfDuplicate = false } = {}) {
 // expected by request handlers.
 async function notifyUserAndWait(data) {
   return deliverNotification(data);
-}
-
-const PROMOTIONAL_DAILY_CAP = Number(process.env.NOTIFICATION_PROMO_DAILY_CAP || 2);
-const SCHEDULE_TIMEZONE = process.env.SCHEDULE_TIMEZONE || "Asia/Kolkata";
-
-function currentMinutesInTimezone() {
-  const [hour, minute] = new Intl.DateTimeFormat("en-GB", {
-    timeZone: SCHEDULE_TIMEZONE,
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).format(new Date()).split(":").map(Number);
-  return hour * 60 + minute;
 }
 
 /**
@@ -279,21 +337,9 @@ async function notifyUserFromTemplate(templateKey, options = {}) {
     return { success: false, skipped: true, reason: "template_disabled" };
   }
 
-  const isPromotional = ["marketing", "engagement"].includes(template.notification_type);
-  const preferences = isPromotional || !options.language
-    ? await NotificationTemplateModel.getPreferences(userId)
-    : null;
-
-  if (isPromotional) {
-    const eligibility = checkPromotionalEligibility({
-      category: template.notification_type,
-      preferences,
-      sentToday: preferences ? await NotificationTemplateModel.countPromotionalToday(userId) : 0,
-      dailyCap: PROMOTIONAL_DAILY_CAP,
-      nowMinutes: currentMinutesInTimezone(),
-    });
-    if (!eligibility.allowed) return { success: false, skipped: true, reason: eligibility.reason };
-  }
+  // Consent, quiet hours and the daily limit are applied by deliverNotification
+  // (the payload carries the template's category in metadata).
+  const preferences = options.language ? null : await NotificationTemplateModel.getPreferences(userId);
 
   let payload;
   try {
@@ -308,7 +354,7 @@ async function notifyUserFromTemplate(templateKey, options = {}) {
     return { success: false, skipped: true, reason: "missing_template_values", missing: error.missing };
   }
 
-  return notifyUserAndWait(payload);
+  return deliverNotification(payload);
 }
 
 module.exports = {

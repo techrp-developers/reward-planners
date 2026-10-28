@@ -8,6 +8,13 @@ function getTestUserIds(env = process.env) {
     .filter((id) => Number.isSafeInteger(id) && id > 0))];
 }
 
+// notifications.send_all_companies for specific RMs. Explicit allow-list:
+// tenant boundaries are never ignored implicitly.
+function getGlobalRmSenderIds(env = process.env) {
+  return new Set(String(env.NOTIFICATION_RM_GLOBAL_SENDER_IDS || "")
+    .split(",").map((value) => Number(value.trim())).filter((id) => Number.isSafeInteger(id) && id > 0));
+}
+
 class NotificationAudienceModel {
   /**
    * Company scope for a dashboard user, from verified data only:
@@ -20,6 +27,9 @@ class NotificationAudienceModel {
     }
     if (user?.role !== "rm") {
       return { role: user?.role || null, global: false, companyIds: [], assignmentsAvailable: false };
+    }
+    if (getGlobalRmSenderIds().has(Number(user.user_id))) {
+      return { role: "rm", global: true, companyIds: [], assignmentsAvailable: true };
     }
 
     try {

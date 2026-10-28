@@ -54,11 +54,12 @@ export default function SettingsTab({ meta, onRefresh }: { meta: ManagerMeta; on
           <Row label="Company access">
             {scope.global ? "All companies" : scope.assignmentsAvailable ? `${scope.companyCount} assigned compan${scope.companyCount === 1 ? "y" : "ies"}` : "Assignments not configured (test sends only)"}
           </Row>
-          <Row label="Campaign approval">{limits.selfApproval ? "Admins may approve their own campaigns" : "Approved by an admin other than the creator"}</Row>
+          <Row label="Sending authority">{meta.permissions.send ? "You send and schedule directly (no admin approval)" : "Not allowed to send campaigns"}</Row>
+          <Row label="Large-send confirmation">More than {limits.largeSendThreshold} recipients requires confirming the exact count</Row>
         </dl>
       </Card>
 
-      <Card title="Employee protections" subtitle="Applied to marketing and engagement campaigns; announcements are approval-gated.">
+      <Card title="Employee protections" subtitle="Applied to marketing and engagement campaigns; announcements still respect company scope and audit logging.">
         <dl className="divide-y divide-gray-100">
           <Row label="Consent">Only employees with a saved preference that opts in. No record means no consent.</Row>
           <Row label="Language">From the employee's app setting (notification_preferences.language); English if not approved</Row>
@@ -71,6 +72,8 @@ export default function SettingsTab({ meta, onRefresh }: { meta: ManagerMeta; on
         <dl className="divide-y divide-gray-100">
           <Row label="Campaign tables">{infrastructure.campaignTables ? <Tag tone="green">Installed</Tag> : <Tag tone="red">Missing (migration 20261027_01)</Tag>}</Row>
           <Row label="Push attempt log">{infrastructure.attemptsTable ? <Tag tone="green">Installed</Tag> : <Tag tone="amber">Missing (migration 20261026_02)</Tag>}</Row>
+          <Row label="Image library & destinations">{infrastructure.mediaTables ? <Tag tone="green">Installed</Tag> : <Tag tone="amber">Missing (migration 20261028_01)</Tag>}</Row>
+          <Row label="Approved image hosts"><span className="font-mono text-xs">{meta.imageHosts.join(", ")}</span></Row>
         </dl>
       </Card>
     </div>
