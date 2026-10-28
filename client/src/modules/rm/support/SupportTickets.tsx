@@ -22,6 +22,7 @@ interface Ticket {
   user_name: string | null;
   user_email: string | null;
   user_phone: string | null;
+  company_name: string | null;
   subject: string;
   description: string;
   category_id: number;
@@ -246,6 +247,7 @@ export default function SupportTickets() {
                 <tr style={{ background: "linear-gradient(90deg, rgba(133,43,175,0.04) 0%, rgba(252,63,120,0.02) 100%)" }}>
                   <th className="px-6 py-4 text-xs font-bold tracking-wider text-left text-gray-400 uppercase">Ticket</th>
                   <th className="px-6 py-4 text-xs font-bold tracking-wider text-left text-gray-400 uppercase">Customer</th>
+                  <th className="px-6 py-4 text-xs font-bold tracking-wider text-left text-gray-400 uppercase">Company</th>
                   <th className="px-6 py-4 text-xs font-bold tracking-wider text-left text-gray-400 uppercase">Category / Module</th>
                   <th className="px-6 py-4 text-xs font-bold tracking-wider text-left text-gray-400 uppercase">Status</th>
                   <th className="px-6 py-4 text-xs font-bold tracking-wider text-left text-gray-400 uppercase">Actions</th>
@@ -277,6 +279,10 @@ export default function SupportTickets() {
                       <p className="text-sm text-gray-700">{ticket.user_name ?? "Unknown"}</p>
                       <p className="text-xs text-gray-400 mt-0.5">{ticket.user_email || "No email"}</p>
                       <p className="text-xs text-gray-400">{ticket.user_phone || "No phone"}</p>
+                    </td>
+
+                    <td className="px-6 py-4">
+                      <p className="text-sm text-gray-700">{ticket.company_name ?? "—"}</p>
                     </td>
 
                     <td className="px-6 py-4">
@@ -376,6 +382,7 @@ export default function SupportTickets() {
               <div className="grid gap-3 sm:grid-cols-2">
                 {[
                   ["Customer", selectedTicket.user_name || "Unknown"],
+                  ["Company", selectedTicket.company_name || "Not provided"],
                   ["Email", selectedTicket.user_email || "Not provided"],
                   ["Phone", selectedTicket.user_phone || "Not provided"],
                   ["Category", selectedTicket.category_name || "Not specified"],

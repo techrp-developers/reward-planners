@@ -386,7 +386,10 @@ class SupportController {
         try {
           const placeholders = userIds.map(() => "?").join(",");
           const [rows] = await db.execute(
-            `SELECT user_id, name, email, phone FROM customer WHERE user_id IN (${placeholders})`,
+            `SELECT cu.user_id, cu.name, cu.email, cu.phone, co.company_name
+             FROM customer cu
+             LEFT JOIN companies co ON co.company_id = cu.company_id
+             WHERE cu.user_id IN (${placeholders})`,
             userIds,
           );
           rows.forEach((row) => users.set(Number(row.user_id), row));
@@ -413,6 +416,7 @@ class SupportController {
         user_name: users.get(Number(ticket.user_id))?.name || null,
         user_email: users.get(Number(ticket.user_id))?.email || null,
         user_phone: users.get(Number(ticket.user_id))?.phone || null,
+        company_name: users.get(Number(ticket.user_id))?.company_name || null,
         category_name: categories.get(Number(ticket.category_id)) || null,
         support_module: ticket.support_module || "general",
         reference_type: ticket.reference_type || null,
