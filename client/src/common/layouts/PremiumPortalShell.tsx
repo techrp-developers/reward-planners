@@ -8,26 +8,27 @@ type PremiumPortalShellProps = {
   roleLabel: string;
   userLabel?: string;
   children: ReactNode;
-  // "plain" uses a simple page backdrop and a compact themed header (used by HR).
+  // "plain" uses a simple page backdrop and a compact themed header (used by HR and RM).
   variant?: "premium" | "plain";
+  themeKey?: string;
 };
 
-export default function PremiumPortalShell({ sidebar, roleLabel, userLabel, children, variant = "premium" }: PremiumPortalShellProps) {
+export default function PremiumPortalShell({ sidebar, roleLabel, userLabel, children, variant = "premium", themeKey = "hr-theme" }: PremiumPortalShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { pathname } = useLocation();
   const plain = variant === "plain";
   const [darkMode, setDarkMode] = useState(() => {
-    try { return localStorage.getItem("hr-theme") === "dark"; }
+    try { return localStorage.getItem(themeKey) === "dark"; }
     catch { return false; }
   });
 
   useEffect(() => {
     if (!plain) return;
     document.body.classList.toggle("hr-dark", darkMode);
-    try { localStorage.setItem("hr-theme", darkMode ? "dark" : "light"); }
+    try { localStorage.setItem(themeKey, darkMode ? "dark" : "light"); }
     catch { /* Keep the toggle usable when browser storage is unavailable. */ }
     return () => document.body.classList.remove("hr-dark");
-  }, [plain, darkMode]);
+  }, [plain, darkMode, themeKey]);
 
   return (
     <div className={`role-portal min-h-screen ${plain ? "bg-[#f8f6fb] text-slate-900" : "bg-[#f7f6fa] text-slate-900"}`}>

@@ -67,15 +67,15 @@ export default function InactiveUsersReportPage() {
   };
 
   return (
-    <main className="min-h-full bg-gradient-to-br from-[#fdf8ff] via-white to-[#fff5f8] p-4 sm:p-6 lg:p-8">
-      <div className="mx-auto max-w-[1500px] space-y-6">
-        <header className="flex flex-col justify-between gap-5 rounded-3xl bg-gradient-to-br from-[#25103d] via-[#68258d] to-[#c33076] p-6 text-white sm:flex-row sm:items-center sm:p-8">
+    <main className="min-h-full">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <header className="flex flex-col justify-between gap-5 rounded-xl text-slate-900 sm:flex-row sm:items-center">
           <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-purple-200">RM analytics</p>
-            <h1 className="mt-2 flex items-center gap-3 text-2xl font-extrabold"><FiUsers /> Inactive Users Report</h1>
-            <p className="mt-2 text-sm text-purple-100">All employees marked inactive in the company directory.</p>
+            <p className="text-xs font-medium text-[#852BAF]">RM analytics</p>
+            <h1 className="mt-2 flex items-center gap-3 text-2xl font-semibold"><FiUsers /> Inactive Users Report</h1>
+            <p className="mt-2 text-sm text-slate-500">All employees marked inactive in the company directory.</p>
           </div>
-          <button disabled={loading || !!error || !filtered.length} onClick={download} className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-bold text-[#68258d] disabled:opacity-50"><FiDownload /> Download CSV</button>
+          <button disabled={loading || !!error || !filtered.length} onClick={download} className="inline-flex items-center justify-center gap-2 rounded-lg border border-purple-100 bg-white px-4 py-2.5 text-sm font-bold text-[#68258d] disabled:opacity-50"><FiDownload /> Download CSV</button>
         </header>
         <section className="rounded-2xl border border-purple-100 bg-white p-5">
           <p className="text-sm text-slate-500">Total inactive users</p>
@@ -89,7 +89,7 @@ export default function InactiveUsersReportPage() {
           </select>
           <button disabled={loading} onClick={() => void load()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#852BAF] px-5 py-3 text-sm font-bold text-white disabled:opacity-50"><FiRefreshCw className={loading ? "animate-spin" : ""} /> Refresh</button>
         </section>
-        <section className="overflow-hidden rounded-3xl border border-purple-100 bg-white">
+        <section className="overflow-hidden rounded-xl border border-purple-100 bg-white">
           {loading ? <p role="status" className="p-12 text-center text-slate-500">Loading inactive users...</p>
             : error ? <p role="alert" className="p-12 text-center text-red-600">{error}</p>
               : <>

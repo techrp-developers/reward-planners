@@ -26,7 +26,7 @@ const roleName = (role?: string) => (role || "portal").replaceAll("_", " ");
 export default function NotificationBell() {
   const { notifications, unreadCount, markAsRead, markAllAsRead, clearNotification, clearAll } = useNotification();
   const { user } = useAuth();
-  const isHr = user?.role === "hr";
+  const isSimplePortal = user?.role === "hr" || user?.role === "rm";
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -55,12 +55,12 @@ export default function NotificationBell() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className={isHr ? "relative grid h-9 w-9 cursor-pointer place-items-center rounded-lg text-slate-500 transition hover:bg-purple-50 hover:text-[#852BAF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#852BAF]" : "group relative grid h-11 w-11 cursor-pointer place-items-center rounded-2xl border border-purple-100 bg-white text-slate-500 shadow-sm transition-all hover:-translate-y-0.5 hover:border-purple-200 hover:text-[#852BAF] hover:shadow-md"}
+        className={isSimplePortal ? "relative grid h-9 w-9 cursor-pointer place-items-center rounded-lg text-slate-500 transition hover:bg-purple-50 hover:text-[#852BAF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#852BAF]" : "group relative grid h-11 w-11 cursor-pointer place-items-center rounded-2xl border border-purple-100 bg-white text-slate-500 shadow-sm transition-all hover:-translate-y-0.5 hover:border-purple-200 hover:text-[#852BAF] hover:shadow-md"}
         aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ""}`}
       >
         <FiBell size={19} className="transition-transform group-hover:rotate-6" />
         {unreadCount > 0 && (
-          <span className={`absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-white px-1 text-[9px] font-bold text-white ${isHr ? "bg-[#852BAF]" : "bg-gradient-to-br from-red-500 to-pink-600 shadow-sm"}`}>
+          <span className={`absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-white px-1 text-[9px] font-bold text-white ${isSimplePortal ? "bg-[#852BAF]" : "bg-gradient-to-br from-red-500 to-pink-600 shadow-sm"}`}>
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}
@@ -69,8 +69,8 @@ export default function NotificationBell() {
       {open && createPortal(
         <div className="fixed inset-0 z-[100]">
           <button type="button" aria-label="Close notifications" onClick={() => setOpen(false)} className="absolute inset-0 bg-slate-950/35 backdrop-blur-[2px]" />
-          <aside role="dialog" aria-modal="true" aria-labelledby="notification-title" className={`absolute inset-y-0 right-0 flex w-full max-w-[430px] animate-[slideInRight_.28s_ease-out] flex-col border-l border-purple-100 ${isHr ? "bg-white shadow-xl" : "bg-[#fbfaff] shadow-[-20px_0_60px_rgba(35,18,48,0.2)]"}`}>
-            {isHr ? (
+          <aside role="dialog" aria-modal="true" aria-labelledby="notification-title" className={`absolute inset-y-0 right-0 flex w-full max-w-[430px] animate-[slideInRight_.28s_ease-out] flex-col border-l border-purple-100 ${isSimplePortal ? "bg-white shadow-xl" : "bg-[#fbfaff] shadow-[-20px_0_60px_rgba(35,18,48,0.2)]"}`}>
+            {isSimplePortal ? (
               <div className="border-b border-slate-100 px-5 py-5 sm:px-6">
                 <div className="flex items-center justify-between gap-3">
                   <h2 id="notification-title" className="flex items-center gap-3 text-lg font-semibold text-slate-800">
@@ -99,17 +99,17 @@ export default function NotificationBell() {
 
             <div className="flex-1 overflow-y-auto p-4 sm:p-5">
               {notifications.length === 0 ? (
-                <div className="flex h-full min-h-72 flex-col items-center justify-center text-center"><div className={`grid h-14 w-14 place-items-center rounded-2xl bg-purple-50 ${isHr ? "text-[#852BAF]" : "text-purple-300"}`}><FiBell size={24} /></div><h3 className="mt-4 font-semibold text-slate-800">You're all caught up</h3><p className="mt-1 max-w-64 text-sm leading-6 text-slate-500">New updates will appear here.</p></div>
+                <div className="flex h-full min-h-72 flex-col items-center justify-center text-center"><div className={`grid h-14 w-14 place-items-center rounded-2xl bg-purple-50 ${isSimplePortal ? "text-[#852BAF]" : "text-purple-300"}`}><FiBell size={24} /></div><h3 className="mt-4 font-semibold text-slate-800">You're all caught up</h3><p className="mt-1 max-w-64 text-sm leading-6 text-slate-500">New updates will appear here.</p></div>
               ) : (
                 <div className="space-y-3">
                   {notifications.map((notification) => {
                     const Icon = CATEGORY_ICON[notification.category];
                     return (
-                      <article key={notification.id} onClick={() => handleNotificationClick(notification)} className={`group cursor-pointer border p-4 transition ${isHr ? "rounded-xl hover:border-purple-200" : "rounded-2xl shadow-sm hover:-translate-y-0.5 hover:shadow-md"} ${notification.read ? "border-slate-100 bg-white" : "border-purple-100 bg-purple-50/55"}`}>
+                      <article key={notification.id} onClick={() => handleNotificationClick(notification)} className={`group cursor-pointer border p-4 transition ${isSimplePortal ? "rounded-xl hover:border-purple-200" : "rounded-2xl shadow-sm hover:-translate-y-0.5 hover:shadow-md"} ${notification.read ? "border-slate-100 bg-white" : "border-purple-100 bg-purple-50/55"}`}>
                         <div className="flex items-start gap-3">
                           <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl border ${PRIORITY_STYLE[notification.priority]}`}><Icon size={17} /></div>
-                          <div className="min-w-0 flex-1"><div className="flex items-start gap-2"><h3 className={`flex-1 text-sm text-slate-900 ${isHr ? "font-semibold" : "font-extrabold"}`}>{notification.title}</h3>{!notification.read && <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${isHr ? "bg-[#852BAF]" : "bg-[#FC3F78] shadow-[0_0_0_3px_rgba(252,63,120,.12)]"}`} />}</div><p className="mt-1 text-xs leading-5 text-slate-500">{notification.message}</p><p className={`mt-2 text-slate-400 ${isHr ? "text-xs" : "text-[10px] font-bold uppercase tracking-wider"}`}>{timeAgo(notification.createdAt)}</p></div>
-                          <button type="button" onClick={(event) => { event.stopPropagation(); clearNotification(notification.id); }} className={`rounded-lg p-1.5 transition hover:bg-red-50 hover:text-red-500 ${isHr ? "text-slate-400" : "text-slate-300 opacity-0 group-hover:opacity-100 focus:opacity-100"}`} aria-label="Dismiss notification"><FiTrash2 size={14} /></button>
+                          <div className="min-w-0 flex-1"><div className="flex items-start gap-2"><h3 className={`flex-1 text-sm text-slate-900 ${isSimplePortal ? "font-semibold" : "font-extrabold"}`}>{notification.title}</h3>{!notification.read && <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${isSimplePortal ? "bg-[#852BAF]" : "bg-[#FC3F78] shadow-[0_0_0_3px_rgba(252,63,120,.12)]"}`} />}</div><p className="mt-1 text-xs leading-5 text-slate-500">{notification.message}</p><p className={`mt-2 text-slate-400 ${isSimplePortal ? "text-xs" : "text-[10px] font-bold uppercase tracking-wider"}`}>{timeAgo(notification.createdAt)}</p></div>
+                          <button type="button" onClick={(event) => { event.stopPropagation(); clearNotification(notification.id); }} className={`rounded-lg p-1.5 transition hover:bg-red-50 hover:text-red-500 ${isSimplePortal ? "text-slate-400" : "text-slate-300 opacity-0 group-hover:opacity-100 focus:opacity-100"}`} aria-label="Dismiss notification"><FiTrash2 size={14} /></button>
                         </div>
                       </article>
                     );
