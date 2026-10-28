@@ -1,3 +1,4 @@
+import BrandLogo from "../../../common/components/BrandLogo";
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
@@ -99,21 +100,9 @@ export default function AdminNavbar() {
   return (
     <nav className="premium-role-sidebar fixed top-0 left-0 flex flex-col w-64 h-full bg-white border-r border-gray-100 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
       {/* Branding */}
-      <div className="px-8 py-10">
+      <div className="px-6 py-5">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#852BAF] to-[#FC3F78] shadow-lg flex items-center justify-center text-white font-black italic">
-            R
-          </div>
-
-          <div>
-            <h1 className="text-xl font-black text-gray-900">
-              REWARDS
-            </h1>
-
-            <p className="text-[10px] uppercase font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#852BAF] to-[#FC3F78]">
-              Admin Portal
-            </p>
-          </div>
+          <div><BrandLogo /><p className="mt-1 text-xs font-medium text-[#852BAF]">Admin Portal</p></div>
         </div>
       </div>
 

@@ -1,9 +1,9 @@
+import BrandLogo from "../../common/components/BrandLogo";
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { FiGrid, FiUsers, FiBriefcase, FiHelpCircle, FiBarChart2, FiUser, FiKey, FiLogOut, FiChevronUp } from "react-icons/fi";
 import { useAuth } from "../../common/auth/useAuth";
 import { routes } from "../../routes";
-import logo from "../../common/assets/logo.svg";
 
 const groups = [
   { title: "Workspace", links: [
@@ -27,8 +27,8 @@ export default function RmSidebar() {
 
   return <nav aria-label="RM navigation" className="flex h-full w-64 flex-col border-r border-purple-100 bg-white">
     <div className="flex h-16 shrink-0 items-center gap-3 border-b border-purple-100 px-4">
-      <img src={logo} alt="" className="h-9 w-9 rounded-lg bg-white object-contain p-1" />
-      <div><p className="text-sm font-semibold text-slate-900">Reward Planners</p><p className="text-[11px] text-[#852BAF]">RM portal</p></div>
+      <BrandLogo className="w-32" />
+      <div><p className="text-[11px] text-[#852BAF]">RM portal</p></div>
     </div>
     <div className="flex-1 space-y-6 overflow-y-auto px-3 py-5">
       {groups.map(group => <div key={group.title}>

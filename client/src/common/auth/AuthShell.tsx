@@ -1,6 +1,6 @@
+import BrandLogo from "../components/BrandLogo";
 import type { ReactNode } from "react";
 import { Check } from "lucide-react";
-import logoImage from "../assets/logo.svg";
 
 type AuthShellProps = {
   eyebrow: string;
@@ -35,9 +35,7 @@ export default function AuthShell({
 
           <div className="relative z-10">
             <div className="inline-flex items-center gap-3 rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-md">
-              <div className="grid h-10 w-10 place-items-center rounded-xl bg-white shadow-lg shadow-purple-950/40">
-                <img src={logoImage} alt="Rewards portal" className="h-7 w-7 object-contain" />
-              </div>
+              <BrandLogo />
               <div>
                 <p className="text-sm font-bold tracking-wide">Rewards Portal</p>
                 <p className="text-[10px] uppercase tracking-[0.2em] text-purple-200">Your workspace</p>
@@ -76,10 +74,7 @@ export default function AuthShell({
           <div className="w-full max-w-[490px]">
             <div className="mb-8 lg:hidden">
               <div className="inline-flex items-center gap-2.5">
-                <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#180d26] shadow-lg">
-                  <img src={logoImage} alt="Rewards portal" className="h-7 w-7 object-contain brightness-0 invert" />
-                </span>
-                <span className="font-bold tracking-tight text-slate-900">Rewards Portal</span>
+                <BrandLogo />
               </div>
             </div>
 

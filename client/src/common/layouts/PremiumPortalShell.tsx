@@ -7,13 +7,15 @@ type PremiumPortalShellProps = {
   sidebar: ReactNode;
   roleLabel: string;
   userLabel?: string;
+  companyLogo?: string | null;
+  companyName?: string;
   children: ReactNode;
   // "plain" uses a simple page backdrop and a compact themed header (used by HR and RM).
   variant?: "premium" | "plain";
   themeKey?: string;
 };
 
-export default function PremiumPortalShell({ sidebar, roleLabel, userLabel, children, variant = "premium", themeKey = "hr-theme" }: PremiumPortalShellProps) {
+export default function PremiumPortalShell({ sidebar, roleLabel, userLabel, companyLogo, companyName, children, variant = "premium", themeKey = "hr-theme" }: PremiumPortalShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { pathname } = useLocation();
   const plain = variant === "plain";
@@ -39,7 +41,7 @@ export default function PremiumPortalShell({ sidebar, roleLabel, userLabel, chil
       </div>
       {sidebarOpen && <button aria-label="Close navigation" onClick={() => setSidebarOpen(false)} className="fixed inset-0 z-40 bg-slate-950/35 backdrop-blur-sm lg:hidden" />}
 
-      <PortalTopNavbar roleLabel={roleLabel} userLabel={userLabel} onOpenSidebar={() => setSidebarOpen(true)} plain={plain} darkMode={darkMode} onToggleTheme={() => setDarkMode(value => !value)} />
+      <PortalTopNavbar roleLabel={roleLabel} userLabel={userLabel} companyLogo={companyLogo} companyName={companyName} onOpenSidebar={() => setSidebarOpen(true)} plain={plain} darkMode={darkMode} onToggleTheme={() => setDarkMode(value => !value)} />
 
       <main className="relative min-h-screen min-w-0 overflow-x-hidden lg:ml-64">
         <div key={pathname} className="page-enter mx-auto w-full max-w-[1600px] p-4 sm:p-6 lg:p-8">

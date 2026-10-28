@@ -1,3 +1,4 @@
+import BrandLogo from "../../../common/components/BrandLogo";
 import { Link, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import {
@@ -21,7 +22,6 @@ import {
 } from "react-icons/fi";
 import { api } from "../../../common/api/api";
 import { useAuth } from "../../../common/auth/useAuth";
-import logo from "../../../common/assets/logo.svg";
 
 /* ================= TYPES ================= */
 interface NavLink {
@@ -120,24 +120,7 @@ export default function VendorNavbar({ isOpen = false, onClose }: VendorNavbarPr
       {/* ── BRAND LOGO ── */}
       <div className="px-6 pb-5 pt-7">
         <div className="flex items-center gap-3">
-          <div
-            className="flex items-center justify-center overflow-hidden h-11 w-11 rounded-2xl logo-glow-pulse"
-            style={{
-              background: "linear-gradient(135deg, #ffffff 0%, #fff5f8 100%)",
-              boxShadow: "0 6px 20px rgba(133,43,175,0.35)",
-            }}
-          >
-            <img src={logo} alt="Rewards Logo" className="object-contain w-7 h-7" />
-          </div>
-
-          <div>
-            <h1 className="text-[17px] font-extrabold text-gray-900 leading-none tracking-tight">
-              Reward Planners
-            </h1>
-            <p className="text-[9px] uppercase tracking-[0.18em] font-bold mt-1.5 gradient-text-brand">
-              Vendor Portal
-            </p>
-          </div>
+          <div className="min-w-0"><BrandLogo /><p className="mt-1 text-xs font-medium text-[#852BAF]">Vendor Portal</p></div>
           <button onClick={onClose} aria-label="Close navigation" className="ml-auto grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 lg:hidden">
             <FiX size={18} />
           </button>

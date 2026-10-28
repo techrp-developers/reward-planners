@@ -1,5 +1,6 @@
+import BrandLogo from "../../../common/components/BrandLogo";
 import { Link, useLocation } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   FiBarChart2,
   FiBriefcase,
@@ -13,7 +14,6 @@ import {
   FiUsers,
 } from "react-icons/fi";
 import { useAuth } from "../../../common/auth/useAuth";
-import { hrApi } from "../../../common/api/hrApi";
 import { Initials } from "../components/ui";
 
 interface NavLink {
@@ -49,15 +49,6 @@ export default function HrNavbar({ closeSidebar }: HrNavbarProps) {
   const { user, logout } = useAuth();
   const { pathname } = useLocation();
   const [accountOpen, setAccountOpen] = useState(false);
-  const [company, setCompany] = useState<{ company_name: string; company_logo: string | null } | null>(null);
-
-  useEffect(() => {
-    hrApi
-      .get("/employees/company-profile")
-      .then((response) => setCompany(response.data?.data || null))
-      .catch((error) => console.error("Unable to load company branding:", error));
-  }, []);
-
   const linkClass = (active: boolean) =>
     `group flex items-center gap-3 rounded-xl px-2 py-1.5 text-sm transition ${
       active
@@ -74,17 +65,8 @@ export default function HrNavbar({ closeSidebar }: HrNavbarProps) {
     <nav className="flex h-full w-64 flex-col border-r border-purple-100 bg-gradient-to-b from-white via-white to-[#fbf7fd]">
       {/* Company */}
       <div className="flex h-16 items-center gap-3 border-b border-purple-100 px-4">
-        {company?.company_logo ? (
-          <img src={company.company_logo} alt="" className="h-9 w-9 rounded-xl border border-purple-100 bg-white object-contain p-0.5" />
-        ) : (
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#852BAF] from-55% to-[#C13A8E] text-sm font-semibold text-white shadow-md shadow-purple-200">
-            {(company?.company_name || "R").charAt(0).toUpperCase()}
-          </span>
-        )}
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-slate-900">{company?.company_name || "Reward Planners"}</p>
-          <p className="text-[11px] font-medium text-[#852BAF]">HR portal</p>
-        </div>
+        <BrandLogo className="w-32" />
+        <p className="text-[11px] font-medium text-[#852BAF]">HR portal</p>
       </div>
 
       {/* Navigation */}

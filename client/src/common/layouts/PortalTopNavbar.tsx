@@ -4,13 +4,15 @@ import NotificationBell from "../notifications/components/NotificationBell";
 type PortalTopNavbarProps = {
   roleLabel: string;
   userLabel?: string;
+  companyLogo?: string | null;
+  companyName?: string;
   onOpenSidebar: () => void;
   plain?: boolean;
   darkMode?: boolean;
   onToggleTheme?: () => void;
 };
 
-export default function PortalTopNavbar({ roleLabel, userLabel, onOpenSidebar, plain, darkMode, onToggleTheme }: PortalTopNavbarProps) {
+export default function PortalTopNavbar({ roleLabel, userLabel, companyLogo, companyName, onOpenSidebar, plain, darkMode, onToggleTheme }: PortalTopNavbarProps) {
   if (plain) {
     return (
       <header className="sticky top-0 z-30 border-b border-purple-100 bg-white/90 backdrop-blur-md lg:ml-64">
@@ -33,11 +35,11 @@ export default function PortalTopNavbar({ roleLabel, userLabel, onOpenSidebar, p
             </button>
             <NotificationBell />
             {userLabel && (
-              <div className="hidden items-center gap-2.5 rounded-2xl border border-purple-100 bg-white py-1 pl-1 pr-3 shadow-[0_8px_24px_-14px_rgba(133,43,175,0.35)] sm:flex">
-                <span className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-[#852BAF] from-55% to-[#C13A8E] text-xs font-semibold text-white">
+              <div className={`${companyLogo ? "flex" : "hidden sm:flex"} items-center gap-2.5 rounded-2xl border border-purple-100 bg-white p-1 sm:pr-3 shadow-[0_8px_24px_-14px_rgba(133,43,175,0.35)]`}>
+                {companyLogo ? <img src={companyLogo} alt={`${companyName || "Company"} logo`} className="h-8 w-8 rounded-lg border border-purple-100 bg-white object-contain p-0.5" /> : <span className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-[#852BAF] from-55% to-[#C13A8E] text-xs font-semibold text-white">
                   {userLabel.charAt(0).toUpperCase()}
-                </span>
-                <span className="max-w-40 truncate text-sm font-medium text-slate-700">{userLabel}</span>
+                </span>}
+                <div className="hidden min-w-0 max-w-40 sm:block"><p className="truncate text-sm font-medium text-slate-700">{userLabel}</p>{companyName && <p className="truncate text-[11px] text-slate-500">{companyName}</p>}</div>
               </div>
             )}
           </div>
