@@ -1,4 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import ListPagination from "../../../common/components/ListPagination";
+import { useListPagination } from "../../../common/hooks/useListPagination";
+import { useMemo, useState } from "react";
 import { FiDownload, FiRefreshCw, FiUsers } from "react-icons/fi";
 import { api } from "../../../common/api/api";
 
@@ -19,27 +22,21 @@ const columns: [keyof InactiveUser, string][] = [
 ];
 
 export default function InactiveUsersReportPage() {
-  const [rows, setRows] = useState<InactiveUser[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [company, setCompany] = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const response = await api.get("/manager-reports/inactive-users");
-      setRows(response.data.rows || []);
-    } catch {
-      setRows([]);
-      setError("Unable to load inactive users. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { void load(); }, [load]);
+  const { data, isPending: loading, isFetching, isError, refetch: load } = useQuery({
+    queryKey: ["rm-inactive-employment-report"],
+    queryFn: async ({ signal }) => {
+      const response = await api.get("/manager-reports/inactive-users", { signal });
+      return (response.data.rows || []) as InactiveUser[];
+    },
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+  });
+  const rows = useMemo(() => data ?? [], [data]);
+  const error = isError ? "Unable to refresh inactive staff. Please try again." : "";
 
   const companies = useMemo(() => Array.from(new Map(rows.map((row) => [
     String(row.company_id ?? "unassigned"), row.company_name || "Unassigned",
@@ -49,6 +46,10 @@ export default function InactiveUsersReportPage() {
     return rows.filter((row) => (!company || String(row.company_id ?? "unassigned") === company)
       && columns.some(([key]) => String(row[key] ?? "").toLowerCase().includes(query)));
   }, [rows, search, company]);
+
+  const pagination = useListPagination(filtered.length, JSON.stringify([company, search]));
+  const start = (pagination.page - 1) * pagination.pageSize;
+  const pageRows = filtered.slice(start, start + pagination.pageSize);
 
   const download = () => {
     const escape = (value: unknown) => {
@@ -72,33 +73,35 @@ export default function InactiveUsersReportPage() {
         <header className="flex flex-col justify-between gap-5 rounded-xl text-slate-900 sm:flex-row sm:items-center">
           <div>
             <p className="text-xs font-medium text-[#852BAF]">RM analytics</p>
-            <h1 className="mt-2 flex items-center gap-3 text-2xl font-semibold"><FiUsers /> Inactive Users Report</h1>
-            <p className="mt-2 text-sm text-slate-500">All employees marked inactive in the company directory.</p>
+            <h1 className="mt-2 flex items-center gap-3 text-2xl font-semibold"><FiUsers /> Former / inactive staff</h1>
+            <p className="mt-2 text-sm text-slate-500">Employment marked inactive by HR, regardless of app activation or app account status.</p>
           </div>
           <button disabled={loading || !!error || !filtered.length} onClick={download} className="inline-flex items-center justify-center gap-2 rounded-lg border border-purple-100 bg-white px-4 py-2.5 text-sm font-bold text-[#68258d] disabled:opacity-50"><FiDownload /> Download CSV</button>
         </header>
         <section className="rounded-2xl border border-purple-100 bg-white p-5">
-          <p className="text-sm text-slate-500">Total inactive users</p>
-          <p className="mt-2 text-3xl font-bold text-slate-900">{loading || error ? "—" : rows.length}</p>
+          <p className="text-sm text-slate-500">Matching inactive staff</p>
+          <p className="mt-2 text-3xl font-bold text-slate-900">{loading || error ? "—" : filtered.length}</p>
         </section>
         <section className="flex flex-col gap-3 rounded-2xl border border-purple-100 bg-white p-4 md:flex-row">
           <input aria-label="Search inactive users" placeholder="Search name, email, phone or department..." value={search} onChange={(event) => setSearch(event.target.value)} className="min-w-0 flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm" />
           <select aria-label="Filter by company" value={company} onChange={(event) => setCompany(event.target.value)} className="rounded-xl border border-slate-200 px-4 py-3 text-sm">
             <option value="">All companies</option>
+            {company && !companies.some(([id]) => id === company) && <option value={company}>Selected company (no inactive staff)</option>}
             {companies.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
           </select>
-          <button disabled={loading} onClick={() => void load()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#852BAF] px-5 py-3 text-sm font-bold text-white disabled:opacity-50"><FiRefreshCw className={loading ? "animate-spin" : ""} /> Refresh</button>
+          <button disabled={isFetching} onClick={() => void load()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#852BAF] px-5 py-3 text-sm font-bold text-white disabled:opacity-50"><FiRefreshCw className={isFetching ? "animate-spin" : ""} /> Refresh</button>
         </section>
         <section className="overflow-hidden rounded-xl border border-purple-100 bg-white">
           {loading ? <p role="status" className="p-12 text-center text-slate-500">Loading inactive users...</p>
             : error ? <p role="alert" className="p-12 text-center text-red-600">{error}</p>
               : <>
-                <p className="px-5 py-4 text-sm text-slate-500">Showing {filtered.length} of {rows.length} inactive users. CSV includes the filtered results.</p>
+                <p className="px-5 py-4 text-sm text-slate-500">Showing {filtered.length} of {rows.length} inactive staff match the filters. Refreshes every 30 seconds. CSV includes all matching results.</p>
                 <div className="overflow-x-auto"><table className="min-w-full whitespace-nowrap text-left text-sm">
                   <thead className="bg-purple-50 text-xs uppercase text-slate-500"><tr>{columns.map(([key, label]) => <th key={key} className="px-5 py-4">{label}</th>)}</tr></thead>
-                  <tbody className="divide-y divide-slate-100">{filtered.map((row) => <tr key={row.id} className="hover:bg-purple-50/30">{columns.map(([key]) => <td key={key} className="px-5 py-4 text-slate-600">{row[key] ?? "—"}</td>)}</tr>)}</tbody>
+                  <tbody className="divide-y divide-slate-100">{pageRows.map((row) => <tr key={row.id} className="hover:bg-purple-50/30">{columns.map(([key]) => <td key={key} className="px-5 py-4 text-slate-600">{row[key] ?? "—"}</td>)}</tr>)}</tbody>
                 </table></div>
-                {!filtered.length && <p className="p-12 text-center text-sm text-slate-500">No inactive users found.</p>}
+                {!filtered.length && <p className="p-12 text-center text-sm text-slate-500">No inactive staff match these filters.</p>}
+                <ListPagination {...pagination} />
               </>}
         </section>
       </div>
