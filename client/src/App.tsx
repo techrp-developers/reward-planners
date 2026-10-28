@@ -32,6 +32,7 @@ const RmEmployeeDirectory = lazy(() => import("./modules/rm/employees/EmployeeDi
 const RmCompanyEmployees = lazy(() => import("./modules/rm/employees/CompanyEmployees.tsx"));
 const RmReportPage = lazy(() => import("./modules/rm/reports/RmReportPage.tsx"));
 const InactiveUsersReportPage = lazy(() => import("./modules/rm/reports/InactiveUsersReportPage.tsx"));
+const ModuleUsersReportPage = lazy(() => import("./modules/rm/reports/ModuleUsersReportPage.tsx"));
 const RmSupportTickets = lazy(() => import("./modules/rm/support/SupportTickets.tsx"));
 const RmClientApprovals = lazy(() => import("./modules/rm/clients/ClientApprovals.tsx"));
 const HrDashboard = lazy(() => import("./modules/hr/dashboard/HrDashboard.tsx"));
@@ -613,6 +614,7 @@ export default function App() {
         <Route path={routes.rm.employees} element={<RmEmployeeDirectory />} />
         <Route path={routes.rm.companyEmployees} element={<RmCompanyEmployees />} />
         <Route path={routes.rm.reports.usage} element={<RmReportPage />} />
+        <Route path={routes.rm.reports.usageUsers} element={<ModuleUsersReportPage />} />
         <Route path={routes.rm.reports.inactiveUsers} element={<InactiveUsersReportPage />} />
         <Route path={routes.rm.supportTickets} element={<RmSupportTickets />} />
         <Route path={routes.rm.clientApprovals} element={<RmClientApprovals />} />

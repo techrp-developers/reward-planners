@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { FiBarChart2, FiCalendar, FiDownload, FiRefreshCw } from "react-icons/fi";
+import { FiBarChart2, FiCalendar, FiChevronRight, FiDownload, FiRefreshCw } from "react-icons/fi";
+import { useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 import { api } from "../../../common/api/api";
+import { routes } from "../../../routes";
 
 type Row = Record<string, string | number | null>;
 const columns: [string, string][] = [
@@ -22,6 +24,13 @@ export default function RmReportPage() {
   const [loading, setLoading] = useState(true);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const navigate = useNavigate();
+
+  const openModuleUsers = (row: Row) => {
+    if (!row.key) return;
+    const query = fromDate && toDate ? `?${new URLSearchParams({ fromDate, toDate })}` : "";
+    navigate(`${routes.rm.reports.usageUsers.replace(":module", String(row.key))}${query}`);
+  };
 
   const load = useCallback(async () => {
     try {
@@ -114,16 +123,21 @@ export default function RmReportPage() {
             ) : (
               <table className="min-w-full whitespace-nowrap text-left">
                 <thead className="bg-purple-50/60 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                  <tr>{columns.map(([key, label]) => <th key={key} className="px-5 py-4">{label}</th>)}</tr>
+                  <tr>{columns.map(([key, label]) => <th key={key} className="px-5 py-4">{label}</th>)}<th className="px-5 py-4" /></tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {rows.map((row, index) => (
-                    <tr key={String(row.module || index)} className="hover:bg-purple-50/30">
+                    <tr key={String(row.module || index)} onClick={() => openModuleUsers(row)} className="cursor-pointer hover:bg-purple-50/30">
                       {columns.map(([key]) => (
                         <td key={key} className="px-5 py-4 text-sm text-slate-600">
                           <span className={key === "module" ? "font-bold text-slate-900" : ""}>{show(key, row[key])}</span>
                         </td>
                       ))}
+                      <td className="px-5 py-4 text-right">
+                        <button onClick={(e) => { e.stopPropagation(); openModuleUsers(row); }} className="inline-flex items-center gap-1 text-xs font-bold text-[#852BAF] hover:underline">
+                          View users <FiChevronRight />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

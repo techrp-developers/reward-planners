@@ -181,6 +181,7 @@ export const routes = {
     supportTickets: "/rm/support-tickets",
     reports: {
       usage: "/rm/reports/usage",
+      usageUsers: "/rm/reports/usage/:module",
       inactiveUsers: "/rm/reports/inactive-users",
     },
   },
