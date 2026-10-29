@@ -173,39 +173,28 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
     });
   }
 
-  function sendActivationOtpNotifications({ email, employee, otp }) {
-    setImmediate(() => {
-      if (email) {
-        sendOtpMail({
-          email,
-          name: employee.name,
-          otp,
-        }).catch((error) => {
-          console.error("Activation OTP email failed:", error);
-        });
+  async function sendActivationOtpNotifications({ email, employee, otp }) {
+    if (email) {
+      try {
+        await sendOtpMail({ email, name: employee.name, otp });
+        return true;
+      } catch {
+        console.error("Activation OTP email delivery failed");
+        return false;
       }
+    }
 
-      // Send to the channel the employee selected on the login screen.
-      if (email || !employee.phone) return;
-
-      enqueueWhatsApp({
-        eventName: "onbord_verify",
-        ctx: {
-          phone: employee.phone,
-          company_id: employee.company_id ?? null,
-          customer_name: employee.name || "User",
-          otp,
-        },
-      })
-        .then((result) => {
-          if (!result.ok) {
-            console.warn("Activation OTP WhatsApp not queued:", result);
-          }
-        })
-        .catch((error) => {
-          console.error("Activation OTP WhatsApp enqueue failed:", error);
-        });
+    const result = await enqueueWhatsApp({
+      eventName: "onbord_verify",
+      sendImmediately: true,
+      ctx: {
+        phone: employee.phone,
+        company_id: employee.company_id ?? null,
+        customer_name: employee.name || "User",
+        otp,
+      },
     });
+    return result.ok;
   }
 
   function sendForgotPasswordOtpNotifications({ email, user, otp }) {
@@ -429,11 +418,20 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
 
         await AuthModel.storeActivationOTP(identity.otpKey, otp);
 
-        sendActivationOtpNotifications({
+        const accepted = await sendActivationOtpNotifications({
           email: identity.email,
           employee,
           otp,
         });
+        if (!accepted) {
+          return res.status(503).json({
+            success: false,
+            code: "OTP_DELIVERY_FAILED",
+            message: identity.email
+              ? "Unable to send your login code by email. Please try again later."
+              : "WhatsApp login codes are currently unavailable. Please sign in using your registered email or contact support.",
+          });
+        }
 
         return res.json({
           success: true,
@@ -491,11 +489,20 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
 
         await AuthModel.storeActivationOTP(identity.otpKey, otp);
 
-        sendActivationOtpNotifications({
+        const accepted = await sendActivationOtpNotifications({
           email: identity.email,
           employee,
           otp,
         });
+        if (!accepted) {
+          return res.status(503).json({
+            success: false,
+            code: "OTP_DELIVERY_FAILED",
+            message: identity.email
+              ? "Unable to send your login code by email. Please try again later."
+              : "WhatsApp login codes are currently unavailable. Please sign in using your registered email or contact support.",
+          });
+        }
 
         return res.json({
           success: true,

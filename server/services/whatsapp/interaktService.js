@@ -48,10 +48,19 @@ async function sendTemplateMessage({
       },
       timeout: 15000,
     });
+    if (res.data?.result !== true) {
+      const error = new Error("INTERAKT_MESSAGE_REJECTED");
+      error.code = "INTERAKT_MESSAGE_REJECTED";
+      throw error;
+    }
     return res.data;
   } catch (err) {
-    console.log("❌ Interakt request failed:", JSON.stringify(payload));
-    console.log("❌ Interakt error response:", err.response?.status, err.response?.data);
+    // Never log the request body: authentication templates contain live OTPs.
+    console.error("Interakt template request failed", {
+      status: err.response?.status,
+      code: err.code,
+      templateName,
+    });
     throw err;
   }
 }
