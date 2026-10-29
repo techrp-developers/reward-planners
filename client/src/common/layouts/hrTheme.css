@@ -1,4 +1,17 @@
 /* Applied only while the HR shell is mounted; includes body-mounted dialogs. */
+/* Shared account forms also inherit the HR/RM dark palette. */
+.hr-dark .account-settings [role="alert"] {
+  background-color: #3c222a;
+  border-color: #73404d;
+  color: #f3a2ac;
+}
+
+.hr-dark .account-settings [role="status"] {
+  background-color: #18352b;
+  border-color: #315b49;
+  color: #86d9b1;
+}
+
 body.hr-dark {
   color-scheme: dark;
   background: #111018;
