@@ -14,7 +14,7 @@ type Kind = "category" | "service" | "variant";
 type Section = "categories" | "services" | "variants";
 
 const message = (error: unknown) => axios.isAxiosError(error) ? String(error.response?.data?.message || "Please try again.") : "Please try again.";
-const input = "mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100";
+const input = "mt-2 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100";
 
 export default function ServiceCatalogPage() {
   const { section = "categories" } = useParams();
@@ -80,18 +80,53 @@ export default function ServiceCatalogPage() {
   const canAdd = current === "categories" || current === "services" && Boolean(categoryId) || current === "variants" && Boolean(serviceId);
   if (!tabs.some((tab) => tab.key === current)) return <Navigate to={routes.service.catalog.replace(":section?", "categories")} replace />;
 
-  return <main className="space-y-6"><header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#25103d] via-[#68258d] to-[#c33076] p-7 text-white shadow-[0_24px_65px_rgba(91,33,124,0.24)]"><div className="absolute -right-16 -top-24 h-64 w-64 rounded-full bg-white/10 blur-2xl" /><div className="relative flex flex-wrap items-center justify-between gap-5"><div><p className="text-[10px] font-bold uppercase tracking-[0.24em] text-purple-200">Service catalogue</p><h1 className="mt-1 text-3xl font-black">{title}</h1><p className="mt-2 text-sm text-purple-100/80">Organise categories, services and their available variants.</p></div><button onClick={() => void refresh()} className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-bold hover:bg-white/20"><FiRefreshCw className={loading ? "animate-spin" : ""} /> Refresh</button></div></header>
-    <nav className="grid gap-2 rounded-2xl border border-purple-100 bg-white p-2 shadow-sm sm:grid-cols-3">{tabs.map((tab) => <Link key={tab.key} to={routes.service.catalog.replace(":section?", tab.key)} className={`rounded-xl px-4 py-3 text-center text-sm font-extrabold transition ${current === tab.key ? "bg-[#852BAF] text-white shadow" : "text-slate-500 hover:bg-purple-50 hover:text-[#852BAF]"}`}>{tab.label}</Link>)}</nav>
-    {current !== "categories" && <section className="grid gap-3 rounded-2xl border border-purple-100 bg-white p-4 shadow-sm md:grid-cols-2"><label className="text-xs font-bold text-slate-500">Category<select value={categoryId || ""} onChange={(event) => setCategoryId(Number(event.target.value))} className={input}>{categories.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>{current === "variants" && <label className="text-xs font-bold text-slate-500">Service<select value={serviceId || ""} onChange={(event) => setServiceId(Number(event.target.value))} className={input}>{services.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>}</section>}
-    <section className="overflow-hidden rounded-3xl border border-purple-100 bg-white shadow-[0_18px_55px_rgba(67,31,91,0.08)]"><div className="flex items-center justify-between border-b border-slate-100 px-6 py-5"><div><h2 className="font-black text-slate-900">{title}</h2><p className="mt-1 text-xs text-slate-400">{current === "services" ? `Category: ${selectedCategory?.name || "select a category"}` : current === "variants" ? `Service: ${selectedService?.name || "select a service"}` : `${categories.length} active categories`}</p></div><button disabled={!canAdd} onClick={() => openCreate(kind)} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-4 py-2.5 text-sm font-extrabold text-white shadow disabled:cursor-not-allowed disabled:opacity-40"><FiPlus /> Add {kind}</button></div>
-      <div className="p-5">{loading ? <div className="grid min-h-60 place-items-center"><FiRefreshCw className="animate-spin text-3xl text-[#852BAF]" /></div> : current === "categories" ? <Grid entities={categories} kind="category" edit={openEdit} remove={remove} /> : current === "services" ? <Grid entities={services} kind="service" edit={openEdit} remove={remove} /> : <Grid entities={variants} kind="variant" edit={openEdit} remove={remove} />}</div></section>
+  const entities = current === "categories" ? categories : current === "services" ? services : variants;
+  const description = current === "categories"
+    ? "Group related services into categories."
+    : current === "services" ? "Manage the services available within each category."
+    : "Manage pricing and options for the selected service.";
+
+  return <main className="space-y-5">
+    <header className="flex flex-wrap items-start justify-between gap-4">
+      <div><h1 className="text-2xl font-semibold text-slate-900">Service catalogue</h1><p className="mt-1 text-sm text-slate-500">Organise your categories, services and variants.</p></div>
+      <button onClick={() => void refresh()} disabled={loading} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 disabled:opacity-50"><FiRefreshCw className={loading ? "animate-spin" : ""} /> Refresh</button>
+    </header>
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <nav aria-label="Catalogue sections" className="flex overflow-x-auto border-b border-slate-200 px-4 sm:px-6">
+        {tabs.map(tab => <Link key={tab.key} aria-current={current === tab.key ? "page" : undefined} to={routes.service.catalog.replace(":section?", tab.key)} className={`shrink-0 border-b-2 px-4 py-4 text-sm font-medium transition-colors ${current === tab.key ? "border-[#852BAF] text-[#852BAF]" : "border-transparent text-slate-500 hover:text-slate-900"}`}>{tab.label}</Link>)}
+      </nav>
+      <div className="space-y-5 p-4 sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div><h2 className="text-lg font-semibold text-slate-900">{title}</h2><p className="mt-1 text-sm text-slate-500">{description}</p></div>
+          <button disabled={!canAdd} onClick={() => openCreate(kind)} className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-[#852BAF] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#6E2391] disabled:opacity-40"><FiPlus /> Add {kind}</button>
+        </div>
+        {current !== "categories" && <div className="grid gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2">
+          <label className="text-sm font-medium text-slate-600">Category<select value={categoryId || ""} onChange={event => setCategoryId(Number(event.target.value))} className={`${input} bg-white`} disabled={!categories.length}>{!categories.length && <option value="">No categories available</option>}{categories.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
+          {current === "variants" && <label className="text-sm font-medium text-slate-600">Service<select value={serviceId || ""} onChange={event => setServiceId(Number(event.target.value))} className={`${input} bg-white`} disabled={!services.length}>{!services.length && <option value="">No services available</option>}{services.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>}
+        </div>}
+        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500"><span>{entities.length} {current} loaded</span>{current !== "categories" && selectedCategory && <><span aria-hidden="true">/</span><span>{selectedCategory.name}</span></>}{current === "variants" && selectedService && <><span aria-hidden="true">/</span><span>{selectedService.name}</span></>}</div>
+        {loading ? <div role="status" className="flex min-h-48 items-center justify-center gap-2 text-sm text-slate-500"><FiRefreshCw className="animate-spin" /> Loading catalogue...</div> : <Grid entities={entities} kind={kind} edit={openEdit} remove={remove} canAdd={canAdd} />}
+      </div>
+    </section>
     {dialog && <Editor kind={dialog} entity={editing} saving={saving} close={() => { setDialog(null); setEditing(null); }} submit={submit} />}
   </main>;
 }
 
-function Grid({ entities, kind, edit, remove }: { entities: Entity[]; kind: Kind; edit: (kind: Kind, entity: Entity) => void; remove: (kind: Kind, entity: Entity) => void }) {
-  if (!entities.length) return <div className="grid min-h-56 place-items-center text-center text-sm text-slate-400">No {kind}s found. Use Add {kind} to create one.</div>;
-  return <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{entities.map((entity) => { const name = "name" in entity ? entity.name : entity.title; const subtitle = "variant_name" in entity ? entity.variant_name : "price" in entity ? `₹${Number(entity.price).toLocaleString("en-IN")}` : "Service category"; const image = "icon" in entity ? entity.icon : "service_image" in entity ? entity.service_image : entity.image_url; return <article key={entity.id} className="rounded-2xl border border-slate-100 p-4 transition hover:border-purple-200 hover:shadow-md"><div className="flex items-start gap-3"><span className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-purple-50 text-[#852BAF]">{image ? <img src={image} alt="" className="h-full w-full object-cover" /> : kind === "category" ? <FiTag /> : <FiLayers />}</span><div className="min-w-0 flex-1"><h3 className="truncate font-extrabold text-slate-900">{name}</h3><p className="mt-1 text-xs font-semibold text-slate-400">{subtitle}</p></div></div><div className="mt-4 flex gap-2 border-t border-slate-100 pt-3"><button onClick={() => edit(kind, entity)} className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-purple-50 px-3 py-2 text-xs font-bold text-[#852BAF] hover:bg-[#852BAF] hover:text-white"><FiEdit2 /> Edit</button><button onClick={() => void remove(kind, entity)} className="inline-flex items-center justify-center rounded-lg bg-red-50 px-3 py-2 text-red-600 hover:bg-red-600 hover:text-white" aria-label={`Remove ${name}`}><FiTrash2 /></button></div></article>; })}</div>;
+function Grid({ entities, kind, edit, remove, canAdd }: { entities: Entity[]; kind: Kind; edit: (kind: Kind, entity: Entity) => void; remove: (kind: Kind, entity: Entity) => void; canAdd: boolean }) {
+  if (!entities.length) return <div className="rounded-lg border border-dashed border-slate-200 px-6 py-12 text-center"><FiLayers className="mx-auto mb-3 text-slate-400" size={24} /><p className="font-medium text-slate-700">No {kind === "category" ? "categories" : `${kind}s`} yet</p><p className="mt-1 text-sm text-slate-500">{canAdd ? `Use Add ${kind} to create your first entry.` : kind === "service" ? "Create a category before adding services." : "Select a category with services before adding variants."}</p></div>;
+  return <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{entities.map(entity => {
+    const name = "name" in entity ? entity.name : entity.title;
+    const image = ("icon" in entity ? entity.icon : null) || ("service_image" in entity ? entity.service_image : null) || entity.image_url;
+    const description = "description" in entity ? entity.description : "short_description" in entity ? entity.short_description : null;
+    return <article key={entity.id} className="flex min-w-0 flex-col rounded-xl border border-slate-200 bg-white">
+      <div className="flex flex-1 flex-col gap-4 p-4">
+        <div className="flex items-start gap-3"><span className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-lg border border-slate-100 bg-slate-50 text-[#852BAF]">{image ? <img src={image} alt="" className="h-full w-full object-contain" /> : kind === "category" ? <FiTag size={20} /> : <FiLayers size={20} />}</span><div className="min-w-0"><h3 className="break-words text-sm font-semibold leading-6 text-slate-900">{name}</h3><p className="mt-1 break-words text-xs text-slate-500">{"variant_name" in entity ? entity.variant_name : kind === "category" ? "Service category" : "Service"}</p></div></div>
+        {description && <p className="line-clamp-3 text-sm leading-6 text-slate-500" title={description}>{description}</p>}
+        {"price" in entity && <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-2"><span className="text-sm font-semibold text-slate-900">{Number(entity.price).toLocaleString("en-IN", { style: "currency", currency: "INR" })}</span>{"estimated_days" in entity && entity.estimated_days != null && <span className="text-xs text-slate-500">{entity.estimated_days} days estimated</span>}</div>}
+      </div>
+      <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-4 py-3"><button onClick={() => edit(kind, entity)} className="inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-[#852BAF] hover:bg-purple-50"><FiEdit2 size={14} /> Edit</button><button onClick={() => void remove(kind, entity)} className="inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-500 hover:bg-red-50 hover:text-red-600" aria-label={`Remove ${name}`}><FiTrash2 size={14} /> Remove</button></div>
+    </article>;
+  })}</div>;
 }
 
 function Editor({ kind, entity, saving, close, submit }: { kind: Kind; entity: Entity | null; saving: boolean; close: () => void; submit: (event: React.FormEvent<HTMLFormElement>) => void }) {

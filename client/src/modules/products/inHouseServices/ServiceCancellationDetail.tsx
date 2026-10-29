@@ -91,7 +91,7 @@ export default function ServiceCancellationDetail() {
   return (
     <div className="min-h-screen p-6 md:p-10" style={{ background: "linear-gradient(160deg, #fdf8ff 0%, #fff5f8 50%, #f8f9ff 100%)" }}>
       <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
-        <button type="button" onClick={() => navigate(-1)} className="cursor-pointer rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-5 py-2.5 text-sm font-semibold text-white shadow-lg">← Back</button>
+        <button type="button" onClick={() => navigate(-1)} className="service-back-button cursor-pointer rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-5 py-2.5 text-sm font-semibold text-white shadow-lg">← Back</button>
         <h1 className="text-2xl font-bold text-gray-900 md:text-3xl">Service Cancellation Request</h1>
       </div>
 

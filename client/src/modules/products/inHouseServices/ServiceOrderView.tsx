@@ -257,7 +257,7 @@ const ServiceOrderView: React.FC = () => {
   }
 
   if (error) {
-    return <div className="grid min-h-[65vh] place-items-center bg-gradient-to-br from-[#fdf8ff] via-white to-[#fff5f8] p-6 text-center"><div><div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-red-50 text-red-500"><FiFileText size={24} /></div><h2 className="mt-4 text-xl font-extrabold text-slate-900">Order unavailable</h2><p className="mt-1 text-sm text-slate-500">{error}</p><button onClick={() => navigate(-1)} className="mt-5 rounded-xl bg-[#852BAF] px-5 py-2.5 text-sm font-bold text-white">Return to orders</button></div></div>;
+    return <div className="grid min-h-[65vh] place-items-center bg-gradient-to-br from-[#fdf8ff] via-white to-[#fff5f8] p-6 text-center"><div><div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-red-50 text-red-500"><FiFileText size={24} /></div><h2 className="mt-4 text-xl font-extrabold text-slate-900">Order unavailable</h2><p className="mt-1 text-sm text-slate-500">{error}</p><button onClick={() => navigate(-1)} className="service-back-button mt-5 rounded-xl bg-[#852BAF] px-5 py-2.5 text-sm font-bold text-white">Return to orders</button></div></div>;
   }
 
   if (!data) {
@@ -276,7 +276,7 @@ const ServiceOrderView: React.FC = () => {
       <div className="relative mb-6 flex items-center justify-between overflow-hidden rounded-3xl bg-gradient-to-br from-[#25103d] via-[#68258d] to-[#c33076] p-6 text-white shadow-[0_24px_65px_rgba(91,33,124,0.24)] sm:p-8">
         <button
           onClick={() => navigate(-1)}
-          className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-white/20"
+          className="service-back-button inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-white/20"
         >
           ← Back
         </button>

@@ -38,7 +38,7 @@ export default function ServicePartnerProfile() {
     return (
       <div className="max-w-3xl mx-auto py-16 text-center">
         <h2 className="text-xl font-bold text-gray-700">Service partner not found</h2>
-        <Link to={servicePartnerRoutes.list} className="text-[#852BAF] font-semibold mt-2 inline-block">
+        <Link to={servicePartnerRoutes.list} className="service-back-button text-[#852BAF] font-semibold mt-2 inline-block">
           Back to list
         </Link>
       </div>
@@ -49,7 +49,7 @@ export default function ServicePartnerProfile() {
     <div className="max-w-5xl mx-auto space-y-6 p-8">
       <Link
         to={servicePartnerRoutes.list}
-        className="inline-flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-[#852BAF]"
+        className="service-back-button inline-flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-[#852BAF]"
       >
         <FiArrowLeft /> Back to Service Partners
       </Link>

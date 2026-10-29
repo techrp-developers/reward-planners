@@ -33,6 +33,30 @@
 .service-manager-ui [class*="from-[#25103d]"] [class*="border-white/"] { border-color: var(--service-border); }
 .service-manager-ui [class*="from-[#25103d]"] [class*="bg-white/"] { background: var(--service-muted); }
 .service-manager-ui [class*="from-[#25103d]"] > [class*="blur-"] { display: none; }
+/* Former gradient headers must not retain white headings on light surfaces. */
+.service-manager-ui [class*="from-[#25103d]"] :is(h1, h2, h3) { color: var(--service-text); }
+.service-manager-ui .service-back-button,
+.service-manager-ui [class*="from-[#25103d]"] .service-back-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  min-height: 2.5rem;
+  flex-shrink: 0;
+  padding: .5rem .875rem;
+  border: 1px solid var(--service-border);
+  border-radius: .5rem;
+  background: var(--service-surface);
+  color: var(--service-text);
+  font-size: .875rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.service-manager-ui .service-back-button:hover,
+.service-manager-ui [class*="from-[#25103d]"] .service-back-button:hover {
+  background: var(--service-muted);
+  border-color: #a760c9;
+}
 .service-manager-ui :is(.font-black, .font-extrabold, .font-bold) { font-weight: 600; }
 .service-manager-ui h1 { font-size: 1.5rem; line-height: 2rem; letter-spacing: -.025em; }
 .service-manager-ui :is(.rounded-3xl, .rounded-2xl) { border-radius: .75rem; }
