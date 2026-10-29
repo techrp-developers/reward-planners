@@ -113,6 +113,7 @@ export default function ManagerNavbar() {
       type: "dropdown",
       children: [
         { label: "Order List", to: routes.manager.orders.orderList },
+        { label: "Returns & replacements", to: routes.manager.orders.returns },
         {
           label: "Cancellation Request",
           to: routes.manager.orders.cancellationRequest,
@@ -162,7 +163,7 @@ export default function ManagerNavbar() {
         animation: "slideInLeft 0.35s cubic-bezier(.22,.68,0,1.2) both",
       }}
     >
-      {/* ── BRAND LOGO ── */}
+      {/* â”€â”€ BRAND LOGO â”€â”€ */}
       <div className="px-6 pb-5 pt-7">
         <div className="flex items-center gap-3">
           <div className="min-w-0"><BrandLogo /><p className="mt-1 text-xs font-medium text-[#852BAF]">Manager Portal</p></div>
@@ -177,7 +178,7 @@ export default function ManagerNavbar() {
         />
       </div>
 
-      {/* ── MANAGER BADGE ── */}
+      {/* â”€â”€ MANAGER BADGE â”€â”€ */}
       {/* <div className="px-4 mb-2">
         <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold bg-purple-50 text-purple-700 border border-purple-100">
           <FiGrid className="shrink-0" size={13} />
@@ -186,8 +187,8 @@ export default function ManagerNavbar() {
         </div>
       </div> */}
 
-      {/* ── NOTIFICATIONS ── */}
-      {/* ── NAVIGATION ── */}
+      {/* â”€â”€ NOTIFICATIONS â”€â”€ */}
+      {/* â”€â”€ NAVIGATION â”€â”€ */}
       <div className="flex-1 px-3 space-y-0.5 overflow-y-auto vendor-sidebar-scroll pb-2">
         {navItems.map((item, i) => {
           const isDropdownOpen = openDropdown === item.label;
@@ -320,7 +321,7 @@ export default function ManagerNavbar() {
         })}
       </div>
 
-      {/* ── PROFILE SECTION ── */}
+      {/* â”€â”€ PROFILE SECTION â”€â”€ */}
       <div
         className="p-3 m-3 rounded-2xl"
         style={{

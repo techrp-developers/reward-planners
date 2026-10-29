@@ -374,6 +374,7 @@ export default function App() {
 
         {/* Orders */}
         <Route path={routes.manager.orders.orderList} element={<OrderList />} />
+        <Route path={routes.manager.orders.returns} element={<VendorReturnRequests manager />} />
 
         <Route path={routes.manager.orders.details} element={<OrderView />} />
         <Route path={routes.manager.reports.stock} element={<ManagerReportPage type="stock" />} />

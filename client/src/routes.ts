@@ -51,6 +51,7 @@ export const routes = {
     },
     orders:{
       orderList: "/manager/orders",
+      returns: "/manager/orders/returns",
       details: "/manager/order-view/:orderId",
       cancellationRequest: "/manager/cancellation-request",
       cancellationDetail: "/manager/cancellation-detail/:orderId",

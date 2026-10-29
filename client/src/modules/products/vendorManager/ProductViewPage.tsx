@@ -267,8 +267,8 @@ export default function ReviewProductPage() {
 
         product_status: raw.status ?? "",
         isDiscountEligible: raw.is_discount_eligible ?? 1,
-        isReturnable: raw.is_returnable ?? 1,
-        isReplaceable: raw.is_replaceable ?? 1,
+        isReturnable: Number(raw.is_returnable ?? 1),
+        isReplaceable: Number(raw.is_replaceable ?? 1),
         openBoxDelivery: Number(raw.open_box_delivery) || 0,
         returnWindowDays: raw.return_window_days ?? null,
 
@@ -549,7 +549,7 @@ export default function ReviewProductPage() {
   const customAttributeRows: { label: string; value: string }[] = Array.isArray(rawCustomAttributes)
     ? rawCustomAttributes.map((row: { label?: unknown; value?: unknown; values?: unknown }) => ({
         label: String(row.label ?? "Custom attribute"),
-        value: Array.isArray(row.values) ? row.values.map(String).join(", ") : String(row.value ?? "—"),
+        value: Array.isArray(row.values) ? row.values.map(String).join(", ") : String(row.value ?? "â€”"),
       }))
     : [];
 
@@ -730,7 +730,7 @@ export default function ReviewProductPage() {
                         <p
                           className={`text-sm font-semibold ${hasValue ? "text-gray-800" : "text-gray-300"}`}
                         >
-                          {hasValue ? values.join(", ") : "—"}
+                          {hasValue ? values.join(", ") : "â€”"}
                         </p>
                       </div>
                     );
@@ -858,7 +858,7 @@ export default function ReviewProductPage() {
                             ))}
                           </div>
                         ) : (
-                          <span className="text-xs text-gray-300">—</span>
+                          <span className="text-xs text-gray-300">â€”</span>
                         )}
                       </td>
 
@@ -899,11 +899,11 @@ export default function ReviewProductPage() {
                       </td>
 
                       <td className="px-4 py-3 text-gray-700">
-                        {variant.mrp ? `₹${variant.mrp}` : "—"}
+                        {variant.mrp ? `â‚¹${variant.mrp}` : "â€”"}
                       </td>
 
                       <td className="px-4 py-3 font-semibold text-gray-800">
-                        {variant.sale_price ? `₹${variant.sale_price}` : "—"}
+                        {variant.sale_price ? `â‚¹${variant.sale_price}` : "â€”"}
                       </td>
 
                       <td className="px-4 py-3">
@@ -927,7 +927,7 @@ export default function ReviewProductPage() {
                           ? new Date(
                               variant.manufacturing_date,
                             ).toLocaleDateString("en-IN")
-                          : "—"}
+                          : "â€”"}
                       </td>
 
                       <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
@@ -935,7 +935,7 @@ export default function ReviewProductPage() {
                           ? new Date(variant.expiry_date).toLocaleDateString(
                               "en-IN",
                             )
-                          : "—"}
+                          : "â€”"}
                       </td>
                     </tr>
                   ))}
@@ -1029,7 +1029,7 @@ export default function ReviewProductPage() {
             <FormInput
               id="delivery_sla"
               label="Delivery SLA"
-              value={`${product.deliverySlaMinDays} – ${product.deliverySlaMaxDays} days`}
+              value={`${product.deliverySlaMinDays} â€“ ${product.deliverySlaMaxDays} days`}
             />
             <FormInput
               id="shippingClass"

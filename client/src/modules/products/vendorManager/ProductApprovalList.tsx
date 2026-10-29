@@ -64,6 +64,10 @@ interface ProductItem {
   vendor_name: string;
   vendor_email: string;
   product_name: string;
+  open_box_delivery?: number;
+  is_returnable?: number;
+  is_replaceable?: number;
+  return_window_days?: number;
   brand_name: string;
   sale_price: number;
   vendor_price: number;
@@ -663,7 +667,7 @@ export default function ProductManagerList() {
           <div>
             <h2 className="text-3xl font-bold text-gray-900">Products</h2>
             <p className="mt-1 text-sm text-gray-500">
-              Manage your products, pricing, and stock — all in one place.
+              Manage your products, pricing, and stock â€” all in one place.
             </p>
           </div>
           </div>
@@ -852,7 +856,7 @@ export default function ProductManagerList() {
                           <FiBox />
                         </span>
                       )}
-                      <span className="min-w-0"><span className="line-clamp-2 text-sm font-semibold leading-snug text-gray-800 transition-colors group-hover:text-[#852BAF]">{product.product_name || "Unnamed Product"}</span><span className="mt-1 inline-flex rounded-md bg-purple-50 px-1.5 py-0.5 text-[10px] font-bold text-[#852BAF]">PRD-{product.product_id}</span></span>
+                      <span className="min-w-0"><span className="line-clamp-2 text-sm font-semibold leading-snug text-gray-800 transition-colors group-hover:text-[#852BAF]">{product.product_name || "Unnamed Product"}</span><span className="mt-1 inline-flex rounded-md bg-purple-50 px-1.5 py-0.5 text-[10px] font-bold text-[#852BAF]">PRD-{product.product_id}</span><span className="mt-2 block text-[11px] font-normal leading-5 text-slate-500">Open-box: {Number(product.open_box_delivery) === 1 ? "Yes" : "No"} ? Returns: {Number(product.is_returnable) === 1 ? "Yes" : "No"}<br />Replacement: {Number(product.is_replaceable) === 1 ? "Yes (video required)" : "No"}{(Number(product.is_returnable) === 1 || Number(product.is_replaceable) === 1) && <> ? {product.return_window_days || 0} days</>}</span></span>
                     </Link>
                   </td>
 
@@ -882,7 +886,7 @@ export default function ProductManagerList() {
                         {product.rejection_reason}
                       </span>
                     ) : (
-                      <span className="text-xs text-gray-300">—</span>
+                      <span className="text-xs text-gray-300">â€”</span>
                     )}
                   </td>
 
@@ -893,7 +897,7 @@ export default function ProductManagerList() {
                           month: "long",
                           year: "numeric",
                         })
-                      : "—"}
+                      : "â€”"}
                   </td>
 
                   <td className="px-4 py-4">
@@ -929,7 +933,7 @@ export default function ProductManagerList() {
                         </>
                       )}
 
-                      {/* Resubmission — brand purple */}
+                      {/* Resubmission â€” brand purple */}
                       <button
                         onClick={() => handleProductAction("request_resubmission", product)}
                         className="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-purple-50 border border-purple-200 text-[#852BAF] hover:bg-[#852BAF] hover:text-white hover:border-[#852BAF] transition-all shadow-sm cursor-pointer"

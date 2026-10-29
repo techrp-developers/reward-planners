@@ -9,6 +9,10 @@ router.get("/return-requests", authenticateToken, authorizeRoles("vendor"), retu
 router.get("/return-requests/:id", authenticateToken, authorizeRoles("vendor"), returnRequests.detail);
 router.patch("/return-requests/:id", authenticateToken, authorizeRoles("vendor"), returnRequests.review);
 
+router.get("/manager/return-requests", authenticateToken, authorizeRoles("vendor_manager", "admin"), returnRequests.list);
+router.get("/manager/return-requests/:id", authenticateToken, authorizeRoles("vendor_manager", "admin"), returnRequests.detail);
+router.patch("/manager/return-requests/:id", authenticateToken, authorizeRoles("vendor_manager", "admin"), returnRequests.review);
+
 // Get all orders
 router.get(
   "/order-list",

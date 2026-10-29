@@ -74,7 +74,7 @@ async function processUploadedFiles(
         fs.mkdirSync(videoFolder, { recursive: true });
       }
 
-      // move temp → video folder first
+      // move temp â†’ video folder first
       await moveFile(file.path, originalPath);
 
       const compressedFilename = `compressed-${Date.now()}.mp4`;
@@ -690,7 +690,7 @@ class ProductModel {
       );
 
       // The product may have been created with no attributes at all (so no
-      // row exists yet in product_attributes) — fall back to inserting one.
+      // row exists yet in product_attributes) â€” fall back to inserting one.
       if (result.affectedRows === 0) {
         await connection.execute(
           `INSERT INTO product_attributes (product_id, attributes) VALUES (?, ?)`,
@@ -1082,6 +1082,10 @@ class ProductModel {
         p.brand_name,
         p.manufacturer,
         p.product_name,
+        p.open_box_delivery,
+        p.is_returnable,
+        p.is_replaceable,
+        p.return_window_days,
         p.description,
         p.short_description,
         p.custom_category,
