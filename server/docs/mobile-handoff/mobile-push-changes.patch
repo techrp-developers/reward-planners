@@ -1,0 +1,324 @@
+diff --git a/App.tsx b/App.tsx
+index 7775396..7028d10 100644
+--- a/App.tsx
++++ b/App.tsx
+@@ -11,6 +11,7 @@ import { queryClient } from './src/query/queryClient';
+ import { AppThemeProvider } from "./src/theme/ThemeContext";
+ import NetworkGuard from './src/modules/common/noInternet/NetworkGuard';
+ import PushNotificationManager from './src/modules/common/notifications/PushNotificationManager';
++import { flushPendingNotification, navigationRef } from './src/modules/common/notifications/notificationRouting';
+ import { useFestivalIcon } from './src/hooks/useFestivalIcon';
+ type AuthModalStackParamList = {
+   Login: undefined;
+@@ -48,7 +49,14 @@ export default function App() {
+               <CartProvider>
+                 <CmsAppShellProvider>
+                   <NetworkGuard>
+-                    <NavigationContainer linking={linking}>
++                    {/* onReady/onStateChange replay a notification tap that
++                        arrived before login, terms or navigation were ready. */}
++                    <NavigationContainer
++                      ref={navigationRef}
++                      linking={linking}
++                      onReady={flushPendingNotification}
++                      onStateChange={flushPendingNotification}
++                    >
+                       <PushNotificationManager />
+                       <AlertContainer />
+                       <RootNavigator />
+diff --git a/index.js b/index.js
+index b85dd27..1df4787 100644
+--- a/index.js
++++ b/index.js
+@@ -8,6 +8,8 @@ import App from './App';
+ import { name as appName } from './app.json';
+ import { getMessaging, setBackgroundMessageHandler } from '@react-native-firebase/messaging';
+ import { getApps } from '@react-native-firebase/app';
++import notifee, { EventType } from '@notifee/react-native';
++import { openFromNotification } from './src/modules/common/notifications/notificationRouting';
+ 
+ if (getApps().length > 0) {
+   setBackgroundMessageHandler(getMessaging(), async remoteMessage => {
+@@ -17,6 +19,18 @@ if (getApps().length > 0) {
+   });
+ }
+ 
++// A Notifee notification (shown while the app was in the foreground) tapped
++// after the app went to the background. The dispatcher queues the tap until
++// navigation and login are ready.
++notifee.onBackgroundEvent(async ({ type, detail }) => {
++  if (type === EventType.PRESS && detail.notification?.data) {
++    const data = Object.fromEntries(
++      Object.entries(detail.notification.data).map(([key, value]) => [key, value == null ? undefined : String(value)]),
++    );
++    openFromNotification(data, 'background', detail.notification.id);
++  }
++});
++
+ enableScreens(true);
+ enableFreeze(true);
+ 
+diff --git a/src/modules/common/auth/context/AuthContext.tsx b/src/modules/common/auth/context/AuthContext.tsx
+index a11698d..8b142fa 100644
+--- a/src/modules/common/auth/context/AuthContext.tsx
++++ b/src/modules/common/auth/context/AuthContext.tsx
+@@ -17,6 +17,22 @@ import { fetchTermsStatus } from "../../../ecommerce/api/TermsConditionAPI";
+ import { isTokenExpiringSoon } from "../utils/jwtUtils";
+ import { secureDeleteItem, secureGetItem, secureSetItem } from "../services/secureStorage";
+ import { chatSocket } from "../../../chat/services/chatSocket";
++import { getApps } from "@react-native-firebase/app";
++import { getMessaging, getToken } from "@react-native-firebase/messaging";
++
++// This phone's FCM token, so logout deactivates only this device's pushes
++// (other devices of the same employee keep receiving). Never blocks logout.
++const currentFcmToken = async (): Promise<string | undefined> => {
++  if (getApps().length === 0) return undefined;
++  try {
++    return await Promise.race([
++      getToken(getMessaging()),
++      new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 3000)),
++    ]);
++  } catch {
++    return undefined;
++  }
++};
+ 
+ const REFRESH_TOKEN_KEY = "@rewardsplanners_refresh_token";
+ const DEVICE_ID_KEY = "@rewardsplanners_device_id";
+@@ -390,9 +406,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+ 
+     try {
+       const refreshToken = await secureGetItem(REFRESH_TOKEN_KEY);
++      const fcmToken = await currentFcmToken();
+ 
+       await api.post("/v1/auth/logout", {
+         refreshToken: refreshToken || undefined,
++        fcm_token: fcmToken || undefined,
+       });
+     } catch {
+       // logout local session even if API fails
+diff --git a/src/modules/common/notifications/PushNotificationManager.tsx b/src/modules/common/notifications/PushNotificationManager.tsx
+index 5335f13..f5033d3 100644
+--- a/src/modules/common/notifications/PushNotificationManager.tsx
++++ b/src/modules/common/notifications/PushNotificationManager.tsx
+@@ -1,4 +1,4 @@
+-import React, { useEffect, useMemo, useRef } from "react";
++import { useEffect, useMemo, useRef } from "react";
+ import { PermissionsAndroid, Platform } from "react-native";
+ import {
+   getInitialNotification,
+@@ -10,20 +10,23 @@ import {
+   registerDeviceForRemoteMessages,
+   type RemoteMessage,
+ } from "@react-native-firebase/messaging";
+-import notifee, { AndroidImportance, EventType } from "@notifee/react-native";
+-import { getApps } from "@react-native-firebase/app";
+-import { useNavigation } from "@react-navigation/native";
++import notifee, { AndroidImportance, AndroidStyle, EventType } from "@notifee/react-native";
++import { getApp, getApps } from "@react-native-firebase/app";
+ import api from "../auth/api/axios";
+ import { useAuth } from "../auth/context/AuthContext";
+ import { chatSocket } from "../../chat/services/chatSocket";
++import { openFromNotification, type PushData } from "./notificationRouting";
+ 
+ const CHANNEL_ID = "reward_planners_general";
+ 
+-const openNotificationCenter = (navigation: any) => {
++// The Firebase project this build is configured for (google-services.json /
++// GoogleService-Info.plist). Sent with the token so the backend routes pushes
++// through the matching project during the old -> new project migration.
++const firebaseProjectId = () => {
+   try {
+-    navigation.navigate("Notification");
+-  } catch (error) {
+-    __DEV__ && console.warn("[Push] Unable to open notification screen", error);
++    return getApps().length > 0 ? getApp().options.projectId : undefined;
++  } catch {
++    return undefined;
+   }
+ };
+ 
+@@ -32,36 +35,48 @@ const syncToken = async (token: string) => {
+   await api.post("/v1/auth/update-fcm-token", {
+     fcm_token: token,
+     device_platform: Platform.OS,
++    firebase_project_id: firebaseProjectId(),
+   });
+ };
+ 
+-const displayForegroundNotification = async (
+-  message: RemoteMessage,
+-) => {
+-  const title = message.notification?.title || message.data?.title || "Reward Planners";
+-  const body = message.notification?.body || message.data?.message || "You have a new notification";
++const toPushData = (data: RemoteMessage["data"] | Record<string, unknown> | undefined): PushData | undefined => {
++  if (!data) return undefined;
++  return Object.fromEntries(Object.entries(data).map(([key, value]) => [key, typeof value === "string" ? value : value == null ? undefined : String(value)]));
++};
++
++// Foreground only: in the background Android/FCM already shows the
++// notification, so displaying it again here would duplicate it.
++const displayForegroundNotification = async (message: RemoteMessage) => {
++  const data = toPushData(message.data) || {};
++  const title = message.notification?.title || data.title || "Reward Planners";
++  const body = message.notification?.body || data.message || "You have a new notification";
++  const imageUrl = data.image_url || message.notification?.android?.imageUrl;
+ 
+   await notifee.displayNotification({
++    // Same id for the same inbox item: a repeated delivery replaces, never stacks.
++    id: data.notification_id || message.messageId,
+     title: String(title),
+     body: String(body),
+-    data: message.data,
++    data,
+     android: {
+       channelId: CHANNEL_ID,
+       importance: AndroidImportance.HIGH,
+       pressAction: { id: "default" },
+       smallIcon: "ic_launcher",
+       sound: "default",
++      // Rich image when available; Notifee falls back to text if it fails to load.
++      ...(imageUrl ? { largeIcon: imageUrl, style: { type: AndroidStyle.BIGPICTURE, picture: imageUrl } } : {}),
+     },
+     ios: {
+       sound: "default",
+       foregroundPresentationOptions: { sound: true, banner: true, list: true, badge: true },
++      ...(imageUrl ? { attachments: [{ url: imageUrl }] } : {}),
+     },
+   });
+ };
+ 
+ export default function PushNotificationManager() {
+   const { isAuthenticated } = useAuth();
+-  const navigation = useNavigation<any>();
+   const initialNotificationHandled = useRef(false);
+   const firebaseMessaging = useMemo(
+     () => (getApps().length > 0 ? getMessaging() : null),
+@@ -115,24 +130,30 @@ export default function PushNotificationManager() {
+       );
+     });
+ 
+-    const unsubscribeOpened = onNotificationOpenedApp(firebaseMessaging, () => {
+-      openNotificationCenter(navigation);
++    // Background (app was running): FCM-displayed notification tapped.
++    const unsubscribeOpened = onNotificationOpenedApp(firebaseMessaging, message => {
++      openFromNotification(toPushData(message.data), "background", message.messageId);
+     });
+ 
+-    const unsubscribeNotifee = notifee.onForegroundEvent(({ type }) => {
+-      if (type === EventType.PRESS) openNotificationCenter(navigation);
++    // Foreground Notifee notification tapped.
++    const unsubscribeNotifee = notifee.onForegroundEvent(({ type, detail }) => {
++      if (type === EventType.PRESS) {
++        openFromNotification(toPushData(detail.notification?.data), "foreground", detail.notification?.id);
++      }
+     });
+ 
++    // Terminated: the app was launched by a tap. The dispatcher queues it
++    // until login/terms/navigation are ready, so no timers are needed.
+     if (!initialNotificationHandled.current) {
+       initialNotificationHandled.current = true;
+       getInitialNotification(firebaseMessaging).then(message => {
+-        if (message) setTimeout(() => openNotificationCenter(navigation), 250);
+-      });
++        if (message) openFromNotification(toPushData(message.data), "terminated", message.messageId);
++      }).catch(() => {});
+       notifee.getInitialNotification().then(initial => {
+         if (initial?.notification) {
+-          setTimeout(() => openNotificationCenter(navigation), 250);
++          openFromNotification(toPushData(initial.notification.data), "terminated", initial.notification.id);
+         }
+-      });
++      }).catch(() => {});
+     }
+ 
+     return () => {
+@@ -140,7 +161,7 @@ export default function PushNotificationManager() {
+       unsubscribeOpened();
+       unsubscribeNotifee();
+     };
+-  }, [firebaseMessaging, navigation]);
++  }, [firebaseMessaging]);
+ 
+   return null;
+ }
+diff --git a/src/modules/dashboard/notification/Notification.tsx b/src/modules/dashboard/notification/Notification.tsx
+index 0f715ef..a3221a5 100644
+--- a/src/modules/dashboard/notification/Notification.tsx
++++ b/src/modules/dashboard/notification/Notification.tsx
+@@ -25,6 +25,7 @@ import {
+   markNotificationAsRead,
+   type NotificationItem,
+ } from "./NotificationAPI";
++import { openFromNotification, parseRoute } from "../../common/notifications/notificationRouting";
+ 
+ type Nav = NativeStackNavigationProp<any>;
+ 
+@@ -182,6 +183,17 @@ function Notification() {
+       markNotificationAsRead(item.notification_id).catch(() => loadNotifications(true));
+     }
+ 
++    // Campaign notifications carry a validated destination route; the shared
++    // dispatcher opens it (or the inbox fallback) and records the open.
++    if (parseRoute(item.metadata?.target_route)) {
++      openFromNotification({
++        notification_id: String(item.notification_id),
++        target_route: JSON.stringify(item.metadata?.target_route),
++        destination_type: item.metadata?.destination_type,
++      }, "inbox");
++      return;
++    }
++
+     if (actionUrl === "/wallet") {
+       navigation.navigate("WalletHistory");
+       return;
+@@ -339,6 +351,15 @@ function Notification() {
+         showHelp={false}
+         isDark={isDark}
+       />
++      <TouchableOpacity
++        style={styles.settingsLink}
++        onPress={() => navigation.navigate("NotificationSettings")}
++        accessibilityRole="button"
++        accessibilityLabel="Notification settings"
++      >
++        <MaterialCommunityIcons name="cog-outline" size={16} color="#6D5AE6" />
++        <Text style={styles.settingsLinkText}>Notification settings</Text>
++      </TouchableOpacity>
+ 
+       {loading ? (
+         <View style={styles.centered}>
+@@ -443,6 +464,8 @@ function Notification() {
+ export default Notification;
+ 
+ const styles = StyleSheet.create({
++  settingsLink: { flexDirection: "row", alignItems: "center", alignSelf: "flex-end", gap: 6, paddingHorizontal: 16, paddingVertical: 8 },
++  settingsLinkText: { color: "#6D5AE6", fontSize: 13, fontWeight: "600" },
+   safe: {
+     flex: 1,
+     backgroundColor: "#F5F3FA",
+diff --git a/src/navigation/RootNavigator.tsx b/src/navigation/RootNavigator.tsx
+index 16c15b8..0c68e71 100644
+--- a/src/navigation/RootNavigator.tsx
++++ b/src/navigation/RootNavigator.tsx
+@@ -41,6 +41,7 @@ export type AppStackParamList = {
+   GlobalSearchScreen: undefined;
+   TrackOrders: undefined;
+   Notification: undefined;
++  NotificationSettings: undefined;
+   ServiceSearch: undefined;
+   WalletHistory: undefined;
+   HelpForm: { context?: 'dashboard' | 'ecommerce' | 'services' | 'bbps' | 'step_counter' } | undefined;
+@@ -288,6 +289,12 @@ function AppNavigator() {
+           require("../modules/dashboard/notification/Notification").default
+         }
+       />
++      <AppStack.Screen
++        name="NotificationSettings"
++        getComponent={() =>
++          require("../modules/dashboard/notification/NotificationSettings").default
++        }
++      />
+       
+ 
+     </AppStack.Navigator>

@@ -962,11 +962,19 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
           });
         }
 
-        await AuthModel.updateFcmToken(userId, fcm_token, normalizedPlatform || null);
+        // Updated app builds report which Firebase project issued the token
+        // (from their own Firebase config). Only known project ids are
+        // stored; older builds send nothing and the project stays unknown.
+        const { knownProjectIds } = require("../../../config/firebase");
+        const reportedProject = typeof req.body.firebase_project_id === "string" ? req.body.firebase_project_id.trim() : "";
+        const firebaseProjectId = reportedProject && knownProjectIds().has(reportedProject) ? reportedProject : null;
+
+        await AuthModel.updateFcmToken(userId, fcm_token, normalizedPlatform || null, firebaseProjectId);
 
         return res.json({
           success: true,
           message: "FCM token updated",
+          firebase_project_id: firebaseProjectId,
         });
       } catch (err) {
         console.error("Update FCM Token Error:", err.message);

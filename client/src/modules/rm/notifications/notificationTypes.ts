@@ -64,7 +64,11 @@ export interface ManagerMeta {
   firebase: {
     enabled: boolean; projectId: string | null; expectedProjectId: string | null; reason: string | null;
     legacyEnabled: boolean; legacyProjectId: string | null;
+    legacyTrackedProjectId?: string | null; legacyReason?: string | null;
+    credentialMode?: string | null; serviceAccountEmail?: string | null;
+    adcSource?: string | null; credentialCheck?: "pending" | "verified" | "unverified" | "failed" | null; checkedAt?: string | null;
   };
+  scheduler?: { running: boolean };
   permissions: { send: boolean; sendAllCompanies: boolean; approveTranslations: boolean };
   limits: { promotionalDailyCap: number; largeSendThreshold: number; employeeTimezone: string };
   infrastructure: { campaignTables: boolean; attemptsTable: boolean; mediaTables: boolean };

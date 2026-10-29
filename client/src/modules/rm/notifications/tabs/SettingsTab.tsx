@@ -26,12 +26,16 @@ export default function SettingsTab({ meta, onRefresh }: { meta: ManagerMeta; on
 
       <Card title="Firebase" subtitle="Credentials stay on the server; the dashboard only sees their status.">
         <dl className="divide-y divide-gray-100">
-          <Row label="Push sending">{firebase.enabled ? <Tag tone="green">Enabled</Tag> : <Tag tone="red">Disabled</Tag>}</Row>
+          <Row label="Push sending">{!firebase.enabled ? <Tag tone="red">Disconnected</Tag> : firebase.credentialCheck === "verified" ? <Tag tone="green">Connected (credentials verified)</Tag> : <Tag tone="amber">Enabled, credentials not yet verified</Tag>}</Row>
           <Row label="Primary project"><span className="font-mono">{firebase.projectId || "—"}</span></Row>
           <Row label="Expected project (FIREBASE_PROJECT_ID)"><span className="font-mono">{firebase.expectedProjectId || "not enforced"}</span></Row>
-          <Row label="Legacy project fallback">{firebase.legacyEnabled ? <span className="font-mono">{firebase.legacyProjectId}</span> : <span className="text-gray-500">not configured</span>}</Row>
+          <Row label="Legacy project fallback">{firebase.legacyEnabled ? <span className="font-mono">{firebase.legacyProjectId}</span> : firebase.legacyReason ? <Tag tone="red">{firebase.legacyReason}</Tag> : firebase.legacyTrackedProjectId ? <span className="text-xs text-gray-600"><span className="font-mono">{firebase.legacyTrackedProjectId}</span> tracked at registration; no credentials, so old-build devices are not reached</span> : <span className="text-gray-500">not configured</span>}</Row>
+          <Row label="Credentials">{firebase.credentialMode ? <span className="font-mono text-xs">{firebase.credentialMode}{firebase.serviceAccountEmail ? ` · ${firebase.serviceAccountEmail}` : ""}</span> : <span className="text-gray-500">none</span>}</Row>
+          {firebase.adcSource && <Row label="ADC source"><span className="font-mono text-xs">{firebase.adcSource}</span></Row>}
+          <Row label="Credential check">{firebase.credentialCheck === "verified" ? <Tag tone="green">Access token obtained</Tag> : firebase.credentialCheck === "pending" ? <Tag tone="amber">Checking…</Tag> : firebase.credentialCheck ? <Tag tone={firebase.credentialCheck === "failed" ? "red" : "amber"}>{firebase.credentialCheck === "failed" ? "Failed" : "Not verified (network)"}</Tag> : <span className="text-gray-500">not run</span>}{firebase.checkedAt && <span className="ml-2 text-xs text-gray-500">{new Date(firebase.checkedAt).toLocaleString()}</span>}</Row>
+          <Row label="Campaign scheduler">{meta.scheduler?.running ? <Tag tone="green">Running on this server</Tag> : <Tag tone="amber">Not running here (set ENABLE_LOCAL_SCHEDULED_JOBS=true locally)</Tag>}</Row>
         </dl>
-        {!firebase.enabled && firebase.reason && <div className="p-4"><Notice tone="red">{firebase.reason}</Notice></div>}
+        {firebase.reason && <div className="p-4"><Notice tone={firebase.enabled ? "amber" : "red"}>{firebase.reason}</Notice></div>}
         {projectMismatch && <div className="p-4"><Notice tone="red">Credentials do not match the expected project.</Notice></div>}
         <p className="px-5 pb-4 text-xs text-gray-500">Devices still registered with the old Firebase project are kept. Pushes to them use the legacy fallback when FIREBASE_LEGACY_SERVICE_ACCOUNT is configured.</p>
       </Card>

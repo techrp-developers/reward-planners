@@ -28,5 +28,6 @@ router.use("/status", statusRoutes);
 router.use("/polls", pollRoutes);
 router.use("/ota", otaRoutes);
 router.use("/rm/notifications", rmNotificationRoutes);
+router.use("/rm/assignments", require("./rmAssignmentRoute"));
 
 module.exports = router;

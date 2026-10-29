@@ -194,6 +194,8 @@ require("./routes/mountCrmRoutes")(app, dashboardRoute, fleaMarketRoute);
 // calls it through the /api/crm proxy. (It is also reachable at /v1/rm/... via
 // commonRoute; both paths use the dashboard session auth.)
 app.use("/api/crm/v1/rm/notifications", require("./app/common/routes/rmNotificationRoute"));
+// Admin-only RM -> company assignments that scope RM notification audiences.
+app.use("/api/crm/v1/rm/assignments", require("./app/common/routes/rmAssignmentRoute"));
 
 // App Routes 
 app.use("/v1", ecommerceRoute);

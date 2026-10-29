@@ -246,6 +246,8 @@ async function processRecipient(recipient, campaign, preferences, now = new Date
     return { status: "cancelled", skip_reason: "campaign_cancelled" };
   }
   if (campaign.expires_at && campaign.expires_at <= now) return { status: "skipped", skip_reason: "campaign_expired" };
+  // The creator's authority at delivery time (see recipientAuthority).
+  if (deps.blocked) return { status: "skipped", skip_reason: deps.blocked };
   const delivery = deps.delivery === undefined ? null : deps.delivery;
   if (delivery?.blocked) return { status: "skipped", skip_reason: delivery.blocked };
 
@@ -314,12 +316,56 @@ async function processRecipient(recipient, campaign, preferences, now = new Date
   return { ...base, status: "failed", attempts: Number(recipient.attempts || 0) + 1, devices_attempted: devices.length, devices_accepted: 0, last_error_code: errorCode };
 }
 
+/**
+ * Re-check, right before delivery, that each recipient is still within the
+ * campaign creator's current authority. Recipients are materialised when an
+ * occurrence starts, so a sender role or company assignment revoked after that
+ * (or before a retry) must still stop the push. Returns recipient_id -> reason
+ * for recipients that must be skipped.
+ */
+async function recipientAuthority(claimed, campaigns, deps = {}) {
+  const creatorOf = deps.currentCreator || currentCreator;
+  const getScope = deps.getScope || ((user) => AudienceModel.getScope(user));
+  const companiesOf = deps.companiesOf || (async (userIds) => {
+    const [rows] = await db.query(
+      `SELECT user_id, company_id FROM customer WHERE user_id IN (${userIds.map(() => "?").join(",")})`,
+      userIds,
+    );
+    return new Map(rows.map((row) => [Number(row.user_id), row.company_id == null ? null : Number(row.company_id)]));
+  });
+  const audit = deps.audit || ((entry) => CampaignModel.audit(entry));
+
+  const blocked = new Map();
+  for (const [campaignId, campaign] of campaigns) {
+    if (!campaign) continue;
+    const rows = claimed.filter((row) => row.campaign_id === campaignId);
+    const creator = await creatorOf(campaign);
+    let reason = null;
+    let outside = rows;
+    if (!canSendNotifications(creator)) {
+      reason = "sender_not_authorised";
+    } else {
+      const scope = await getScope(creator);
+      if (scope.global) continue;
+      const allowed = new Set(scope.companyIds.map(Number));
+      const companies = await companiesOf([...new Set(rows.map((row) => Number(row.user_id)))]);
+      outside = rows.filter((row) => !allowed.has(companies.get(Number(row.user_id))));
+      reason = "out_of_scope";
+    }
+    if (!outside.length) continue;
+    for (const row of outside) blocked.set(row.recipient_id, reason);
+    await audit({ campaignId, actor: SYSTEM_ACTOR, action: "send_blocked", decision: "denied", details: { reason, recipients: outside.length } });
+  }
+  return blocked;
+}
+
 async function processDueRecipients(now = new Date()) {
   const claimed = await CampaignModel.claimRecipients(BATCH_SIZE);
   if (!claimed.length) return 0;
 
   const campaigns = new Map();
   for (const id of new Set(claimed.map((row) => row.campaign_id))) campaigns.set(id, await CampaignModel.findById(id));
+  const blocked = await recipientAuthority(claimed, campaigns);
   const preferences = await loadPreferences([...new Set(claimed.map((row) => Number(row.user_id)))]);
   const contexts = new Map();
   for (const [id, campaign] of campaigns) {
@@ -339,6 +385,7 @@ async function processDueRecipients(now = new Date()) {
       try {
         update = await processRecipient(recipient, campaigns.get(recipient.campaign_id), preferences.get(Number(recipient.user_id)), now, {
           delivery: contexts.get(recipient.campaign_id) || null,
+          blocked: blocked.get(recipient.recipient_id) || null,
         });
       } catch (error) {
         console.error(`[Campaign Worker] Recipient ${recipient.recipient_id} failed:`, error.message);
@@ -403,6 +450,7 @@ module.exports = {
   finalizeCampaigns,
   processDueRecipients,
   processRecipient,
+  recipientAuthority,
   runCampaignWorkerOnce,
   upcomingRun,
 };

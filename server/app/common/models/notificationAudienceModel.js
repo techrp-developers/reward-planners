@@ -33,8 +33,11 @@ class NotificationAudienceModel {
     }
 
     try {
+      // Only active companies count: deactivating a company also ends RM access.
       const [rows] = await db.execute(
-        "SELECT company_id FROM rm_company_assignments WHERE rm_user_id = ?",
+        `SELECT a.company_id FROM rm_company_assignments a
+         INNER JOIN companies co ON co.company_id = a.company_id AND co.status = 1
+         WHERE a.rm_user_id = ?`,
         [user.user_id],
       );
       return { role: "rm", global: false, companyIds: rows.map((row) => Number(row.company_id)), assignmentsAvailable: true };

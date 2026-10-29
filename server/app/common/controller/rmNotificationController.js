@@ -240,9 +240,22 @@ class RmNotificationController {
             projectId: firebaseStatus.projectId,
             expectedProjectId: firebaseStatus.expectedProjectId,
             reason: firebaseStatus.reason,
+            credentialMode: firebaseStatus.credentialMode,
+            serviceAccountEmail: firebaseStatus.serviceAccountEmail,
+            adcSource: firebaseStatus.adcSource,
+            credentialCheck: firebaseStatus.credentialCheck,
+            checkedAt: firebaseStatus.checkedAt,
             legacyEnabled: legacyFirebaseStatus.enabled,
             legacyProjectId: legacyFirebaseStatus.projectId,
+            // Recognised at token registration even without legacy credentials.
+            legacyTrackedProjectId: process.env.FIREBASE_LEGACY_PROJECT_ID || null,
+            legacyReason: legacyFirebaseStatus.reason,
+            legacyCredentialMode: legacyFirebaseStatus.credentialMode,
+            legacyCredentialCheck: legacyFirebaseStatus.credentialCheck,
+            legacyCheckedAt: legacyFirebaseStatus.checkedAt,
           },
+          // Whether this server process runs the campaign scheduler.
+          scheduler: { running: require("../../../config/scheduledJobs").localJobsEnabled(process.env) },
           permissions: {
             send: canSendNotifications(req.user),
             sendAllCompanies: scope.global,
@@ -951,6 +964,10 @@ class RmNotificationController {
       if (!firebaseStatus.enabled) {
         return res.status(409).json({ success: false, code: "FIREBASE_UNAVAILABLE", message: "Push sending is not configured on the server, so a retry would fail again." });
       }
+      // Company access may have been revoked since the campaign was sent.
+      const scope = await AudienceModel.getScope(req.user);
+      const permission = checkAudiencePermission(campaign.audience_type, campaign.audience_filter, scope);
+      if (!permission.allowed) return deny(req, res, { action: "retry", campaignId: campaign.campaign_id, reason: permission.reason });
 
       const requeued = await CampaignModel.requeueFailedRecipients(campaign.campaign_id, campaign.occurrences_started, RETRYABLE_ERROR_CODES);
       if (!requeued) return res.status(409).json({ success: false, message: "No failed recipients are eligible for retry (permanent errors such as invalid devices are not retried)." });
