@@ -1,0 +1,57 @@
+/* Scoped here because enquiry and order components are shared by portals. */
+.service-manager-ui {
+  --service-surface: #fff;
+  --service-muted: #f7f6f9;
+  --service-border: #e2e8f0;
+  --service-text: #1e293b;
+  --service-secondary: #64748b;
+}
+.hr-dark .service-manager-ui {
+  --service-surface: #1c1926;
+  --service-muted: #292235;
+  --service-border: #3b3249;
+  --service-text: #e8e5ef;
+  --service-secondary: #b1a9c0;
+}
+.service-manager-ui > :is(main, div)[class*="min-h-"],
+.service-manager-ui > :is(main, div)[style*="linear-gradient"] {
+  background: transparent !important;
+  padding: 0;
+  min-height: auto;
+}
+.service-manager-ui [class*="bg-gradient-"] { background-image: none; }
+.service-manager-ui [class*="from-[#852BAF]"] { background-color: #852baf; }
+.service-manager-ui [class*="from-white"] { background-color: var(--service-surface); }
+.service-manager-ui [class*="from-[#25103d]"] {
+  background: var(--service-surface);
+  color: var(--service-text);
+  border: 1px solid var(--service-border);
+  border-radius: .75rem;
+  padding: 1.25rem;
+}
+.service-manager-ui [class*="from-[#25103d]"] [class*="text-purple-"] { color: var(--service-secondary); }
+.service-manager-ui [class*="from-[#25103d]"] [class*="border-white/"] { border-color: var(--service-border); }
+.service-manager-ui [class*="from-[#25103d]"] [class*="bg-white/"] { background: var(--service-muted); }
+.service-manager-ui [class*="from-[#25103d]"] > [class*="blur-"] { display: none; }
+.service-manager-ui :is(.font-black, .font-extrabold, .font-bold) { font-weight: 600; }
+.service-manager-ui h1 { font-size: 1.5rem; line-height: 2rem; letter-spacing: -.025em; }
+.service-manager-ui :is(.rounded-3xl, .rounded-2xl) { border-radius: .75rem; }
+.service-manager-ui [class*="shadow"] { box-shadow: none; }
+.service-manager-ui :is(section, article)[class*="border-purple-100"] { border-color: var(--service-border); }
+.service-manager-ui table { font-size: .875rem; }
+.service-manager-ui table thead { background: var(--service-muted); }
+.service-manager-ui table th { font-size: .75rem; font-weight: 600; text-transform: none; letter-spacing: normal; }
+.service-manager-ui table td { vertical-align: middle; }
+.service-manager-ui :is(input, select, textarea) { border-radius: .5rem; }
+.role-portal:has(.service-manager-ui) :is(button, a, input, select, textarea):focus-visible { outline: 2px solid #a760c9; outline-offset: 3px; }
+.role-portal:has(.service-manager-ui) :is(button:not(:disabled), a[href], select:not(:disabled)) { cursor: pointer; }
+.service-manager-ui button:disabled { cursor: not-allowed; }
+.hr-dark .service-manager-ui :is(.bg-green-50, .bg-emerald-50) { background-color: #18352b; }
+.hr-dark .service-manager-ui :is(.text-green-700, .text-emerald-600, .text-emerald-700) { color: #86d9b1; }
+.hr-dark .service-manager-ui .bg-amber-50 { background-color: #382d1b; }
+.hr-dark .service-manager-ui :is(.text-amber-600, .text-amber-700) { color: #e8c57e; }
+.hr-dark .service-manager-ui .bg-red-50 { background-color: #3c222a; }
+.hr-dark .service-manager-ui :is(.text-red-600, .text-red-700) { color: #f3a2ac; }
+@media (prefers-reduced-motion: reduce) {
+  .role-portal:has(.service-manager-ui) .page-enter { animation: none; }
+}

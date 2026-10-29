@@ -26,7 +26,7 @@ const roleName = (role?: string) => (role || "portal").replaceAll("_", " ");
 export default function NotificationBell() {
   const { notifications, unreadCount, markAsRead, markAllAsRead, clearNotification, clearAll } = useNotification();
   const { user } = useAuth();
-  const isSimplePortal = user?.role === "hr" || user?.role === "rm";
+  const isSimplePortal = user?.role === "hr" || user?.role === "rm" || user?.role === "service_manager";
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
 
