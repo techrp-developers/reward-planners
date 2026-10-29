@@ -18,6 +18,7 @@ export const routes = {
     },
     orders:{
       summary: "/vendor/orders/summary",
+      returns: "/vendor/orders/returns",
       details: "/vendor/orders/details/:orderId",
     },
     reports: {

@@ -181,6 +181,7 @@ interface ProductView {
   isDiscountEligible?: number;
   isReturnable?: number;
   isReplaceable?: number;
+  openBoxDelivery?: number;
   returnWindowDays?: number | null;
 
   deliverySlaMinDays?: number;
@@ -276,6 +277,7 @@ export default function ReviewProductPage() {
         isDiscountEligible: raw.is_discount_eligible ?? 1,
         isReturnable: raw.is_returnable ?? 1,
         isReplaceable: raw.is_replaceable ?? 1,
+        openBoxDelivery: Number(raw.open_box_delivery) || 0,
         returnWindowDays: raw.return_window_days ?? null,
 
         deliverySlaMinDays: raw.delivery_sla_min_days ?? 1,
@@ -921,6 +923,8 @@ export default function ReviewProductPage() {
                 readOnly
               />
 
+              <FormInput id="openBoxDelivery" label="Open-box delivery" value={product.openBoxDelivery === 1 ? "Yes" : "No"} readOnly />
+              <FormInput id="replacementVideo" label="Damaged-product video for replacement" value={product.isReplaceable === 1 ? "Required" : "Not applicable"} readOnly />
               <FormInput
                 label={RETURN_WINDOW_LABEL}
                 id="returnWindowDays"

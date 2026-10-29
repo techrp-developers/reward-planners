@@ -163,6 +163,7 @@ interface ProductData {
   isDiscountEligible: 1 | 0;
   isReturnable: 1 | 0;
   isReplaceable: 1 | 0;
+  openBoxDelivery: 1 | 0;
   returnWindowDays: string;
   deliveryMinDays: string;
   deliveryMaxDays: string;
@@ -186,6 +187,7 @@ const initialProductData: ProductData = {
   isDiscountEligible: 1,
   isReturnable: 1,
   isReplaceable: 1,
+  openBoxDelivery: 0,
   returnWindowDays: "",
   deliveryMinDays: "1",
   deliveryMaxDays: "3",
@@ -600,6 +602,7 @@ export default function ProductListingDynamic() {
       );
       formData.append("is_returnable", String(product.isReturnable));
       formData.append("is_replaceable", String(product.isReplaceable));
+      formData.append("open_box_delivery", String(product.openBoxDelivery));
       if ((product.isReturnable === 1 || product.isReplaceable === 1) && product.returnWindowDays)
         formData.append("return_window_days", product.returnWindowDays);
       formData.append("delivery_sla_min_days", product.deliveryMinDays);
@@ -1322,6 +1325,12 @@ export default function ProductListingDynamic() {
               </select>
             </div>
 
+
+              <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-purple-100 bg-purple-50/40 p-4 text-sm text-slate-700">
+                <input type="checkbox" checked={product.openBoxDelivery === 1} onChange={event => setProduct(prev => ({ ...prev, openBoxDelivery: event.target.checked ? 1 : 0 }))} className="h-4 w-4 accent-[#852BAF]" />
+                <span><span className="block font-semibold">Open-box delivery</span><span className="block text-xs text-slate-500">Allow the customer to inspect the product at delivery.</span></span>
+              </label>
+              {product.isReplaceable === 1 && <p className="rounded-xl border border-purple-100 bg-purple-50/40 p-4 text-sm text-slate-600">Customers must upload a video showing the damaged product when requesting a replacement.</p>}
             <div>
               <label className={labelCls}>Returnable</label>
               <select

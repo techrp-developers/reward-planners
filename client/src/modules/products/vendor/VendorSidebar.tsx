@@ -87,8 +87,11 @@ export default function VendorNavbar({ isOpen = false, onClose }: VendorNavbarPr
     },
     isApproved && {
       label: "Orders",
-      to: "/vendor/orders/summary",
       Icon: FiShoppingCart,
+      children: [
+        { label: "All orders", to: "/vendor/orders/summary", Icon: FiShoppingCart },
+        { label: "Returns & replacements", to: "/vendor/orders/returns", Icon: FiPackage },
+      ],
     },
     isApproved && {
       label: "Reports",

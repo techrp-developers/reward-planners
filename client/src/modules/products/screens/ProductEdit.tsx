@@ -151,6 +151,7 @@ interface ProductData {
   isDiscountEligible: 1 | 0;
   isReturnable: 1 | 0;
   isReplaceable: 1 | 0;
+  openBoxDelivery: 1 | 0;
   returnWindowDays: string;
 
   deliveryMinDays: string;
@@ -176,6 +177,7 @@ const initialProductData: ProductData = {
   isDiscountEligible: 1,
   isReturnable: 1,
   isReplaceable: 1,
+  openBoxDelivery: 0,
   returnWindowDays: "",
 
   deliveryMinDays: "1",
@@ -663,6 +665,7 @@ export default function EditProductPage() {
         isDiscountEligible: p.is_discount_eligible ?? 1,
         isReturnable: p.is_returnable ?? 1,
         isReplaceable: p.is_replaceable ?? 1,
+        openBoxDelivery: Number(p.open_box_delivery) === 1 ? 1 : 0,
         returnWindowDays: p.return_window_days
           ? String(p.return_window_days)
           : "",
@@ -847,6 +850,7 @@ export default function EditProductPage() {
       formData.append("is_returnable", String(product.isReturnable));
 
       formData.append("is_replaceable", String(product.isReplaceable));
+      formData.append("open_box_delivery", String(product.openBoxDelivery));
 
       if (product.isReturnable === 1 || product.isReplaceable === 1) {
         formData.append("return_window_days", product.returnWindowDays);
@@ -1436,6 +1440,12 @@ export default function EditProductPage() {
                   </select>
                 </div>
 
+
+              <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-purple-100 bg-purple-50/40 p-4 text-sm text-slate-700">
+                <input type="checkbox" checked={product.openBoxDelivery === 1} onChange={event => setProduct(prev => ({ ...prev, openBoxDelivery: event.target.checked ? 1 : 0 }))} className="h-4 w-4 accent-[#852BAF]" />
+                <span><span className="block font-semibold">Open-box delivery</span><span className="block text-xs text-slate-500">Allow the customer to inspect the product at delivery.</span></span>
+              </label>
+              {product.isReplaceable === 1 && <p className="rounded-xl border border-purple-100 bg-purple-50/40 p-4 text-sm text-slate-600">Customers must upload a video showing the damaged product when requesting a replacement.</p>}
                 {/* Returnable */}
                 <div>
                   <label className="block mb-1 text-sm font-medium text-gray-700">

@@ -3,6 +3,18 @@ const router = express.Router();
 const OrderController = require("../controllers/orderController");
 const auth = require("../../../common/middlewares/auth");
 
+const returnRequests = require("../../../../controllers/returnRequestController");
+const multer = require("multer");
+const evidenceUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024, files: 1, fields: 5 }, fileFilter: (req, file, cb) => {
+  if (!["video/mp4", "video/quicktime", "video/webm"].includes(file.mimetype)) return cb(new Error("Upload an MP4, MOV or WebM video"));
+  cb(null, true);
+} }).single("video");
+router.get("/return-requests", auth, returnRequests.customerList);
+router.post("/items/:orderItemId/return-request", auth, (req, res, next) => evidenceUpload(req, res, error => {
+  if (error) return res.status(error.code === "LIMIT_FILE_SIZE" ? 413 : 400).json({ success: false, message: error.code === "LIMIT_FILE_SIZE" ? "Video must be no larger than 50 MB" : error.message });
+  next();
+}), returnRequests.create);
+
 // Get all orders
 router.get("/orders-history", auth, OrderController.getOrderHistory);
 

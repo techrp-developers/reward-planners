@@ -85,6 +85,7 @@ const AdminProductViewPage = lazy(() => import("./modules/admin/products/AdminPr
 const NotFoundPage = lazy(() => import("./common/auth/NotFound.tsx"));
 
 // Vendor Orders
+const VendorReturnRequests = lazy(() => import("./modules/products/vendor/ReturnRequests"));
 const OrderSummary = lazy(() => import("./modules/products/vendor/OrderSummary.tsx"));
 const OrderDetail = lazy(() => import("./modules/products/vendor/OrderDetail.tsx"));
 const VendorReportPage = lazy(() => import("./modules/products/vendor/reports/VendorReportPage.tsx"));
@@ -291,6 +292,7 @@ export default function App() {
 
         {/* Orders */}
         <Route path={routes.vendor.orders.summary} element={<OrderSummary />} />
+        <Route path={routes.vendor.orders.returns} element={<VendorReturnRequests />} />
 
         <Route path={routes.vendor.orders.details} element={<OrderDetail />} />
         <Route path={routes.vendor.reports.stock} element={<VendorReportPage type="stock" />} />
