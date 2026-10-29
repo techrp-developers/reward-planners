@@ -30,39 +30,6 @@ function setup({ item, existing, affectedRows = 1 } = {}) {
   const req = { user: { user_id: 5, vendor_id: 9, role: "vendor" }, params: { orderItemId: "7", id: "42" }, body: { request_type: "replacement", reason: "Arrived damaged" }, file: { buffer: Buffer.from("0000ftypisom0000"), mimetype: "video/mp4" } };
   return { controller: exports, calls, req, res };
 }
-const eligible = { order_item_id: 7, vendor_id: 9, is_replaceable: 1, is_returnable: 1, return_window_days: 7, delivered_at: new Date(Date.now() - 86400000).toISOString() };
-
-test("replacement requires video before querying the database", async () => {
-  const s = setup(); delete s.req.file; await s.controller.create(s.req, s.res);
-  assert.equal(s.res.code, 400); assert.equal(s.calls.length, 0);
-});
-test("non-video content is rejected", async () => {
-  const s = setup(); s.req.file.buffer = Buffer.from("not a video"); await s.controller.create(s.req, s.res);
-  assert.equal(s.res.code, 400); assert.equal(s.calls.length, 0);
-});
-test("ownership and eligibility are checked before upload", async () => {
-  for (const item of [undefined, { ...eligible, is_replaceable: 0 }, { ...eligible, delivered_at: null }, { ...eligible, delivered_at: new Date(Date.now() - 9 * 86400000).toISOString() }]) {
-    const s = setup({ item }); await s.controller.create(s.req, s.res);
-    assert.equal(s.res.code, 400); assert.ok(!s.calls.includes("upload"));
-    const check = s.calls.find(c => c.sql?.includes("FOR UPDATE"));
-    assert.match(check.sql, /o.user_id = \?/); assert.equal(check.params[1], 5);
-    assert.ok(s.calls.includes("rollback"));
-  }
-});
-test("duplicate request does not upload another video", async () => {
-  const s = setup({ item: eligible, existing: { request_id: 12 } }); await s.controller.create(s.req, s.res);
-  assert.equal(s.res.code, 409); assert.ok(!s.calls.includes("upload"));
-});
-test("eligible replacement persists video and vendor ownership", async () => {
-  const s = setup({ item: eligible }); await s.controller.create(s.req, s.res);
-  assert.equal(s.res.code, 201); assert.ok(s.calls.includes("commit"));
-  const insert = s.calls.find(c => c.sql?.startsWith("INSERT"));
-  assert.equal(insert.params[1], 9); assert.equal(insert.params[5], "private/evidence");
-});
-test("return requests allow no video", async () => {
-  const s = setup({ item: eligible }); s.req.body.request_type = "return"; delete s.req.file;
-  await s.controller.create(s.req, s.res); assert.equal(s.res.code, 201);
-});
 test("review is scoped to vendor and pending state", async () => {
   const s = setup(); s.req.body = { status: "approved" }; await s.controller.review(s.req, s.res);
   assert.equal(s.res.code, 200); assert.match(s.calls[0].sql, /vendor_id = \? AND status = 'pending'/); assert.equal(s.calls[0].params[3], 9);

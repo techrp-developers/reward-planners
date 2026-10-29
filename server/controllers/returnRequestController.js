@@ -1,8 +1,5 @@
 const db = require("../config/database");
-const { randomUUID } = require("crypto");
-const { uploadToR2 } = require("../utils/r2upload");
 const { getPrivateFileUrl } = require("../utils/r2SignedUrl");
-const { deleteFromR2 } = require("../utils/r2delete");
 
 // Only staff roles can review across vendors; vendor access stays owner-scoped.
 const reviewScope = (user, prefix = "") => {
@@ -68,63 +65,5 @@ exports.review = async (req, res) => {
   } catch (error) {
     console.error("Return request review failed:", error.code);
     return res.status(500).json({ success: false, message: "Unable to review request" });
-  }
-};
-
-exports.create = async (req, res) => {
-  let connection;
-  let uploadedKey = null;
-  try {
-    const type = req.body.request_type;
-    const reason = String(req.body.reason || "").trim();
-    if (!["return", "replacement"].includes(type) || !reason || reason.length > 2000) return res.status(400).json({ success: false, message: "Request type and a reason of up to 2000 characters are required" });
-    if (type === "replacement" && !req.file) return res.status(400).json({ success: false, message: "Upload a video showing the damaged product to request a replacement" });
-    if (req.file) {
-      const b = req.file.buffer;
-      const mp4 = b.length > 12 && b.toString("ascii", 4, 8) === "ftyp";
-      const webm = b.length > 4 && b.readUInt32BE(0) === 0x1a45dfa3;
-      if (!mp4 && !webm) return res.status(400).json({ success: false, message: "Upload an MP4, MOV or WebM video" });
-    }
-    connection = await db.getConnection();
-    await connection.beginTransaction();
-    const [[item]] = await connection.execute(`SELECT oi.order_item_id, vo.vendor_id, p.is_returnable, p.is_replaceable, p.return_window_days,
-      (SELECT MAX(s.delivered_at) FROM order_shipments s WHERE s.vendor_order_id = oi.vendor_order_id AND s.shipping_status = 'delivered') AS delivered_at
-      FROM eorder_items oi JOIN eorders o ON o.order_id = oi.order_id
-      JOIN vendor_orders vo ON vo.vendor_order_id = oi.vendor_order_id
-      JOIN eproducts p ON p.product_id = oi.product_id
-      WHERE oi.order_item_id = ? AND o.user_id = ? AND oi.fulfillment_status = 'active' FOR UPDATE`, [req.params.orderItemId, req.user.user_id]);
-    const enabled = item && Number(type === "return" ? item.is_returnable : item.is_replaceable) === 1;
-    const delivered = item?.delivered_at ? new Date(item.delivered_at).getTime() : NaN;
-    const age = Date.now() - delivered;
-    if (!enabled || !Number.isFinite(age) || age < 0 || Number(item.return_window_days) < 1 || age > Number(item.return_window_days) * 86400000) {
-      await connection.rollback();
-      return res.status(400).json({ success: false, message: "This item is not eligible or its return/replacement window has expired" });
-    }
-    const [[existing]] = await connection.execute("SELECT request_id FROM product_return_requests WHERE order_item_id = ?", [item.order_item_id]);
-    if (existing) { await connection.rollback(); return res.status(409).json({ success: false, message: "A request already exists for this item", request_id: existing.request_id }); }
-    let videoKey = null;
-    if (req.file) {
-      videoKey = await uploadToR2(req.file.buffer, `private/return-evidence/${req.user.user_id}/${randomUUID()}`, req.file.mimetype);
-      uploadedKey = videoKey;
-    }
-    const [result] = await connection.execute(`INSERT INTO product_return_requests (order_item_id, vendor_id, user_id, request_type, reason, video_key) VALUES (?, ?, ?, ?, ?, ?)`, [item.order_item_id, item.vendor_id, req.user.user_id, type, reason, videoKey]);
-    await connection.commit();
-    uploadedKey = null;
-    return res.status(201).json({ success: true, request_id: result.insertId });
-  } catch (error) {
-    if (connection) await connection.rollback();
-    if (uploadedKey) await deleteFromR2(uploadedKey).catch(() => console.error("Return video cleanup failed"));
-    console.error("Return request creation failed:", error.code);
-    return res.status(error.code === "ER_DUP_ENTRY" ? 409 : 500).json({ success: false, message: error.code === "ER_DUP_ENTRY" ? "A request already exists for this item" : "Unable to submit request" });
-  } finally { if (connection) connection.release(); }
-};
-
-exports.customerList = async (req, res) => {
-  try {
-    const [rows] = await db.execute(`${baseSelect} WHERE r.user_id = ? ORDER BY r.created_at DESC`, [req.user.user_id]);
-    return res.json({ success: true, rows: rows.map(({ video_key, ...row }) => ({ ...row, has_video: Boolean(video_key) })) });
-  } catch (error) {
-    console.error("Customer return requests failed:", error.code);
-    return res.status(500).json({ success: false, message: "Unable to load requests" });
   }
 };

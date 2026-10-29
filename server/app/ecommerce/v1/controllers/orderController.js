@@ -10,6 +10,11 @@ const archiver = require("archiver");
 const { notifyUser } = require("../../../common/utils/notification");
 const { canRequestCancellation } = require("../utils/lifecyclePolicy");
 const ItemCancellationModel = require("../models/itemCancellationModel");
+const ReturnRequestModel = require("../models/returnRequestModel");
+const {
+  REQUEST_TYPES,
+  VIDEO_REQUIRED,
+} = require("../utils/returnRequestPolicy");
 
 function positiveInt(value, fallback, max = 100) {
   const parsed = Number.parseInt(value, 10);
@@ -663,6 +668,116 @@ class OrderController {
       return res.status(500).json({
         success: false,
         message: "Unable to fetch item cancellation details",
+      });
+    }
+  }
+
+  // ==============================================Return / Replacement=============================================
+
+  async requestItemReturn(req, res) {
+    try {
+      const userId = req.user?.user_id;
+      const orderItemId = Number(req.params.orderItemId);
+      const type = req.body.request_type;
+      const reason = String(req.body.reason || "").trim();
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+      if (
+        !Number.isInteger(orderItemId) ||
+        orderItemId <= 0 ||
+        !REQUEST_TYPES.includes(type) ||
+        !reason ||
+        reason.length > 2000
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Valid order item, request type and a reason of up to 2000 characters are required",
+        });
+      }
+      if (VIDEO_REQUIRED[type] && !req.file) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Upload a video showing the damaged product to request a replacement",
+        });
+      }
+
+      const data = await ReturnRequestModel.request({
+        userId,
+        orderItemId,
+        type,
+        reason,
+        video: req.file,
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: `${type === "return" ? "Return" : "Replacement"} request submitted successfully`,
+        // top-level request_id kept for app builds using the earlier response
+        request_id: data.request_id,
+        data,
+      });
+    } catch (error) {
+      const errors = {
+        ITEM_NOT_FOUND: [404, "Order item not found"],
+        ITEM_NOT_RETURNABLE: [
+          400,
+          "This item is not eligible or its return/replacement window has expired",
+        ],
+        RETURN_ALREADY_REQUESTED: [
+          409,
+          "A return or replacement was already requested for this item",
+        ],
+      };
+      const [status, message] = errors[error.message] || [
+        500,
+        "Unable to submit return/replacement request",
+      ];
+      if (status === 500) {
+        console.error("Return request error:", error);
+      }
+      return res.status(status).json({ success: false, message });
+    }
+  }
+
+  async itemReturnDetails(req, res) {
+    try {
+      const data = await ReturnRequestModel.details({
+        userId: req.user?.user_id,
+        orderItemId: Number(req.params.orderItemId),
+      });
+      return res.json({ success: true, data });
+    } catch (error) {
+      if (error.message === "RETURN_REQUEST_NOT_FOUND") {
+        return res.status(404).json({
+          success: false,
+          message: "No return or replacement request for this item",
+        });
+      }
+      console.error("Return request details error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Unable to fetch return/replacement details",
+      });
+    }
+  }
+
+  async getReturnRequests(req, res) {
+    try {
+      const data = await ReturnRequestModel.list({ userId: req.user?.user_id });
+      // `rows` kept for app builds using the earlier response
+      return res.json({ success: true, data, rows: data });
+    } catch (error) {
+      console.error("Return requests list error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Unable to fetch return/replacement requests",
       });
     }
   }

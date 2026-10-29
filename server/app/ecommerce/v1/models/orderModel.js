@@ -10,6 +10,7 @@ const {
 const {
   canRequestItemCancellation,
 } = require("../utils/itemCancellationPolicy");
+const { getReturnEligibility } = require("../utils/returnRequestPolicy");
 const {
   getCancellationGraceMinutes,
   getCourierBookingEligibleAt,
@@ -532,11 +533,20 @@ class orderModel {
 
       p.product_name,
       p.brand_name,
+      p.open_box_delivery,
+      p.is_returnable,
+      p.is_replaceable,
+      p.return_window_days,
 
       v.variant_attributes,
       os.id AS shipment_id,
       os.shipping_status,
+      os.delivered_at,
       pr.review_id,
+      rr.request_id AS return_request_id,
+      rr.request_type AS return_request_type,
+      rr.status AS return_request_status,
+      rr.vendor_note AS return_vendor_note,
       ic.status AS item_cancellation_status,
       ic.refund_status AS item_refund_status,
       ic.refund_amount AS item_refund_amount,
@@ -571,6 +581,8 @@ class orderModel {
       AND pr.user_id = ?
     LEFT JOIN ecommerce_item_cancellations ic
       ON ic.order_item_id = oi.order_item_id
+    LEFT JOIN product_return_requests rr
+      ON rr.order_item_id = oi.order_item_id
 
     WHERE oi.order_id = ?
     `,
@@ -627,6 +639,25 @@ class orderModel {
           terminal:
             i.fulfillment_status === "cancelled" ||
             ["cancelled", "delivered", "rto"].includes(i.shipping_status),
+        },
+        open_box_delivery: Number(i.open_box_delivery) === 1,
+        return_request: {
+          ...getReturnEligibility({
+            fulfillmentStatus: i.fulfillment_status,
+            shippingStatus: i.shipping_status,
+            deliveredAt: i.delivered_at,
+            isReturnable: i.is_returnable,
+            isReplaceable: i.is_replaceable,
+            returnWindowDays: i.return_window_days,
+            hasExistingRequest: Boolean(i.return_request_id),
+          }),
+          is_returnable: Number(i.is_returnable) === 1,
+          is_replaceable: Number(i.is_replaceable) === 1,
+          return_window_days: Number(i.return_window_days || 0),
+          request_id: i.return_request_id || null,
+          request_type: i.return_request_type || null,
+          status: i.return_request_status || null,
+          vendor_note: i.return_vendor_note || null,
         },
         feedback: {
           can_submit:

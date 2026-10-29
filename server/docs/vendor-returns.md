@@ -15,6 +15,14 @@ The customer app must wire its request form to these authenticated endpoints:
   `request_type` (`return` or `replacement`), `reason` (1–2000 characters),
   and `video` (required for replacement; MP4/MOV/WebM, maximum 50 MB).
 - `GET /v1/orders/return-requests`: customer's own requests and review status.
+- `GET /v1/orders/items/:orderItemId/return-request`: one request with a
+  short-lived signed `video_url`.
+
+`GET /v1/orders/order-details/:orderId` returns `open_box_delivery` and a
+`return_request` block per item (`can_return`, `can_replace`, `window_ends_at`,
+`video_required`, and the existing request's `status`/`vendor_note`) so the app
+can decide which actions to show. Code lives in `app/ecommerce/v1`
+(`models/returnRequestModel.js`, `utils/returnRequestPolicy.js`).
 
 Requests cover the full order-item quantity. One request per order item is allowed.
 The API verifies customer ownership, active fulfillment, delivery, enabled product
