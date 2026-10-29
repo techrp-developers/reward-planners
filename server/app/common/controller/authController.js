@@ -61,6 +61,35 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
     return digits;
   }
 
+  // Dummy/test accounts that always use the fixed OTP below — no email/WhatsApp
+  // code is generated or sent for them, and the fixed code always verifies.
+  // Configure in .env:
+  //   OTP_BYPASS_IDENTIFIERS=test@example.com,9876543210  (emails and/or phones, comma-separated)
+  //   OTP_BYPASS_CODE=123456                              (the fixed code these accounts enter)
+  // Leave OTP_BYPASS_IDENTIFIERS empty in production to disable this entirely.
+  const otpBypassIdentifiers = new Set(
+    (process.env.OTP_BYPASS_IDENTIFIERS || "")
+      .split(",")
+      .map((raw) => {
+        const value = raw.trim();
+        if (!value) return "";
+        return value.includes("@") ? normalizeEmail(value) : normalizePhone(value);
+      })
+      .filter(Boolean),
+  );
+
+  const OTP_BYPASS_CODE = String(process.env.OTP_BYPASS_CODE || "123456");
+
+  // True for a whitelisted dummy/test account (regardless of the code entered).
+  function isOtpBypassIdentifier(otpKey) {
+    return otpBypassIdentifiers.size > 0 && otpBypassIdentifiers.has(otpKey);
+  }
+
+  // True when a whitelisted account entered the fixed bypass code.
+  function isOtpBypass(otpKey, otp) {
+    return isOtpBypassIdentifier(otpKey) && String(otp) === OTP_BYPASS_CODE;
+  }
+
   function escapeVCardValue(value) {
     return String(value ?? "")
       .replace(/\\/g, "\\\\")
@@ -385,6 +414,15 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
 
         if (await isAccountDeactivated(employee.id)) return sendUserInactive(res);
 
+        // Dummy/test account: no code is generated or sent — the fixed
+        // OTP_BYPASS_CODE will verify directly in verifyActivationOTP.
+        if (isOtpBypassIdentifier(identity.otpKey)) {
+          return res.json({
+            success: true,
+            message: "If your employee account is eligible, a code has been sent.",
+          });
+        }
+
         await AuthModel.deleteOTPByEmail(identity.otpKey);
 
         const otp = generateOTP();
@@ -438,6 +476,15 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
 
         if (await isAccountDeactivated(employee.id)) return sendUserInactive(res);
 
+        // Dummy/test account: nothing to resend — the fixed OTP_BYPASS_CODE
+        // always verifies in verifyActivationOTP.
+        if (isOtpBypassIdentifier(identity.otpKey)) {
+          return res.json({
+            success: true,
+            message: "OTP resent successfully",
+          });
+        }
+
         await AuthModel.deleteOTPByEmail(identity.otpKey);
 
         const otp = generateOTP();
@@ -479,24 +526,28 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
           });
         }
 
-        const attempt = await AuthModel.getOtpAttempts(identity.otpKey);
+        // Whitelisted dummy/test accounts verify with the fixed bypass code
+        // and skip the real OTP lookup (no code was ever generated for them).
+        if (!isOtpBypass(identity.otpKey, otp)) {
+          const attempt = await AuthModel.getOtpAttempts(identity.otpKey);
 
-        if (attempt && attempt.attempt_count >= 5) {
-          return res.status(429).json({
-            success: false,
-            message: "Too many OTP attempts. Try again later.",
-          });
-        }
+          if (attempt && attempt.attempt_count >= 5) {
+            return res.status(429).json({
+              success: false,
+              message: "Too many OTP attempts. Try again later.",
+            });
+          }
 
-        const otpRecord = await AuthModel.verifyOTP(identity.otpKey, otp);
+          const otpRecord = await AuthModel.verifyOTP(identity.otpKey, otp);
 
-        if (!otpRecord) {
-          await AuthModel.incrementOtpAttempts(identity.otpKey);
+          if (!otpRecord) {
+            await AuthModel.incrementOtpAttempts(identity.otpKey);
 
-          return res.status(400).json({
-            success: false,
-            message: "Invalid or expired OTP",
-          });
+            return res.status(400).json({
+              success: false,
+              message: "Invalid or expired OTP",
+            });
+          }
         }
 
         const employee = await findEmployeeForActivation(identity);
