@@ -1,3 +1,4 @@
+import ServiceStatusSelect from "./ServiceStatusSelect";
 import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../../../common/api/api";
@@ -542,27 +543,10 @@ const ServiceOrderView: React.FC = () => {
                       <span className={getStatusBadge(item.status)}>
                         {item.status.replaceAll("_", " ")}
                       </span>
-                      <select
-                        value=""
-                        disabled={
-                          item.status === "completed" ||
-                          item.status === "cancelled" ||
-                          updatingStatus
-                        }
-                        onChange={(e) =>
-                          updateServiceStatus(item.id, e.target.value)
-                        }
-                        className="px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                      >
-                        <option value="" disabled>
-                          Choose action
-                        </option>
-                        {STATUS_OPTIONS.map((status) => (
-                          <option key={status} value={status}>
-                            {status.replaceAll("_", " ")}
-                          </option>
-                        ))}
-                      </select>
+                      <ServiceStatusSelect value={item.status} options={STATUS_OPTIONS}
+                        busy={updatingStatus} disabled={item.status === "completed" || item.status === "cancelled"}
+                        label={`Change status for ${item.service_name}`}
+                        onChange={status => void updateServiceStatus(item.id, status)} />
 
                       {item.status !== "cancelled" && (
                           <button

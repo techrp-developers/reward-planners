@@ -1,0 +1,46 @@
+.enquiry-status-control {
+  --status-accent: #a16207;
+  position: relative;
+  display: inline-flex;
+  min-width: 148px;
+  color: #334155;
+}
+.enquiry-status-control[data-status="contacted"] { --status-accent: #2563eb; }
+.enquiry-status-control[data-status="converted"] { --status-accent: #15803d; }
+.enquiry-status-control[data-status="closed"] { --status-accent: #64748b; }
+.enquiry-status-control select {
+  appearance: none;
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 36px 9px 32px;
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  background: #fff;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+  cursor: pointer;
+  transition: border-color .15s, background-color .15s;
+}
+.enquiry-status-control select:hover:not(:disabled) { border-color: #a760c9; background: #faf8fc; }
+.enquiry-status-control select:focus-visible { outline: 2px solid #a760c9; outline-offset: 2px; }
+.enquiry-status-control select:disabled { cursor: wait; opacity: .65; }
+.enquiry-status-dot { position: absolute; top: 50%; left: 13px; width: 7px; height: 7px; border-radius: 50%; background: var(--status-accent); transform: translateY(-50%); pointer-events: none; }
+.enquiry-status-chevron { position: absolute; top: 13px; right: 12px; width: 14px; height: 14px; pointer-events: none; color: #64748b; }
+.hr-dark .enquiry-status-control { color: #e8e5ef; }
+.hr-dark .enquiry-status-control select { background: #1c1926; border-color: #51465f; }
+.hr-dark .enquiry-status-control select:hover:not(:disabled) { background: #292235; border-color: #c99aeb; }
+.hr-dark .enquiry-status-control[data-status="new"] { --status-accent: #e8c57e; }
+.hr-dark .enquiry-status-control[data-status="contacted"] { --status-accent: #93b4ff; }
+.hr-dark .enquiry-status-control[data-status="converted"] { --status-accent: #86d9b1; }
+.hr-dark .enquiry-status-control[data-status="closed"] { --status-accent: #b1a9c0; }
+.hr-dark .enquiry-status-chevron { color: #b1a9c0; }
+.enquiry-status-control[data-status="documents_uploaded"],
+.enquiry-status-control[data-status="in_progress"] { --status-accent: #2563eb; }
+.enquiry-status-control[data-status="completed"] { --status-accent: #15803d; }
+.enquiry-status-control[data-status="cancelled"] { --status-accent: #dc2626; }
+.hr-dark .enquiry-status-control[data-status="in_progress"],
+.hr-dark .enquiry-status-control[data-status="documents_uploaded"] { --status-accent: #93b4ff; }
+.hr-dark .enquiry-status-control[data-status="completed"] { --status-accent: #86d9b1; }
+.hr-dark .enquiry-status-control[data-status="cancelled"] { --status-accent: #f3a2ac; }
