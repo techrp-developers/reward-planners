@@ -289,7 +289,9 @@ const TodoController = {
       });
 
       const createdTodo = await TodoModel.getTodoById(todoId, userId);
-      await replaceReminderSchedule(createdTodo, normalizedReminderEntries || []);
+      await replaceReminderSchedule(createdTodo, normalizedReminderEntries || [], {
+        deviceAlarm: req.body.device_alarm === true,
+      });
 
       return res.status(201).json({
         success: true,
@@ -435,7 +437,9 @@ const TodoController = {
       }
 
       const updatedTodo = await TodoModel.getTodoById(id, userId);
-      await replaceReminderSchedule(updatedTodo, normalizedReminderEntries || []);
+      await replaceReminderSchedule(updatedTodo, normalizedReminderEntries || [], {
+        deviceAlarm: req.body.device_alarm === true,
+      });
 
       return res.status(200).json({
         success: true,
@@ -569,7 +573,9 @@ const TodoController = {
       );
 
       const updatedTodo = await TodoModel.getTodoById(id, userId);
-      await replaceReminderSchedule(updatedTodo, normalizedReminderEntries || []);
+      await replaceReminderSchedule(updatedTodo, normalizedReminderEntries || [], {
+        deviceAlarm: req.body.device_alarm === true,
+      });
 
       return res.status(200).json({
         success: true,

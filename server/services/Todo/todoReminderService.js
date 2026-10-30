@@ -77,7 +77,7 @@ async function getCustomReminderInputs(todoId) {
   return rows.map((row) => row.reminder_label || row.scheduled_time);
 }
 
-async function replaceReminderSchedule(todo, customReminders = []) {
+async function replaceReminderSchedule(todo, customReminders = [], { deviceAlarm = false } = {}) {
   if (!todo?.id) return;
 
   await db.query(
@@ -104,6 +104,7 @@ async function replaceReminderSchedule(todo, customReminders = []) {
         todo.created_by,
         "START_15",
         "15 min before",
+        0,
         toLocalDateTimeString(startReminderAt),
       ]);
     }
@@ -122,6 +123,7 @@ async function replaceReminderSchedule(todo, customReminders = []) {
       todo.created_by,
       "CUSTOM",
       reminder.label || reminder.time,
+      deviceAlarm ? 1 : 0,
       toLocalDateTimeString(scheduledAt),
     ]);
   }
@@ -138,6 +140,7 @@ async function replaceReminderSchedule(todo, customReminders = []) {
       user_id,
       reminder_type,
       reminder_label,
+      device_alarm,
       scheduled_for,
       status,
       created_at,
@@ -208,6 +211,7 @@ async function getDueReminders(limit = 100) {
       tr.user_id,
       tr.reminder_type,
       tr.reminder_label,
+      tr.device_alarm,
       tr.scheduled_for,
       tr.attempt_count,
       t.created_by,
@@ -308,7 +312,11 @@ async function processDueReminders(limit = 100) {
       // have registered an FCM token yet, so persisting the reminder must not
       // depend on push delivery succeeding.
       await createInAppNotification(payload);
-      const pushResult = await sendPushNotification(payload);
+
+      // The phone already rings a local alarm for this reminder.
+      const pushResult = Number(reminder.device_alarm) === 1
+        ? { success: false, skipped: true, reason: "device_alarm" }
+        : await sendPushNotification(payload);
 
       if (!pushResult.success && !pushResult.skipped) {
         console.warn(
