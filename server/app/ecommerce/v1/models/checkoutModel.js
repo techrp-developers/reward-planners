@@ -2,7 +2,11 @@ const db = require("../../../../config/database");
 const fs = require("fs");
 const path = require("path");
 const AddressModel = require("../../../common/models/addressModel");
-const xpressService = require("../../../../services/ExpressBees/xpressbees_service");
+const courierService = require("../../../../services/courier/courierService");
+const {
+  buildDeliveryChoices,
+  selectCourierForPreference,
+} = require("../../../../services/courier/courierPolicy");
 const {
   reserveWalletCoins,
 } = require("../../../../services/rewards/ecommerceWalletService");
@@ -40,6 +44,7 @@ class CheckoutModel {
     useRewards = true,
     expectedTotal,
     expectedRedeemable,
+    deliveryPreference,
   ) {
     const conn = await db.getConnection();
 
@@ -238,7 +243,7 @@ class CheckoutModel {
         const breadth = Math.round(vendor.breadth);
         const height = Math.round(vendor.height);
 
-        const serviceResponse = await xpressService.checkServiceability({
+        const serviceResponse = await courierService.checkServiceability({
           origin: vendorAddress.pincode,
           destination: customerAddress.zipcode,
           payment_type: "prepaid",
@@ -265,9 +270,10 @@ class CheckoutModel {
           throw new Error("NOT_SERVICEABLE");
         }
 
-        const selectedCourier = [...validOptions].sort(
-          (a, b) => a.total_charges - b.total_charges,
-        )[0];
+        const selectedCourier = selectCourierForPreference(
+          validOptions,
+          deliveryPreference,
+        );
 
         // =====================
         // DELIVERY DATE
@@ -553,6 +559,7 @@ class CheckoutModel {
     useRewards = true,
     expectedTotal,
     expectedRedeemable,
+    deliveryPreference,
   }) {
     const conn = await db.getConnection();
 
@@ -663,7 +670,7 @@ class CheckoutModel {
       const breadth = Math.round(item.breadth);
       const height = Math.round(quantity * Number(item.height));
 
-      const serviceResponse = await xpressService.checkServiceability({
+      const serviceResponse = await courierService.checkServiceability({
         origin: vendorAddress.pincode,
         destination: customerAddress.zipcode,
         payment_type: "prepaid",
@@ -678,9 +685,10 @@ class CheckoutModel {
         throw new Error("NOT_SERVICEABLE");
       }
 
-      const courier = serviceResponse.data
-        .filter((o) => o.total_charges > 0)
-        .sort((a, b) => a.total_charges - b.total_charges)[0];
+      const courier = selectCourierForPreference(
+        serviceResponse.data,
+        deliveryPreference,
+      );
 
       if (!courier) throw new Error("NOT_SERVICEABLE");
 
@@ -917,7 +925,12 @@ class CheckoutModel {
   }
 
   // Get checkout details
-  async getCheckoutCart(userId, useRewards = true, addressId = null) {
+  async getCheckoutCart(
+    userId,
+    useRewards = true,
+    addressId = null,
+    deliveryPreference,
+  ) {
     // ===============================
     // 1. WALLET
     // ===============================
@@ -1152,6 +1165,7 @@ class CheckoutModel {
     const shippingBreakdown = [];
     const eddList = [];
     const vendorEDDMap = {};
+    const vendorCourierOptions = [];
     // Shipping cannot be calculated until the user selects an address.
     if (!addressRequired) {
       for (const vendorId in vendorGroups) {
@@ -1167,7 +1181,7 @@ class CheckoutModel {
 
         if (!vendorAddress?.pincode) continue;
 
-        const serviceResponse = await xpressService.checkServiceability({
+        const serviceResponse = await courierService.checkServiceability({
           origin: vendorAddress.pincode,
           destination: destinationPincode,
           payment_type: "prepaid",
@@ -1186,11 +1200,14 @@ class CheckoutModel {
           continue;
         }
 
-        const courier = courierOptions
-          .filter((option) => Number(option.total_charges) > 0)
-          .sort((a, b) => Number(a.total_charges) - Number(b.total_charges))[0];
+        const courier = selectCourierForPreference(
+          courierOptions,
+          deliveryPreference,
+        );
 
         if (!courier) continue;
+
+        vendorCourierOptions.push(courierOptions);
 
         const shippingCharge = deliveryChargeForUser({
           userId,
@@ -1261,6 +1278,14 @@ class CheckoutModel {
       addressRequired,
       shippingCalculated: !addressRequired,
       shippingBreakdown,
+      deliveryChoices: buildDeliveryChoices(vendorCourierOptions, {
+        chargeFor: (courier) =>
+          deliveryChargeForUser({
+            userId,
+            calculatedCharge: courier.total_charges,
+          }),
+        baseAmount: finalProductTotal,
+      }),
     };
   }
 
@@ -1274,6 +1299,7 @@ class CheckoutModel {
     useRewards = true,
     userId,
     addressId = null,
+    deliveryPreference,
   }) {
     // ===============================
     // 1. WALLET
@@ -1403,6 +1429,7 @@ class CheckoutModel {
     let shippingCharge = 0;
     let expectedDeliveryDate = null;
     let shippingBreakdown = [];
+    let deliveryChoices = [];
 
     if (!addressRequired) {
       const [[vendorAddress]] = await db.execute(
@@ -1413,7 +1440,7 @@ class CheckoutModel {
 
       if (!vendorAddress) throw new Error("VENDOR_ADDRESS_MISSING");
 
-      const serviceResponse = await xpressService.checkServiceability({
+      const serviceResponse = await courierService.checkServiceability({
         origin: vendorAddress.pincode,
         destination: destinationPincode,
         payment_type: "prepaid",
@@ -1430,15 +1457,25 @@ class CheckoutModel {
         throw new Error("NOT_SERVICEABLE");
       }
 
-      const courier = serviceResponse.data
-        .filter((o) => Number(o.total_charges) > 0)
-        .sort((a, b) => Number(a.total_charges) - Number(b.total_charges))[0];
+      const courier = selectCourierForPreference(
+        serviceResponse.data,
+        deliveryPreference,
+      );
 
       if (!courier) throw new Error("NOT_SERVICEABLE");
 
       shippingCharge = deliveryChargeForUser({
         userId,
         calculatedCharge: courier.total_charges,
+      });
+
+      deliveryChoices = buildDeliveryChoices([serviceResponse.data], {
+        chargeFor: (option) =>
+          deliveryChargeForUser({
+            userId,
+            calculatedCharge: option.total_charges,
+          }),
+        baseAmount: finalItemTotal,
       });
 
       if (courier.estimated_delivery_date) {
@@ -1517,6 +1554,7 @@ class CheckoutModel {
       addressRequired,
       shippingCalculated: !addressRequired,
       shippingBreakdown,
+      deliveryChoices,
       estimated_delivery_date: expectedDeliveryDate,
     };
   }

@@ -1,5 +1,5 @@
 const db = require("../../../../config/database");
-const xpressService = require("../../../../services/ExpressBees/xpressbees_service");
+const courierService = require("../../../../services/courier/courierService");
 const {
   sendEcommerceOrderStatusMail,
 } = require("../../../../services/mailBuilder/ecommerceOrderStatus");
@@ -9,7 +9,7 @@ const {
 
 const classifyService = (name) => {
   const lower = name.toLowerCase();
-  if (lower.includes("air")) return "express";
+  if (lower.includes("air") || lower.includes("express")) return "express";
   if (lower.includes("surface")) return "standard";
   return "economy";
 };
@@ -203,7 +203,7 @@ class LogisticsController {
 
         const weightGrams = Math.round(group.totalWeightKg * 1000);
 
-        const serviceResponse = await xpressService.checkServiceability({
+        const serviceResponse = await courierService.checkServiceability({
           origin: vendorAddress.pincode,
           destination: pincode,
           payment_type: paymentType,
@@ -401,7 +401,7 @@ class LogisticsController {
       // ==========================
       // DELEGATE TO SERVICE
       // ==========================
-      const orderId = await xpressService.cancelShipment(shipmentId);
+      const orderId = await courierService.cancelShipment(shipmentId);
 
       sendEcommerceOrderStatusMail({
         orderId,

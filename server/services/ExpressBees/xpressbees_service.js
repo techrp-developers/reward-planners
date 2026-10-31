@@ -1,5 +1,8 @@
 const axios = require("axios");
-const db = require("../../config/database");
+const {
+  bookingUnconfirmedError,
+  isBookingUnconfirmed,
+} = require("../courier/courierPolicy");
 const XPRESS_BASE_URL = (
   process.env.XPRESS_BASE_URL || "https://shipment.xpressbees.com/api"
 ).replace(/\/$/, "");
@@ -138,6 +141,9 @@ async function bookShipment(payload) {
       "XpressBees Booking Error:",
       error.response?.data || error.message,
     );
+    if (isBookingUnconfirmed(error)) {
+      throw bookingUnconfirmedError("XpressBees");
+    }
     throw new Error("Shipment booking failed");
   }
 }
@@ -183,186 +189,6 @@ async function createNDRException(actions) {
     );
 
     throw new Error("NDR action failed");
-  }
-}
-
-// ==========================
-// Resolve NDR
-// ==========================
-async function resolveNDR({ shipmentId, action, new_address_id, notes }) {
-  if (!["retry", "address_update", "cancel"].includes(action)) {
-    throw new Error("Unsupported NDR action");
-  }
-
-  const conn = await db.getConnection();
-
-  try {
-    await conn.beginTransaction();
-
-    // ==========================
-    // FETCH + LOCK SHIPMENT ROW
-    // ==========================
-    const [rows] = await conn.query(
-      `SELECT * FROM order_shipments WHERE id = ? FOR UPDATE`,
-      [shipmentId],
-    );
-
-    const shipment = rows[0];
-
-    if (!shipment) {
-      throw new Error("Shipment not found");
-    }
-
-    if (!shipment.is_ndr_active) {
-      throw new Error("No active NDR for this shipment");
-    }
-
-    // ==========================
-    // FETCH ADDRESS IF NEEDED
-    // ==========================
-    let address = null;
-
-    if (action === "address_update") {
-      if (!new_address_id) {
-        throw new Error("Address required");
-      }
-
-      const [addrRows] = await conn.query(
-        `SELECT ca.*
-         FROM customer_addresses ca
-         JOIN eorders eo ON eo.user_id = ca.user_id
-         WHERE ca.address_id = ? AND eo.order_id = ?
-         LIMIT 1`,
-        [new_address_id, shipment.order_id],
-      );
-
-      address = addrRows[0];
-
-      if (!address) throw new Error("Invalid address");
-    }
-
-    // ==========================
-    // CALL COURIER API FIRST
-    // (before any DB writes — if courier fails we rollback cleanly)
-    // ==========================
-    if (action === "retry") {
-      const ndrPayload = [
-        {
-          awb: shipment.awb_number,
-          action: "re-attempt",
-          action_data: {
-            re_attempt_date: new Date(Date.now() + 24 * 60 * 60 * 1000)
-              .toISOString()
-              .split("T")[0],
-          },
-        },
-      ];
-
-      const result = await createNDRException(ndrPayload);
-
-      if (!Array.isArray(result) || !result[0]?.status) {
-        throw new Error(result?.[0]?.message || "NDR API failed");
-      }
-    }
-
-    if (action === "address_update") {
-      const ndrPayload = [
-        {
-          awb: shipment.awb_number,
-          action: "change_address",
-          action_data: {
-            name: address.contact_name,
-            address_1: address.address1,
-            address_2: address.address2 || "",
-          },
-        },
-      ];
-
-      const result = await createNDRException(ndrPayload);
-
-      if (!Array.isArray(result) || !result[0]?.status) {
-        throw new Error(result?.[0]?.message || "NDR API failed");
-      }
-    }
-
-    if (action === "cancel") {
-      if (shipment.awb_number) {
-        const cancelResult = await cancelShipmentExpressBees(
-          shipment.awb_number,
-        );
-
-        // Log failure but don't hard-fail — courier may have already cancelled
-        if (!cancelResult?.status) {
-          const message =
-            cancelResult?.error?.message ||
-            cancelResult?.error ||
-            "Courier cancel failed";
-          const error = new Error(message);
-          error.code = "COURIER_CANCELLATION_FAILED";
-          throw error;
-        }
-      }
-    }
-
-    // ==========================
-    // ALL COURIER CALLS DONE — NOW WRITE TO DB
-    // ==========================
-
-    // Determine new shipping_status
-    // An accepted NDR action is not proof that the parcel is moving again.
-    // Tracking will promote retry/address updates when XpressBees reports it.
-    const newShippingStatus = action === "cancel" ? "cancelled" : null;
-
-    if (newShippingStatus) {
-      const timestampCol = action === "cancel" ? "cancelled_at" : null;
-
-      const tsFragment = timestampCol ? `, ${timestampCol} = NOW()` : "";
-
-      await conn.query(
-        `UPDATE order_shipments
-         SET shipping_status = ?,
-             is_ndr_active = 0
-             ${tsFragment}
-         WHERE id = ?`,
-        [newShippingStatus, shipmentId],
-      );
-    } else {
-      // Fallback: just clear the NDR flag
-      await conn.query(
-        `UPDATE order_shipments SET is_ndr_active = 0 WHERE id = ?`,
-        [shipmentId],
-      );
-    }
-
-    // ==========================
-    // RESOLVE NDR LOG
-    // ==========================
-    await conn.query(
-      `UPDATE shipment_ndr_logs
-       SET resolved = 1,
-           resolution_type = ?,
-           resolution_notes = ?,
-           resolved_at = NOW()
-       WHERE shipment_id = ?
-         AND resolved = 0`,
-      [action, notes || null, shipmentId],
-    );
-
-    // ==========================
-    // EVENT LOG
-    // ==========================
-    await conn.query(
-      `INSERT INTO shipment_events (shipment_id, status, description)
-       VALUES (?, 'ndr_resolved', ?)`,
-      [shipmentId, action],
-    );
-
-    await conn.commit();
-  } catch (err) {
-    await conn.rollback();
-    throw err;
-  } finally {
-    conn.release();
   }
 }
 
@@ -415,86 +241,10 @@ async function cancelShipmentExpressBees(awb) {
   }
 }
 
-async function cancelShipment(shipmentId) {
-  const conn = await db.getConnection();
-
-  try {
-    await conn.beginTransaction();
-
-    // ==========================
-    // 1. FETCH + LOCK SHIPMENT ROW
-    // ==========================
-    const [rows] = await conn.query(
-      `SELECT * FROM order_shipments WHERE id = ? LIMIT 1 FOR UPDATE`,
-      [shipmentId],
-    );
-
-    if (!rows.length) {
-      throw new Error("Shipment not found");
-    }
-
-    const shipment = rows[0];
-
-    // ==========================
-    // 2. VALIDATE STATUS
-    // Re-checked under lock — prevents cancelling a shipment
-    // that moved to in_transit between the API call and the lock
-    // ==========================
-    if (
-      !["pending", "booked"].includes(shipment.shipping_status)
-    ) {
-      throw new Error("Cancellation not allowed at current shipment stage");
-    }
-
-    // ==========================
-    // 3. CALL COURIER API
-    // Done before DB write — if courier fails, transaction
-    // rolls back and shipment stays in its current status
-    // ==========================
-    if (shipment.awb_number) {
-      const cancelResponse = await cancelShipmentExpressBees(
-        shipment.awb_number,
-      );
-
-      if (!cancelResponse.status) {
-        const error = new Error("Courier cancel failed");
-        error.code = "COURIER_CANCELLATION_FAILED";
-        error.courierMessage =
-          cancelResponse.error?.message || cancelResponse.error || null;
-        throw error;
-      }
-    }
-    // If no AWB yet (status = 'pending', not yet booked at courier),
-    // skip the courier call — nothing to cancel on their end
-
-    // ==========================
-    // 4. UPDATE DB
-    // ==========================
-    await conn.query(
-      `UPDATE order_shipments
-       SET shipping_status = 'cancelled',
-           cancelled_at = NOW()
-       WHERE id = ?`,
-      [shipmentId],
-    );
-
-    await conn.commit();
-
-    return shipment.order_id;
-  } catch (err) {
-    await conn.rollback();
-    throw err;
-  } finally {
-    conn.release();
-  }
-}
-
 module.exports = {
   bookShipment,
   checkServiceability,
   trackShipment,
   cancelShipmentExpressBees,
-  cancelShipment,
-  resolveNDR,
   createNDRException,
 };

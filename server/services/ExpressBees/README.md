@@ -34,3 +34,9 @@ The tracking lifecycle enqueues these WhatsApp rule events:
 Each event must have an active `wa_rules` entry linked to an active,
 Interakt-approved `wa_templates` entry. The templates receive customer name as
 `{{1}}` and order reference as `{{2}}`.
+
+## Switching XpressBees off and on
+
+Set `XPRESS_ENABLED=false` to stop new quotes and bookings through XpressBees.
+Shipments already booked with it keep tracking and cancelling normally. See
+`services/Ekart/README.md` for how the two couriers are chosen.

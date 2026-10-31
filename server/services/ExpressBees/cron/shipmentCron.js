@@ -1,5 +1,5 @@
 const cron = require("node-cron");
-const xpressService = require("../xpressbees_service");
+const courierService = require("../../courier/courierService");
 const db = require("../../../config/database");
 const { notifyUser } = require("../../../app/common/utils/notification");
 const {
@@ -116,6 +116,13 @@ const STATUS_TIME_COLUMNS = {
   delivered: "delivered_at",
   rto: "rto_at",
 };
+
+// Ekart tracking arrives already mapped, including null for unknown statuses.
+function resolveEventStatus(event) {
+  return event?.mapped_status !== undefined
+    ? event.mapped_status
+    : mapXpressStatus(event?.message, event?.status_code);
+}
 
 function mapXpressStatus(status, statusCode) {
   const codeStatus = mapXpressStatusCode(statusCode);
@@ -263,7 +270,7 @@ async function syncTrackingHistory(shipment, history) {
   if (!Array.isArray(history)) return;
 
   for (const event of [...history].reverse()) {
-    const status = mapXpressStatus(event?.message, event?.status_code);
+    const status = resolveEventStatus(event);
     if (!status || !event?.event_time) continue;
 
     const timeColumn = STATUS_TIME_COLUMNS[status];
@@ -314,7 +321,7 @@ async function syncVendorOrderStatus(vendorOrderId, shipmentStatus) {
 // =====================
 async function updateShipmentTracking(shipment) {
   try {
-    const response = await xpressService.trackShipment(shipment.awb_number);
+    const response = await courierService.trackShipment(shipment);
 
     if (!response || !response.status) {
       return;
@@ -347,18 +354,23 @@ async function updateShipmentTracking(shipment) {
 
     if (!rawStatus) {
       console.warn(
-        `[tracking] XpressBees response has no status for AWB ${shipment.awb_number}`,
+        `[tracking] Courier response has no status for AWB ${shipment.awb_number}`,
       );
       return;
     }
 
     const providerStatusCode =
       response.data.status_code || latestHistoryEvent?.status_code;
-    const newStatus = mapXpressStatus(rawStatus, providerStatusCode);
-    const rtoDelivered = isXpressRtoDelivered(
-      providerStatusCode,
-      response.data.rto_status === "delivered" ? "rto delivered" : rawStatus,
-    );
+    const newStatus =
+      response.data.mapped_status !== undefined
+        ? response.data.mapped_status
+        : mapXpressStatus(rawStatus, providerStatusCode);
+    const rtoDelivered =
+      response.data.rto_delivered ??
+      isXpressRtoDelivered(
+        providerStatusCode,
+        response.data.rto_status === "delivered" ? "rto delivered" : rawStatus,
+      );
 
     if (!newStatus) return;
 
@@ -390,8 +402,7 @@ async function updateShipmentTracking(shipment) {
     // =====================
     const timeColumn = STATUS_TIME_COLUMNS[newStatus];
     const statusEventTime = response.data.history?.find(
-      (event) =>
-        mapXpressStatus(event?.message, event?.status_code) === newStatus,
+      (event) => resolveEventStatus(event) === newStatus,
     )?.event_time;
 
     // =====================
@@ -694,8 +705,8 @@ cron.schedule("*/30 * * * *", async () => {
   try {
     console.log("🚚 Tracking cron running...");
     const [shipments] = await db.query(
-      `SELECT id, order_id, vendor_order_id, awb_number, shipping_status,
-              rto_processed
+      `SELECT id, order_id, vendor_order_id, courier_id, awb_number,
+              shipping_status, rto_processed
        FROM order_shipments
        WHERE awb_number IS NOT NULL
          AND (
@@ -769,7 +780,7 @@ cron.schedule("*/15 * * * *", async () => {
 
     for (const shipment of shipments) {
       try {
-        const result = await xpressService.cancelShipmentExpressBees(
+        const result = await courierService.cancelAtCourier(
           shipment.awb_number,
         );
         if (!result?.status) {

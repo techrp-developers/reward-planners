@@ -8,7 +8,7 @@ const ExcelJS = require("exceljs");
 const { uploadToR2 } = require("../utils/r2upload");
 const { optimizeProductImage } = require("../utils/productCoverImage");
 const XLSX = require("xlsx");
-const xpressService = require("../services/ExpressBees/xpressbees_service");
+const courierService = require("../services/courier/courierService");
 const { runNonBlocking } = require("../utils/nonBlocking");
 const { notifyProductSubmitted } = require("../services/mailBuilder/productNotificationService");
 
@@ -1076,7 +1076,7 @@ class ProductController {
         return res.status(422).json({ success: false, message: "Vendor shipping pincode is unavailable" });
       }
 
-      const serviceResponse = await xpressService.checkServiceability({
+      const serviceResponse = await courierService.checkServiceability({
         origin: String(shipment.origin),
         destination,
         payment_type: "prepaid",

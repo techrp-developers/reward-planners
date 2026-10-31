@@ -83,12 +83,12 @@ export default function CancellationDetail() {
       const courierFailed = approving && axios.isAxiosError<{ code?: string }>(error)
         && error.response?.data?.code === "COURIER_CANCELLATION_FAILED";
       if (courierFailed) {
-        // The AWB may already have been cancelled by hand in the XpressBees
+        // The AWB may already have been cancelled by hand in the courier
         // panel, in which case the courier API refuses a second cancel.
         const manual = await Swal.fire({
           icon: "warning",
-          title: "XpressBees could not cancel the shipment",
-          html: `${escapeHtml(getErrorMessage(error, "Courier cancellation failed."))}<br/><br/>If this AWB was <b>already cancelled manually</b> in the XpressBees panel, you can approve and refund now.`,
+          title: "Courier could not cancel the shipment",
+          html: `${escapeHtml(getErrorMessage(error, "Courier cancellation failed."))}<br/><br/>If this AWB was <b>already cancelled manually</b> in the courier panel, you can approve and refund now.`,
           showCancelButton: true,
           confirmButtonColor: "#16a34a",
           confirmButtonText: "AWB cancelled manually – refund",
