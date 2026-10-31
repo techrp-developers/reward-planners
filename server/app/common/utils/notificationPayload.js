@@ -105,8 +105,39 @@ function safeImageUrl(value) {
 // keep using `screen`; new builds read the destination fields.
 const OPTIONAL_DATA_KEYS = ["destination_type", "target_id", "deep_link", "fallback_screen", "language"];
 
+// How prominently each category is shown, per platform. deliverNotification()
+// tags promotional automatic events with metadata.category before this runs,
+// so anything without a promotional category is an operational alert.
+//
+// Transport priority (FCM android.priority, APNs apns-priority) only decides
+// whether a dozing device is woken straight away; it does not create a
+// heads-up banner. Prominence comes from the Android channel's importance (and
+// the user's own channel settings, which the app never overrides) and the iOS
+// interruption level. Android 8+ app builds that have not created a channel
+// yet show the message on the manifest default channel (reward_planners_general),
+// so older builds keep receiving everything.
+const GENERAL_CHANNEL_ID = "reward_planners_general";
+// Android drawable packaged in the app (monochrome status-bar icon). A
+// resource NAME only: the backend never references app files, paths or URLs.
+const ANDROID_SMALL_ICON = "ic_stat_notification";
+const DELIVERY_PROFILES = {
+  // Orders, payments, bookings, chat, account: HIGH channel, delivered at once.
+  operational: { channelId: GENERAL_CHANNEL_ID, androidPriority: "high", apnsPriority: "10", interruptionLevel: "active", sound: true },
+  // Engagement nudges and announcements: DEFAULT channel.
+  updates: { channelId: "reward_planners_updates", androidPriority: "normal", apnsPriority: "5", interruptionLevel: "active", sound: true },
+  // Marketing promotions: LOW channel; on iOS delivered quietly to the list.
+  offers: { channelId: "reward_planners_offers", androidPriority: "normal", apnsPriority: "5", interruptionLevel: "passive", sound: false },
+};
+const PROFILE_BY_CATEGORY = { marketing: "offers", engagement: "updates", announcement: "updates" };
+
+function deliveryProfileFor(data) {
+  return DELIVERY_PROFILES[PROFILE_BY_CATEGORY[data.metadata?.category] || "operational"];
+}
+const androidPriorityFor = (data) => deliveryProfileFor(data).androidPriority;
+
 function buildPushMessage(data, fcmToken) {
   const imageUrl = safeImageUrl(data.image_url);
+  const profile = deliveryProfileFor(data);
   const campaignId = data.metadata?.campaign_id;
   const optional = {};
   for (const key of OPTIONAL_DATA_KEYS) {
@@ -139,20 +170,33 @@ function buildPushMessage(data, fcmToken) {
       ...(imageUrl ? { image_url: imageUrl } : {}),
       ...(data.notification_id ? { notification_id: String(data.notification_id) } : {}),
       ...(campaignId ? { campaign_id: String(campaignId) } : {}),
+      // Same channel as android.notification.channelId, for the app's
+      // foreground (Notifee) display, which must not guess it.
+      android_channel_id: profile.channelId,
       ...optional,
     },
     android: {
-      priority: "high",
+      priority: profile.androidPriority,
       notification: {
-        channelId: "reward_planners_general",
-        sound: "default",
-        defaultSound: true,
-        vibrateTimingsMillis: [0, 1000, 500, 1000, 500],
+        // Rendered by Android itself while the app is in the background.
+        channelId: profile.channelId,
+        icon: ANDROID_SMALL_ICON,
+        // Pre-Android 8 devices have no channels and use these directly.
+        ...(profile.sound ? { sound: "default", defaultSound: true, vibrateTimingsMillis: [0, 1000, 500, 1000, 500] } : {}),
         ...(imageUrl ? { imageUrl } : {}),
       },
     },
     apns: {
-      payload: { aps: { sound: "default", ...(imageUrl ? { "mutable-content": 1 } : {}) } },
+      headers: { "apns-priority": profile.apnsPriority, "apns-push-type": "alert" },
+      payload: {
+        aps: {
+          ...(profile.sound ? { sound: "default" } : {}),
+          "interruption-level": profile.interruptionLevel,
+          // Groups notifications of one kind together, like Android channels.
+          "thread-id": profile.channelId,
+          ...(imageUrl ? { "mutable-content": 1 } : {}),
+        },
+      },
       ...(imageUrl ? { fcmOptions: { imageUrl } } : {}),
     },
     token: fcmToken,
@@ -162,7 +206,10 @@ function buildPushMessage(data, fcmToken) {
 module.exports = {
   buildNotificationPayload,
   buildPushMessage,
+  androidPriorityFor,
   buildWindowedIdempotencyKey,
+  DELIVERY_PROFILES,
+  deliveryProfileFor,
   IMAGE_HOSTS,
   inferScreen,
   safeImageUrl,

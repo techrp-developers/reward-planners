@@ -97,8 +97,17 @@ class NotificationController {
       const userId = requireUserId(req, res);
       if (!userId) return;
 
+      // Optional paging: ?before_id=<oldest notification_id already shown>.
+      let beforeId = null;
+      if (req.query.before_id !== undefined) {
+        beforeId = Number(req.query.before_id);
+        if (!Number.isSafeInteger(beforeId) || beforeId <= 0) {
+          return res.status(400).json({ success: false, message: "before_id must be a positive notification id" });
+        }
+      }
+
       const notifications =
-        await NotificationModel.getByUser(userId, req.query.limit);
+        await NotificationModel.getByUser(userId, req.query.limit, beforeId);
 
       return res.json({
         success: true,

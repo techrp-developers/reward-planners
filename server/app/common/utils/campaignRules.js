@@ -95,14 +95,61 @@ function validateAnnouncement(value) {
   return errors;
 }
 
+/*
+ * CRM Push Notification Manager: the Relationship Manager is the ONLY human
+ * role allowed (business decision 2026-10-30). Admins keep every other CRM
+ * module but are refused here, like HR, vendors and any unknown role. There
+ * is no admin bypass.
+ *
+ * This covers human management through the CRM only. Employee mobile APIs
+ * (token registration, inbox, preferences, read/open) and trusted backend
+ * events (orders, payments, chat, reminders) do not go through this policy.
+ *
+ * `user` must come from authenticateToken: JWT signature verified, role and
+ * is_verified reloaded from eusers on every request, never from the body.
+ */
+const PUSH_NOTIFICATION_MANAGER_ROLES = new Set(["rm"]);
+const RM_NOTIFICATION_PERMISSIONS = Object.freeze({
+  manageCampaigns: true,
+  sendNotifications: true,
+  scheduleNotifications: true,
+  manageTemplates: true,
+  manageCompanyAssignments: true,
+  manageAudiences: true,
+  viewHistory: true,
+  viewAnalytics: true,
+  viewDeliveryDiagnostics: true,
+  manageNotificationModuleSettings: true,
+});
+const NO_NOTIFICATION_PERMISSIONS = Object.freeze(Object.fromEntries(Object.keys(RM_NOTIFICATION_PERMISSIONS).map((key) => [key, false])));
+
+function canManagePushNotifications(user) {
+  return PUSH_NOTIFICATION_MANAGER_ROLES.has(user?.role);
+}
+
+function notificationPermissionsFor(user) {
+  return canManagePushNotifications(user) ? RM_NOTIFICATION_PERMISSIONS : NO_NOTIFICATION_PERMISSIONS;
+}
+
 /**
- * notifications.send: role-based (there is no permission table). Admins and
- * RMs may send; NOTIFICATION_RM_SEND_ENABLED=false switches RM sending off.
- * Used by the API and again by the scheduler when a job runs.
+ * notifications.send: RMs only. NOTIFICATION_RM_SEND_ENABLED=false switches
+ * sending off. Checked by the API and again by the worker, with the creator's
+ * CURRENT role, when a scheduled or queued campaign runs; so a campaign made
+ * by an account that is no longer an RM (e.g. an older admin campaign) fails
+ * closed instead of being treated as RM-authorised.
  */
 function canSendNotifications(user) {
-  if (user?.role === "admin") return true;
-  return user?.role === "rm" && String(process.env.NOTIFICATION_RM_SEND_ENABLED ?? "true").toLowerCase() !== "false";
+  return canManagePushNotifications(user) && String(process.env.NOTIFICATION_RM_SEND_ENABLED ?? "true").toLowerCase() !== "false";
+}
+
+// rm_company_assignments.manage: every verified RM (business decision
+// 2026-10-30), admins no longer. Any verified RM can assign any active company
+// to any verified RM, itself included, so an RM can widen its own audience to
+// every active company's consenting employees. Every change is audited with
+// the actor.
+const MANAGE_RM_COMPANY_ASSIGNMENTS = "manage_rm_company_assignments";
+function canManageRmCompanyAssignments(user) {
+  return canManagePushNotifications(user);
 }
 
 function campaignCategoryForTemplate(template) {
@@ -386,6 +433,12 @@ module.exports = {
   CATEGORIES,
   CONTENT_TYPES,
   canSendNotifications,
+  canManagePushNotifications,
+  canManageRmCompanyAssignments,
+  notificationPermissionsFor,
+  PUSH_NOTIFICATION_MANAGER_ROLES,
+  RM_NOTIFICATION_PERMISSIONS,
+  MANAGE_RM_COMPANY_ASSIGNMENTS,
   validateAnnouncement,
   mediaIdForLanguage,
   mediaLanguageWarnings,

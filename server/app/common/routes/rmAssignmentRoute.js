@@ -5,8 +5,8 @@ const controller = require("../controller/rmAssignmentController");
 
 const router = express.Router();
 
-// Dashboard session auth (eusers); admins only (denials are audited).
-router.use(authenticateToken, controller.requireAdmin);
+// Dashboard session auth (verified eusers); admins and RMs (denials are audited).
+router.use(authenticateToken, controller.requireAssignmentManager);
 
 const writeLimit = rateLimit({
   windowMs: 60 * 1000,

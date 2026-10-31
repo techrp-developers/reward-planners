@@ -10,6 +10,8 @@ Full contract and routing table: `../mobile-push-deep-linking.md`.
 - `new-files/` — files to add:
   - `notificationRouting.ts` → `src/modules/common/notifications/`
   - `NotificationSettings.tsx`, `notificationPreferencesAPI.ts` → `src/modules/dashboard/notification/`
+  - `NotificationPermissionSheet.tsx` → `src/modules/common/notifications/` (see
+    `notification-permission-and-channels.md`: Android 13+ is never asked for permission today)
 
 ## Apply (from the app repo root)
 ```

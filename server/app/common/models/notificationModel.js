@@ -146,7 +146,8 @@ class NotificationModel {
   /* ================================
      FETCH USER NOTIFICATIONS
   ================================= */
-  async getByUser(userId, limit = 50) {
+  /** Newest first; beforeId (a notification_id) loads the next older page. */
+  async getByUser(userId, limit = 50, beforeId = null) {
     const [rows] = await db.execute(
       `
       SELECT
@@ -164,11 +165,11 @@ class NotificationModel {
         is_read,
         created_at
       FROM notifications
-      WHERE user_id = ?
+      WHERE user_id = ?${beforeId ? " AND notification_id < ?" : ""}
       ORDER BY notification_id DESC
       LIMIT ?
       `,
-      [userId, normalizeLimit(limit)],
+      beforeId ? [userId, beforeId, normalizeLimit(limit)] : [userId, normalizeLimit(limit)],
     );
 
     return rows.map((row) => ({

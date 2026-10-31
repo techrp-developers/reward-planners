@@ -1,7 +1,8 @@
 import { api } from "../../../common/api/api";
-import type { AudienceFilter, AudiencePreview, Campaign, CatalogProduct, Language, ManagerMeta, MediaAsset, MediaMap, Paged, RenderedPreview, Template } from "./notificationTypes";
+import type { AssignmentAuditEntry, AssignmentCompany, AssignResult, AudienceFilter, AudiencePreview, Campaign, CampaignDiagnostics, CatalogProduct, Language, ManagerMeta, MediaAsset, MediaMap, Paged, RenderedPreview, RmAccount, RmAssignment, Template } from "./notificationTypes";
 
 const BASE = "/v1/rm/notifications";
+const ASSIGNMENTS = "/v1/rm/assignments";
 
 type Envelope<T> = { success: boolean; data: T; message?: string };
 const unwrap = <T,>(promise: Promise<{ data: Envelope<T> }>) => promise.then((response) => response.data.data);
@@ -45,6 +46,15 @@ export interface TestResult {
   user_id: number; name: string; language: string; inbox_saved: boolean;
   image_sent?: boolean; image_fallback?: boolean; destination?: string | null; destination_blocked?: string | null;
   devices_attempted: number; firebase_accepted: number; skipped_reason: string | null; errors: string[];
+  /** The one device the test went to (token masked) and Firebase's message id. */
+  device?: { id: number; platform: string; token: string; firebaseProjectId: string } | null;
+  fcm_message_id?: string | null;
+}
+
+/** Allow-listed test employees and their registered devices (tokens masked by the server). */
+export interface TestDeviceUser {
+  user_id: number; name: string;
+  devices: { device_id: number; user_id: number; platform: string; token: string; last_seen_at: string | null }[];
 }
 
 export interface AnalyticsData {
@@ -101,7 +111,8 @@ export const notificationApi = {
   campaign: (id: number) => unwrap<Campaign>(api.get(`${BASE}/campaigns/${id}`)),
   createCampaign: (body: CampaignInput) => unwrap<Campaign>(api.post(`${BASE}/campaigns`, body)),
   updateCampaign: (id: number, body: CampaignInput) => unwrap<Campaign>(api.put(`${BASE}/campaigns/${id}`, body)),
-  testCampaign: (id: number, body: { language?: string } = {}) => unwrap<TestResult[]>(api.post(`${BASE}/campaigns/${id}/test`, body)),
+  testCampaign: (id: number, body: { language?: string; user_id?: number; device_id?: number } = {}) => unwrap<TestResult[]>(api.post(`${BASE}/campaigns/${id}/test`, body)),
+  testDevices: () => unwrap<TestDeviceUser[]>(api.get(`${BASE}/test-devices`)),
   /** Direct send (no approval): mode "now" or "schedule"; confirm_recipients for large sends. */
   sendCampaign: (id: number, body: { mode: "now" | "schedule"; send_date?: string; send_time?: string; timezone?: string; confirm_recipients?: number }) =>
     api.post<{ success: boolean; data: Campaign; warning?: string | null }>(`${BASE}/campaigns/${id}/send`, body).then((response) => response.data),
@@ -111,4 +122,15 @@ export const notificationApi = {
     unwrap<Paged<RecipientRow>>(api.get(`${BASE}/campaigns/${id}/recipients`, { params })),
   attempts: (id: number, params: Record<string, string | number>) =>
     unwrap<{ available: boolean; rows: AttemptRow[] }>(api.get(`${BASE}/campaigns/${id}/attempts`, { params })),
+  diagnostics: (id: number) => unwrap<CampaignDiagnostics>(api.get(`${BASE}/campaigns/${id}/diagnostics`)),
+};
+
+/** RM -> company assignments: relationship managers only (server-enforced, audited). */
+export const assignmentApi = {
+  rms: () => unwrap<{ rms: RmAccount[]; orphaned: RmAssignment[] }>(api.get(ASSIGNMENTS)),
+  companies: () => unwrap<AssignmentCompany[]>(api.get(`${ASSIGNMENTS}/companies`)),
+  audit: (params: { rm_user_id?: number; page?: number; limit?: number } = {}) => unwrap<AssignmentAuditEntry[]>(api.get(`${ASSIGNMENTS}/audit`, { params })),
+  assign: (rmUserId: number, companyIds: number[]) => unwrap<AssignResult>(api.post(`${ASSIGNMENTS}/${rmUserId}/companies`, { company_ids: companyIds })),
+  revoke: (rmUserId: number, companyId: number) =>
+    unwrap<{ rm_user_id: number; company_id: number; removed: boolean }>(api.delete(`${ASSIGNMENTS}/${rmUserId}/companies/${companyId}`)),
 };

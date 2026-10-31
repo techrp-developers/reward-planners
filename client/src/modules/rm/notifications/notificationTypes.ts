@@ -49,7 +49,7 @@ export interface CatalogProduct {
 }
 
 export interface ManagerMeta {
-  role: "admin" | "rm";
+  role: "rm";
   modules: ModuleOption[];
   categories: Category[];
   audienceTypes: AudienceType[];
@@ -68,8 +68,10 @@ export interface ManagerMeta {
     credentialMode?: string | null; serviceAccountEmail?: string | null;
     adcSource?: string | null; credentialCheck?: "pending" | "verified" | "unverified" | "failed" | null; checkedAt?: string | null;
   };
-  scheduler?: { running: boolean };
-  permissions: { send: boolean; sendAllCompanies: boolean; approveTranslations: boolean };
+  scheduler?: CampaignWorkerState & { running: boolean };
+  permissions: { send: boolean; sendAllCompanies: boolean; approveTranslations: boolean; manageCompanyAssignments?: boolean } & Partial<RmNotificationPermissions>;
+  /** The signed-in dashboard user (newer backends). */
+  userId?: number;
   limits: { promotionalDailyCap: number; largeSendThreshold: number; employeeTimezone: string };
   infrastructure: { campaignTables: boolean; attemptsTable: boolean; mediaTables: boolean };
   /** Set by the client when the backend omits fields (restart the server). */
@@ -100,11 +102,28 @@ export interface Template {
   is_enabled: boolean;
   placeholders: string[];
   created_by?: number | null;
-  /** What the current user may do: admins everything; RMs their own promotional templates. */
-  permissions?: { edit: boolean; publish: boolean; approveTranslations: boolean; owned: boolean } | null;
+  /** What the current RM may do with this template (system event templates are read-only). */
+  permissions?: { edit: boolean; publish: boolean; approveTranslations: boolean; owned: boolean; systemEvent?: boolean } | null;
 }
 
 export interface AudienceFilter { user_ids?: number[]; company_ids?: number[]; module?: string | null }
+
+/* ---------- RM company assignments (/v1/rm/assignments) ---------- */
+export interface AssignmentCompany {
+  company_id: number; company_name: string; status: number; eligible: boolean;
+  active_employees: number; rm_user_ids: number[];
+}
+export interface RmAssignment {
+  rm_user_id: number; company_id: number; company_name: string | null; company_status: number | null;
+  assigned_by: number | null; assigned_by_name: string | null; created_at: string;
+}
+export interface RmAccount { user_id: number; name: string; email: string; is_verified: boolean; companies: RmAssignment[] }
+export interface AssignmentAuditEntry {
+  audit_id: number; action: "rm_assignment_granted" | "rm_assignment_revoked" | "rm_assignment_denied"; decision: string;
+  details: { rm_user_id?: number; company_id?: number; reason?: string } | null;
+  actor_user_id: number; actor_role: string; actor_name: string | null; created_at: string;
+}
+export interface AssignResult { rm_user_id: number; assigned: number[]; already_assigned: number[] }
 
 /**
  * Delivery states are separate, never merged: queued -> inbox created ->
@@ -196,3 +215,36 @@ export interface AudiencePreview {
 export interface RenderedPreview { language?: Language; title?: string; message?: string; fallback?: boolean; error?: string; missing?: string[] }
 
 export interface Paged<T> { total: number; page?: number; limit?: number; rows: T[] }
+
+/** The campaign worker as this server process actually runs it. */
+export interface CampaignWorkerState {
+  campaignWorkerEnabled?: boolean;
+  state?: "off" | "starting" | "running" | "stalled" | "error" | "waiting_for_firebase";
+  reason?: string | null;
+  configured?: boolean;
+  mode?: "off" | "campaign_worker_only" | "all_jobs";
+  startedAt?: string | null;
+  lastRunAt?: string | null;
+  lastOutcome?: string | null;
+}
+
+export type DiagnosticState = "pass" | "fail" | "pending" | "info";
+export interface CampaignDiagnostics {
+  stage: string;
+  due: boolean;
+  expired: boolean;
+  blockers: { code: string; message: string }[];
+  checks: { key: string; label: string; state: DiagnosticState; detail: string | null }[];
+  lastWorkerActivityAt: string | null;
+  worker?: CampaignWorkerState;
+  audience: { candidates: number; withDevice: number; consented: number; noPreferenceRecord: number; optedOut: number; reachable: number; unknownProjectDevices: number };
+  scopeAllowed: boolean;
+  scopeReason: string | null;
+}
+
+/** The RM-only Notification Manager permission set sent by /meta (server: RM_NOTIFICATION_PERMISSIONS). */
+export interface RmNotificationPermissions {
+  manageCampaigns: boolean; sendNotifications: boolean; scheduleNotifications: boolean; manageTemplates: boolean;
+  manageCompanyAssignments: boolean; manageAudiences: boolean; viewHistory: boolean; viewAnalytics: boolean;
+  viewDeliveryDiagnostics: boolean; manageNotificationModuleSettings: boolean;
+}

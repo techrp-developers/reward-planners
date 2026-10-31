@@ -35,6 +35,7 @@ const InactiveUsersReportPage = lazy(() => import("./modules/rm/reports/Inactive
 const RmSupportTickets = lazy(() => import("./modules/rm/support/SupportTickets.tsx"));
 const RmClientApprovals = lazy(() => import("./modules/rm/clients/ClientApprovals.tsx"));
 const NotificationManager = lazy(() => import("./modules/rm/notifications/NotificationManager.tsx"));
+const NotificationAccessDenied = lazy(() => import("./modules/rm/notifications/NotificationAccessDenied.tsx"));
 const HrDashboard = lazy(() => import("./modules/hr/dashboard/HrDashboard.tsx"));
 const WarehouseDashboard = lazy(() => import("./modules/warehouse_manager/dashboard/WarehouseDashboard.tsx"));
 const FleaMarketDashboard = lazy(() => import("./modules/flea_market/dashboard/FleaMarketDashboard.tsx"));
@@ -411,7 +412,8 @@ export default function App() {
       {/* ========== ADMIN ========== */}
       <Route element={<AdminLayout />}>
         <Route path={routes.admin.dashboard} element={<AdminDashboard />} />
-        <Route path={routes.admin.notifications} element={<NotificationManager />} />
+        {/* Push notifications are RM-only; an old admin link shows Access denied. */}
+        <Route path={routes.admin.notifications} element={<NotificationAccessDenied />} />
         <Route
           path={routes.admin.vendors}
           element={<AdminVendorApprovalList />}

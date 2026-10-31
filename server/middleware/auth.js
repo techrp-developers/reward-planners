@@ -21,7 +21,7 @@ exports.authenticateToken = async (req, res, next) => {
 
   try {
     const decoded = verifyToken(token);
-    if (decoded.type && decoded.type !== "access") throw new Error("Invalid token type");
+    if (decoded.type && decoded.type !== "access") throw Object.assign(new Error("Invalid token type"), { name: "JsonWebTokenError" });
 
     if (cookieToken && !["GET", "HEAD", "OPTIONS"].includes(req.method) && !isCsrfValid(req)) {
       return res.status(403).json({ success: false, code: "CSRF_INVALID", message: "Invalid security token" });
@@ -132,9 +132,13 @@ exports.authenticateToken = async (req, res, next) => {
 
     next();
   } catch (err) {
-    console.error("Token verification error:", err);
-    const expired = err?.name === "TokenExpiredError";
-    return res.status(expired ? 401 : 403).json({
+    // Only token problems are authentication failures (401: the client may
+    // refresh once, then signs out). Anything else, e.g. the database being
+    // down, goes to the error handler instead of looking like a bad login.
+    if (!["JsonWebTokenError", "TokenExpiredError", "NotBeforeError"].includes(err?.name)) return next(err);
+    console.error("Token verification error:", err.name, err.message);
+    const expired = err.name === "TokenExpiredError";
+    return res.status(401).json({
       success: false,
       code: expired ? "ACCESS_TOKEN_EXPIRED" : "ACCESS_TOKEN_INVALID",
       message: expired ? "Access token expired" : "Invalid access token",

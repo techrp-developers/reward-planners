@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { FiCalendar, FiCheckCircle, FiSave, FiSend, FiUsers, FiX, FiZap } from "react-icons/fi";
-import { notificationApi, type CampaignInput, type TestResult } from "../notificationApi";
+import { FiBriefcase, FiCalendar, FiCheckCircle, FiSave, FiSend, FiUsers, FiX, FiZap } from "react-icons/fi";
+import { notificationApi, type CampaignInput, type TestDeviceUser, type TestResult } from "../notificationApi";
 import type { AudiencePreview, AudienceType, Campaign, Category, ContentType, DeliveryMode, Language, ManagerMeta, MediaAsset, MediaMap, RecurrenceType, RenderedPreview, Template } from "../notificationTypes";
 import { Card, LanguageTabs, Modal, Notice, NotificationPreviews, Spinner, Tag, inputCls, labelCls, primaryBtn, secondaryBtn } from "../components";
 import MediaDestinationSection, { type MediaDestinationValue } from "./MediaDestinationSection";
-import { AUDIENCE_LABELS, LANGUAGE_LABELS, SKIP_REASON_LABELS, apiErrorMessage, campaignVariablesNeeded, newClientRequestId, toZonedInputs } from "../notificationUtils";
+import TestDevicePicker, { type TestTarget } from "./TestDevicePicker";
+import { defaultTestTarget, sendNowBlockedReason, expiryTooSoon, zonedInputsToUtc, AUDIENCE_LABELS, LANGUAGE_LABELS, SKIP_REASON_LABELS, apiErrorMessage, campaignVariablesNeeded, newClientRequestId, toZonedInputs } from "../notificationUtils";
 import type { TabNavigation } from "../NotificationManager";
 
 const TIMEZONES = ["Asia/Kolkata", "UTC", "Asia/Dubai", "Asia/Singapore", "Europe/London", "America/New_York"];
@@ -111,10 +112,27 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
   const [busy, setBusy] = useState<string | null>(null);
   const [saveAsTemplate, setSaveAsTemplate] = useState(false);
   const [testResults, setTestResults] = useState<TestResult[] | null>(null);
+  // Send test goes to one chosen device; a ref (not just state) blocks a
+  // second click that lands before React re-renders the disabled button.
+  const [testUsers, setTestUsers] = useState<TestDeviceUser[] | null>(null);
+  const [testTarget, setTestTarget] = useState<TestTarget>(null);
+  const sending = useRef(false);
+  useEffect(() => {
+    if (!meta.testUsers.length) { setTestUsers([]); return; }
+    let active = true;
+    notificationApi.testDevices()
+      .then((users) => { if (!active) return; setTestUsers(users); setTestTarget(defaultTestTarget(users)); })
+      .catch(() => { if (active) setTestUsers([]); });
+    return () => { active = false; };
+  }, [meta.testUsers.length]);
   const [companies, setCompanies] = useState<{ company_id: number; company_name: string; active_employees: number }[]>([]);
   const [employeeSearch, setEmployeeSearch] = useState("");
-  const [employeeResults, setEmployeeResults] = useState<{ user_id: number; name: string; company_name: string | null }[]>([]);
+  const [employeeResults, setEmployeeResults] = useState<{ user_id: number; name: string; company_id: number; company_name: string | null }[]>([]);
+  const [employeeSearching, setEmployeeSearching] = useState(false);
   const [selectedNames, setSelectedNames] = useState<Record<number, string>>({});
+  // Company of each picked employee, so a revoked company also drops its employees.
+  const [selectedCompanyOf, setSelectedCompanyOf] = useState<Record<number, number>>({});
+  const [messageError, setMessageError] = useState("");
   const [assets, setAssets] = useState<Record<number, MediaAsset>>({});
   const [confirmSend, setConfirmSend] = useState<{ mode: "now" | "schedule"; campaign: Campaign } | null>(null);
   const [clientRequestId, setClientRequestId] = useState(newClientRequestId);
@@ -128,8 +146,28 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
 
   useEffect(() => {
     notificationApi.templates({ usable: 1, limit: 100 }).then((result) => setTemplates(result.rows)).catch(() => setTemplates([]));
-    notificationApi.companies().then(setCompanies).catch(() => setCompanies([]));
   }, []);
+
+  // Companies in scope: reloaded whenever meta is refreshed (e.g. after Manage
+  // Companies), so new assignments appear and revoked ones disappear at once.
+  const scopeKey = JSON.stringify([meta.scope.global, meta.scope.companyCount, meta.userId]);
+  useEffect(() => {
+    let active = true;
+    notificationApi.companies().then((list) => { if (active) setCompanies(list); }).catch(() => { if (active) setCompanies([]); });
+    return () => { active = false; };
+  }, [meta]);
+
+  // Drop selections that left the scope (revoked or deactivated company).
+  useEffect(() => {
+    if (meta.scope.global) return;
+    const inScope = new Set(companies.map((company) => company.company_id));
+    setForm((current) => {
+      const companyIds = current.company_ids.filter((id) => inScope.has(id));
+      const userIds = current.user_ids.filter((id) => selectedCompanyOf[id] === undefined || inScope.has(selectedCompanyOf[id]));
+      return companyIds.length === current.company_ids.length && userIds.length === current.user_ids.length ? current : { ...current, company_ids: companyIds, user_ids: userIds };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companies]);
 
   // Load an existing campaign, or start from a template chosen in the library.
   useEffect(() => {
@@ -183,35 +221,66 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewKey]);
 
-  const audienceKey = JSON.stringify([form.audience_type, form.user_ids, form.company_ids, form.audience_module, form.category]);
+  // The scope is part of the key: a changed assignment invalidates the preview.
+  // `active` discards a slower, older response so it cannot overwrite a newer one.
+  const audienceKey = JSON.stringify([form.audience_type, form.user_ids, form.company_ids, form.audience_module, form.category, scopeKey]);
   useEffect(() => {
+    let active = true;
     setAudience(null);
     const timer = window.setTimeout(() => {
       notificationApi.previewAudience({
         audience_type: form.audience_type,
         audience_filter: { user_ids: form.user_ids, company_ids: form.company_ids, module: form.audience_module || null },
         category: form.category,
-      }).then(setAudience).catch((error) => setAudience({ allowed: false, reason: apiErrorMessage(error) }));
+      }).then((result) => { if (active) setAudience(result); })
+        .catch((error) => { if (active) setAudience({ allowed: false, reason: apiErrorMessage(error) }); });
     }, 300);
-    return () => window.clearTimeout(timer);
+    return () => { active = false; window.clearTimeout(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audienceKey]);
 
   useEffect(() => {
-    if (!["individual", "selected"].includes(form.audience_type) || employeeSearch.trim().length < 2) { setEmployeeResults([]); return undefined; }
+    if (!["individual", "selected"].includes(form.audience_type) || employeeSearch.trim().length < 2) { setEmployeeResults([]); setEmployeeSearching(false); return undefined; }
+    let active = true;
+    setEmployeeSearching(true);
     const timer = window.setTimeout(() => {
-      notificationApi.employees({ search: employeeSearch.trim() }).then(setEmployeeResults).catch(() => setEmployeeResults([]));
+      notificationApi.employees({ search: employeeSearch.trim() })
+        .then((rows) => { if (active) setEmployeeResults(rows); })
+        .catch(() => { if (active) setEmployeeResults([]); })
+        .finally(() => { if (active) setEmployeeSearching(false); });
     }, 300);
-    return () => window.clearTimeout(timer);
-  }, [employeeSearch, form.audience_type]);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [employeeSearch, form.audience_type, scopeKey]);
 
-  // all_companies needs notifications.send_all_companies (admins, or RMs on the
+  const canManageCompanies = Boolean(meta.permissions.manageCompanyAssignments);
+  const noCompaniesInScope = !meta.scope.global && companies.length === 0;
+  const manageCompaniesHint = (text: string) => (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-purple-100 bg-purple-50/40 p-3">
+      <p className="text-sm text-gray-600">{text}</p>
+      {canManageCompanies && <button type="button" className={secondaryBtn} onClick={() => nav.go("companies")}><FiBriefcase /> Manage Companies</button>}
+    </div>
+  );
+
+  // English title and message are required for every save (the server enforces it too).
+  const requireMessage = () => {
+    const title = form.title_en.trim();
+    const body = form.body_en.trim();
+    if (title && body) { setMessageError(""); return true; }
+    const missing = !title && !body ? "English title and message are required." : !title ? "English title is required." : "English message is required.";
+    setMessageError(missing);
+    setLang("en");
+    toast.error(missing);
+    return false;
+  };
+
+  // all_companies needs notifications.send_all_companies (RMs on the
   // server's explicit global-sender list); RMs otherwise target assigned companies.
   const audienceOptions = meta.audienceTypes.filter((type) => (
     type === "all_companies" ? meta.permissions.sendAllCompanies : type === "assigned_companies" ? !meta.scope.global : true
   ));
 
   const save = async (overrides: Partial<FormState> = {}): Promise<Campaign | null> => {
+    if (!requireMessage()) return null;
     setBusy("save");
     try {
       const input = toInput({ ...form, ...overrides });
@@ -225,7 +294,7 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
             module: form.module, notification_type: form.category === "engagement" ? "engagement" : "marketing", priority: form.priority,
             title_en: form.title_en, body_en: form.body_en, title_hi: form.title_hi, body_hi: form.body_hi, title_mr: form.title_mr, body_mr: form.body_mr,
           });
-          toast.success("Also saved as a reusable template (disabled until an admin enables it).");
+          toast.success("Also saved as a reusable template (disabled until you enable it in the Template Library).");
           setSaveAsTemplate(false);
         } catch (error) {
           toast.error(`Campaign saved, but the template was not: ${apiErrorMessage(error)}`);
@@ -246,14 +315,24 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
   const saveDraft = async () => { if (await save()) toast.success("Draft saved. Nothing has been sent."); };
 
   const sendTest = async () => {
-    const saved = await save();
-    if (!saved) return;
-    setBusy("test");
+    if (!testTarget) { toast.error("Choose the test device first."); return; }
+    if (sending.current) return;
+    sending.current = true;
     try {
-      setTestResults(await notificationApi.testCampaign(saved.campaign_id, previewLang === "en" ? {} : { language: previewLang }));
+      const saved = await save();
+      if (!saved) return;
+      setBusy("test");
+      const results = await notificationApi.testCampaign(saved.campaign_id, {
+        user_id: testTarget.userId,
+        device_id: testTarget.deviceId,
+        ...(previewLang === "en" ? {} : { language: previewLang }),
+      });
+      setTestResults(results);
+      if (results.some((result) => result.firebase_accepted > 0)) toast.success("Test accepted by Firebase. Check the test phone.");
     } catch (error) {
       toast.error(apiErrorMessage(error));
     } finally {
+      sending.current = false;
       setBusy(null);
     }
   };
@@ -269,7 +348,8 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
   };
 
   const confirmAndSend = async () => {
-    if (!confirmSend) return;
+    if (!confirmSend || sending.current) return;
+    sending.current = true;
     setBusy("send");
     try {
       const { campaign: target, mode } = confirmSend;
@@ -286,11 +366,13 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
     } catch (error) {
       toast.error(apiErrorMessage(error));
     } finally {
+      sending.current = false;
       setBusy(null);
     }
   };
 
   if (loading) return <Spinner />;
+  const sendNowBlocked = sendNowBlockedReason(meta);
 
   const titleField = `title_${lang}` as const;
   const bodyField = `body_${lang}` as const;
@@ -338,7 +420,7 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
                   <option value="">Select a template…</option>
                   {templates.map((template) => <option key={template.template_id} value={template.template_id}>{template.name} ({template.notification_type}){template.is_enabled ? "" : " · disabled"}</option>)}
                 </select>
-                {selectedTemplate && !selectedTemplate.is_enabled && <p className="mt-1 text-xs font-semibold text-amber-700">This template is disabled: you can draft and test, but not send it until an admin enables it. To send now, choose “Write a new notification”.</p>}
+                {selectedTemplate && !selectedTemplate.is_enabled && <p className="mt-1 text-xs font-semibold text-amber-700">This template is disabled: you can draft and test, but not send it until you enable it in the Template Library. To send now, enable it there or choose “Write a new notification”.</p>}
                 <p className="mt-1 text-xs text-gray-500">System event templates (orders, payments, OTPs) are not listed: campaigns cannot imitate them.</p>
               </label>
             )}
@@ -396,12 +478,15 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
             <LanguageTabs value={lang} onChange={setLang} approved={form.approved_languages} available={{ hi: Boolean(form.title_hi && form.body_hi), mr: Boolean(form.title_mr && form.body_mr) }} />
             <label className="block"><span className={labelCls}>{LANGUAGE_LABELS[lang]} title {lang === "en" && "*"}</span>
               <input className={inputCls} disabled={!editable} maxLength={255} value={form[titleField]}
-                onChange={(event) => setForm((current) => ({ ...current, [titleField]: event.target.value, approved_languages: current.approved_languages.filter((item) => item !== lang) }))} />
+                onChange={(event) => { setMessageError(""); setForm((current) => ({ ...current, [titleField]: event.target.value, approved_languages: current.approved_languages.filter((item) => item !== lang) })); }}
+                aria-invalid={lang === "en" && Boolean(messageError) && !form.title_en.trim()} />
             </label>
             <label className="block"><span className={labelCls}>{LANGUAGE_LABELS[lang]} message {lang === "en" && "*"}</span>
               <textarea className={`${inputCls} min-h-28`} disabled={!editable} maxLength={1000} value={form[bodyField]}
-                onChange={(event) => setForm((current) => ({ ...current, [bodyField]: event.target.value, approved_languages: current.approved_languages.filter((item) => item !== lang) }))} />
+                onChange={(event) => { setMessageError(""); setForm((current) => ({ ...current, [bodyField]: event.target.value, approved_languages: current.approved_languages.filter((item) => item !== lang) })); }}
+                aria-invalid={lang === "en" && Boolean(messageError) && !form.body_en.trim()} />
             </label>
+            {messageError && <p className="text-sm font-semibold text-red-600" role="alert">{messageError}</p>}
             <p className="text-xs text-gray-500">Use <code>{"{{first_name}}"}</code> to greet each employee by name.</p>
             {lang !== "en" && (
               meta.permissions.approveTranslations ? (
@@ -439,7 +524,7 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
             </label>
 
             {form.audience_type === "test" && (
-              <p className="text-sm text-gray-600">Test users: {meta.testUsers.length ? meta.testUsers.map((user) => user.name).join(", ") : <span className="font-semibold text-amber-700">none configured (an admin sets NOTIFICATION_TEST_USER_IDS)</span>}. Use “Send test”. To send to employees, choose a real audience.</p>
+              <p className="text-sm text-gray-600">Test users: {meta.testUsers.length ? meta.testUsers.map((user) => user.name).join(", ") : <span className="font-semibold text-amber-700">none configured (set NOTIFICATION_TEST_USER_IDS in the server configuration)</span>}. Use “Send test”. To send to employees, choose a real audience.</p>
             )}
 
             {(form.audience_type === "company" || form.audience_type === "module_users") && (
@@ -455,8 +540,17 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
                       </label>
                     ))}
                   </div>
-                ) : <p className="text-sm text-gray-500">No companies are available in your scope.</p>}
+                ) : manageCompaniesHint(form.audience_type === "company" ? "No companies are assigned to you yet, so there is nothing to select." : "No companies are assigned to you yet, so this audience is empty.")}
               </div>
+            )}
+
+            {form.audience_type === "assigned_companies" && (
+              companies.length ? (
+                <div>
+                  <span className={labelCls}>Included companies ({companies.length})</span>
+                  <div className="flex flex-wrap gap-1.5">{companies.map((company) => <Tag key={company.company_id} tone="purple">{company.company_name} · {company.active_employees}</Tag>)}</div>
+                </div>
+              ) : manageCompaniesHint("No companies are assigned to you yet, so this audience is empty.")
             )}
 
             {form.audience_type === "module_users" && (
@@ -471,15 +565,21 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
 
             {(form.audience_type === "individual" || form.audience_type === "selected") && (
               <div className="space-y-2">
+                {noCompaniesInScope && manageCompaniesHint("No companies are assigned to you yet, so there are no employees to search.")}
                 <label className="block"><span className={labelCls}>Find employees (name or email)</span>
-                  <input className={inputCls} disabled={!editable} value={employeeSearch} onChange={(event) => setEmployeeSearch(event.target.value)} placeholder="Type at least 2 characters" />
+                  <input className={inputCls} disabled={!editable || noCompaniesInScope} value={employeeSearch} onChange={(event) => setEmployeeSearch(event.target.value)} placeholder="Type at least 2 characters" />
                 </label>
+                {employeeSearching && <p className="text-xs text-gray-500">Searching…</p>}
+                {!employeeSearching && employeeSearch.trim().length >= 2 && employeeResults.length === 0 && !noCompaniesInScope && (
+                  <p className="text-xs text-gray-500">No employees in your assigned companies match “{employeeSearch.trim()}”.</p>
+                )}
                 {employeeResults.length > 0 && (
                   <div className="max-h-40 overflow-y-auto rounded-xl border border-gray-100">
                     {employeeResults.map((employee) => (
                       <button key={employee.user_id} type="button" className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-purple-50"
                         onClick={() => {
                           setSelectedNames((current) => ({ ...current, [employee.user_id]: employee.name }));
+                          setSelectedCompanyOf((current) => ({ ...current, [employee.user_id]: employee.company_id }));
                           set("user_ids", form.audience_type === "individual" ? [employee.user_id] : [...new Set([...form.user_ids, employee.user_id])]);
                         }}>
                         <span className="font-semibold text-gray-800">{employee.name}</span><span className="text-xs text-gray-500">{employee.company_name}</span>
@@ -551,6 +651,9 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
               <label><span className={labelCls}>Expires on (optional)</span><input type="date" className={inputCls} disabled={!editable} value={form.expiry_date} onChange={(event) => set("expiry_date", event.target.value)} /></label>
               <label><span className={labelCls}>Expiry time</span><input type="time" className={inputCls} disabled={!editable || !form.expiry_date} value={form.expiry_time} onChange={(event) => set("expiry_time", event.target.value)} /></label>
             </div>
+            {expiryTooSoon({ date: form.expiry_date, time: form.expiry_time }, form.timezone, form.delivery_mode !== "now" && form.send_date ? zonedInputsToUtc(form.send_date, form.send_time, form.timezone) ?? new Date() : new Date()) && (
+              <p role="alert" className="text-xs font-semibold text-red-600">This expiry is less than 10 minutes after the send time, so the campaign would expire before it is sent. Clear the expiry or choose a later time.</p>
+            )}
             <p className="text-xs text-gray-500">Times are entered in the selected timezone and stored in UTC. The server worker sends the campaign; your browser does not need to stay open.</p>
           </div>
         </Card>
@@ -572,17 +675,18 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
             <label className="flex items-center gap-2 text-sm text-gray-700">
               <input type="checkbox" disabled={!editable} checked={saveAsTemplate} onChange={(event) => setSaveAsTemplate(event.target.checked)} /> Also save as a reusable template
             </label>
+            {meta.testUsers.length > 0 && <TestDevicePicker users={testUsers} value={testTarget} onChange={setTestTarget} disabled={busy !== null} />}
             <div className="grid gap-2">
               <button type="button" className={secondaryBtn} disabled={!tablesReady || !editable || busy !== null} onClick={saveDraft}><FiSave /> {busy === "save" ? "Saving…" : "Save draft"}</button>
-              <button type="button" className={secondaryBtn} disabled={!tablesReady || busy !== null || !meta.testUsers.length || (campaign !== null && !campaign.can_manage)} onClick={sendTest}
-                title={meta.testUsers.length ? "Saves, then sends to the configured test users only" : "No test users are configured"}>
+              <button type="button" className={secondaryBtn} disabled={!tablesReady || busy !== null || !meta.testUsers.length || !testTarget || (campaign !== null && !campaign.can_manage)} onClick={sendTest}
+                title={!meta.testUsers.length ? "No test users are configured" : !testTarget ? "Choose the test device" : "Saves, then sends one test to the chosen device only"}>
                 <FiZap /> {busy === "test" ? "Sending test…" : `Send test${previewLang !== "en" ? ` (${LANGUAGE_LABELS[previewLang]})` : ""}`}
               </button>
               {meta.permissions.send && (
                 <>
-                  <button type="button" className={primaryBtn} disabled={!tablesReady || !editable || busy !== null || form.audience_type === "test" || !audience?.allowed || !meta.firebase.enabled}
+                  <button type="button" className={primaryBtn} disabled={!tablesReady || !editable || busy !== null || form.audience_type === "test" || !audience?.allowed || sendNowBlocked !== null}
                     onClick={() => startSend("now")}
-                    title={!meta.firebase.enabled ? "Push sending is not configured on the server" : form.audience_type === "test" ? "Choose a real audience, or use Send test" : undefined}>
+                    title={sendNowBlocked ?? (form.audience_type === "test" ? "Choose a real audience, or use Send test" : undefined)}>
                     <FiSend /> Send now
                   </button>
                   <button type="button" className={secondaryBtn} disabled={!tablesReady || !editable || busy !== null || form.audience_type === "test" || !audience?.allowed || form.delivery_mode === "now"}
@@ -593,8 +697,8 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
                 </>
               )}
             </div>
-            {!meta.firebase.enabled && meta.permissions.send && (
-              <p className="text-xs text-amber-700">Push sending is not configured on the server ({meta.firebase.reason || "Firebase disabled"}). You can save drafts and schedule; scheduled campaigns wait until Firebase is configured.</p>
+            {sendNowBlocked && meta.permissions.send && (
+              <p role="status" className="text-xs font-semibold text-amber-700">{sendNowBlocked}</p>
             )}
             {campaign && <button type="button" className="w-full text-center text-xs font-bold text-[#852BAF] hover:underline" onClick={() => nav.go("compose")}>Start a new notification</button>}
           </div>
@@ -641,10 +745,11 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
                     {result.destination ? ` · opens ${result.destination}` : ""}
                     {result.destination_blocked ? " · destination unavailable (real sends would skip)" : ""}
                   </p>
-                  {result.errors.length > 0 && <p className="text-xs text-red-600">{result.errors.join(", ")}</p>}
+                  {result.device && <p className="text-xs text-gray-500">Device #{result.device.id} · {result.device.platform} · {result.device.token}</p>}
+                  {result.errors.length > 0 && <p className="text-xs text-red-600">{result.errors.join(", ")} (not retried)</p>}
                 </div>
                 {result.firebase_accepted > 0
-                  ? <Tag tone="green"><FiCheckCircle /> Accepted on {result.firebase_accepted}/{result.devices_attempted}</Tag>
+                  ? <Tag tone="green"><FiCheckCircle /> Accepted by Firebase</Tag>
                   : <Tag tone={result.devices_attempted ? "red" : "amber"}>{result.devices_attempted ? "Not accepted" : "No device"}</Tag>}
               </div>
             ))}

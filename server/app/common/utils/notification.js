@@ -366,4 +366,6 @@ module.exports = {
   notifyUserFromTemplate,
   sendPushNotification,
   createInAppNotification,
+  // For the single-device QA push (singleDeviceTestPush.js): same attempt log.
+  recordPushAttempts,
 };

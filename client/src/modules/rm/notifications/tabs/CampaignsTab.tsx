@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { FiEdit2, FiRefreshCw, FiSearch } from "react-icons/fi";
-import { notificationApi, type AttemptRow, type RecipientRow } from "../notificationApi";
-import type { Campaign, Language, ManagerMeta } from "../notificationTypes";
+import { notificationApi, type AttemptRow, type RecipientRow, type TestDeviceUser } from "../notificationApi";
+import TestDevicePicker, { type TestTarget } from "./TestDevicePicker";
+import type { Campaign, CampaignDiagnostics, DiagnosticState, Language, ManagerMeta } from "../notificationTypes";
 import { Card, EmptyState, LanguageTabs, Metric, Modal, Notice, NotificationPreviews, Pagination, Spinner, StatusPill, Tag, dangerBtn, inputCls, labelCls, primaryBtn, secondaryBtn } from "../components";
-import { AUDIENCE_LABELS, LANGUAGE_LABELS, SKIP_REASON_LABELS, apiErrorMessage, campaignActions, formatInZone, toNumber, toZonedInputs } from "../notificationUtils";
+import { AUDIENCE_LABELS, LANGUAGE_LABELS, SKIP_REASON_LABELS, SCHEDULER_OFF_MESSAGE, apiErrorMessage, campaignActions, defaultTestTarget, displayStatus, firebaseUnavailableText, formatInZone, sendNowBlockedReason, toNumber, toZonedInputs, waitingNote } from "../notificationUtils";
 import { confirmDialog } from "../../../../common/utils/confirmDialog";
 import type { TabNavigation } from "../NotificationManager";
 
 const LIMIT = 20;
 const SCHEDULED_STATUSES = "scheduled,sending";
-
 export default function CampaignsTab({ meta, nav, mode }: { meta: ManagerMeta; nav: TabNavigation; mode: "scheduled" | "history" }) {
   const [filters, setFilters] = useState({ status: "", module: "", search: "" });
   const [page, setPage] = useState(1);
@@ -50,7 +50,7 @@ export default function CampaignsTab({ meta, nav, mode }: { meta: ManagerMeta; n
     <>
       <Card
         title={mode === "scheduled" ? "Scheduled & queued" : "Campaign history"}
-        subtitle={meta.role === "admin" ? "All campaigns" : "Campaigns you created"}
+        subtitle="Campaigns you created"
         actions={<button type="button" className={secondaryBtn} onClick={load}><FiRefreshCw /> Refresh</button>}
       >
         <div className="grid gap-3 border-b border-gray-100 p-4 sm:grid-cols-3">
@@ -95,7 +95,10 @@ export default function CampaignsTab({ meta, nav, mode }: { meta: ManagerMeta; n
                     <td className="px-4 py-3 text-right text-emerald-700">{toNumber(campaign.firebase_accepted)}</td>
                     <td className="px-4 py-3 text-right text-red-600">{toNumber(campaign.failed)}</td>
                     <td className="px-4 py-3 text-right text-amber-700">{toNumber(campaign.pending_retry)}</td>
-                    <td className="px-4 py-3"><StatusPill status={campaign.status} /></td>
+                    <td className="px-4 py-3">
+                      <StatusPill status={displayStatus(campaign, Boolean(meta.scheduler?.running))} />
+                      {waitingNote(campaign, Boolean(meta.scheduler?.running)) && <p className="mt-1 text-[11px] text-gray-500">{waitingNote(campaign, Boolean(meta.scheduler?.running))}</p>}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -112,7 +115,7 @@ export default function CampaignsTab({ meta, nav, mode }: { meta: ManagerMeta; n
 
 function CampaignDetail({ meta, nav, campaignId, onClose, onChanged }: { meta: ManagerMeta; nav: TabNavigation; campaignId: number; onClose: () => void; onChanged: () => void }) {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
-  const [section, setSection] = useState<"overview" | "recipients" | "attempts" | "audit">("overview");
+  const [section, setSection] = useState<"overview" | "delivery" | "recipients" | "attempts" | "audit">("overview");
   const [lang, setLang] = useState<Language>("en");
   const [busy, setBusy] = useState(false);
   const [reschedule, setReschedule] = useState({ date: "", time: "" });
@@ -120,6 +123,16 @@ function CampaignDetail({ meta, nav, campaignId, onClose, onChanged }: { meta: M
   const [recipientStatus, setRecipientStatus] = useState("");
   const [recipientPage, setRecipientPage] = useState(1);
   const [attempts, setAttempts] = useState<{ available: boolean; rows: AttemptRow[] } | null>(null);
+  const [testUsers, setTestUsers] = useState<TestDeviceUser[] | null>(null);
+  const [testTarget, setTestTarget] = useState<TestTarget>(null);
+  useEffect(() => {
+    if (!meta.testUsers.length) return undefined;
+    let active = true;
+    notificationApi.testDevices()
+      .then((users) => { if (!active) return; setTestUsers(users); setTestTarget(defaultTestTarget(users)); })
+      .catch(() => { if (active) setTestUsers([]); });
+    return () => { active = false; };
+  }, [meta.testUsers.length]);
 
   const load = useCallback(() => {
     notificationApi.campaign(campaignId).then((result) => {
@@ -191,20 +204,23 @@ function CampaignDetail({ meta, nav, campaignId, onClose, onChanged }: { meta: M
     <Modal title={`${campaign.name} · #${campaign.campaign_id}`} onClose={onClose} wide>
       <div className="space-y-5">
         <div className="flex flex-wrap items-center gap-2">
-          <StatusPill status={campaign.status} />
+          <StatusPill status={displayStatus(campaign, Boolean(meta.scheduler?.running))} />
           <Tag tone="purple">{campaign.category}</Tag>
           <Tag>{campaign.module}</Tag>
           <Tag tone="blue">{AUDIENCE_LABELS[campaign.audience_type]}</Tag>
           <span className="text-xs text-gray-500">by {campaign.created_by_name || "—"}{campaign.approved_by_name ? ` · approved by ${campaign.approved_by_name}` : ""}</span>
         </div>
+        {campaign.status === "scheduled" && !meta.scheduler?.running && (
+          <Notice tone="red">{SCHEDULER_OFF_MESSAGE} {meta.scheduler?.reason || "The campaign worker does not run on this server."} This campaign will not be sent from here. Open "Delivery check" for details.</Notice>
+        )}
         {campaign.rejection_reason && <Notice tone="red">{campaign.status === "rejected" ? "Rejected: " : ""}{campaign.rejection_reason}</Notice>}
         {(campaign.warnings || []).map((warning) => <Notice key={warning}>{warning}</Notice>)}
 
         <div className="flex gap-1 border-b border-gray-100">
-          {(["overview", "recipients", "attempts", "audit"] as const).map((key) => (
+          {(["overview", "delivery", "recipients", "attempts", "audit"] as const).map((key) => (
             <button key={key} type="button" onClick={() => setSection(key)}
               className={`-mb-px border-b-2 px-3 py-2 text-sm font-bold capitalize ${section === key ? "border-[#852BAF] text-[#852BAF]" : "border-transparent text-gray-500 hover:text-gray-800"}`}>
-              {key === "attempts" ? "Firebase attempts" : key}
+              {key === "attempts" ? "Firebase attempts" : key === "delivery" ? "Delivery check" : key}
             </button>
           ))}
         </div>
@@ -267,18 +283,22 @@ function CampaignDetail({ meta, nav, campaignId, onClose, onChanged }: { meta: M
                     <input type="time" className={inputCls} value={reschedule.time} onChange={(event) => setReschedule({ ...reschedule, time: event.target.value })} aria-label="Send time" />
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <button type="button" className={primaryBtn} disabled={busy || !meta.firebase.enabled} title={meta.firebase.enabled ? undefined : "Push sending is not configured on the server"}
+                    <button type="button" className={primaryBtn} disabled={busy || !meta.firebase.enabled || !meta.scheduler?.running}
+                      title={!meta.firebase.enabled ? firebaseUnavailableText(meta.firebase) : !meta.scheduler?.running ? SCHEDULER_OFF_MESSAGE : undefined}
                       onClick={() => sendFromDetail("now")}>Send now</button>
                     <button type="button" className={secondaryBtn} disabled={busy || !reschedule.date || !reschedule.time}
                       onClick={() => sendFromDetail("schedule")}>{campaign.status === "scheduled" ? "Save new time" : "Schedule"} ({campaign.timezone})</button>
                   </div>
-                  {!meta.firebase.enabled && <p className="text-xs text-amber-700">Firebase is not configured: scheduled campaigns wait until it is.</p>}
+                  {sendNowBlockedReason(meta) && <p role="status" className="text-xs font-semibold text-amber-700">{sendNowBlockedReason(meta)}</p>}
                 </div>
               )}
 
               <div className="flex flex-wrap gap-2">
                 {actions.edit && <button type="button" className={secondaryBtn} onClick={() => { onClose(); nav.go("compose", { campaign: String(campaign.campaign_id) }); }}><FiEdit2 /> Edit</button>}
-                {actions.test && <button type="button" className={secondaryBtn} disabled={busy || !meta.testUsers.length} onClick={() => run("Test sent to the configured test users.", () => notificationApi.testCampaign(campaign.campaign_id))}>Send test</button>}
+                {actions.test && meta.testUsers.length > 0 && <div className="w-full"><TestDevicePicker users={testUsers} value={testTarget} onChange={setTestTarget} disabled={busy} /></div>}
+                {actions.test && <button type="button" className={secondaryBtn} disabled={busy || !meta.testUsers.length || !testTarget}
+                  title={!meta.testUsers.length ? "No test users are configured" : !testTarget ? "Choose the test device" : "One test to the chosen device only"}
+                  onClick={() => testTarget && run("Test accepted by Firebase. Check the test phone.", () => notificationApi.testCampaign(campaign.campaign_id, { user_id: testTarget.userId, device_id: testTarget.deviceId }))}>Send test</button>}
                 {actions.retry && <button type="button" className={secondaryBtn} disabled={busy || !meta.firebase.enabled} onClick={() => run("Retryable failures were queued again.", () => notificationApi.retryCampaign(campaign.campaign_id))}>Retry failed</button>}
                 {actions.cancel && <button type="button" className={dangerBtn} disabled={busy} onClick={async () => {
                   const ok = await confirmDialog({ title: "Cancel this campaign?", text: "Unsent notifications are cancelled. Messages already sent cannot be recalled.", confirmButtonText: "Cancel campaign" });
@@ -288,6 +308,8 @@ function CampaignDetail({ meta, nav, campaignId, onClose, onChanged }: { meta: M
             </div>
           </div>
         )}
+
+        {section === "delivery" && <DeliveryCheck campaignId={campaign.campaign_id} timezone={campaign.timezone} />}
 
         {section === "recipients" && (
           <div className="space-y-3">
@@ -363,5 +385,54 @@ function CampaignDetail({ meta, nav, campaignId, onClose, onChanged }: { meta: M
         )}
       </div>
     </Modal>
+  );
+}
+
+const STATE_STYLE: Record<DiagnosticState, { tone: "green" | "red" | "gray" | "blue"; label: string }> = {
+  pass: { tone: "green", label: "Yes" },
+  fail: { tone: "red", label: "No" },
+  pending: { tone: "gray", label: "Not yet" },
+  info: { tone: "blue", label: "Info" },
+};
+
+/** Step-by-step answer to "why hasn't this been sent?". Counts only. */
+export function DeliveryCheck({ campaignId, timezone }: { campaignId: number; timezone: string }) {
+  const [data, setData] = useState<CampaignDiagnostics | null>(null);
+  const [error, setError] = useState("");
+  const load = useCallback(() => {
+    notificationApi.diagnostics(campaignId)
+      .then((result) => { setData(result); setError(""); })
+      .catch((requestError) => setError(apiErrorMessage(requestError)));
+  }, [campaignId]);
+  useEffect(load, [load]);
+
+  if (error) return <Notice tone="red">{error} <button type="button" className="ml-2 font-bold underline" onClick={() => { setError(""); load(); }}>Retry</button></Notice>;
+  if (!data) return <Spinner />;
+  return (
+    <div className="space-y-3">
+      {data.blockers.length > 0 ? (
+        <Notice tone="red">
+          <p className="font-bold">Delivery is blocked</p>
+          <ul className="mt-1 list-disc pl-5">{data.blockers.map((blocker) => <li key={blocker.code}>{blocker.message}</li>)}</ul>
+        </Notice>
+      ) : <Notice tone="blue">No blocking problem found. Stage: {data.stage.replace(/_/g, " ")}.</Notice>}
+      {!data.scopeAllowed && data.scopeReason && <Notice tone="red">Creator's company scope: {data.scopeReason}</Notice>}
+      <ol className="divide-y divide-gray-100 rounded-xl border border-gray-100">
+        {data.checks.map((check) => (
+          <li key={check.key} className="flex items-start justify-between gap-3 px-3 py-2 text-sm">
+            <div>
+              <p className="font-semibold text-gray-900">{check.label}</p>
+              {check.detail && <p className="text-xs text-gray-500">{check.detail}</p>}
+            </div>
+            <Tag tone={STATE_STYLE[check.state].tone}>{STATE_STYLE[check.state].label}</Tag>
+          </li>
+        ))}
+      </ol>
+      <p className="text-xs text-gray-500">
+        Last worker activity: {data.lastWorkerActivityAt ? formatInZone(data.lastWorkerActivityAt, timezone) : "none recorded"}.
+        Quiet hours and the daily limit are applied per employee at send time. Accepted by Firebase does not prove the phone displayed it.
+      </p>
+      <button type="button" className={secondaryBtn} onClick={load}><FiRefreshCw /> Check again</button>
+    </div>
   );
 }

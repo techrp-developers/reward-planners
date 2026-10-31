@@ -7,7 +7,11 @@ export const STATUS_META: Record<string, { label: string; cls: string }> = {
   pending_approval: { label: "Draft (legacy review)", cls: "bg-gray-100 text-gray-700" },
   approved: { label: "Ready (legacy)", cls: "bg-sky-100 text-sky-800" },
   rejected: { label: "Draft (legacy rejected)", cls: "bg-gray-100 text-gray-700" },
-  scheduled: { label: "Scheduled / queued", cls: "bg-violet-100 text-violet-800" },
+  scheduled: { label: "Scheduled", cls: "bg-violet-100 text-violet-800" },
+  // Display-only states for a scheduled campaign that has not started (see displayStatus).
+  scheduled_due: { label: "Due · waiting for worker", cls: "bg-amber-100 text-amber-800" },
+  scheduled_unavailable: { label: "Scheduled · worker unavailable", cls: "bg-red-100 text-red-700" },
+  scheduled_expired: { label: "Expired · not sent", cls: "bg-gray-200 text-gray-600" },
   sending: { label: "Sending", cls: "bg-blue-100 text-blue-800" },
   completed: { label: "Completed", cls: "bg-emerald-100 text-emerald-800" },
   partially_failed: { label: "Partially failed", cls: "bg-orange-100 text-orange-800" },
@@ -25,7 +29,7 @@ export const AUDIENCE_LABELS: Record<string, string> = {
   company: "Selected companies",
   assigned_companies: "All my assigned companies",
   module_users: "Module users (activity in last 90 days)",
-  all_companies: "All companies (admin only)",
+  all_companies: "All companies (global senders only)",
 };
 
 export const SKIP_REASON_LABELS: Record<string, string> = {
@@ -117,4 +121,86 @@ export function newClientRequestId(): string {
 export function apiErrorMessage(error: unknown, fallback = "Something went wrong. Please try again."): string {
   const data = (error as { response?: { data?: { message?: string; code?: string } } })?.response?.data;
   return data?.message || fallback;
+}
+
+/** Status-aware message for company assignment requests (server text wins for 404/409/422). */
+export function assignmentErrorMessage(error: unknown, fallback = "The change could not be saved. Please try again."): string {
+  const failure = error as { code?: string; response?: { status?: number; data?: { message?: string } } };
+  const status = failure?.response?.status;
+  const serverMessage = failure?.response?.data?.message;
+  if (!failure?.response) {
+    return failure?.code === "ECONNABORTED" ? "The server took too long to respond. Check your connection and try again." : "Could not reach the server. Check your connection and try again.";
+  }
+  if (status === 401) return "Your session has expired. Please sign in again.";
+  if (status === 403) return serverMessage || "Your account is not allowed to manage company assignments.";
+  if (status === 429) return serverMessage || "Too many changes in a minute. Please wait and try again.";
+  if (status === 503) return "The server is temporarily unavailable. Please try again shortly.";
+  if (status && status >= 500) return "Something went wrong on the server. Please try again.";
+  return serverMessage || fallback;
+}
+
+export const SCHEDULER_OFF_MESSAGE = "Scheduled delivery is unavailable in this environment.";
+
+/**
+ * The status to show for a campaign. A scheduled campaign that has not
+ * started is never labelled as queued or progressing: the label says whether
+ * this server can actually pick it up. Stored statuses are unchanged.
+ */
+export function displayStatus(campaign: { status: string; occurrences_started: number | null; expires_at: string | null; next_run_at: string | null }, workerRunning: boolean, now = new Date()): string {
+  const note = waitingNote(campaign, workerRunning, now);
+  if (!note) return campaign.status;
+  if (!workerRunning) return "scheduled_unavailable";
+  return note.startsWith("Expired") ? "scheduled_expired" : "scheduled_due";
+}
+
+/** Why a queued campaign has not started, when the list alone can tell. Never implies progress. */
+export function waitingNote(campaign: { status: string; occurrences_started: number | null; expires_at: string | null; next_run_at: string | null }, schedulerRunning: boolean, now = new Date()): string | null {
+  if (campaign.status !== "scheduled" || toNumber(campaign.occurrences_started) > 0) return null;
+  if (!schedulerRunning) return "Scheduler not running here";
+  const expires = parseUtc(campaign.expires_at);
+  if (expires && expires <= now) return "Expired before it started";
+  const next = parseUtc(campaign.next_run_at);
+  return next && next <= now ? "Due · waiting for the worker" : null;
+}
+
+/** Why pushes cannot leave right now; "still checking" is not "not configured". */
+export function firebaseUnavailableText(firebase: { credentialCheck?: string | null; reason?: string | null }): string {
+  if (firebase.credentialCheck === "pending") return "Firebase credentials are still being verified on the server. This normally takes a few seconds.";
+  return `Push sending is not configured on the server (${firebase.reason || "Firebase disabled"}).`;
+}
+
+/** "YYYY-MM-DD" + "HH:MM" in `timeZone` -> the UTC instant (no library; DST-safe for one-step offsets). */
+export function zonedInputsToUtc(date: string, time: string, timeZone = "Asia/Kolkata"): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date || "");
+  const clock = /^(\d{2}):(\d{2})$/.exec(time || "");
+  if (!match || !clock) return null;
+  const guess = Date.UTC(+match[1], +match[2] - 1, +match[3], +clock[1], +clock[2]);
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+  }).formatToParts(new Date(guess)).map((part) => [part.type, part.value]));
+  const shown = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute);
+  return new Date(guess - (shown - guess));
+}
+
+// Matches the server (campaignDiagnostics MIN_DELIVERY_WINDOW_MIN).
+export const MIN_EXPIRY_WINDOW_MIN = 10;
+
+/** True when an optional expiry would end the campaign before the worker can send it. */
+export function expiryTooSoon(expiry: { date: string; time: string }, timeZone: string, startAt: Date): boolean {
+  if (!expiry.date) return false;
+  const expires = zonedInputsToUtc(expiry.date, expiry.time || "23:59", timeZone);
+  return Boolean(expires && expires.getTime() - startAt.getTime() < MIN_EXPIRY_WINDOW_MIN * 60 * 1000);
+}
+
+/** Preselect a test device only when exactly one exists; otherwise the RM must choose. */
+export function defaultTestTarget(users: { user_id: number; devices: { device_id: number }[] }[]): { userId: number; deviceId: number } | null {
+  const all = users.flatMap((user) => user.devices.map((device) => ({ userId: user.user_id, deviceId: device.device_id })));
+  return all.length === 1 ? all[0] : null;
+}
+
+/** Why Send now is unavailable right now, or null when it can be used. */
+export function sendNowBlockedReason(meta: { firebase: { enabled: boolean; credentialCheck?: string | null; reason?: string | null }; scheduler?: { running?: boolean; reason?: string | null } }): string | null {
+  if (!meta.firebase.enabled) return firebaseUnavailableText(meta.firebase);
+  if (!meta.scheduler?.running) return `Campaign worker unavailable: ${(meta.scheduler?.reason || "it is not running on this server").replace(/.$/, "")}. Send now is off; a schedule is saved but only sent once a worker runs.`;
+  return null;
 }

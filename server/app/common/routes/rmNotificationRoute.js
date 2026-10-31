@@ -1,13 +1,16 @@
 const express = require("express");
 const multer = require("multer");
 const { rateLimit } = require("express-rate-limit");
-const { authenticateToken, authorizeRoles } = require("../../../middleware/auth");
+const { authenticateToken } = require("../../../middleware/auth");
+const requirePushNotificationManager = require("../middlewares/requirePushNotificationManager");
 const controller = require("../controller/rmNotificationController");
 
 const router = express.Router();
 
-// Dashboard session auth (eusers), not the mobile customer token.
-router.use(authenticateToken, authorizeRoles("admin", "rm"));
+// Dashboard session auth (eusers), not the mobile customer token. RMs only:
+// this router is mounted at /api/crm/v1/rm/notifications and /v1/rm/notifications,
+// so both prefixes get exactly this guard.
+router.use(authenticateToken, requirePushNotificationManager);
 
 const perUser = (limit, message) => rateLimit({
   windowMs: 60 * 1000,
@@ -69,6 +72,7 @@ router.get("/campaigns", bind("listCampaigns"));
 router.post("/campaigns", writeLimit, bind("createCampaign"));
 router.get("/campaigns/:id", bind("getCampaign"));
 router.put("/campaigns/:id", writeLimit, bind("updateCampaign"));
+router.get("/test-devices", bind("testDevices"));
 router.post("/campaigns/:id/test", testLimit, bind("testCampaign"));
 // Direct sending (no approval step): Send Now / Schedule / reschedule.
 router.post("/campaigns/:id/send", writeLimit, bind("sendCampaign"));
@@ -80,5 +84,6 @@ router.post("/campaigns/:id/retry", writeLimit, bind("retryFailed"));
 router.post("/campaigns/:id/cancel", writeLimit, bind("cancelCampaign"));
 router.get("/campaigns/:id/recipients", bind("campaignRecipients"));
 router.get("/campaigns/:id/attempts", bind("campaignAttempts"));
+router.get("/campaigns/:id/diagnostics", bind("campaignDiagnostics"));
 
 module.exports = router;

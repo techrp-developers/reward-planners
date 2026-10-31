@@ -1,6 +1,6 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
-const {localJobsEnabled,startScheduledJobs}=require('../config/scheduledJobs');
+const {campaignWorkerEnabled,localJobsEnabled,startScheduledJobs}=require('../config/scheduledJobs');
 const {createReconcileRunner}=require('../services/BusBooking/reconcileRunner');
 
 test('local schedulers require explicit opt-in and register no jobs by default',()=>{
@@ -9,6 +9,15 @@ test('local schedulers require explicit opt-in and register no jobs by default',
   assert.equal(localJobsEnabled({NODE_ENV:'development',ENABLE_LOCAL_SCHEDULED_JOBS:'true'}),true);
   assert.equal(localJobsEnabled({NODE_ENV:'development',ENABLE_LOCAL_SCHEDULED_JOBS:'true',RUN_SCHEDULED_JOBS:'false'}),false);
   assert.deepEqual(startScheduledJobs({NODE_ENV:'development'},()=>assert.fail('Job loaded'),{info(){}}),[]);
+});
+test('the campaign worker can be enabled alone for local QA',()=>{
+  const env={NODE_ENV:'development',ENABLE_LOCAL_CAMPAIGN_WORKER:'true'};
+  assert.equal(campaignWorkerEnabled(env),true);
+  assert.equal(campaignWorkerEnabled({NODE_ENV:'development'}),false);
+  assert.equal(campaignWorkerEnabled({NODE_ENV:'production'}),true);
+  const loaded=[];
+  assert.deepEqual(startScheduledJobs(env,job=>loaded.push(job),{info(){}}),['../services/Notifications/campaignWorkerCron']);
+  assert.deepEqual(loaded,['../services/Notifications/campaignWorkerCron']);
 });
 test('production jobs are not disabled by the local-development toggle',()=>{
   const loaded=[];

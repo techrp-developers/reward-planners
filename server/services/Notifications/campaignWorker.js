@@ -423,7 +423,13 @@ async function finalizeCampaigns() {
 
 let firebaseWaitLogged = false;
 
+// In-process heartbeat for the dashboard: when this server's worker last ran
+// and how it ended. Null until the first run (or when the worker is off).
+const heartbeat = { lastRunAt: null, lastOutcome: null, lastError: null };
+const getWorkerHeartbeat = () => ({ ...heartbeat });
+
 async function runCampaignWorkerOnce({ maxBatches = 10, firebase = firebaseStatus } = {}) {
+  heartbeat.lastRunAt = new Date().toISOString();
   // Without Firebase credentials nothing can be pushed. Leave queued
   // campaigns and recipients untouched (not failed, not discarded) so they
   // are sent once push sending is configured.
@@ -432,22 +438,40 @@ async function runCampaignWorkerOnce({ maxBatches = 10, firebase = firebaseStatu
       console.warn("[Campaign Worker] Firebase is not configured; queued campaigns are waiting.");
       firebaseWaitLogged = true;
     }
+    Object.assign(heartbeat, { lastOutcome: "firebase_disabled", lastError: null });
     return { waiting: "firebase_disabled" };
   }
   firebaseWaitLogged = false;
-  await activateDueCampaigns();
-  for (let batch = 0; batch < maxBatches; batch += 1) {
-    if (!(await processDueRecipients())) break;
+  try {
+    await activateDueCampaigns();
+    for (let batch = 0; batch < maxBatches; batch += 1) {
+      if (!(await processDueRecipients())) break;
+    }
+    await finalizeCampaigns();
+  } catch (error) {
+    Object.assign(heartbeat, { lastOutcome: "error", lastError: String(error.code || error.message).slice(0, 120) });
+    throw error;
   }
-  await finalizeCampaigns();
+  Object.assign(heartbeat, { lastOutcome: "ok", lastError: null });
   return { waiting: null };
+}
+
+// One run at a time in this process: the cron tick and a "Send now" kick
+// share it, so a kick never overlaps a tick (row locks also guard across
+// processes).
+let inFlight = null;
+function runCampaignWorkerExclusive(options) {
+  if (!inFlight) inFlight = runCampaignWorkerOnce(options).finally(() => { inFlight = null; });
+  return inFlight;
 }
 
 module.exports = {
   activateDueCampaigns,
+  runCampaignWorkerExclusive,
   buildCampaignPayload,
   buildDeliveryContext,
   finalizeCampaigns,
+  getWorkerHeartbeat,
   processDueRecipients,
   processRecipient,
   recipientAuthority,

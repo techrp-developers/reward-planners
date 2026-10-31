@@ -3,7 +3,6 @@ const CampaignModel = require("../models/notificationCampaignModel");
 const AudienceModel = require("../models/notificationAudienceModel");
 const NotificationTemplateModel = require("../models/notificationTemplateModel");
 const { firebaseStatus, legacyFirebaseStatus } = require("../../../config/firebase");
-const { deliverNotification } = require("../utils/notification");
 const {
   AUDIENCE_TYPES,
   CATEGORIES,
@@ -26,9 +25,9 @@ const {
   resolveModule,
 } = require("../utils/notificationTemplate");
 const { DEFAULT_TIMEZONE, EMPLOYEE_TIMEZONE, dayRangeUtc, sessionToUtcSql, toSqlUtc, utcOffsetString } = require("../utils/campaignSchedule");
-const { buildCampaignPayload, buildDeliveryContext } = require("../../../services/Notifications/campaignWorker");
+const { buildCampaignPayload, buildDeliveryContext, getWorkerHeartbeat, runCampaignWorkerExclusive } = require("../../../services/Notifications/campaignWorker");
 const MediaModel = require("../models/notificationMediaModel");
-const { ANNOUNCEMENT_TYPES, CONTENT_TYPES, canSendNotifications, mediaIdForLanguage, mediaLanguageWarnings } = require("../utils/campaignRules");
+const { ANNOUNCEMENT_TYPES, CONTENT_TYPES, canSendNotifications, canManagePushNotifications, canManageRmCompanyAssignments, mediaIdForLanguage, mediaLanguageWarnings, notificationPermissionsFor } = require("../utils/campaignRules");
 const { DESTINATIONS, getDestination } = require("../utils/notificationDestinations");
 const {
   ImageValidationError,
@@ -38,6 +37,9 @@ const {
   notificationStorageKey,
 } = require("../utils/notificationImage");
 const { IMAGE_HOSTS } = require("../utils/notificationPayload");
+const { BLOCKER_MESSAGES, describeWorkerState, diagnoseCampaign, sendBlockers } = require("../utils/campaignDiagnostics");
+const { TestPushError, listTestDevices, sendToSingleDevice } = require("../utils/singleDeviceTestPush");
+const { campaignWorkerEnabled, campaignWorkerRuntime } = require("../../../config/scheduledJobs");
 const { uploadToR2 } = require("../../../utils/r2upload");
 const { getPublicUrl } = require("../../../utils/publicUrl");
 
@@ -56,7 +58,18 @@ const RETRYABLE_ERROR_CODES = [
 // Sends to more employees than this need the RM to confirm the exact count.
 const LARGE_SEND_THRESHOLD = Number(process.env.NOTIFICATION_LARGE_SEND_THRESHOLD || 200);
 
-const isAdmin = (user) => user?.role === "admin";
+// Whether THIS process is really running the campaign worker (not just
+// whether the environment asks for it).
+const campaignWorkerState = () => describeWorkerState({
+  runtime: campaignWorkerRuntime(),
+  heartbeat: getWorkerHeartbeat(),
+  configured: campaignWorkerEnabled(process.env),
+});
+// Firebase projects this server can deliver to right now.
+const sendableProjectIds = () => [
+  firebaseStatus.projectId,
+  legacyFirebaseStatus.enabled ? legacyFirebaseStatus.projectId : null,
+].filter(Boolean);
 const positiveInt = (value) => (Number.isSafeInteger(Number(value)) && Number(value) > 0 ? Number(value) : null);
 
 /** Dashboard from/to are calendar days in the employee timezone -> UTC bounds. */
@@ -84,8 +97,9 @@ async function deny(req, res, { action, reason, campaignId = null, status = 403 
   return res.status(status).json({ success: false, message: reason });
 }
 
+// Each RM manages the campaigns it created (no role sees every campaign).
 function canManage(user, campaign) {
-  return isAdmin(user) || Number(campaign.created_by) === Number(user.user_id);
+  return canManagePushNotifications(user) && Number(campaign.created_by) === Number(user.user_id);
 }
 
 function humanize(key) {
@@ -93,16 +107,18 @@ function humanize(key) {
 }
 
 /**
- * Template authority. Admins: everything. RMs: their OWN marketing/engagement
- * templates (created_by) - edit, approve translations explicitly, publish.
- * Unowned catalog templates and transactional templates are admin-managed.
+ * Template authority: RMs fully manage every marketing/engagement template
+ * (catalog or RM-made): content, translations approval, priority, deep link,
+ * enable/disable. No admin approval is involved. Transactional templates
+ * belong to backend system events (orders, payments, chat...) and stay
+ * read-only in the CRM so a campaign tool can never alter or impersonate
+ * them. Enabling a template never bypasses consent or delivery rules.
  */
 function templatePermissions(user, template) {
-  if (isAdmin(user)) return { edit: true, publish: true, approveTranslations: true, owned: false };
   const owned = template.created_by != null && Number(template.created_by) === Number(user?.user_id);
   const promotional = ["marketing", "engagement"].includes(template.notification_type);
-  const allowed = owned && promotional && canSendNotifications(user);
-  return { edit: allowed, publish: allowed, approveTranslations: allowed, owned };
+  const allowed = promotional && canSendNotifications(user);
+  return { edit: allowed, publish: allowed, approveTranslations: allowed, owned, systemEvent: !promotional };
 }
 
 function serializeTemplate(template, user = null) {
@@ -222,6 +238,7 @@ class RmNotificationController {
         success: true,
         data: {
           role: req.user.role,
+          userId: req.user.user_id,
           modules: MODULE_OPTIONS.map(({ value, label, module, screen }) => ({ value, label, module, screen: screen || null })),
           categories: CATEGORIES,
           audienceTypes: AUDIENCE_TYPES,
@@ -255,11 +272,14 @@ class RmNotificationController {
             legacyCheckedAt: legacyFirebaseStatus.checkedAt,
           },
           // Whether this server process runs the campaign scheduler.
-          scheduler: { running: require("../../../config/scheduledJobs").localJobsEnabled(process.env) },
+          scheduler: (() => { const worker = campaignWorkerState(); return { running: worker.campaignWorkerEnabled, ...worker }; })(),
           permissions: {
+            // The full RM-only permission set; the dashboard renders from this.
+            ...notificationPermissionsFor(req.user),
             send: canSendNotifications(req.user),
             sendAllCompanies: scope.global,
-            approveTranslations: true,
+            approveTranslations: canSendNotifications(req.user),
+            manageCompanyAssignments: canManageRmCompanyAssignments(req.user),
           },
           limits: {
             promotionalDailyCap: Number(process.env.NOTIFICATION_PROMO_DAILY_CAP || 2),
@@ -483,11 +503,9 @@ class RmNotificationController {
       const moduleOption = MODULE_OPTIONS.find((option) => option.value === body.module);
       if (!moduleOption) return res.status(400).json({ success: false, message: "Select a valid module." });
 
-      // RMs create promotional templates only; event (transactional) templates
-      // are reserved for admins so campaigns cannot impersonate system events.
-      const type = ["marketing", "engagement"].includes(body.notification_type) || (isAdmin(req.user) && body.notification_type === "transactional")
-        ? body.notification_type
-        : null;
+      // Only promotional templates are created here; transactional (system
+      // event) templates belong to the backend so campaigns cannot impersonate them.
+      const type = ["marketing", "engagement"].includes(body.notification_type) ? body.notification_type : null;
       if (!type) return res.status(400).json({ success: false, message: "Select marketing or engagement as the notification type." });
 
       const { value, errors } = validateCampaignInput({ ...body, name: key, category: "marketing", module: moduleOption.value });
@@ -499,7 +517,7 @@ class RmNotificationController {
       const approved = canSend
         ? parseApprovedLanguages(body.approved_languages).filter((lang) => value[`title_${lang}`] && value[`body_${lang}`])
         : [];
-      const publish = canSend && Boolean(body.is_enabled) && (type !== "transactional" || isAdmin(req.user));
+      const publish = canSend && Boolean(body.is_enabled);
 
       const columns = ["template_key", "module", "trigger_description", "target_audience", "notification_type", "priority",
         "title_en", "body_en", "title_mr", "body_mr", "title_hi", "body_hi", "deep_link_pattern",
@@ -521,7 +539,7 @@ class RmNotificationController {
       } catch (error) {
         if (error.code !== "ER_BAD_FIELD_ERROR") throw error;
         // notification_templates.created_by not added yet (migration 20261028_01):
-        // without an owner the template stays unpublished and admin-managed.
+        // the template is saved unpublished; the RM can enable it afterwards.
         const draftValues = values.slice(0, -1);
         draftValues[columns.indexOf("localization_status")] = "approved:";
         draftValues[columns.indexOf("is_enabled")] = 0;
@@ -529,7 +547,7 @@ class RmNotificationController {
           `INSERT INTO notification_templates (${columns.slice(0, -1).join(", ")}) VALUES (?)`,
           [draftValues],
         );
-        warning = "Saved as a draft template. Apply migration 20261028_01 to let RMs publish their own templates.";
+        warning = "Saved as a disabled template. Enable it from the Template Library when it is ready.";
       }
       NotificationTemplateModel.clearCache();
       await CampaignModel.audit({ actor: req.user, action: "template_created", details: { template_id: result.insertId, template_key: key, published: publish && !warning }, ip: req.ip });
@@ -544,17 +562,16 @@ class RmNotificationController {
     try {
       const template = await loadTemplate(positiveInt(req.params.id));
       if (!template) return res.status(404).json({ success: false, message: "Template not found" });
-      const admin = isAdmin(req.user);
       const perms = templatePermissions(req.user, template);
       const body = req.body || {};
 
-      // System catalog templates (no owner) and other RMs' templates are
-      // admin-managed; an RM fully manages the promotional templates they own.
       if (!perms.edit) {
-        return deny(req, res, { action: "template_update", reason: "Only an admin, or the RM who created this marketing/engagement template, can change it." });
-      }
-      if (!admin && "deep_link_pattern" in body) {
-        return deny(req, res, { action: "template_update", reason: "Only an admin can change template deep links." });
+        return deny(req, res, {
+          action: "template_update",
+          reason: perms.systemEvent
+            ? "System event (transactional) templates are managed by the backend and cannot be changed here."
+            : "Your account is not allowed to change notification templates.",
+        });
       }
 
       const next = {
@@ -570,7 +587,7 @@ class RmNotificationController {
       if (contentErrors.length) return res.status(400).json({ success: false, message: contentErrors.join(" "), errors: contentErrors });
 
       let deepLink = template.deep_link_pattern;
-      if (admin && "deep_link_pattern" in body) {
+      if ("deep_link_pattern" in body) {
         deepLink = body.deep_link_pattern ? String(body.deep_link_pattern) : null;
         if (deepLink && !/^rp:\/\/[a-z0-9\-/{}_]{1,200}$/.test(deepLink)) {
           return res.status(400).json({ success: false, message: "Deep links must use the rp:// scheme with simple path segments." });
@@ -697,6 +714,42 @@ class RmNotificationController {
     }
   }
 
+  /** Where delivery stands and where it stopped. Counts only, no tokens. */
+  async campaignDiagnostics(req, res) {
+    try {
+      const campaign = await this.loadManaged(req, res, "view");
+      if (!campaign) return undefined;
+      // The worker acts with the creator's current authority, not the viewer's.
+      const [[creator]] = await db.query("SELECT user_id, role FROM eusers WHERE user_id = ? LIMIT 1", [campaign.created_by]);
+      const scope = await AudienceModel.getScope(creator || { user_id: campaign.created_by, role: null });
+      const permission = checkAudiencePermission(campaign.audience_type, campaign.audience_filter || {}, scope);
+      const [summary, audience, [[activity]]] = await Promise.all([
+        CampaignModel.recipientSummary(campaign.campaign_id),
+        permission.allowed
+          ? AudienceModel.deliveryReadiness(campaign.audience_type, campaign.audience_filter || {}, scope, campaign.category, sendableProjectIds())
+          : { candidates: 0, withDevice: 0, consented: 0, noPreferenceRecord: 0, optedOut: 0, reachable: 0, unknownProjectDevices: 0 },
+        db.query(`SELECT ${sessionToUtcSql("MAX(updated_at)")} AS at FROM notification_campaign_recipients WHERE campaign_id = ?`, [campaign.campaign_id]),
+      ]);
+      const worker = campaignWorkerState();
+      const result = diagnoseCampaign({
+        campaign,
+        schedulerRunning: worker.campaignWorkerEnabled,
+        workerReason: worker.reason,
+        firebase: firebaseStatus,
+        creatorAuthorised: canSendNotifications(creator),
+        audience,
+        summary,
+        lastWorkerActivityAt: activity?.at ? new Date(`${String(activity.at).replace(" ", "T")}Z`) : null,
+      });
+      return res.json({
+        success: true,
+        data: { ...result, worker, audience, summary, scopeAllowed: permission.allowed, scopeReason: permission.allowed ? null : permission.reason },
+      });
+    } catch (error) {
+      return handleError(res, error, "campaign diagnostics");
+    }
+  }
+
   async createCampaign(req, res) {
     try {
       // Double-click / concurrent-request protection: the dashboard sends one
@@ -780,6 +833,13 @@ class RmNotificationController {
   }
 
   /** Sends only to the NOTIFICATION_TEST_USER_IDS allow-list, never to the audience. */
+  /**
+   * Send test: ONE allow-listed test employee, ONE registered device, one FCM
+   * send with no retry (singleDeviceTestPush). Never a multi-device or
+   * audience send; never changes the campaign's status; needs no worker.
+   * Test accounts are development accounts, so consent rules are not applied.
+   * body: { user_id?, device_id?, language? } - required when ambiguous.
+   */
   async testCampaign(req, res) {
     try {
       const campaign = await this.loadManaged(req, res, "test");
@@ -789,57 +849,98 @@ class RmNotificationController {
       }
 
       const testUsers = await AudienceModel.getTestUsers();
-      const requested = Array.isArray(req.body?.user_ids) ? req.body.user_ids.map(Number) : null;
-      const targets = requested ? testUsers.filter((user) => requested.includes(Number(user.user_id))) : testUsers;
-      if (!targets.length) {
+      if (!testUsers.length) {
         return deny(req, res, {
-          action: "test",
-          campaignId: campaign.campaign_id,
-          status: 400,
-          reason: "No authorised test users are configured. Ask an admin to set NOTIFICATION_TEST_USER_IDS.",
+          action: "test", campaignId: campaign.campaign_id, status: 400,
+          reason: "No authorised test users are configured. Set NOTIFICATION_TEST_USER_IDS in the server configuration.",
         });
+      }
+      const requestedUser = req.body?.user_id == null ? null : Number(req.body.user_id);
+      const user = requestedUser == null
+        ? (testUsers.length === 1 ? testUsers[0] : null)
+        : testUsers.find((candidate) => Number(candidate.user_id) === requestedUser);
+      if (!user) {
+        return deny(req, res, {
+          action: "test", campaignId: campaign.campaign_id, status: requestedUser == null ? 400 : 403,
+          reason: requestedUser == null ? "Choose which test employee should receive the test." : "That employee is not an authorised test user.",
+        });
+      }
+      const deviceId = req.body?.device_id == null || req.body.device_id === "" ? null : Number(req.body.device_id);
+      if (deviceId != null && !(Number.isSafeInteger(deviceId) && deviceId > 0)) {
+        return res.status(400).json({ success: false, message: "Choose a valid test device." });
       }
 
       const forcedLanguage = ["en", "hi", "mr"].includes(req.body?.language) ? req.body.language : null;
+      let rendered;
+      try {
+        rendered = renderCampaignForRecipient(campaign, { language: forcedLanguage || user.language, firstName: String(user.name || "").split(/\s+/)[0] });
+      } catch (error) {
+        if (!(error instanceof TemplateRenderError)) throw error;
+        return res.status(400).json({ success: false, message: error.message });
+      }
       // Same image/destination checks as a real send, so the test is faithful.
       const delivery = await buildDeliveryContext(campaign);
-      const results = [];
-      for (const user of targets) {
-        let rendered;
-        try {
-          rendered = renderCampaignForRecipient(campaign, { language: forcedLanguage || user.language, firstName: String(user.name || "").split(/\s+/)[0] });
-        } catch (error) {
-          if (!(error instanceof TemplateRenderError)) throw error;
-          return res.status(400).json({ success: false, message: error.message });
-        }
-        const payload = buildCampaignPayload(campaign, { user_id: user.user_id, occurrence_no: 0 }, rendered, delivery);
-        payload.idempotency_key = `campaign-test:${campaign.campaign_id}:${user.user_id}:${Date.now()}`;
-        payload.title = `[TEST] ${payload.title}`.slice(0, 255);
-        payload.metadata = { ...payload.metadata, test: true };
+      const payload = buildCampaignPayload(campaign, { user_id: user.user_id, occurrence_no: 0 }, rendered, delivery);
+      payload.title = `[TEST] ${payload.title}`.slice(0, 255);
+      payload.metadata = { ...payload.metadata, test: true };
+      payload.idempotency_key = undefined;
+      payload.reference_id = `campaign-test-${campaign.campaign_id}-${Date.now()}`;
 
-        // Test sends go only to the NOTIFICATION_TEST_USER_IDS allow-list of
-        // development accounts, so consent/quiet-hour rules are not applied.
-        const outcome = await deliverNotification(payload, { policy: "checked" });
-        results.push({
-          user_id: user.user_id,
-          name: user.name,
-          language: rendered.language,
-          image_sent: Boolean(payload.image_url),
-          image_fallback: Boolean(payload.metadata.image_fallback),
-          destination: payload.screen || null,
-          destination_blocked: delivery.blocked,
-          inbox_saved: Boolean(outcome.notificationId),
-          devices_attempted: outcome.results?.length || 0,
-          firebase_accepted: outcome.sent || 0,
-          skipped_reason: outcome.skipped ? outcome.reason : null,
-          errors: (outcome.results || []).filter((item) => !item.success).map((item) => item.errorCode),
-        });
+      let outcome;
+      try {
+        outcome = await sendToSingleDevice(user.user_id, payload, { deviceId });
+      } catch (error) {
+        if (!(error instanceof TestPushError)) throw error;
+        await CampaignModel.audit({ campaignId: campaign.campaign_id, actor: req.user, action: "test_sent", decision: "denied", details: { user_id: user.user_id, device_id: deviceId, reason: error.code, ...(error.details || {}) }, ip: req.ip });
+        const message = error.code === "DEVICE_NOT_UNIQUE" && error.details?.primaryProjectDevices > 1
+          ? "This test employee has more than one registered device. Choose the device to send to."
+          : error.message;
+        return res.status(error.status).json({ success: false, code: error.code, message, devices: error.details });
       }
 
-      await CampaignModel.audit({ campaignId: campaign.campaign_id, actor: req.user, action: "test_sent", details: { users: results.map((item) => item.user_id) }, ip: req.ip });
-      return res.json({ success: true, data: results });
+      const result = {
+        user_id: user.user_id,
+        name: user.name,
+        language: rendered.language,
+        image_sent: Boolean(payload.image_url),
+        image_fallback: Boolean(payload.metadata.image_fallback),
+        destination: payload.screen || null,
+        destination_blocked: delivery.blocked,
+        inbox_saved: Boolean(outcome.notificationId),
+        devices_attempted: 1,
+        firebase_accepted: outcome.accepted ? 1 : 0,
+        device: outcome.device,
+        fcm_message_id: outcome.fcmMessageId,
+        channel: outcome.channel,
+        skipped_reason: null,
+        errors: outcome.accepted ? [] : [outcome.errorCode],
+      };
+      await CampaignModel.audit({
+        campaignId: campaign.campaign_id, actor: req.user, action: "test_sent", decision: outcome.accepted ? "allowed" : "failed",
+        details: { users: [user.user_id], device_id: outcome.device.id, notification_id: outcome.notificationId, fcm_message_id: outcome.fcmMessageId, error_code: outcome.errorCode },
+        ip: req.ip,
+      });
+      return res.status(outcome.accepted ? 200 : 502).json({ success: outcome.accepted, data: [result], ...(outcome.accepted ? {} : { message: `Firebase did not accept the test (${outcome.errorCode}). It was not retried.` }) });
     } catch (error) {
       return handleError(res, error, "test campaign");
+    }
+  }
+
+  /** The allow-listed test employees and their registered devices (tokens masked). */
+  async testDevices(req, res) {
+    try {
+      const users = await AudienceModel.getTestUsers();
+      const devices = await listTestDevices(users.map((user) => Number(user.user_id)));
+      return res.json({
+        success: true,
+        data: users.map((user) => ({
+          user_id: Number(user.user_id),
+          name: user.name,
+          devices: devices.filter((device) => device.user_id === Number(user.user_id)),
+        })),
+      });
+    } catch (error) {
+      return handleError(res, error, "test devices");
     }
   }
 
@@ -883,7 +984,7 @@ class RmNotificationController {
       if (campaign.source === "template") {
         const template = await loadTemplate(campaign.template_id);
         if (!template || Number(template.is_enabled) !== 1) {
-          errors.push("The selected template is disabled. Ask an admin to enable it, or switch to \"Write a new notification\".");
+          errors.push("The selected template is disabled. Enable it in the Template Library, or switch to \"Write a new notification\".");
         }
       }
       errors.push(...(await validateRichContent(campaign, { checkReachable: true })).errors);
@@ -901,8 +1002,30 @@ class RmNotificationController {
         return res.status(409).json({
           success: false,
           code: "FIREBASE_UNAVAILABLE",
-          message: `Push sending is not configured on the server (${firebaseStatus.reason || "Firebase disabled"}). Save as draft or schedule for later.`,
+          message: firebaseStatus.credentialCheck === "pending"
+            ? "Firebase credentials are still being verified on the server. Try again in a few seconds."
+            : `Push sending is not configured on the server (${firebaseStatus.reason || "Firebase disabled"}). Save as draft or schedule for later.`,
         });
+      }
+
+      // Nor when nothing could be delivered: no worker on this server, an
+      // expiry the worker cannot meet, or nobody who opted in. A later
+      // schedule is still accepted (consent or the environment can change
+      // before it runs) but says so instead of looking like progress.
+      const readiness = await AudienceModel.deliveryReadiness(campaign.audience_type, campaign.audience_filter, scope, campaign.category, sendableProjectIds());
+      const blockers = sendBlockers({
+        category: campaign.category,
+        audience: readiness,
+        schedulerRunning: campaignWorkerState().campaignWorkerEnabled,
+        firebaseEnabled: true, // handled above, with its own message
+        startAt: scheduledAt,
+        expiresAt: campaign.expires_at,
+      });
+      if (blockers.includes("expiry_too_close")) {
+        return res.status(400).json({ success: false, code: "EXPIRY_TOO_CLOSE", message: `${BLOCKER_MESSAGES.expiry_too_close} Choose a later expiry or clear it.` });
+      }
+      if (mode === "now" && blockers.length) {
+        return res.status(409).json({ success: false, code: blockers[0].toUpperCase(), message: BLOCKER_MESSAGES[blockers[0]], blockers, audience: readiness });
       }
 
       // One explicit confirmation of the exact audience size for large sends.
@@ -925,6 +1048,12 @@ class RmNotificationController {
         rejection_reason: null,
       });
       if (!moved) return res.status(409).json({ success: false, message: "The campaign changed. Reload and try again." });
+      // Send Now: start a worker run straight away instead of waiting for the
+      // next minute's tick. Only when this process runs the worker; all the
+      // usual checks (scope, consent, quiet hours, caps) happen inside it.
+      if (mode === "now" && campaignWorkerState().campaignWorkerEnabled) {
+        setImmediate(() => runCampaignWorkerExclusive().catch((error) => console.error("[Campaign Worker] Send-now run failed:", error.message)));
+      }
       await CampaignModel.audit({
         campaignId: campaign.campaign_id,
         actor: req.user,
@@ -932,6 +1061,7 @@ class RmNotificationController {
         details: {
           next_run_at: toSqlUtc(scheduledAt), timezone, recipients: preview.total, eligible_languages: preview.languages,
           approved_languages: campaign.approved_languages || "",
+          consented: readiness.consented, reachable: readiness.reachable, ...(blockers.length ? { blockers } : {}),
         },
         ip: req.ip,
       });
@@ -941,7 +1071,7 @@ class RmNotificationController {
         data: serializeCampaign(await CampaignModel.findById(campaign.campaign_id), req.user),
         warning: !firebaseStatus.enabled
           ? "Firebase is not configured. The campaign stays queued and is sent once push credentials are installed."
-          : null,
+          : blockers.length ? blockers.map((code) => BLOCKER_MESSAGES[code]).join(" ") : null,
       });
     } catch (error) {
       return handleError(res, error, "send campaign");
@@ -1256,10 +1386,8 @@ class RmNotificationController {
       const mediaId = positiveInt(req.params.id);
       const media = mediaId ? await MediaModel.findById(mediaId) : null;
       if (!media) return res.status(404).json({ success: false, message: "Image not found" });
-      // Archiving stops future use; scheduled campaigns using it fall back to text and are flagged.
-      if (!isAdmin(req.user) && Number(media.created_by) !== Number(req.user.user_id)) {
-        return deny(req, res, { action: "media_archive", reason: "Only an admin or the uploader can archive this image." });
-      }
+      // The library is shared by all RMs (the router admits RMs only). Archiving
+      // stops future use; scheduled campaigns using it fall back to text and are flagged.
       await MediaModel.archiveMedia(mediaId);
       await CampaignModel.audit({ actor: req.user, action: "media_archived", details: { media_id: mediaId }, ip: req.ip });
       return res.json({ success: true });

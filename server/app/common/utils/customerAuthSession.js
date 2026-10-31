@@ -158,15 +158,24 @@ async function rotateCustomerSession(req, res) {
   }
 }
 
+/** Revoke the refresh session; returns its user_id (or null) for logout cleanup. */
 async function revokeCustomerSession(req, res) {
   const rawToken = getRefreshToken(req);
+  let userId = null;
   if (rawToken) {
+    const tokenHash = hashToken(rawToken);
+    const [[session]] = await db.execute(
+      "SELECT user_id FROM customer_auth_sessions WHERE token_hash = ? LIMIT 1",
+      [tokenHash],
+    );
+    userId = session?.user_id ?? null;
     await db.execute(
       "UPDATE customer_auth_sessions SET revoked_at = COALESCE(revoked_at, NOW()) WHERE token_hash = ?",
-      [hashToken(rawToken)],
+      [tokenHash],
     );
   }
   clearRefreshCookie(res);
+  return userId;
 }
 
 module.exports = {

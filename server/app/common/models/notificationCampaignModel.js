@@ -131,11 +131,9 @@ class NotificationCampaignModel {
     return hydrate(row);
   }
 
-  /** RMs see their own campaigns; admins see all. */
+  /** Each RM sees the campaigns it created; no role sees every campaign. */
   visibilityFilter(actor) {
-    return actor.role === "admin"
-      ? { sql: "1 = 1", params: [] }
-      : { sql: "nc.created_by = ?", params: [actor.user_id] };
+    return { sql: "nc.created_by = ?", params: [actor.user_id] };
   }
 
   async list(actor, { statuses = [], module = null, search = "", page = 1, limit = 20 } = {}) {
@@ -151,7 +149,7 @@ class NotificationCampaignModel {
     const [[{ total }]] = await db.query(`SELECT COUNT(*) AS total FROM notification_campaigns nc WHERE ${where.join(" AND ")}`, params);
     const [rows] = await db.query(
       `SELECT nc.*, ${UTC("nc.created_at")} AS created_at, eu.name AS created_by_name, rc.recipients, rc.queued, rc.pending_retry, rc.attempted,
-              rc.sent, rc.firebase_accepted, rc.failed, rc.skipped, rc.cancelled AS recipients_cancelled
+              rc.sent, rc.firebase_accepted, rc.inbox_only, rc.failed, rc.skipped, rc.cancelled AS recipients_cancelled
        FROM notification_campaigns nc
        LEFT JOIN eusers eu ON eu.user_id = nc.created_by
        LEFT JOIN (${RECIPIENT_COUNTS} GROUP BY campaign_id) rc ON rc.campaign_id = nc.campaign_id
@@ -373,7 +371,7 @@ class NotificationCampaignModel {
 
   async findCampaignsAwaitingCompletion() {
     const [rows] = await db.query(
-      `SELECT nc.*, rc.queued, rc.sent, rc.failed, rc.skipped
+      `SELECT nc.*, rc.queued, rc.sent, rc.inbox_only, rc.failed, rc.skipped
        FROM notification_campaigns nc
        LEFT JOIN (
          SELECT campaign_id, occurrence_no,

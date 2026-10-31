@@ -1,9 +1,28 @@
 const express = require("express");
 const router = express.Router();
+const { rateLimit } = require("express-rate-limit");
+const { authenticateToken } = require("../middleware/auth");
+const requirePushNotificationManager = require("../app/common/middlewares/requirePushNotificationManager");
+const { getTestUserIds } = require("../app/common/models/notificationAudienceModel");
+const CampaignModel = require("../app/common/models/notificationCampaignModel");
+const { TestPushError, sendSingleDeviceTestPush } = require("../app/common/utils/singleDeviceTestPush");
+
+// Developer tools (mounted only when NODE_ENV is not production, app.js).
+// They send WhatsApp messages and pushes, so none of them is public:
+//   - every route needs a verified RM dashboard session (JWT signature checked,
+//     role reloaded from eusers); anyone else gets 401/403;
+//   - every route that targets an employee (:userId) only accepts the
+//     NOTIFICATION_TEST_USER_IDS allow-list of development accounts;
+//   - anything with a side effect is POST, so cookie sessions also need the
+//     CSRF token (GET is read-only).
+router.use(authenticateToken, requirePushNotificationManager);
+router.param("userId", (req, res, next, value) => {
+  if (getTestUserIds().includes(Number(value))) return next();
+  return res.status(403).json({ ok: false, code: "NOT_A_TEST_USER", error: "Only employees listed in NOTIFICATION_TEST_USER_IDS can be targeted by developer tools." });
+});
 const db = require("../config/database");
 const { enqueueWhatsApp } = require("../services/whatsapp/waEnqueueService");
 const { sendBirthdayWishes } = require("../services/Todo/birthdayReminderCron");
-const { sendPushNotification } = require("../app/common/utils/notification");
 const { firebaseStatus } = require("../config/firebase");
 const { maskToken } = require("../app/common/utils/pushDelivery");
 
@@ -390,7 +409,7 @@ router.post("/test", async (req, res) => {
   }
 });
 
-router.get("/test-birthday", async (req, res) => {
+router.post("/test-birthday", async (req, res) => {
   try {
     await sendBirthdayWishes();
     return res.json({ ok: true, message: "Birthday wishes check triggered!" });
@@ -402,7 +421,10 @@ router.get("/test-birthday", async (req, res) => {
 router.get("/notification-health/:userId", async (req, res) => {
   try {
     const userId = Number(req.params.userId);
-    const sendTest = String(req.query.sendTest || "").toLowerCase() === "true";
+    if (req.query.sendTest !== undefined) {
+      // The old ?sendTest=true pushed from a GET. Health checks never send.
+      return res.status(400).json({ ok: false, code: "SEND_NOT_ALLOWED_ON_GET", error: "notification-health is read-only. Use POST /api/wa/test-push/:userId for a single-device test." });
+    }
 
     if (!Number.isInteger(userId) || userId <= 0) {
       return res.status(400).json({
@@ -491,23 +513,6 @@ router.get("/notification-health/:userId", async (req, res) => {
     }
     const activeDevices = devices.filter((device) => device.is_active).length;
 
-    let testPushResult = null;
-
-    if (sendTest) {
-      testPushResult = await sendPushNotification({
-        userId,
-        module: "system",
-        type: "health_check",
-        title: "Push health check",
-        message: "This is a live push notification health check from Reward Planners backend.",
-        icon: "activity",
-        reference_type: "health_check",
-        reference_id: String(userId),
-        action_url: "/",
-        screen: "Dashboard",
-      });
-    }
-
     return res.json({
       ok: true,
       currentDate: "2026-08-05",
@@ -530,7 +535,6 @@ router.get("/notification-health/:userId", async (req, res) => {
       notificationCounts,
       recentNotifications,
       todoReminders: todoReminderRows,
-      testPushResult,
       assessment: {
         sharedPathReady: true,
         canAttemptPushNow: firebaseStatus.enabled && (activeDevices > 0 || Boolean(user.fcm_token)),
@@ -546,6 +550,42 @@ router.get("/notification-health/:userId", async (req, res) => {
       ok: false,
       error: e.message,
     });
+  }
+});
+
+// POST /api/wa/test-push/:userId: ONE push to the employee's single device on
+// the primary Firebase project (see singleDeviceTestPush.js). Development
+// servers only, verified RM, allow-listed employee, 1 per minute per RM,
+// audited. Responses never include the device token.
+const testPushLimit = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 1,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  keyGenerator: (req) => `wa-test-push:${req.user.user_id}`,
+  message: { ok: false, error: "One test push per minute. Wait before sending another." },
+});
+router.post("/test-push/:userId", testPushLimit, async (req, res) => {
+  const userId = Number(req.params.userId);
+  const audit = (decision, details) => CampaignModel.audit({ actor: req.user, action: "test_push", decision, details: { user_id: userId, ...details }, ip: req.ip });
+  if (String(process.env.NODE_ENV || "").toLowerCase() !== "development") {
+    await audit("denied", { reason: "not_development" });
+    return res.status(403).json({ ok: false, code: "DEVELOPMENT_ONLY", error: "Test pushes are only available on a development server." });
+  }
+  try {
+    const deviceId = req.body?.device_id;
+    if (deviceId !== undefined && !(Number.isSafeInteger(Number(deviceId)) && Number(deviceId) > 0)) {
+      return res.status(400).json({ ok: false, error: "device_id must be a positive integer." });
+    }
+    const result = await sendSingleDeviceTestPush(userId, { deviceId });
+    await audit(result.accepted ? "allowed" : "failed", {
+      notification_id: result.notificationId, device_id: result.device.id, fcm_message_id: result.fcmMessageId, error_code: result.errorCode, channel: result.channel,
+    });
+    return res.status(result.accepted ? 200 : 502).json({ ok: result.accepted, ...result });
+  } catch (error) {
+    if (!(error instanceof TestPushError)) throw error;
+    await audit("denied", { reason: error.code, ...(error.details || {}) });
+    return res.status(error.status).json({ ok: false, code: error.code, error: error.message, devices: error.details });
   }
 });
 
@@ -568,7 +608,7 @@ router.get("/notification-types", async (req, res) => {
   }
 });
 
-router.all("/notification-trigger/:userId", async (req, res) => {
+router.post("/notification-trigger/:userId", async (req, res) => {
   try {
     const userId = Number(req.params.userId);
     const type = req.body?.type || req.query?.type;
@@ -621,7 +661,7 @@ router.all("/notification-trigger/:userId", async (req, res) => {
   }
 });
 
-router.get("/test-ecommerce/:userId", async (req, res) => {
+router.post("/test-ecommerce/:userId", async (req, res) => {
   try {
     const userId = Number(req.params.userId);
     const { notifyUser } = require("../app/common/utils/notification");
@@ -671,7 +711,7 @@ router.get("/test-ecommerce/:userId", async (req, res) => {
   }
 });
 
-router.get("/test-abandonment/:userId", async (req, res) => {
+router.post("/test-abandonment/:userId", async (req, res) => {
   try {
     const userId = Number(req.params.userId);
     const { notifyUser } = require("../app/common/utils/notification");
@@ -721,7 +761,7 @@ router.get("/test-abandonment/:userId", async (req, res) => {
   }
 });
 
-router.get("/test-todo/:userId", async (req, res) => {
+router.post("/test-todo/:userId", async (req, res) => {
   try {
     const userId = Number(req.params.userId);
     const { notifyUser } = require("../app/common/utils/notification");
@@ -744,7 +784,7 @@ router.get("/test-todo/:userId", async (req, res) => {
   }
 });
 
-router.get("/test-all/:userId", async (req, res) => {
+router.post("/test-all/:userId", async (req, res) => {
   try {
     const userId = Number(req.params.userId);
     const { notifyUser } = require("../app/common/utils/notification");
@@ -1075,7 +1115,7 @@ router.get("/test-all/:userId", async (req, res) => {
   }
 });
 
-router.get("/test-single/:userId/:type", async (req, res) => {
+router.post("/test-single/:userId/:type", async (req, res) => {
   try {
     const userId = Number(req.params.userId);
     const type = req.params.type;

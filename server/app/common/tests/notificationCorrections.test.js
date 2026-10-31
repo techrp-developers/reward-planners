@@ -145,14 +145,16 @@ test("no device -> inbox_only; accepted after a crash -> not pushed again", asyn
 
 /* 6. Sending authority */
 
-test("RMs and admins can send; RM sending can be switched off", () => {
+test("only RMs can send (admins cannot); RM sending can be switched off", () => {
   assert.equal(canSendNotifications({ role: "rm" }), true);
-  assert.equal(canSendNotifications({ role: "admin" }), true);
-  assert.equal(canSendNotifications({ role: "hr" }), false);
+  for (const role of ["admin", "hr", "vendor", "vendor_manager", "service_manager", "warehouse_manager", "flea_market_manager", "service_partner", "unknown", undefined]) {
+    assert.equal(canSendNotifications({ role }), false, String(role));
+  }
+  assert.equal(canSendNotifications(undefined), false);
   process.env.NOTIFICATION_RM_SEND_ENABLED = "false";
   try {
     assert.equal(canSendNotifications({ role: "rm" }), false);
-    assert.equal(canSendNotifications({ role: "admin" }), true);
+    assert.equal(canSendNotifications({ role: "admin" }), false);
   } finally {
     delete process.env.NOTIFICATION_RM_SEND_ENABLED;
   }

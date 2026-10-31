@@ -1,7 +1,9 @@
 const RmAssignmentModel = require("../models/rmAssignmentModel");
+const { canManageRmCompanyAssignments, MANAGE_RM_COMPANY_ASSIGNMENTS } = require("../utils/campaignRules");
 
-// Admin-only management of RM -> company assignments. RMs can only send push
-// campaigns to employees of companies assigned here.
+// Management of RM -> company assignments (admins and verified RMs, see
+// canManageRmCompanyAssignments). RMs can only send push campaigns to
+// employees of companies assigned here.
 
 const MAX_COMPANIES_PER_REQUEST = 100;
 
@@ -17,15 +19,15 @@ function handleError(res, error, context) {
 
 function createRmAssignmentController(model = RmAssignmentModel) {
   return {
-    /** Route guard: only admins; denied attempts are audited. */
-    async requireAdmin(req, res, next) {
-      if (req.user?.role === "admin") return next();
+    /** Route guard: admins and RMs; denied attempts are audited. */
+    async requireAssignmentManager(req, res, next) {
+      if (canManageRmCompanyAssignments(req.user)) return next();
       await model.auditDenied({
         actor: req.user,
         ip: req.ip,
-        details: { reason: "not_admin", method: req.method, path: req.originalUrl.split("?")[0].slice(0, 200) },
+        details: { reason: `missing_${MANAGE_RM_COMPANY_ASSIGNMENTS}`, method: req.method, path: req.originalUrl.split("?")[0].slice(0, 200) },
       });
-      return res.status(403).json({ success: false, message: "Only an admin can manage RM company assignments." });
+      return res.status(403).json({ success: false, code: "PUSH_NOTIFICATION_RM_ONLY", message: "Only relationship managers can manage RM company assignments." });
     },
 
     async list(req, res) {

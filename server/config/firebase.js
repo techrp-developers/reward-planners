@@ -21,6 +21,21 @@ const { initializeApp, cert, applicationDefault, getApp, getApps } = require("fi
 
 const SERVER_ROOT = path.resolve(__dirname, "..");
 const RECHECK_MS = 5 * 60 * 1000;
+// A token request that never answers (stalled network, impersonation call
+// hanging) must not leave the status at "Verifying..." forever.
+// An impersonated ADC token takes ~10s locally, longer while the server starts.
+const CHECK_TIMEOUT_MS = Number(process.env.FIREBASE_CREDENTIAL_CHECK_TIMEOUT_MS || 60000);
+// Network trouble (including that timeout) is retried sooner than rejected credentials.
+const NETWORK_RECHECK_MS = 60 * 1000;
+
+function withTimeout(promise, ms = CHECK_TIMEOUT_MS) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`ETIMEDOUT: no answer from Google within ${Math.round(ms / 1000)}s`)), ms);
+    timer.unref?.();
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 
 // Shared, read-only view of the Admin SDK state. Senders check this instead of
 // discovering a disabled SDK through one failed send per device token.
@@ -218,7 +233,7 @@ async function verifyPrimaryCredentials() {
       status.adcSource = adc.source;
       status.serviceAccountEmail = adc.email;
     }
-    await getApp().options.credential.getAccessToken();
+    await withTimeout(getApp().options.credential.getAccessToken());
     status.enabled = true;
     status.credentialCheck = "verified";
     status.reason = null;
@@ -229,12 +244,15 @@ async function verifyPrimaryCredentials() {
     // Keys keep their previous behaviour on network trouble; ADC fails closed.
     status.enabled = !keyless && network;
     status.credentialCheck = network ? "unverified" : "failed";
-    status.reason = keyless
-      ? `Application Default Credentials could not be used (${detail}). ${ADC_HINT.replace("<project>", status.projectId)}`
-      : `Firebase credentials ${network ? "could not be verified" : "were rejected by Google"} (${detail}).`;
+    // A network problem says nothing about the credentials, so no re-login hint.
+    status.reason = keyless && network
+      ? `Could not reach Google to verify Application Default Credentials (${detail}). Retrying in ${NETWORK_RECHECK_MS / 1000}s.`
+      : keyless
+        ? `Application Default Credentials could not be used (${detail}). ${ADC_HINT.replace("<project>", status.projectId)}`
+        : `Firebase credentials ${network ? "could not be verified" : "were rejected by Google"} (${detail}).`;
     console.warn(`Firebase push notifications ${status.enabled ? "unverified" : "are disabled"}:`, status.reason);
     if (!recheckTimer && (keyless || network)) {
-      recheckTimer = setTimeout(() => { recheckTimer = null; verifyPrimaryCredentials(); }, RECHECK_MS);
+      recheckTimer = setTimeout(() => { recheckTimer = null; verifyPrimaryCredentials(); }, network ? NETWORK_RECHECK_MS : RECHECK_MS);
       recheckTimer.unref();
     }
   }
@@ -328,7 +346,7 @@ async function verifyLegacyAccess() {
   if (legacyStatus.credentialMode !== "application_default" || !legacyStatus.credentialCheck) return legacyStatus;
   let network = false;
   try {
-    const { access_token: accessToken } = await getApp(legacyStatus.appName).options.credential.getAccessToken();
+    const { access_token: accessToken } = await withTimeout(getApp(legacyStatus.appName).options.credential.getAccessToken());
     const response = await fetch(`https://cloudresourcemanager.googleapis.com/v1/projects/${encodeURIComponent(legacyStatus.projectId)}:testIamPermissions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
@@ -385,6 +403,7 @@ function knownProjectIds() {
 }
 
 module.exports = {
+  withTimeout,
   firebaseStatus: status,
   legacyFirebaseStatus: legacyStatus,
   knownProjectIds,

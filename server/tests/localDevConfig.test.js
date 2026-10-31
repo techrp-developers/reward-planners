@@ -103,7 +103,13 @@ function loadAdcFirebase({ adcFile = null, tokens, env = {}, fetch, cert }) {
       cert: cert || (() => assert.fail("ADC mode must not load a key")),
       getApp: () => ({ options: { credential } }),
     },
-  }, { fetch, setTimeout(callback, ms) { state.timers.push({ callback, ms }); return { unref() {} }; } });
+  }, {
+    fetch,
+    // Timers still pending (re-checks). The per-request timeout guard is cleared
+    // as soon as Google answers, so it drops out of this list.
+    setTimeout(callback, ms) { const timer = { callback, ms, unref() {} }; state.timers.push(timer); return timer; },
+    clearTimeout(timer) { state.timers = state.timers.filter((entry) => entry !== timer); },
+  });
   return { ...result, state };
 }
 
@@ -141,6 +147,28 @@ test("failed ADC stays disabled, is re-checked, and recovers without a second ap
   assert.equal(exports.firebaseStatus.enabled, true);
   assert.equal(exports.firebaseStatus.reason, null);
   assert.equal(state.initialized, 1);
+});
+
+test("a token request that never answers ends 'Verifying...' with a network diagnostic and a quick re-check", async () => {
+  const { exports, state } = loadAdcFirebase({
+    adcFile: impersonating(PRIMARY_SA),
+    tokens: [() => new Promise(() => {}), async () => ({ access_token: "t" })],
+  });
+  assert.equal(exports.firebaseStatus.credentialCheck, "pending");
+  const [guard] = state.timers;
+  assert.equal(guard.ms, 60 * 1000);
+  guard.callback(); // Google never answered
+  await exports.firebaseReady;
+  assert.equal(exports.firebaseStatus.enabled, false); // never claimed ready
+  assert.equal(exports.firebaseStatus.credentialCheck, "unverified");
+  assert.ok(exports.firebaseStatus.reason.startsWith("Could not reach Google to verify Application Default Credentials (ETIMEDOUT"));
+  assert.doesNotMatch(exports.firebaseStatus.reason, /gcloud auth/); // not a credentials problem
+  const recheck = state.timers.find((timer) => timer !== guard);
+  assert.equal(recheck.ms, 60 * 1000);
+  recheck.callback();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(exports.firebaseStatus.credentialCheck, "verified");
+  assert.equal(exports.firebaseStatus.enabled, true);
 });
 
 test("a re-check refuses ADC that now impersonates another project's service account", async () => {

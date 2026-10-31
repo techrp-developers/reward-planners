@@ -179,6 +179,13 @@ if (process.env.NODE_ENV !== "production") {
 // Serve uploads folder
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
+// /public/* assets live only in R2 behind the CDN. The mobile app's local mode
+// points image URLs at this server, so in development send them on to the CDN.
+if (process.env.NODE_ENV !== "production") {
+  const { getPublicUrl } = require("./utils/publicUrl");
+  app.get("/public/*", (req, res) => res.redirect(302, getPublicUrl(req.originalUrl)));
+}
+
 // Base route
 app.get("/", (req, res) => {
   res.json({
@@ -219,16 +226,8 @@ app.use((req, res) => {
   });
 });
 
-// Global Error Handler
-app.use((error, req, res, next) => {
-  console.error("Unhandled Error:", error);
-
-  res.status(500).json({
-    success: false,
-    message: "Internal server error",
-    error: process.env.NODE_ENV === "development" ? error.message : undefined,
-  });
-});
+// Global Error Handler (database outages answer 503 DATABASE_UNAVAILABLE)
+app.use(require("./middleware/errorHandler"));
 
 // Start Server
 const PORT = process.env.PORT || 5000;
@@ -251,7 +250,10 @@ server.listen(PORT, () => {
   }
 });
 
-// Nodemon uses SIGTERM so each child releases its resources before replacement.
+// Nodemon restarts with SIGUSR2 (nodemon.json). On Linux/macOS that runs the
+// graceful shutdown below. On Windows nodemon force-stops the child instead:
+// its SIGTERM/SIGINT path relies on windows-kill.exe, which can hang and leave
+// the previous process serving stale code indefinitely.
 let shuttingDown = false;
 async function shutdown(signal) {
   if (shuttingDown) return;
@@ -286,3 +288,4 @@ async function shutdown(signal) {
 }
 process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("SIGTERM", () => shutdown("SIGTERM"));
+if (process.platform !== "win32") process.once("SIGUSR2", () => shutdown("SIGUSR2"));

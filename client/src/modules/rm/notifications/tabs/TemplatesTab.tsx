@@ -33,7 +33,7 @@ export default function TemplatesTab({ meta, nav }: { meta: ManagerMeta; nav: Ta
     <>
       <Card
         title="Template library"
-        subtitle="Stored notification templates. Disabled templates can be drafted with but not sent until an admin enables them."
+        subtitle="Stored notification templates. You enable or disable marketing and engagement templates; disabled ones can be drafted with but not sent until you enable them. System event templates are managed by the backend."
         actions={<button type="button" className={primaryBtn} onClick={() => setEditor({ mode: "create", template: { notification_type: "marketing", priority: "normal", module_option: "common" } })}><FiPlus /> New template</button>}
       >
         <div className="grid gap-3 border-b border-gray-100 p-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -154,7 +154,6 @@ function TemplatePreview({ template, onClose }: { template: Template; onClose: (
 }
 
 function TemplateEditor({ meta, state, onClose, onSaved }: { meta: ManagerMeta; state: NonNullable<EditorState>; onClose: () => void; onSaved: () => void }) {
-  const isAdmin = meta.role === "admin";
   const original = state.template;
   const [form, setForm] = useState({
     template_key: original.template_key || "",
@@ -171,12 +170,12 @@ function TemplateEditor({ meta, state, onClose, onSaved }: { meta: ManagerMeta; 
   });
   const [lang, setLang] = useState<Language>("en");
   const [saving, setSaving] = useState(false);
-  // The server decides per template: admins manage everything; an RM manages
-  // the marketing/engagement templates they created (edit, approve their own
-  // translations, publish). System templates stay admin-managed.
+  // The server decides per template: RMs fully manage every marketing and
+  // engagement template (content, translations, priority, deep link, enable /
+  // disable). System event (transactional) templates are read-only here.
   const perms = state.mode === "create"
-    ? { edit: true, publish: meta.permissions.send, approveTranslations: meta.permissions.send }
-    : original.permissions ?? { edit: isAdmin, publish: isAdmin, approveTranslations: isAdmin };
+    ? { edit: true, publish: meta.permissions.send, approveTranslations: meta.permissions.send, systemEvent: false }
+    : original.permissions ?? { edit: false, publish: false, approveTranslations: false, systemEvent: original.notification_type === "transactional" };
   const locked = !perms.edit;
 
   const setText = (field: string, value: string) => {
@@ -195,7 +194,7 @@ function TemplateEditor({ meta, state, onClose, onSaved }: { meta: ManagerMeta; 
         title_mr: form.title_mr, body_mr: form.body_mr,
         ...(perms.approveTranslations ? { approved_languages: form.approved_languages } : {}),
         ...(perms.publish ? { is_enabled: form.is_enabled } : {}),
-        ...(isAdmin && state.mode === "edit" ? { deep_link_pattern: form.deep_link_pattern || null } : {}),
+        ...(perms.edit && state.mode === "edit" ? { deep_link_pattern: form.deep_link_pattern || null } : {}),
       };
       if (state.mode === "create") {
         const created = await notificationApi.createTemplate({ ...content, template_key: form.template_key, module: form.module, notification_type: form.notification_type, notes: form.notes });
@@ -219,7 +218,7 @@ function TemplateEditor({ meta, state, onClose, onSaved }: { meta: ManagerMeta; 
     <Modal title={state.mode === "create" ? "New template" : `Edit · ${original.name}`} onClose={onClose} wide>
       <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
         <div className="space-y-4">
-          {locked && <Notice>This is a system template or another person's template. Only an admin can change it; use Duplicate to make your own copy.</Notice>}
+          {locked && <Notice>{perms.systemEvent ? "This is a system event template (orders, payments, chat and similar). It is managed by the backend and cannot be changed here; use Duplicate to make a marketing or engagement copy." : "You cannot change this template."}</Notice>}
           {state.mode === "create" && (
             <div className="grid gap-3 sm:grid-cols-3">
               <label className="sm:col-span-3"><span className={labelCls}>Template key</span><input className={`${inputCls} font-mono`} value={form.template_key} onChange={(event) => setForm({ ...form, template_key: event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "_") })} /></label>
@@ -231,7 +230,6 @@ function TemplateEditor({ meta, state, onClose, onSaved }: { meta: ManagerMeta; 
               <label><span className={labelCls}>Type</span>
                 <select className={inputCls} value={form.notification_type} onChange={(event) => setForm({ ...form, notification_type: event.target.value as Template["notification_type"] })}>
                   <option value="marketing">Marketing</option><option value="engagement">Engagement</option>
-                  {isAdmin && <option value="transactional">Transactional (system events)</option>}
                 </select>
               </label>
               <label><span className={labelCls}>Priority</span>
@@ -267,13 +265,13 @@ function TemplateEditor({ meta, state, onClose, onSaved }: { meta: ManagerMeta; 
                   <input type="checkbox" checked={form.is_enabled} onChange={(event) => setForm({ ...form, is_enabled: event.target.checked })} /> Published (usable for sending)
                 </label>
               )}
-              {isAdmin && state.mode === "edit" && (
+              {perms.edit && state.mode === "edit" && (
                 <label className="block"><span className={labelCls}>Deep link pattern (stored only; the app does not open rp:// links yet)</span>
                   <input className={`${inputCls} font-mono`} value={form.deep_link_pattern} onChange={(event) => setForm({ ...form, deep_link_pattern: event.target.value })} />
                 </label>
               )}
             </div>
-          ) : <p className="text-xs text-gray-500">An admin publishes system templates and approves their translations. Duplicate a template to make your own editable copy.</p>}
+          ) : <p className="text-xs text-gray-500">System event templates are published by the backend. Duplicate a template to make your own editable copy.</p>}
         </div>
 
         <div className="space-y-3">

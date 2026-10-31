@@ -1079,10 +1079,15 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
     ====================================================== */
     async logoutUser(req, res) {
       try {
-        const userId = req.user?.user_id;
-        await revokeCustomerSession(req, res);
-        const fcmToken = typeof req.body?.fcm_token === "string" ? req.body.fcm_token : null;
+        // The access token is often expired by the time someone logs out, so
+        // the refresh session also identifies the employee.
+        const sessionUserId = await revokeCustomerSession(req, res);
+        const userId = req.user?.user_id ?? sessionUserId;
+        const fcmToken = typeof req.body?.fcm_token === "string" && req.body.fcm_token.length <= 512 ? req.body.fcm_token : null;
         if (userId) await AuthModel.clearFcmToken(userId, fcmToken);
+        // Neither token identified anyone: the device still proves it holds
+        // this (unguessable) FCM token, so it may at least stop its own pushes.
+        else if (fcmToken) await AuthModel.deactivateFcmTokenByValue(fcmToken);
 
         return res.json({
           success: true,

@@ -419,6 +419,17 @@ class authModel {
     );
   }
 
+  // Logout without a usable session: stop pushes to this one device only.
+  async deactivateFcmTokenByValue(fcmToken) {
+    await db.execute(
+      "UPDATE user_push_tokens SET is_active = 0, updated_at = NOW() WHERE fcm_token = ?",
+      [fcmToken],
+    ).catch((error) => {
+      if (error.code !== "ER_NO_SUCH_TABLE") throw error;
+    });
+    await db.execute("UPDATE customer SET fcm_token = NULL WHERE fcm_token = ?", [fcmToken]);
+  }
+
   // With fcmToken, only that device is signed out of pushes; other phones of
   // the same employee keep receiving. Without it (older app builds that do not
   // send their token on logout) every device is deactivated, as before.

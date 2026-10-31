@@ -18,13 +18,13 @@ function getGlobalRmSenderIds(env = process.env) {
 class NotificationAudienceModel {
   /**
    * Company scope for a dashboard user, from verified data only:
-   * admin -> global; rm -> rm_company_assignments rows (none if the table has
-   * not been created). Any other role has no scope.
+   * rm -> rm_company_assignments rows (none if the table has
+   * not been created), or global for NOTIFICATION_RM_GLOBAL_SENDER_IDS.
+   * Every other role, admin included, has no scope.
    */
   async getScope(user) {
-    if (user?.role === "admin") {
-      return { role: "admin", global: true, companyIds: [], assignmentsAvailable: true };
-    }
+    // RMs only (admins included in "no scope"): the Push Notification Manager
+    // is RM-only, so no other role reaches employees through it.
     if (user?.role !== "rm") {
       return { role: user?.role || null, global: false, companyIds: [], assignmentsAvailable: false };
     }
@@ -123,6 +123,55 @@ class NotificationAudienceModel {
       marketingConsented: n(row.marketing_consented),
       engagementConsented: n(row.engagement_consented),
       noPreferenceRecord: n(row.no_preference_record),
+    };
+  }
+
+  /**
+   * Who could actually receive a push in this category right now, as counts
+   * only. Quiet hours and the daily limit depend on the send moment and are
+   * applied per recipient by the worker. `projectIds` are the Firebase
+   * projects the server can send to; tokens of unknown project are reported
+   * separately because they usually belong to an older app build.
+   */
+  async deliveryReadiness(audienceType, filter, scope, category, projectIds = []) {
+    const { sql, params } = this.audienceWhere(audienceType, filter, scope);
+    const needsConsent = category === "marketing" || category === "engagement";
+    const consentColumn = category === "engagement" ? "engagement_enabled" : "marketing_enabled";
+    const consented = needsConsent ? `(np.user_id IS NOT NULL AND np.${consentColumn} = 1)` : "1 = 1";
+    const projects = projectIds.length ? projectIds : [""];
+    const [[row]] = await db.query(
+      `
+      SELECT
+        COUNT(*) AS candidates,
+        SUM(${consented}) AS consented,
+        SUM(np.user_id IS NULL) AS no_preference_record,
+        SUM(np.user_id IS NOT NULL AND np.${consentColumn} = 0) AS opted_out,
+        SUM(EXISTS (
+          SELECT 1 FROM user_push_tokens upt WHERE upt.user_id = c.user_id AND upt.is_active = 1
+            AND upt.firebase_project_id IN (${projects.map(() => "?").join(",")})
+        )) AS with_device,
+        SUM(${consented} AND EXISTS (
+          SELECT 1 FROM user_push_tokens upt WHERE upt.user_id = c.user_id AND upt.is_active = 1
+            AND upt.firebase_project_id IN (${projects.map(() => "?").join(",")})
+        )) AS reachable,
+        SUM(${consented} AND EXISTS (
+          SELECT 1 FROM user_push_tokens upt WHERE upt.user_id = c.user_id AND upt.is_active = 1 AND upt.firebase_project_id IS NULL
+        )) AS unknown_project_devices
+      FROM customer c
+      LEFT JOIN notification_preferences np ON np.user_id = c.user_id
+      WHERE ${sql}
+      `,
+      [...projects, ...projects, ...params],
+    );
+    const n = (value) => Number(value || 0);
+    return {
+      candidates: n(row.candidates),
+      withDevice: n(row.with_device),
+      consented: n(row.consented),
+      noPreferenceRecord: needsConsent ? n(row.no_preference_record) : 0,
+      optedOut: needsConsent ? n(row.opted_out) : 0,
+      reachable: n(row.reachable),
+      unknownProjectDevices: n(row.unknown_project_devices),
     };
   }
 
