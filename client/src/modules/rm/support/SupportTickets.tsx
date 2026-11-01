@@ -13,6 +13,7 @@ import {
 import Swal from "sweetalert2";
 import { api } from "../../../common/api/api";
 import { useDebounce } from "../../../common/hooks/useDebounce";
+import WebsiteEnquiries from "./WebsiteEnquiries";
 
 type TicketStatus = "open" | "in_progress" | "resolved" | "closed";
 
@@ -101,6 +102,20 @@ const nextActions: Record<TicketStatus, { status: TicketStatus; label: string }[
 };
 
 export default function SupportTickets() {
+  const [tab, setTab] = useState<"support" | "website">("support");
+  return <div className="mx-auto max-w-7xl space-y-6">
+    <nav aria-label="Enquiry source" className="flex flex-wrap gap-2 rounded-xl border border-purple-100 bg-white p-2">
+      {([['support', 'Support Tickets'], ['website', 'Website Enquiries']] as const).map(([value, label]) =>
+        <button key={value} type="button" aria-pressed={tab === value} onClick={() => setTab(value)}
+          className={`rounded-lg px-5 py-2.5 text-sm font-semibold ${tab === value ? 'bg-[#852BAF] text-white' : 'text-gray-600 hover:bg-purple-50'}`}>
+          {label}
+        </button>)}
+    </nav>
+    {tab === "website" ? <WebsiteEnquiries /> : <SupportTicketList />}
+  </div>;
+}
+
+function SupportTicketList() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [filter, setFilter] = useState<FilterValue>("all");
   const [loading, setLoading] = useState(true);
