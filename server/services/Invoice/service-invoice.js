@@ -68,6 +68,7 @@ async function generateInvoice(parentOrderId) {
   // reward-discount row. Reuse the cache only for invoices without rewards.
   if (
     existingInvoice &&
+    String(existingInvoice.invoice_url || "").endsWith("-branded.pdf") &&
     rewardDiscount === 0 &&
     Number(existingInvoice.total_amount) === total
   ) {
@@ -85,8 +86,8 @@ async function generateInvoice(parentOrderId) {
   // GENERATE FILE DETAILS
   // --------------------------------------------------
 
-  const invoiceNumber = `INV-${Date.now()}`;
-  const fileName = `${invoiceNumber}.pdf`;
+  const invoiceNumber = existingInvoice?.invoice_number || `INV-${Date.now()}`;
+  const fileName = `${invoiceNumber}-branded.pdf`;
 
   const invoiceDir = path.join(
     __dirname,
@@ -125,12 +126,17 @@ async function generateInvoice(parentOrderId) {
   // HEADER
   // --------------------------------------------------
 
+  doc.image(path.join(__dirname, "../../templates/assets/invoice-logo.png"), 50, 32, {
+    fit: [135, 62],
+  });
+
   doc
     .fillColor(primaryColor)
     .font("Helvetica-Bold")
-    .fontSize(26)
-    .text("SERVICE INVOICE", {
-      align: "center",
+    .fontSize(23)
+    .text("SERVICE INVOICE", 210, 50, {
+      width: 335,
+      align: "right",
     });
 
   doc.moveDown(1);

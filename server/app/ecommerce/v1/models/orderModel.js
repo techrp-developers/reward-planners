@@ -1155,6 +1155,16 @@ class orderModel {
       i.grand_total,
       i.invoice_date,
 
+      (SELECT GROUP_CONCAT(DISTINCT
+        CASE
+          WHEN os.courier_id LIKE 'ekart:%' THEN 'Ekart'
+          WHEN os.courier_id IS NOT NULL AND os.courier_id <> '' THEN 'Xpressbees'
+          ELSE NULLIF(os.courier_name, '')
+        END ORDER BY os.courier_id SEPARATOR ', ')
+       FROM order_shipments os
+       WHERE os.order_id = i.order_id AND os.vendor_id = i.vendor_id
+         AND os.shipping_status <> 'cancelled') AS delivery_partner,
+
       o.order_ref,
       o.created_at AS order_date,
 

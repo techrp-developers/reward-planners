@@ -129,10 +129,9 @@ const template = fs.readFileSync(
   "utf8",
 );
 
-const invoiceLogo = fs.readFileSync(
-  path.join(__dirname, "../../../../templates/assets/invoice-logo.svg"),
-  "utf8",
-);
+const invoiceLogo = `<img src="data:image/png;base64,${fs.readFileSync(
+  path.join(__dirname, "../../../../templates/assets/invoice-logo.png"),
+).toString("base64")}" alt="Reward Planners">`;
 
 function buildInvoiceHTML(invoice = {}, items = []) {
   // Build product rows
@@ -172,6 +171,8 @@ function buildInvoiceHTML(invoice = {}, items = []) {
     .replace(/\n\s*.*GST\s+[^<\n]*%/g, "");
 
   let html = template.replace(/{{company_logo}}/g, () => invoiceLogo);
+  html = html.replace(/{{delivery_partner}}/g,
+    () => escapeHTML(invoice.delivery_partner || "To be assigned"));
 
   // ------------------------
   // Invoice Info
