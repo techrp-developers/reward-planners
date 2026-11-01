@@ -1,3 +1,4 @@
+const { settleTransactionReward } = require("../rewards/transactionRewardService");
 const { sendTransactionSuccessEmail } = require("../mailBuilder/transactionSuccess");
 const cron = require("node-cron");
 const TransactionModel = require("../../app/bbps/v1/models/transactionModel");
@@ -34,6 +35,7 @@ cron.schedule("*/5 * * * *", async () => {
       await conn.commit();
 
       void sendTransactionSuccessEmail("bbps", freshTxn.id);
+        await settleTransactionReward("bbps", freshTxn.id);
 
       console.log(`✅ Retried success: ${freshTxn.id}`);
     } catch (err) {

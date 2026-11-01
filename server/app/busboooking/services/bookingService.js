@@ -1,3 +1,4 @@
+const { settleTransactionReward } = require("../../../services/rewards/transactionRewardService");
 const { sendTransactionSuccessEmail } = require("../../../services/mailBuilder/transactionSuccess");
 const srdvClient = require("../utils/srdvClient");
 const db = require("../../../config/database");
@@ -118,6 +119,7 @@ async function markConfirmed(orderId, booking, rawResponse) {
     ],
   );
   if (updated.affectedRows) void sendTransactionSuccessEmail("bus", orderId);
+  await settleTransactionReward("busbooking", orderId);
 }
 
 // A booking that definitely did not happen: record it and the full refund it

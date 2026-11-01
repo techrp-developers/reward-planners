@@ -11,7 +11,7 @@ const CUSTOMER_ORDER_COLUMNS = `
   o.source_city, o.destination_city,
   o.journey_date, o.departure_time, o.arrival_time,
   o.boarding_point_name, o.dropping_point_name,
-  o.seat_count, o.total_amount, o.reward_coins_used,
+  o.seat_count, o.total_amount, o.reward_coins_used, o.reward_coins_earned,
   o.status, o.payment_status,
   o.ticket_no, o.travel_operator_pnr,
   o.created_at`;

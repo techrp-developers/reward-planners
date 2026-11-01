@@ -74,6 +74,7 @@ export const routes = {
       orders: "/manager/reports/orders",
     },
     rewards:{
+      transactionRanges:"/manager/transaction-rewards",
       rewardRule:"/manager/rewards-rule",
       create:"/manager/reward-create",
       edit:"/manager/reward-edit/:id",

@@ -153,6 +153,7 @@ export default function ManagerNavbar() {
       type: "dropdown",
       children: [
         { label: "Reward Rule", to: routes.manager.rewards.rewardRule },
+        { label: "BBPS & Bus Rewards", to: routes.manager.rewards.transactionRanges },
         { label: "Reward Mapping", to: routes.manager.rewards.mapping },
       ],
     },

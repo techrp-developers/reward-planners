@@ -1,3 +1,4 @@
+const { settleTransactionReward } = require("../../../../services/rewards/transactionRewardService");
 const { sendTransactionSuccessEmail } = require("../../../../services/mailBuilder/transactionSuccess");
 const crypto = require("crypto");
 const TransactionModel = require("../models/transactionModel");
@@ -595,6 +596,7 @@ class PaymentController {
         await conn.commit();
 
         void sendTransactionSuccessEmail("bbps", txn.id);
+        await settleTransactionReward("bbps", txn.id);
 
         notifyUser(
           {
@@ -772,6 +774,7 @@ class PaymentController {
       await conn.commit();
 
       void sendTransactionSuccessEmail("bbps", txn.id);
+        await settleTransactionReward("bbps", txn.id);
 
       notifyUser(
         {

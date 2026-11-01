@@ -110,6 +110,7 @@ const ServiceCancellationDetail = lazy(
 
 // Manage Rewards
 const RewardRule = lazy(() => import("./modules/products/vendorManager/reward/RewardRule.tsx"));
+const TransactionRewardRanges = lazy(() => import("./modules/products/vendorManager/reward/TransactionRewardRanges.tsx"));
 const RewardForm = lazy(() => import("./modules/products/vendorManager/reward/RewardForm.tsx"));
 const ProductRewardMapping = lazy(() => import("./modules/products/vendorManager/reward/ProductRewardMapping.tsx"));
 
@@ -396,6 +397,7 @@ export default function App() {
         />
 
         {/* Rewards */}
+        <Route path={routes.manager.rewards.transactionRanges} element={<TransactionRewardRanges />} />
         <Route
           path={routes.manager.rewards.rewardRule}
           element={<RewardRule />}
