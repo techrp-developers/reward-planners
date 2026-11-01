@@ -340,7 +340,14 @@ async function processShipmentsAfterPayment(orderId) {
       [orderId],
     );
 
-    if (!order) return;
+    if (!order) {
+      console.warn(`[COURIER_BOOKING] Order ${orderId}: order not found`);
+      return;
+    }
+
+    console.log(
+      `[COURIER_BOOKING] Order ${orderId}: start, sync=${order.shipment_sync_status}, paid_at=${order.paid_at}`,
+    );
 
     const graceMinutes = getCancellationGraceMinutes();
     if (
@@ -354,7 +361,7 @@ async function processShipmentsAfterPayment(orderId) {
         graceMinutes,
       );
       console.log(
-        `[COURIER_GRACE_PERIOD] Holding order ${orderId} until ${eligibleAt.toISOString()}`,
+        `[COURIER_BOOKING][COURIER_GRACE_PERIOD] Holding order ${orderId} until ${eligibleAt.toISOString()}`,
       );
       return {
         skipped: true,
@@ -369,12 +376,13 @@ async function processShipmentsAfterPayment(orderId) {
       })
     ) {
       console.warn(
-        `[COURIER_TEST_MODE] Skipping courier booking for order ${orderId}, user ${order.user_id}`,
+        `[COURIER_BOOKING][COURIER_TEST_MODE] Skipping courier booking for order ${orderId}, user ${order.user_id}`,
       );
       return { skipped: true, reason: "courier_test_mode" };
     }
 
     if (order?.shipment_sync_status === "completed") {
+      console.log(`[COURIER_BOOKING] Order ${orderId}: already completed`);
       return;
     }
 
@@ -398,6 +406,10 @@ async function processShipmentsAfterPayment(orderId) {
         )
       `,
       [orderId],
+    );
+
+    console.log(
+      `[COURIER_BOOKING] Order ${orderId}: ${shipments.length} shipment row(s) ready: ${shipments.map((row) => row.id).join(",") || "none"}`,
     );
 
     if (shipments.length > 0) {
@@ -451,6 +463,9 @@ async function processShipmentsAfterPayment(orderId) {
         );
 
         if (!nextCourier) {
+          console.warn(
+            `[COURIER_BOOKING] Order ${orderId}: shipment ${shipment.id} has no untried courier`,
+          );
           await conn.query(
             `
             UPDATE order_shipments
@@ -458,7 +473,7 @@ async function processShipmentsAfterPayment(orderId) {
                 booking_in_progress = 0,
                 booking_attempts = 5,
                 booking_last_attempt_at = NOW(),
-                last_booking_error = 'No untried courier remains'
+                last_booking_error = COALESCE(last_booking_error, 'No untried courier remains')
             WHERE id = ?
             `,
             [shipment.id],
@@ -467,6 +482,9 @@ async function processShipmentsAfterPayment(orderId) {
         }
 
         attemptedCourierId = nextCourier.id;
+        console.log(
+          `[COURIER_BOOKING] Order ${orderId}: booking shipment ${shipment.id} with ${nextCourier.id}`,
+        );
 
         // 3 Load booking details
         const bookingContext = await loadBookingContext(
@@ -485,6 +503,9 @@ async function processShipmentsAfterPayment(orderId) {
         }
 
         const data = bookingResponse.data;
+        console.log(
+          `[COURIER_BOOKING] Order ${orderId}: shipment ${shipment.id} booked, awb=${data.awb_number}`,
+        );
 
         // update shipment row
         await conn.query(
@@ -524,6 +545,9 @@ async function processShipmentsAfterPayment(orderId) {
           [shipment.vendor_order_id],
         );
       } catch (err) {
+        console.error(
+          `[COURIER_BOOKING] Order ${orderId}: shipment ${shipment.id} failed with ${attemptedCourierId}: ${err.message}`,
+        );
         console.error(`Shipment booking failed for ${shipment.id}`, err);
 
         // The courier may hold this shipment, so booking elsewhere could ship

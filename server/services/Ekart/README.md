@@ -58,3 +58,18 @@ it really arrives sooner.
 
 Vendor pickup addresses are registered with Ekart automatically on first
 booking, and again if the address changes.
+
+## Live test orders without Razorpay
+
+```env
+ECOMMERCE_PAYMENT_BYPASS=true
+ECOMMERCE_PAYMENT_BYPASS_USER_IDS=24
+```
+
+For these user IDs, `POST create-order` marks the order paid without calling
+Razorpay and returns `bypassed: true` and `paymentStatus: "paid"`. The app should
+then open the success screen instead of Razorpay. Everything after payment is
+real: stock, invoices, messages and courier booking. Refunds complete locally.
+
+Turn this off after testing. These orders are marked by `payment_method =
+'test_bypass'` and IDs starting with `bypass_`.

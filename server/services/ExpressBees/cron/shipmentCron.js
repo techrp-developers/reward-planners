@@ -728,6 +728,17 @@ cron.schedule("*/30 * * * *", async () => {
   }
 }, { name: "xpressbees-tracking", noOverlap: true });
 
+console.log("[COURIER_BOOKING] Cron ON", {
+  xpress_enabled: process.env.XPRESS_ENABLED ?? "(not set)",
+  ekart_credentials_set: Boolean(
+    process.env.EKART_CLIENT_ID &&
+      process.env.EKART_USERNAME &&
+      process.env.EKART_PASSWORD,
+  ),
+  grace_minutes: process.env.ECOMMERCE_CANCELLATION_GRACE_MINUTES ?? "(not set)",
+  skip_courier_booking: process.env.ECOMMERCE_SKIP_COURIER_BOOKING ?? "false",
+});
+
 // =====================
 // RETRY FAILED BOOKINGS
 // =====================
@@ -751,6 +762,10 @@ cron.schedule("*/10 * * * *", async () => {
       AND booking_attempts < 5
       AND booking_in_progress = 0
     `);
+
+    console.log(
+      `[COURIER_BOOKING] Cron run: ${shipments.length} order(s) to book: ${shipments.map((row) => row.order_id).join(",") || "none"}`,
+    );
 
     for (const row of shipments) {
       try {

@@ -178,6 +178,8 @@ async function checkServiceability(payload) {
 async function ensurePickupAddress(address) {
   if (registeredAliases.has(address.alias)) return;
 
+  console.log(`[COURIER_BOOKING] Ekart: checking pickup ${address.alias}`);
+
   const { data: addresses } = await requestWithEkartToken({
     method: "get",
     url: `${EKART_BASE_URL}/api/v2/addresses`,
@@ -193,6 +195,10 @@ async function ensurePickupAddress(address) {
       url: `${EKART_BASE_URL}/api/v2/address`,
       data: address,
     });
+
+    console.log(
+      `[COURIER_BOOKING] Ekart: pickup ${address.alias} response: ${JSON.stringify(data)}`,
+    );
 
     if (!data?.status) {
       throw new Error(data?.remark || "Ekart pickup address rejected");
@@ -234,6 +240,10 @@ async function bookShipment(context, serviceType) {
       data: buildEkartShipmentPayload(context, serviceType),
     });
 
+    console.log(
+      `[COURIER_BOOKING] Ekart: create response for ${context.orderNumber}: ${JSON.stringify(response.data)}`,
+    );
+
     if (!response.data?.status || !response.data.tracking_id) {
       return {
         status: false,
@@ -254,8 +264,7 @@ async function bookShipment(context, serviceType) {
     };
   } catch (error) {
     console.error(
-      "Ekart Booking Error:",
-      error.response?.data || error.message,
+      `[COURIER_BOOKING] Ekart: rejected ${context.orderNumber}, HTTP ${error.response?.status ?? "none"}: ${JSON.stringify(error.response?.data ?? error.message)}`,
     );
     if (isBookingUnconfirmed(error)) throw bookingUnconfirmedError("Ekart");
     throw new Error(getErrorMessage(error, "Shipment booking failed"));
