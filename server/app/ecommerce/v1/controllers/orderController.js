@@ -149,6 +149,9 @@ function buildInvoiceHTML(invoice = {}, items = []) {
             SKU: ${escapeHTML(item.sku || "")}
             • GST ${item.tax_rate || 0}%
           </div>
+          ${item.offer ? `<div style="font-size:11px;color:#db2777;">
+            Offer: ${escapeHTML(item.offer.title)}${item.offer.original_price === null ? "" : ` • Normal price ₹${money(item.offer.original_price)}`}
+          </div>` : ""}
         </td>
 
         <td style="text-align:center">

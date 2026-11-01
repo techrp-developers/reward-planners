@@ -10,6 +10,7 @@ interface Order {
   status: string;
   created_at: string;
   item_count: number;
+  offer_item_count: number;
   product_name: string | null;
   brand_name: string | null;
   awb_number?: string;
@@ -134,6 +135,9 @@ const OrderList: React.FC = () => {
                           </a>
                           {order.awb_number && (
                             <div className="text-xs text-gray-400 mt-0.5">AWB: {order.awb_number}</div>
+                          )}
+                          {Number(order.offer_item_count) > 0 && (
+                            <span className="mt-1 inline-flex rounded-full border border-pink-200 bg-pink-50 px-2 py-0.5 text-[10px] font-bold text-[#FC3F78]">Offer applied</span>
                           )}
                         </td>
 

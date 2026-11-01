@@ -2,6 +2,7 @@ const db = require("../../../../config/database");
 const razorpay = require("../middlewares/razorpay");
 const axios = require("axios");
 const { notifyUser } = require("../../../common/utils/notification");
+const { orderOfferColumns, orderOffer } = require("../../../../utils/orderOffer");
 
 // helper function
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
@@ -70,8 +71,8 @@ class ServiceOrderModel {
   async create(data, conn = db) {
     const [result] = await conn.execute(
       `INSERT INTO service_orders
-    (user_id, service_id, variant_id, address_id, enquiry_id, price, parent_order_id, bundle_id, promotional_content_id, flash_sale_campaign_id, status, payment_status, reward_coins_earned, reward_coins_used)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    (user_id, service_id, variant_id, address_id, enquiry_id, price, parent_order_id, bundle_id, promotional_content_id, flash_sale_campaign_id, status, payment_status, reward_coins_earned, reward_coins_used, original_price)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         data.user_id,
         data.service_id,
@@ -87,6 +88,7 @@ class ServiceOrderModel {
         data.payment_status || "pending",
         Number(data.reward_coins_earned || 0),
         Number(data.reward_coins_used || 0),
+        data.original_price ?? null,
       ],
     );
 
@@ -239,6 +241,7 @@ class ServiceOrderModel {
         variant_name: row.variant_name,
         image_url: row.image_url ? getPublicUrl(row.image_url) : null,
         price: Number(row.price),
+        offer: orderOffer(row, row.price),
         reward_coins_used: Number(row.reward_coins_used || 0),
         reward_coins_earned: Number(row.reward_coins_earned || 0),
         total_amount: Math.max(
@@ -404,6 +407,7 @@ class ServiceOrderModel {
       so.payment_status,
       so.bundle_id,
       so.created_at,
+      ${orderOfferColumns("so")},
 
       ca.address_type,
       ca.address1,
@@ -1840,6 +1844,8 @@ class ServiceOrderModel {
       so.status,
       so.created_at,
       so.payment_status,
+      so.flash_sale_campaign_id,
+      so.promotional_content_id,
 
       cu.name,
       cu.email,
@@ -1898,10 +1904,16 @@ class ServiceOrderModel {
 
           total_amount: 0,
 
+          offer_item_count: 0,
+
           items: [],
 
           statuses: [],
         };
+      }
+
+      if (row.flash_sale_campaign_id || row.promotional_content_id) {
+        grouped[row.parent_order_id].offer_item_count += 1;
       }
 
       grouped[row.parent_order_id].items.push({
@@ -1932,6 +1944,8 @@ class ServiceOrderModel {
         created_at: order.created_at,
 
         total_amount: order.total_amount,
+
+        offer_item_count: order.offer_item_count,
 
         status: finalStatus,
 
@@ -1975,6 +1989,7 @@ class ServiceOrderModel {
       so.payment_status,
       so.bundle_id,
       so.created_at,
+      ${orderOfferColumns("so")},
 
       ca.address_type,
       ca.address1,
@@ -2078,6 +2093,8 @@ class ServiceOrderModel {
         image_url: row.image_url ? getPublicUrl(row.image_url) : null,
 
         price: Number(row.price),
+
+        offer: orderOffer(row, row.price),
 
         status: row.status,
         timeline: getServiceItemTimeline(row.status, row.payment_status),

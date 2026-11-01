@@ -1,5 +1,6 @@
 const db = require("../../../../config/database");
 const courierService = require("../../../../services/courier/courierService");
+const { priceLines } = require("../utils/activeOffers");
 const {
   sendEcommerceOrderStatusMail,
 } = require("../../../../services/mailBuilder/ecommerceOrderStatus");
@@ -136,6 +137,8 @@ class LogisticsController {
           return res.status(404).json({ success: false, message: "Variant not found" });
         }
 
+        await priceLines([Object.assign(variant, { variant_id: variantId, quantity: parsedQuantity })]);
+
         vendorGroups[variant.vendor_id] = {
           totalWeightKg: parsedQuantity * Number(variant.weight),
           totalAmount: parsedQuantity * Number(variant.sale_price),
@@ -151,7 +154,7 @@ class LogisticsController {
       if (mode === "cart") {
         const [rows] = await db.execute(
           `SELECT 
-             ci.quantity, v.weight, v.length, v.breadth, v.height,
+             ci.variant_id, ci.quantity, v.weight, v.length, v.breadth, v.height,
              v.sale_price, p.vendor_id
            FROM cart_items ci
            JOIN product_variants v ON ci.variant_id = v.variant_id
@@ -159,6 +162,7 @@ class LogisticsController {
            WHERE ci.user_id = ?`,
           [userId]
         );
+        await priceLines(rows);
 
         if (!rows.length) {
           return res.status(400).json({ success: false, message: "Cart is empty" });

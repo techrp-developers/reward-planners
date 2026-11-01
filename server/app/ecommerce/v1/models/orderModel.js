@@ -1,5 +1,6 @@
 const db = require("../../../../config/database");
 const { applyActiveOffers } = require("../utils/activeOffers");
+const { orderOfferColumns, orderOffer } = require("../../../../utils/orderOffer");
 const fs = require("fs");
 const path = require("path");
 const {
@@ -314,6 +315,7 @@ class orderModel {
         `SELECT oi.order_id, oi.order_item_id, oi.product_id, oi.variant_id,
                 oi.quantity, oi.price, oi.final_price, oi.reward_coins_used,
                 oi.reward_coins_earned, oi.fulfillment_status,
+                ${orderOfferColumns("oi")},
                 p.product_name, p.brand_name,
                 os.shipping_status,
                 ic.status AS cancellation_status,
@@ -342,6 +344,7 @@ class orderModel {
           brand_name: item.brand_name,
           quantity: item.quantity,
           price: Number(item.price || 0),
+          offer: orderOffer(item, item.price, item.quantity),
           item_total: Number(item.final_price || 0),
           status:
             item.fulfillment_status === "cancelled"
@@ -530,6 +533,7 @@ class orderModel {
       oi.reward_coins_used,
       oi.reward_coins_earned,
       oi.fulfillment_status,
+      ${orderOfferColumns("oi")},
 
       p.product_name,
       p.brand_name,
@@ -614,6 +618,7 @@ class orderModel {
         attributes,
         quantity: i.quantity,
         price: Number(i.price),
+        offer: orderOffer(i, i.price, i.quantity),
         item_total: Number(i.final_price),
         reward_discount: Number(i.reward_discount || 0),
         reward_coins_used: Number(i.reward_coins_used || 0),
@@ -1193,22 +1198,31 @@ class orderModel {
     const [items] = await db.query(
       `
     SELECT
-      product_name,
-      sku,
-      quantity,
-      unit_price,
-      tax_rate,
-      cgst_amount,
-      sgst_amount,
-      igst_amount,
-      line_total
-    FROM invoice_items
-    WHERE invoice_id = ?
+      ii.product_name,
+      ii.sku,
+      ii.quantity,
+      ii.unit_price,
+      ii.tax_rate,
+      ii.cgst_amount,
+      ii.sgst_amount,
+      ii.igst_amount,
+      ii.line_total,
+      ${orderOfferColumns("oi")}
+    FROM invoice_items ii
+    JOIN invoices i ON i.invoice_id = ii.invoice_id
+    LEFT JOIN eorder_items oi
+      ON i.source = 'ecommerce'
+      AND oi.order_id = i.order_id
+      AND oi.variant_id = ii.variant_id
+    WHERE ii.invoice_id = ?
     `,
       [invoiceId],
     );
 
-    return items;
+    return items.map((item) => ({
+      ...item,
+      offer: orderOffer(item, item.unit_price, item.quantity),
+    }));
   }
 }
 

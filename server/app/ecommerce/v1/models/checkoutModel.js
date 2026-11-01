@@ -19,6 +19,7 @@ const {
 } = require("../utils/rewardCalculate");
 const { priceLines } = require("../utils/activeOffers");
 const { deliveryChargeForUser } = require("../utils/deliveryFeePolicy");
+const { orderOfferColumns, orderOffer } = require("../../../../utils/orderOffer");
 
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
 function getPublicUrl(path) {
@@ -454,8 +455,8 @@ class CheckoutModel {
         await conn.execute(
           `
         INSERT INTO eorder_items
-        (order_id, vendor_order_id, product_id, variant_id, quantity, price, reward_discount, reward_coins_used, reward_earned, reward_coins_earned, final_price, flash_sale_campaign_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (order_id, vendor_order_id, product_id, variant_id, quantity, price, reward_discount, reward_coins_used, reward_earned, reward_coins_earned, final_price, flash_sale_campaign_id, promotional_content_id, original_price)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
           [
             orderId,
@@ -470,6 +471,8 @@ class CheckoutModel {
             pricing.rewardEarn,
             pricing.finalItemTotal,
             item.flash_sale_campaign_id,
+            item.promotional_content_id,
+            item.base_sale_price,
           ],
         );
 
@@ -837,8 +840,8 @@ class CheckoutModel {
       (order_id, vendor_order_id, product_id, variant_id, quantity, price,
        reward_discount, reward_coins_used,
        reward_earned, reward_coins_earned,
-       final_price, flash_sale_campaign_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       final_price, flash_sale_campaign_id, promotional_content_id, original_price)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
         [
           orderId,
@@ -853,6 +856,8 @@ class CheckoutModel {
           rewardEarn,
           finalItemTotal,
           item.flash_sale_campaign_id,
+          item.promotional_content_id,
+          item.base_sale_price,
         ],
       );
 
@@ -1039,6 +1044,9 @@ class CheckoutModel {
 
         mrp: Number(row.mrp),
         price: Number(row.sale_price),
+        original_price: row.base_sale_price,
+        offer_price: row.offer_price,
+        is_offer: row.offer_price !== null,
         quantity: Number(row.quantity),
 
         itemTotal,
@@ -1525,6 +1533,11 @@ class CheckoutModel {
         is_replaceable: row.is_replaceable,
 
         price: salePrice,
+        original_price: row.base_sale_price,
+        offer_price: row.offer_price,
+        is_offer: row.offer_price !== null,
+        flash_sale_campaign_id: row.flash_sale_campaign_id,
+        promotional_content_id: row.promotional_content_id,
         quantity,
 
         item_total: itemTotal,
@@ -1620,6 +1633,7 @@ class CheckoutModel {
       oi.price,
       oi.final_price,
       oi.reward_discount,
+      ${orderOfferColumns("oi")},
       p.product_name,
 
       (
@@ -1713,6 +1727,7 @@ class CheckoutModel {
         item_total: Number(i.price) * i.quantity,
         final_price: Number(i.final_price),
         reward_discount: Number(i.reward_discount),
+        offer: orderOffer(i, i.price, i.quantity),
       })),
 
       bill: {
@@ -1726,6 +1741,10 @@ class CheckoutModel {
             Number(order.total_amount),
         ),
         reward_discount: Number(order.reward_discount),
+        offer_savings: items.reduce(
+          (sum, i) => sum + (orderOffer(i, i.price, i.quantity)?.savings || 0),
+          0,
+        ),
         order_total: Number(order.total_amount),
       },
 

@@ -1,4 +1,5 @@
 import ServiceStatusSelect from "./ServiceStatusSelect";
+import OfferTag, { type OrderOffer } from "../components/OfferTag";
 import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../../../common/api/api";
@@ -32,6 +33,7 @@ interface ServiceItem {
   title: string;
   image_url: string | null;
   price: number;
+  offer: OrderOffer | null;
   status: string;
   timeline: Array<{ status: string; completed: boolean }>;
 }
@@ -532,6 +534,7 @@ const ServiceOrderView: React.FC = () => {
 
                   <td className="px-4 py-3 font-semibold">
                     {formatCurrency(item.price)}
+                    <OfferTag offer={item.offer} />
                   </td>
 
                   <td className="px-4 py-3">
@@ -585,7 +588,7 @@ const ServiceOrderView: React.FC = () => {
                   <div key={item.id} className="grid items-center gap-4 rounded-xl bg-slate-50 p-3 text-sm md:grid-cols-[1fr_300px_auto]">
                     <div><span className="font-semibold text-slate-700">{item.service_name}</span><div className="mt-2"><span className={getStatusBadge(item.status)}>{item.status.replaceAll("_", " ")}</span></div></div>
                     <ServiceItemTimeline timeline={item.timeline} />
-                    <span className="font-bold text-[#852BAF]">{formatCurrency(item.price)}</span>
+                    <span className="font-bold text-[#852BAF]">{formatCurrency(item.price)}<OfferTag offer={item.offer} /></span>
                   </div>
                 ))}
               </div>

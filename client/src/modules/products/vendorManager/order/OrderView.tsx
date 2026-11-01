@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api } from "../../../../common/api/api";
 import OrderStatusTimeline, { type ShipmentProgress } from "../../components/OrderStatusTimeline";
+import OfferTag, { type OrderOffer } from "../../components/OfferTag";
 
 interface Order {
   order_id: number;
@@ -52,12 +53,15 @@ interface OrderItem {
   attributes: Record<string, string>;
   quantity: number;
   price: number;
+  offer: OrderOffer | null;
   item_total: number;
 }
 
 interface OrderSummary {
   item_total: number;
   order_total: number;
+  offer_item_count: number;
+  offer_savings: number;
 }
 
 interface OrderDetailsResponse {
@@ -219,6 +223,11 @@ const OrderView: React.FC = () => {
           </p>
         </div>
       </div>
+      <p className={`mt-5 rounded-xl border px-4 py-3 text-sm font-semibold ${data.summary.offer_item_count > 0 ? "border-pink-100 bg-pink-50 text-[#FC3F78]" : "border-gray-100 bg-gray-50 text-gray-500"}`}>
+        {data.summary.offer_item_count > 0
+          ? `Offer applied on ${data.summary.offer_item_count} of ${data.items.length} items · customer saved ${formatCurrency(data.summary.offer_savings)} · reward coins cannot be used on offer items`
+          : "No offer applied"}
+      </p>
     </div>
 
     <OrderStatusTimeline shipments={data.shipments || []} />
@@ -317,7 +326,7 @@ const OrderView: React.FC = () => {
                   ))}
                 </td>
                 <td className="px-4 py-3 text-gray-700">{item.quantity}</td>
-                <td className="px-4 py-3 text-gray-700">{formatCurrency(item.price)}</td>
+                <td className="px-4 py-3 text-gray-700">{formatCurrency(item.price)}<OfferTag offer={item.offer} /></td>
                 <td className="px-4 py-3 font-bold text-[#852BAF]">{formatCurrency(item.item_total)}</td>
               </tr>
             ))}

@@ -103,6 +103,7 @@ class cartModel {
           flash_sale_campaign_id: row.flash_sale_campaign_id,
           promotional_content_id: row.promotional_content_id,
           offer_price: row.offer_price,
+          is_offer: row.offer_price !== null,
           mrp: Number(row.mrp),
           quantity: Number(row.quantity),
         };

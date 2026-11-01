@@ -143,6 +143,7 @@ class CampaignController {
 
             image: getPublicUrl(image_url, image_updated_at),
 
+            final_price: salePrice,
             price: `₹${salePrice.toFixed(2)}`,
             originalPrice: mrp ? `₹${mrp.toFixed(2)}` : null,
 
