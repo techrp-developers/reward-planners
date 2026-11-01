@@ -1,3 +1,4 @@
+const { sendTransactionSuccessEmail } = require("../../../../services/mailBuilder/transactionSuccess");
 const crypto = require("crypto");
 const TransactionModel = require("../models/transactionModel");
 const BillFetchModel = require("../models/billFetchModel");
@@ -593,6 +594,8 @@ class PaymentController {
 
         await conn.commit();
 
+        void sendTransactionSuccessEmail("bbps", txn.id);
+
         notifyUser(
           {
             userId,
@@ -767,6 +770,8 @@ class PaymentController {
       await TransactionModel.updateStatus(txn.id, "PAID", result, conn);
 
       await conn.commit();
+
+      void sendTransactionSuccessEmail("bbps", txn.id);
 
       notifyUser(
         {

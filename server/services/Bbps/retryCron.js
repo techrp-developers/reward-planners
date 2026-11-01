@@ -1,3 +1,4 @@
+const { sendTransactionSuccessEmail } = require("../mailBuilder/transactionSuccess");
 const cron = require("node-cron");
 const TransactionModel = require("../../app/bbps/v1/models/transactionModel");
 const RefundModel = require("../../app/bbps/v1/models/refundModel");
@@ -31,6 +32,8 @@ cron.schedule("*/5 * * * *", async () => {
       await TransactionModel.updateStatus(freshTxn.id, "PAID", res, conn);
 
       await conn.commit();
+
+      void sendTransactionSuccessEmail("bbps", freshTxn.id);
 
       console.log(`✅ Retried success: ${freshTxn.id}`);
     } catch (err) {

@@ -85,7 +85,8 @@ async function sendEcommerceOrderPlacedEmails(orderId) {
     deliveries.push(sendMailBestEffort({
       to: order.customer_email,
       subject: `Order ${order.order_ref} confirmed - invoice attached`,
-      html: `<p>Hello ${escapeHtml(order.customer_name || "Customer")},</p><p>Your order <strong>${escapeHtml(order.order_ref)}</strong> is confirmed. Your invoice${invoiceAttachments.length === 1 ? " is" : "s are"} attached.</p><p>Order total: <strong>₹${money(order.total_amount)}</strong></p>`,
+      text: `Hello ${order.customer_name || "Customer"},\nYour payment was successful and order ${order.order_ref} is confirmed.\nOrder total: INR ${money(order.total_amount)}\n${items.map(item => `${item.product_name} x ${item.quantity}`).join("\n")}\nYour generated invoices are attached.`,
+      html: summaryHtml({ heading: order.customer_name || "Customer", intro: "Your payment was successful and your order is confirmed. Your generated invoices are attached.", orderRef: order.order_ref, items, total: order.total_amount }),
       attachments: invoiceAttachments,
     }, "ecommerce customer invoice mail"));
   }
