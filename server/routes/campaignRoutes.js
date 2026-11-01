@@ -87,6 +87,14 @@ router.post(
   campaignController.addCampaignItems,
 );
 
+// Add every eligible variant of the selected products, categories, or subcategories
+router.post(
+  "/campaigns/:id/items/bulk",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  campaignController.bulkAddCampaignItems,
+);
+
 // Update item
 router.put(
   "/campaigns/:id/items/:variantId",

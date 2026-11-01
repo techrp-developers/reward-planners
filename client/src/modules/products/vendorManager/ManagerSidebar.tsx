@@ -121,6 +121,12 @@ export default function ManagerNavbar() {
       ],
     },
     {
+      label: "Posters",
+      to: routes.manager.posters.list,
+      Icon: FiImage,
+      type: "link",
+    },
+    {
       label: "Flash Sales",
       to: routes.manager.flashSales.list,
       Icon: FiZap,

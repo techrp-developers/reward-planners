@@ -100,6 +100,17 @@ const publicContentEntry = async (entry) => {
   return response;
 };
 
+const MOBILE_CONTENT_ZONES = ['navbar_background', 'promotional_banner', 'offers_banner', 'brand_promotional_banner'];
+
+const resolveModuleContent = async (moduleKey) => {
+  const zones = await ContentZoneModel.resolveAllZones(moduleKey);
+  const content = {};
+  for (const zone of MOBILE_CONTENT_ZONES) {
+    content[zone] = await publicContentEntry(zones[zone]);
+  }
+  return content;
+};
+
 const getRequestedModules = (queryValue) => {
   if (!queryValue) return MOBILE_CONTENT_MODULES;
 
@@ -115,7 +126,7 @@ class CmsController {
   async getContentServices(req, res) {
     try {
       const entry = await ContentZoneModel.getImageTargetEntry(req.params.id, req.query?.imageId ?? null);
-      if (entry.module !== 'service' || entry.target_type !== 'service' || !IMAGE_GALLERY_ZONES.includes(entry.zone)) {
+      if (!['service', 'mobile_dashboard'].includes(entry.module) || !['service', 'service_category'].includes(entry.target_type) || !IMAGE_GALLERY_ZONES.includes(entry.zone)) {
         return res.status(400).json({ success: false, message: 'Content must target services' });
       }
       if (entry.status !== 'active') return res.status(404).json({ success: false, message: 'Service offer is not active' });
@@ -211,21 +222,15 @@ class CmsController {
   async getMobileContent(req, res) {
     try {
       const requestedModules = getRequestedModules(req.query.modules || req.query.module);
-      const [moduleRows, zoneResults] = await Promise.all([
+      const [moduleRows, moduleContent] = await Promise.all([
         ModuleIconModel.getActiveModules(),
         Promise.all(requestedModules.map(async (moduleKey) => [
           moduleKey,
-          await ContentZoneModel.resolveAllZones(moduleKey),
+          await resolveModuleContent(moduleKey),
         ])),
       ]);
 
-      const content = {};
-      for (const [moduleKey, zones] of zoneResults) {
-        content[moduleKey] = {};
-        for (const zone of ['navbar_background', 'promotional_banner', 'offers_banner', 'brand_promotional_banner']) {
-          content[moduleKey][zone] = await publicContentEntry(zones[zone]);
-        }
-      }
+      const content = Object.fromEntries(moduleContent);
 
       return res.json({
         success: true,
@@ -318,3 +323,4 @@ class CmsController {
 }
 
 module.exports = new CmsController();
+module.exports.resolveModuleContent = resolveModuleContent;

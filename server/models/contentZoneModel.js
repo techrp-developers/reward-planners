@@ -158,8 +158,8 @@ class ContentZoneModel {
     ) {
       if (!TARGET_TYPES.includes(data.target_type))
         errors.push(`target_type must be one of: ${TARGET_TYPES.join(", ")}`);
-      if (data.module && Object.hasOwn(SERVICE_TARGETS, data.target_type) && data.module !== "service")
-        errors.push("Service destinations require the service module");
+      if (data.module && Object.hasOwn(SERVICE_TARGETS, data.target_type) && !["service", "mobile_dashboard"].includes(data.module))
+        errors.push("Service destinations require the service module or the mobile dashboard");
       if (data.module === "service" && !Object.hasOwn(SERVICE_TARGETS, data.target_type))
         errors.push("Choose a service, service category, or service bundle destination");
       if (
@@ -517,6 +517,7 @@ class ContentZoneModel {
       )
       LEFT JOIN content_effective_product_offers cpo
         ON cpo.content_id = ? AND cpo.product_id = p.product_id AND cpo.variant_id = v.variant_id
+        AND cpo.offer_price <= v.sale_price
       WHERE p.product_id IN (${placeholders})
         AND p.status = 'approved' AND p.is_visible = 1 AND p.is_deleted = 0
         AND v.variant_id IS NOT NULL
@@ -528,8 +529,12 @@ class ContentZoneModel {
 
   async getContentServices(contentId, imageId = null) {
     const entry = await this.getImageTargetEntry(contentId, imageId);
-    if (entry.target_type !== 'service') return [];
-    const ids = contentTargetIds(entry);
+    if (!['service', 'service_category'].includes(entry.target_type)) return [];
+    let ids = contentTargetIds(entry);
+    if (entry.target_type === 'service_category') {
+      const [services] = await db.query('SELECT id FROM services WHERE category_id = ? AND status = 1 ORDER BY sort_order, id', [entry.target_id]);
+      ids = services.map(service => Number(service.id));
+    }
     if (!ids.length) return [];
     const placeholders = ids.map(() => '?').join(',');
     const [rows] = await db.query(
@@ -552,6 +557,7 @@ class ContentZoneModel {
        FROM (${LIVE_SERVICE_OFFER_SQL} AND cso.content_id = ?) live
        JOIN service_variants v ON v.id = live.variant_id
        WHERE live.service_id IN (${ids.map(() => '?').join(',')})
+         AND live.offer_price <= v.price
        ORDER BY live.offer_price ASC`,
       [contentId, ...ids],
     );
@@ -584,8 +590,8 @@ class ContentZoneModel {
       error.statusCode = 404;
       throw error;
     }
-    if (!['product', 'service'].includes(entry.module)) {
-      const error = new Error('Image destinations require ecommerce or service content');
+    if (!['product', 'service', 'mobile_dashboard'].includes(entry.module)) {
+      const error = new Error('Image destinations require ecommerce, service, or mobile dashboard content');
       error.statusCode = 400;
       throw error;
     }
@@ -660,6 +666,9 @@ class ContentZoneModel {
     if (!Number.isFinite(price) || price <= 0) {
       const error = new Error('Enter a positive offer price, or null to use the normal price'); error.statusCode = 400; throw error;
     }
+    if (price > Number(variant.sale_price)) {
+      const error = new Error(`Offer price cannot exceed the normal price of ₹${variant.sale_price}`); error.statusCode = 400; throw error;
+    }
     await db.query(`INSERT INTO content_product_offers (content_id, product_id, variant_id, offer_price)
       VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE offer_price = VALUES(offer_price)`, [contentId, variant.product_id, variantId, price]);
   }
@@ -708,6 +717,9 @@ class ContentZoneModel {
     if (!Number.isFinite(price) || price <= 0 || Math.round(price * 100) / 100 !== price) {
       const error = new Error('Enter a positive offer price with at most two decimals, or null to use the shared discount'); error.statusCode = 400; throw error;
     }
+    if (price > Number(variant.price)) {
+      const error = new Error(`Offer price cannot exceed the normal price of ₹${variant.price}`); error.statusCode = 400; throw error;
+    }
     await db.query(`INSERT INTO content_service_offers (content_id, service_id, variant_id, offer_price)
       VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE offer_price = VALUES(offer_price)`, [contentId, variant.service_id, variantId, price]);
   }
@@ -738,7 +750,8 @@ class ContentZoneModel {
 
   async saveServiceBundlePrice(contentId, bundleId, offerPrice) {
     const bundles = await this.getServiceBundlePricing(contentId);
-    if (!bundles.some((row) => Number(row.bundle_id) === Number(bundleId))) {
+    const bundle = bundles.find((row) => Number(row.bundle_id) === Number(bundleId));
+    if (!bundle) {
       const error = new Error('Bundle is not linked to this banner'); error.statusCode = 400; throw error;
     }
     if (offerPrice === null) {
@@ -748,6 +761,9 @@ class ContentZoneModel {
     const price = Number(offerPrice);
     if (!Number.isFinite(price) || price <= 0 || Math.round(price * 100) / 100 !== price) {
       const error = new Error('Enter a positive bundle price with at most two decimals, or null to use the shared discount'); error.statusCode = 400; throw error;
+    }
+    if (price > bundle.bundle_total) {
+      const error = new Error(`Bundle price cannot exceed the bundle total of ₹${bundle.bundle_total}`); error.statusCode = 400; throw error;
     }
     await db.query(`INSERT INTO content_bundle_offers (content_id, bundle_id, offer_price)
       VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE offer_price = VALUES(offer_price)`, [contentId, Number(bundleId), price]);

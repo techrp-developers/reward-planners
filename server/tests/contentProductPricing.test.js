@@ -31,6 +31,7 @@ test('pricing includes category, subcategory and image products; saves and clear
   for (const invalid of [0, -1, Infinity, undefined, 'abc']) {
     await assert.rejects(model.saveVariantPrice(1, 12, invalid), /positive offer price/);
   }
+  await assert.rejects(model.saveVariantPrice(1, 12, 100.01), /cannot exceed the normal price/);
   assert.equal(writes.length, 2);
   entry.module = 'service';
   await assert.rejects(model.getPricingVariants(1), /ecommerce banner/);

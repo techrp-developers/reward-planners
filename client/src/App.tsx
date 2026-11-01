@@ -117,6 +117,8 @@ const ProductRewardMapping = lazy(() => import("./modules/products/vendorManager
 const AttributeManagement = lazy(() => import("./modules/products/vendorManager/attribute/attributes.tsx"));
 const FlashSaleList = lazy(() => import("./modules/products/vendorManager/flashSale/FlashSaleList.tsx"));
 const FlashSaleEditor = lazy(() => import("./modules/products/vendorManager/flashSale/FlashSaleEditor.tsx"));
+const PosterList = lazy(() => import("./modules/products/vendorManager/poster/PosterList.tsx"));
+const PosterEditor = lazy(() => import("./modules/products/vendorManager/poster/PosterEditor.tsx"));
 const BbpsLogoUpload = lazy(() => import("./modules/products/vendorManager/bbps/BbpsLogoUpload.tsx"));
 
 /* Sales */
@@ -367,6 +369,9 @@ export default function App() {
         <Route path={routes.manager.content.moduleIcons} element={<ModuleIcon />} />
         <Route path={routes.manager.content.appIcons} element={<AppIcons />} />
 
+        <Route path={routes.manager.posters.list} element={<PosterList />} />
+        <Route path={routes.manager.posters.create} element={<PosterEditor />} />
+        <Route path={routes.manager.posters.edit} element={<PosterEditor />} />
         <Route path={routes.manager.flashSales.list} element={<FlashSaleList />} />
         <Route path={routes.manager.flashSales.create} element={<FlashSaleEditor />} />
         <Route path={routes.manager.flashSales.edit} element={<FlashSaleEditor />} />

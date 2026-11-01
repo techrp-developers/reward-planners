@@ -13,6 +13,7 @@ const {
   calculateRedeemableCoins,
 } = require("../utils/rewardCalculate");
 const { getOfferCandidates, pickOffer } = require("../utils/activeOffers");
+const { resolveModuleContent } = require("../../../common/controller/cmsController");
 
 async function addWishlistStatus(products, userId) {
   products.forEach((product) => {
@@ -68,11 +69,14 @@ class CampaignController {
   // ========================================user==========================================
   async getHomeCampaigns(req, res) {
     try {
-      const data = await CampaignModel.getHomeCampaigns();
+      const [data, content] = await Promise.all([
+        CampaignModel.getHomeCampaigns("product"),
+        resolveModuleContent("product"),
+      ]);
 
       return res.json({
         success: true,
-        data,
+        data: { ...data, content },
       });
     } catch (err) {
       return res.status(err.statusCode || 500).json({
@@ -84,7 +88,7 @@ class CampaignController {
 
   async getUserCampaigns(req, res) {
     try {
-      const campaigns = await CampaignModel.getUserCampaigns(req.query);
+      const campaigns = await CampaignModel.getUserCampaigns({ ...req.query, module: "product" });
 
       return res.json({
         success: true,
@@ -101,7 +105,7 @@ class CampaignController {
 
   async getUserCampaignById(req, res) {
     try {
-      const campaign = await CampaignModel.getUserCampaignById(req.params.id);
+      const campaign = await CampaignModel.getUserCampaignById(req.params.id, "product");
 
       return res.json({
         success: true,
@@ -117,7 +121,7 @@ class CampaignController {
 
   async getCampaignProducts(req, res) {
     try {
-      const products = await CampaignModel.getCampaignProducts(req.params.id);
+      const products = await CampaignModel.getCampaignProducts(req.params.id, req.query);
       const offers = await getOfferCandidates(products.map((product) => product.variant_id));
 
       const data = await Promise.all(

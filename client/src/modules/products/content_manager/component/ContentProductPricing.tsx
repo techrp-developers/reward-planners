@@ -56,6 +56,7 @@ export default function ContentProductPricing({ contentId }: { contentId: number
     const value = drafts[row.variant_id]?.trim() || "";
     const price = value === "" ? null : Number(value);
     if (price !== null && (!Number.isFinite(price) || price <= 0)) { toast.error("Enter a price greater than zero"); return; }
+    if (price !== null && price > Number(row.sale_price)) { toast.error(`Price cannot exceed the normal price of ₹${row.sale_price}`); return; }
     setBusy(true);
     try {
       await api.put(`/content/entries/${contentId}/product-pricing/${row.variant_id}`, { offer_price: price });

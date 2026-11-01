@@ -150,6 +150,7 @@ class ServiceCartModel {
           price,
           is_offer: isOffer,
           promotional_content_id: isOffer ? offer.contentId : null,
+          flash_sale_campaign_id: isOffer ? offer.campaignId : null,
           regular_price: Number(item.individual_price),
           bundle_id: item.bundle_id,
           bundle_item_id: item.bundle_item_id,

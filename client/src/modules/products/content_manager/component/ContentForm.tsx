@@ -331,7 +331,7 @@ export default function ContentForm({ draft, entries, now, module, onChange, onS
           <input value={draft.redirectLink} onChange={(event) => onChange({ redirectLink: event.target.value })} placeholder="https://..." className={inputClass} />
         </label>
 
-        {(module === "product" || module === "service") && draft.zone !== "navbar_background" && (
+        {(module === "product" || module === "service" || module === "mobile_dashboard") && draft.zone !== "navbar_background" && (
           <details className="sm:col-span-2 rounded-xl border border-slate-200 p-3">
             <summary className="cursor-pointer text-sm font-semibold text-slate-600">Campaign fallback destination (optional)</summary>
             <p className="my-2 text-xs text-slate-500">Set each image's destination using Set destination on its thumbnail. This fallback is used only when an image has no destination of its own.</p>

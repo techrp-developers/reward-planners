@@ -23,4 +23,21 @@ function contentNavigation(entry) {
     ...(['category', 'subcategory', 'service_category', 'service_bundle'].includes(type) ? { contentId: Number(entry.content_id) } : {}) };
 }
 
-module.exports = { contentTargetIds, contentNavigation };
+function campaignNavigation(campaign) {
+  const type = campaign.redirect_type;
+  const campaignId = Number(campaign.campaign_id);
+  if (!type) return null;
+  if (type === 'external_url') return campaign.redirect_url ? { destination: 'external_url', url: campaign.redirect_url } : null;
+  if (type === 'campaign' || type === 'brand') return { destination: type, targetId: Number(campaign.redirect_id), campaignId };
+  const navigation = contentNavigation({
+    target_type: type,
+    target_id: campaign.redirect_id,
+    target_ids: campaign.redirect_ids,
+    content_id: campaignId,
+  });
+  if (!navigation) return null;
+  const { contentId, ...rest } = navigation;
+  return { ...rest, campaignId };
+}
+
+module.exports = { contentTargetIds, contentNavigation, campaignNavigation };

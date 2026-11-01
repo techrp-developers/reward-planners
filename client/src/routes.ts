@@ -44,6 +44,11 @@ export const routes = {
     linkDocument:"/manager/document/DocumentCategory",
     attributes: "/manager/attributes",
     bbpsLogos: "/manager/bbps-logos",
+    posters: {
+      list: "/manager/posters",
+      create: "/manager/posters/create",
+      edit: "/manager/posters/:id",
+    },
     flashSales: {
       list: "/manager/flash-sales",
       create: "/manager/flash-sales/create",

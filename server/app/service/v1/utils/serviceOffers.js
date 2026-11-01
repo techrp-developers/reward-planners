@@ -13,6 +13,29 @@ const LIVE_SERVICE_OFFER_SQL = `
     AND (cze.start_at IS NULL OR cze.start_at <= NOW())
     AND (cze.end_at IS NULL OR cze.end_at >= NOW())`;
 
+// A service flash sale is live only inside its schedule and below the current
+// normal price, which can drop after the offer is saved. Unlike ecommerce it
+// carries no unit cap: services have no stock to reserve.
+const LIVE_SERVICE_FLASH_SQL = `
+  SELECT csi.campaign_id, csi.service_id, csi.variant_id, csi.offer_price
+  FROM campaign_service_items csi
+  JOIN campaigns c ON c.campaign_id = csi.campaign_id
+  JOIN service_variants fv ON fv.id = csi.variant_id AND fv.status = 1
+  WHERE c.campaign_type = 'flash_sale'
+    AND c.module = 'service'
+    AND c.status = 'active'
+    AND NOW() BETWEEN c.start_at AND c.end_at
+    AND csi.offer_price < fv.price`;
+
+const LIVE_SERVICE_PRICE_SQL = `
+  SELECT banner.content_id, NULL AS campaign_id, banner.service_id, banner.variant_id, banner.offer_price
+  FROM (${LIVE_SERVICE_OFFER_SQL}) banner
+  JOIN service_variants bv ON bv.id = banner.variant_id
+  WHERE banner.offer_price <= bv.price
+  UNION ALL
+  SELECT NULL AS content_id, flash.campaign_id, flash.service_id, flash.variant_id, flash.offer_price
+  FROM (${LIVE_SERVICE_FLASH_SQL}) flash`;
+
 function toContentId(value) {
   const id = Number(value);
   return Number.isInteger(id) && id > 0 ? id : null;
@@ -21,21 +44,26 @@ function toContentId(value) {
 const positiveIds = (ids) => [...new Set(ids.map(Number).filter((id) => Number.isInteger(id) && id > 0))];
 
 // Offers apply wherever the service is shown, not only when the app arrives
-// from the banner: the lowest live offer wins, matching ecommerce.
+// from the banner: the lowest live offer wins, matching ecommerce (flash sale wins ties).
 
-/** Map of variant_id -> { price, contentId } for the cheapest live banner offer. */
+/** Map of variant_id -> { price, contentId, campaignId } for the cheapest live offer. */
 async function getBestServiceOffers(variantIds, conn = db) {
   const ids = positiveIds(variantIds);
   const best = new Map();
   if (!ids.length) return best;
   const [rows] = await conn.query(
-    `${LIVE_SERVICE_OFFER_SQL} AND cso.variant_id IN (?) AND cso.offer_price > 0
-     ORDER BY cso.offer_price ASC, cso.content_id ASC`,
+    `SELECT live.* FROM (${LIVE_SERVICE_PRICE_SQL}) live
+     WHERE live.variant_id IN (?) AND live.offer_price > 0
+     ORDER BY live.offer_price ASC, live.campaign_id IS NULL ASC, live.content_id ASC`,
     [ids],
   );
   for (const row of rows) {
     if (!best.has(Number(row.variant_id))) {
-      best.set(Number(row.variant_id), { price: Number(row.offer_price), contentId: Number(row.content_id) });
+      best.set(Number(row.variant_id), {
+        price: Number(row.offer_price),
+        contentId: row.content_id == null ? null : Number(row.content_id),
+        campaignId: row.campaign_id == null ? null : Number(row.campaign_id),
+      });
     }
   }
   return best;
@@ -47,18 +75,18 @@ async function getBestServiceOffer(variantId, conn = db) {
 
 /**
  * Adds the lowest live offer across each service's variants to listing rows
- * ("from ₹x"): offer_price, regular_price (that variant's normal price), content_id.
+ * ("from ₹x"): offer_price, regular_price (that variant's normal price), content_id, campaign_id.
  */
 async function attachServiceOffers(services, idKey = "id", conn = db) {
   const list = (services || []).filter(Boolean);
   const ids = positiveIds(list.map((service) => service[idKey]));
   if (!ids.length) return services;
   const [rows] = await conn.query(
-    `SELECT live.service_id, live.content_id, live.offer_price, v.price AS regular_price
-     FROM (${LIVE_SERVICE_OFFER_SQL}) live
+    `SELECT live.service_id, live.content_id, live.campaign_id, live.offer_price, v.price AS regular_price
+     FROM (${LIVE_SERVICE_PRICE_SQL}) live
      JOIN service_variants v ON v.id = live.variant_id
      WHERE live.service_id IN (?) AND live.offer_price > 0
-     ORDER BY live.offer_price ASC, live.content_id ASC`,
+     ORDER BY live.offer_price ASC, live.campaign_id IS NULL ASC, live.content_id ASC`,
     [ids],
   );
   const best = new Map();
@@ -69,7 +97,8 @@ async function attachServiceOffers(services, idKey = "id", conn = db) {
     const offer = best.get(Number(service[idKey]));
     service.offer_price = offer ? Number(offer.offer_price) : null;
     service.regular_price = offer ? Number(offer.regular_price) : null;
-    service.content_id = offer ? Number(offer.content_id) : null;
+    service.content_id = offer && offer.content_id != null ? Number(offer.content_id) : null;
+    service.campaign_id = offer && offer.campaign_id != null ? Number(offer.campaign_id) : null;
     service.is_offer = Boolean(offer);
   }
   return services;
@@ -116,7 +145,7 @@ async function getBestBundleOffer(bundleId, bundleTotal, conn = db) {
     if (row.offer_price != null) offerTotal = Number(row.offer_price);
     else if (value > 0 && row.discount_type === "percentage") offerTotal = Math.max(0.01, roundMoney(total * (1 - value / 100)));
     else if (value > 0 && row.discount_type === "fixed") offerTotal = Math.max(0.01, roundMoney(total - value));
-    if (offerTotal === null || !(offerTotal > 0)) continue;
+    if (offerTotal === null || !(offerTotal > 0) || offerTotal > total) continue;
     const contentId = Number(row.content_id);
     if (!best || offerTotal < best.total || (offerTotal === best.total && contentId < best.contentId)) {
       best = { total: offerTotal, contentId };
