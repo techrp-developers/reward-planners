@@ -774,7 +774,7 @@ class PaymentController {
       await conn.commit();
 
       void sendTransactionSuccessEmail("bbps", txn.id);
-        await settleTransactionReward("bbps", txn.id);
+      await settleTransactionReward("bbps", txn.id);
 
       notifyUser(
         {

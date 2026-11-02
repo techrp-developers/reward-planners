@@ -39,8 +39,8 @@ async function creditTransactionReward(module, referenceId) {
       await conn.execute("UPDATE customer_wallet SET balance = balance + ? WHERE user_id = ?", [points, order.user_id]);
       const [[wallet]] = await conn.execute("SELECT balance FROM customer_wallet WHERE user_id = ?", [order.user_id]);
       await conn.execute(`INSERT INTO wallet_transactions
-        (user_id, title, description, transaction_type, coins, category, reference_id, expiry_date, balance_after)
-        VALUES (?, ?, ?, 'credit', ?, 'reward', ?, DATE_ADD(NOW(), INTERVAL ? DAY), ?)`,
+        (user_id, title, description, transaction_type, coins, category, reference_id, expiry_date, balance_after, reason_code)
+        VALUES (?, ?, ?, 'credit', ?, 'reward', ?, DATE_ADD(NOW(), INTERVAL ? DAY), ?, NULL)`,
       [order.user_id, `Points earned from ${source.label}`, `${points} points for ${source.label} #${referenceId}`, points, award.insertId, settings.expiry_days, wallet.balance]);
       await conn.execute("UPDATE transaction_reward_awards SET balance_after = ? WHERE id = ?", [wallet.balance, award.insertId]);
     }

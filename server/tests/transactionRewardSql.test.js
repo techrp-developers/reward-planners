@@ -16,9 +16,12 @@ test("SQL: captured payment ranges, atomic wallet credit, duplicate protection a
       "razorpay_orders (id INT PRIMARY KEY, module VARCHAR(20), ref_id INT, status VARCHAR(20), amount DECIMAL(12,2))",
       "customer_wallet (user_id INT PRIMARY KEY, balance INT NOT NULL)",
       "customer (user_id INT PRIMARY KEY, name VARCHAR(50), phone VARCHAR(20), company_id INT)",
-      "wallet_transactions (transaction_id INT AUTO_INCREMENT PRIMARY KEY, user_id INT, title VARCHAR(150), description VARCHAR(255), transaction_type VARCHAR(10), coins INT, category VARCHAR(20), reference_id INT, expiry_date DATETIME, balance_after INT)",
+      "wallet_transactions (transaction_id INT AUTO_INCREMENT PRIMARY KEY, user_id INT, title VARCHAR(150), description VARCHAR(255), transaction_type VARCHAR(10), coins INT, category VARCHAR(20), reference_id INT, expiry_date DATETIME, balance_after INT, reason_code VARCHAR(50) DEFAULT 'ORDER_REWARD', UNIQUE KEY wallet_unique (user_id, transaction_type, reason_code, reference_id))",
     ]) await conn.query(`CREATE TEMPORARY TABLE ${definition} ENGINE=InnoDB`);
-    for (const table of ["transaction_reward_settings", "transaction_reward_awards"]) await conn.query(`CREATE TEMPORARY TABLE ${table} LIKE ${table}`);
+    for (const table of ["transaction_reward_settings", "transaction_reward_awards"]) {
+      const [[schema]] = await conn.query(`SHOW CREATE TABLE ${table}`);
+      await conn.query(schema["Create Table"].replace("CREATE TABLE", "CREATE TEMPORARY TABLE"));
+    }
     const ranges = JSON.stringify([{ min: 100, max: 500, points: 10 }, { min: 500, max: null, points: 25 }]);
     await conn.execute("INSERT INTO transaction_reward_settings (module,ranges_json,created_at) VALUES ('bbps',?,'2026-11-01'),('busbooking',?,'2026-11-01')", [ranges, ranges]);
     await conn.query("INSERT INTO customer VALUES (7,'Test','9999999999',NULL)");

@@ -5,19 +5,41 @@ const vm = require("node:vm");
 const path = require("node:path");
 const { normalizeIndianMobile } = require("../services/whatsapp/phone");
 
-function setup(rows = [{ phone: "9876543210" }], error) {
-  const sent = [], queries = [];
-  const context = { module: { exports: {} }, process: { env: { INTERAKT_API_KEY: "test-secret" } }, console: { error() {} }, require(name) {
+function setup(rows = [{ phone: "9876543210" }], error, env = {}) {
+  const sent = [], queries = [], templates = [];
+  const context = { module: { exports: {} }, process: { env: { INTERAKT_API_KEY: "test-secret", ...env } }, console: { error() {} }, require(name) {
     if (name.endsWith("database")) return { execute: async (sql, args) => { queries.push({ sql, args: Array.from(args) }); return [rows]; } };
     if (name.endsWith("phone")) return { normalizeIndianMobile };
-    if (name.endsWith("interaktService")) return { sendTextMessage: async (value) => { if (error) throw error; sent.push(value); return { result: true, id: "queued-id" }; } };
+    if (name.endsWith("interaktService")) return {
+      sendTextMessage: async (value) => { if (error) throw error; sent.push(value); return { result: true, id: "queued-id" }; },
+      sendTemplateMessage: async (value) => { if (error) throw error; templates.push(value); return { result: true, id: "template-id" }; },
+    };
     throw new Error(name);
   } };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../controllers/employeeWhatsAppController.js"), "utf8"), context);
   const res = { code: 200, status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
-  return { sent, queries, res, run: (body) => context.module.exports.sendEmployeeWhatsApp({ body, user: { user_id: 4 } }, res) };
+  return { sent, queries, templates, res, run: (body) => context.module.exports.sendEmployeeWhatsApp({ body, user: { user_id: 4 } }, res) };
 }
 const valid = { recipientType: "employee", recipientId: 12, companyId: 7, message: " Hello " };
+const templateEnv = { INTERAKT_RM_MESSAGE_TEMPLATE: "rm_custom_message" };
+test("approved template sends outside the 24-hour window with a flattened value", async () => {
+  const t = setup(undefined, undefined, templateEnv);
+  await t.run({ ...valid, message: " Line one\n\nLine\ttwo    end " });
+  assert.equal(t.sent.length, 0);
+  assert.equal(t.templates[0].templateName, "rm_custom_message");
+  assert.deepEqual(Array.from(t.templates[0].bodyValues), ["Line one Line two end"]);
+  assert.equal(t.templates[0].phone, "+919876543210");
+  assert.equal(t.res.body.id, "template-id");
+});
+test("template mode rejects messages too long for a template body", async () => {
+  const t = setup(undefined, undefined, templateEnv);
+  await t.run({ ...valid, message: "a".repeat(901) });
+  assert.equal(t.res.code, 400); assert.equal(t.queries.length, 0); assert.equal(t.templates.length, 0);
+});
+test("24-hour hint is dropped once the template is in use", async () => {
+  const t = setup(undefined, new Error("rejected"), templateEnv); await t.run(valid);
+  assert.equal(t.res.code, 503); assert.doesNotMatch(t.res.body.message, /24 hours/);
+});
 test("uses stored phone and scopes employee to company; reports queued, not delivered", async () => {
   const t = setup();
   await t.run({ ...valid, phone: "9123456789" });

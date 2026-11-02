@@ -14,6 +14,46 @@ interface Props {
   phone?: string | null;
 }
 
+const WHATSAPP_FORMATS = [
+  { label: "B", name: "Bold", marker: "*", className: "font-bold" },
+  { label: "I", name: "Italic", marker: "_", className: "italic" },
+  { label: "S", name: "Strikethrough", marker: "~", className: "line-through" },
+  { label: "</>", name: "Monospace", marker: "```", className: "font-mono" },
+];
+
+// WhatsApp ignores a marker that touches whitespace, so spaces in the selection stay outside it.
+function applyWhatsAppFormat(input: HTMLTextAreaElement, marker: string) {
+  const { selectionStart: start, selectionEnd: end } = input;
+  const selected = input.value.slice(start, end);
+  const text = selected.trim();
+  const lead = selected.slice(0, selected.length - selected.trimStart().length);
+  const trail = selected.slice(selected.trimEnd().length);
+  input.setRangeText(`${lead}${marker}${text}${marker}${trail}`, start, end, "end");
+  input.focus();
+  // With nothing selected, leave the cursor between the markers so the RM can type.
+  if (!text) input.setSelectionRange(start + lead.length + marker.length, start + lead.length + marker.length);
+}
+
+function addWhatsAppFormatToolbar() {
+  const input = Swal.getInput() as HTMLTextAreaElement | null;
+  if (!input) return;
+  const toolbar = document.createElement("div");
+  toolbar.className = "mx-8 mt-3 -mb-2 flex gap-1.5";
+  toolbar.setAttribute("role", "toolbar");
+  toolbar.setAttribute("aria-label", "Message formatting");
+  WHATSAPP_FORMATS.forEach(({ label, name, marker, className }) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = label;
+    button.title = name;
+    button.setAttribute("aria-label", name);
+    button.className = `cursor-pointer rounded border border-gray-200 px-2.5 py-1 text-sm text-gray-700 hover:bg-gray-100 ${className}`;
+    button.addEventListener("click", () => applyWhatsAppFormat(input, marker));
+    toolbar.appendChild(button);
+  });
+  input.before(toolbar);
+}
+
 export default function EmployeeContactActions({ name, email, activated, endpoint, activationWhatsAppEndpoint, messageRecipient, phone }: Props) {
   const [sendingReminder, setSendingReminder] = useState(false);
   const reminderInFlight = useRef(false);
@@ -53,11 +93,12 @@ export default function EmployeeContactActions({ name, email, activated, endpoin
     try {
       const result = await Swal.fire({
         titleText: `WhatsApp ${name}`,
-        text: `To: ${phone}. Send from Reward Planners. The user must have messaged us within the last 24 hours.`,
+        text: `To: ${phone}. Sent from Reward Planners.`,
         input: "textarea",
         inputLabel: "Your message",
         inputPlaceholder: "Type your message…",
         inputAttributes: { maxlength: "4096", "aria-label": "WhatsApp message" },
+        didOpen: addWhatsAppFormatToolbar,
         showCancelButton: true,
         confirmButtonText: "Send message",
         confirmButtonColor: "#059669",

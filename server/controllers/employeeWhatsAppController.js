@@ -1,14 +1,25 @@
 const db = require("../config/database");
-const { sendTextMessage } = require("../services/whatsapp/interaktService");
+const { sendTemplateMessage, sendTextMessage } = require("../services/whatsapp/interaktService");
 const { normalizeIndianMobile } = require("../services/whatsapp/phone");
+
+// Meta caps a template body at 1024 characters, and the approved wording uses part of that.
+const TEMPLATE_MESSAGE_LIMIT = 900;
 
 async function sendEmployeeWhatsApp(req, res) {
   const { recipientType, recipientId, companyId, message } = req.body || {};
+  // Set only once the template is approved; until then RMs can reply only inside the 24-hour window.
+  const templateName = process.env.INTERAKT_RM_MESSAGE_TEMPLATE;
+  const windowHint = templateName ? "" : " Free-form messages require a reply from the user within the last 24 hours.";
   if (!["customer", "employee"].includes(recipientType) ||
       !Number.isSafeInteger(recipientId) || recipientId < 1 ||
       (recipientType === "employee" && (!Number.isSafeInteger(companyId) || companyId < 1)) ||
       typeof message !== "string" || !message.trim() || message.trim().length > 4096) {
     return res.status(400).json({ success: false, message: "Select a valid recipient and enter a message of 1–4096 characters." });
+  }
+  // Meta rejects template values containing newlines, tabs or runs of spaces.
+  const templateValue = message.trim().replace(/\s+/g, " ");
+  if (templateName && templateValue.length > TEMPLATE_MESSAGE_LIMIT) {
+    return res.status(400).json({ success: false, message: `WhatsApp messages can be at most ${TEMPLATE_MESSAGE_LIMIT} characters.` });
   }
   try {
     // Resolve the saved recipient server-side; never accept a destination phone from the browser.
@@ -18,10 +29,10 @@ async function sendEmployeeWhatsApp(req, res) {
     if (!rows.length) return res.status(404).json({ success: false, message: "Recipient not found." });
     const phone = normalizeIndianMobile(rows[0].phone);
     if (!phone) return res.status(400).json({ success: false, message: "This user does not have a valid Indian mobile number." });
-    const result = await sendTextMessage({
-      phone, message: message.trim(),
-      callbackData: JSON.stringify({ source: "rm_custom_message", senderId: req.user.user_id, recipientType, recipientId }),
-    });
+    const callbackData = JSON.stringify({ source: "rm_custom_message", senderId: req.user.user_id, recipientType, recipientId });
+    const result = templateName
+      ? await sendTemplateMessage({ phone, templateName, bodyValues: [templateValue], callbackData })
+      : await sendTextMessage({ phone, message: message.trim(), callbackData });
     return res.json({ success: true, message: "Message queued through Reward Planners. Delivery is not yet confirmed.", id: result.id });
   } catch (error) {
     if (error.message === "INTERAKT_CONFIG_MISSING") {
@@ -50,12 +61,12 @@ async function sendEmployeeWhatsApp(req, res) {
     if ((providerStatus >= 400 && providerStatus < 500) || error.message === "INTERAKT_MESSAGE_REJECTED") {
       return res.status(422).json({
         success: false,
-        message: providerReason ? `Interakt rejected the message: ${providerReason}` : "Interakt rejected the message. Check the 24-hour reply window and your account's API access.",
+        message: providerReason ? `Interakt rejected the message: ${providerReason}` : `Interakt rejected the message. Check your account's API access.${windowHint}`,
       });
     }
     // Status/code are not sensitive and tell the operator whether Interakt errored or was unreachable.
     const detail = providerStatus ? `Interakt returned HTTP ${providerStatus}` : `Interakt could not be reached (${error.code || "network error"})`;
-    return res.status(503).json({ success: false, message: `Unable to queue this message: ${detail}${providerReason ? ` – ${providerReason}` : ""}. Free-form messages require a reply from the user within the last 24 hours.` });
+    return res.status(503).json({ success: false, message: `Unable to queue this message: ${detail}${providerReason ? ` – ${providerReason}` : ""}.${windowHint}` });
   }
 }
 
