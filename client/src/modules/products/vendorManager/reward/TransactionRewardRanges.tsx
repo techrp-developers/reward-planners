@@ -6,9 +6,9 @@ type Module = "bbps" | "busbooking";
 
 export default function TransactionRewardRanges() {
   const [module, setModule] = useState<Module>("bbps");
-  return <main className="mx-auto max-w-5xl space-y-6">
-    <header><h1 className="text-2xl font-semibold text-gray-900">BBPS &amp; Bus Rewards</h1>
-      <p className="mt-2 text-sm text-gray-500">Award wallet points based on the amount the customer pays.</p></header>
+  return <main className="max-w-5xl space-y-6 pb-8">
+    <header><h1 className="text-2xl font-semibold tracking-tight text-slate-900">BBPS &amp; Bus Rewards</h1>
+      <p className="mt-1 text-sm text-slate-500">Award wallet points based on the amount the customer pays.</p></header>
     <nav aria-label="Reward module" className="flex gap-2 rounded-xl border border-purple-100 bg-white p-2">
       {([['bbps', 'BBPS'], ['busbooking', 'Bus Booking']] as const).map(([value, label]) =>
         <button type="button" key={value} aria-pressed={module === value} onClick={() => setModule(value)} className={`rounded-lg px-5 py-3 text-sm font-semibold ${module === value ? 'bg-[#852BAF] text-white' : 'text-gray-600'}`}>{label}</button>)}

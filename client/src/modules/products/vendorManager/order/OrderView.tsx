@@ -146,8 +146,8 @@ const OrderView: React.FC = () => {
     }
   };
 
-  if (loading) return <div style={{ padding: 20 }}>Loading order...</div>;
-  if (error) return <div style={{ padding: 20, color: "red" }}>{error}</div>;
+  if (loading) return <p className="py-14 text-center text-sm text-gray-500">Loading order...</p>;
+  if (error) return <p className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">{error}</p>;
   if (!data) return null;
 
   const getStatusBadge = (status: string) => {
@@ -164,20 +164,18 @@ const OrderView: React.FC = () => {
   };
 
   return (
-  <div className="min-h-screen p-6 md:p-10" style={{ background: "linear-gradient(160deg, #fdf8ff 0%, #fff5f8 50%, #f8f9ff 100%)" }}>
+  <div className="w-full pb-8">
 
     {/* HEADER */}
     <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
       <button
-        className="inline-flex items-center gap-2 text-sm font-semibold
-        bg-gradient-to-r from-[#852BAF] to-[#FC3F78] text-white
-        px-5 py-2.5 rounded-xl shadow-lg hover:scale-[1.03] active:scale-95 transition cursor-pointer"
+        className="inline-flex w-fit items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
         onClick={() => navigate(-1)}
       >
         ← Back
       </button>
 
-      <h2 className="text-2xl md:text-3xl font-bold text-gray-900">
+      <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
         Order #{data.order.order_ref}
       </h2>
 
@@ -185,7 +183,7 @@ const OrderView: React.FC = () => {
         type="button"
         onClick={downloadInvoice}
         disabled={downloadingInvoice}
-        className="inline-flex items-center gap-2 rounded-xl border border-purple-200 bg-white px-5 py-2.5 text-sm font-bold text-[#852BAF] shadow-sm transition hover:-translate-y-0.5 hover:border-[#852BAF] hover:shadow-md disabled:cursor-wait disabled:opacity-60"
+        className="inline-flex items-center gap-2 rounded-xl border border-purple-200 bg-white px-5 py-2.5 text-sm font-bold text-[#852BAF] shadow-sm transition hover:border-[#852BAF] hover:shadow-md disabled:cursor-wait disabled:opacity-60"
       >
         <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" />
@@ -308,7 +306,7 @@ const OrderView: React.FC = () => {
 
       <div className="overflow-x-auto rounded-xl border border-gray-100">
         <table className="w-full text-sm">
-          <thead style={{ background: "linear-gradient(135deg, #fdf8ff 0%, #fff5f8 100%)" }}>
+          <thead>
             <tr>
               {["Product", "Brand", "Attributes", "Qty", "Price", "Total"].map((h) => (
                 <th key={h} className="px-4 py-3 text-xs font-bold uppercase text-gray-500 text-left tracking-wider">{h}</th>

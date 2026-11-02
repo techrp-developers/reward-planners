@@ -93,7 +93,7 @@ export default function AttributeValueManager({ attributeId }: Props) {
           }
         }}
         className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 text-sm font-bold text-white rounded-xl cursor-pointer transition-all hover:opacity-90 active:scale-[0.98]"
-        style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }}
+        style={{ background: "linear-gradient(90deg, #852BAF 60%, #C13A8E 100%)" }}
       >
         <FiSave size={14} /> Save Options
       </button>

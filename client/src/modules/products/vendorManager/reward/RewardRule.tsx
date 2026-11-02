@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../../../common/api/api";
-import { FiGift, FiPlus } from "react-icons/fi";
+import { FiPlus } from "react-icons/fi";
 
 interface RewardRule {
   reward_rule_id: number;
@@ -102,16 +102,13 @@ const RewardRule: React.FC = () => {
   };
 
   return (
-    <div className="w-full min-h-screen">
-      <div className="p-6 bg-white border border-gray-200 shadow-lg rounded-2xl">
+    <div className="w-full pb-8">
+      <div>
         {/* HEADER */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-start gap-4">
-            <div className="w-12 h-12 bg-gradient-to-r from-[#852BAF] to-[#FC3F78] rounded-full flex items-center justify-center shrink-0 shadow-md">
-              <FiGift className="text-xl text-white" />
-            </div>
             <div>
-              <h2 className="text-3xl font-bold text-gray-900">Reward Rules</h2>
+              <h2 className="text-2xl font-semibold tracking-tight text-slate-900">Reward Rules</h2>
               <p className="mt-1 text-sm text-gray-500">
                 Manage reward configurations
               </p>
@@ -120,7 +117,7 @@ const RewardRule: React.FC = () => {
 
           <button
             onClick={() => navigate(`/manager/reward-create`)}
-            className="flex items-center gap-2 bg-gradient-to-r from-[#852BAF] to-[#FC3F78] text-white px-5 py-2.5 rounded-xl shadow-md hover:opacity-90 active:scale-95 transition-all cursor-pointer font-semibold text-sm"
+            className="flex items-center gap-2 bg-gradient-to-r from-[#852BAF] from-60% to-[#C13A8E] text-white px-5 py-2.5 rounded-xl shadow-md hover:opacity-90 active:scale-95 transition-all cursor-pointer font-semibold text-sm"
           >
             <FiPlus />
             Create Rule
@@ -143,14 +140,9 @@ const RewardRule: React.FC = () => {
 
         {/* TABLE */}
         {!loading && !error && (
-          <div className="overflow-x-auto border border-gray-100 rounded-2xl">
+          <div className="overflow-x-auto border border-gray-100 rounded-2xl bg-white">
             <table className="w-full text-sm text-left">
-              <thead
-                style={{
-                  background:
-                    "linear-gradient(135deg, #fdf8ff 0%, #fff5f8 100%)",
-                }}
-              >
+              <thead>
                 <tr>
                   {[
                     "Name",

@@ -139,10 +139,7 @@ export default function PosterEditor() {
     <div className="space-y-6">
       <Link to={routes.manager.posters.list} className="inline-flex items-center gap-2 text-sm font-bold text-[#852BAF]"><FiArrowLeft /> Back to posters</Link>
       <form onSubmit={submit} className="overflow-hidden rounded-3xl border border-purple-100 bg-white shadow-[0_18px_55px_rgba(67,31,91,0.08)]">
-        <div className="bg-gradient-to-r from-[#25103d] to-[#852BAF] px-7 py-6 text-white">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-purple-200">{editing ? "Poster workspace" : "New poster"}</p>
-          <h1 className="mt-1 text-2xl font-black">{editing ? "Edit Poster" : "Create Poster"}</h1>
-        </div>
+        <div className="border-b border-gray-100 px-7 py-5"><h1 className="text-2xl font-semibold tracking-tight text-slate-900">{editing ? "Edit poster" : "Create poster"}</h1></div>
         <div className="grid gap-5 p-7 md:grid-cols-2">
           <label className="md:col-span-2">
             <span className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">Poster title *</span>
@@ -218,7 +215,7 @@ export default function PosterEditor() {
           </label>
         </div>
         <div className="flex justify-end border-t border-gray-100 px-7 py-5">
-          <button disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-6 py-3 text-sm font-extrabold text-white shadow-lg disabled:opacity-50"><FiSave /> {saving ? "Saving..." : editing ? "Save Poster" : "Create Poster"}</button>
+          <button disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] from-60% to-[#C13A8E] px-6 py-3 text-sm font-extrabold text-white shadow-lg disabled:opacity-50"><FiSave /> {saving ? "Saving..." : editing ? "Save Poster" : "Create Poster"}</button>
         </div>
       </form>
     </div>

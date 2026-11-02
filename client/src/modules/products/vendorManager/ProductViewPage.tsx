@@ -139,7 +139,7 @@ const SectionHeader = ({ icon: Icon, title, description }: any) => (
     <div
       className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
       style={{
-        background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
+        background: "linear-gradient(90deg, #852BAF 60%, #C13A8E 100%)",
       }}
     >
       <Icon className="text-white" style={{ fontSize: 15 }} />
@@ -549,32 +549,18 @@ export default function ReviewProductPage() {
   const customAttributeRows: { label: string; value: string }[] = Array.isArray(rawCustomAttributes)
     ? rawCustomAttributes.map((row: { label?: unknown; value?: unknown; values?: unknown }) => ({
         label: String(row.label ?? "Custom attribute"),
-        value: Array.isArray(row.values) ? row.values.map(String).join(", ") : String(row.value ?? "â€”"),
+        value: Array.isArray(row.values) ? row.values.map(String).join(", ") : String(row.value ?? "—"),
       }))
     : [];
 
   return (
-    <div
-      className="min-h-screen p-6"
-      style={{
-        background:
-          "linear-gradient(160deg, #fdf8ff 0%, #fff5f8 50%, #f8f9ff 100%)",
-      }}
-    >
-      <div className="mx-auto max-w-7xl">
+    <div className="pb-8">
+      <div>
         {/* PAGE HEADER */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-start gap-4">
-            <div
-              className="w-12 h-12 rounded-full flex items-center justify-center shrink-0 shadow-md"
-              style={{
-                background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
-              }}
-            >
-              <FaBox className="text-white text-xl" />
-            </div>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">
+              <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
                 Product Review
               </h1>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
@@ -624,7 +610,7 @@ export default function ReviewProductPage() {
 
           <button
             onClick={() => navigate(-1)}
-            className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white rounded-xl shadow-md transition-all bg-gradient-to-r from-[#852BAF] to-[#FC3F78] hover:opacity-90 active:scale-95 cursor-pointer"
+            className="inline-flex w-fit items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             <FaArrowLeft /> Back
           </button>
@@ -730,7 +716,7 @@ export default function ReviewProductPage() {
                         <p
                           className={`text-sm font-semibold ${hasValue ? "text-gray-800" : "text-gray-300"}`}
                         >
-                          {hasValue ? values.join(", ") : "â€”"}
+                          {hasValue ? values.join(", ") : "—"}
                         </p>
                       </div>
                     );
@@ -802,12 +788,7 @@ export default function ReviewProductPage() {
             />
             <div className="w-full overflow-x-auto overscroll-x-contain rounded-xl border border-gray-100">
               <table className="min-w-max text-sm text-left">
-                <thead
-                  style={{
-                    background:
-                      "linear-gradient(135deg, #fdf8ff 0%, #fff5f8 100%)",
-                  }}
-                >
+                <thead>
                   <tr>
                     {[
                       "Images",
@@ -858,7 +839,7 @@ export default function ReviewProductPage() {
                             ))}
                           </div>
                         ) : (
-                          <span className="text-xs text-gray-300">â€”</span>
+                          <span className="text-xs text-gray-300">—</span>
                         )}
                       </td>
 
@@ -899,11 +880,11 @@ export default function ReviewProductPage() {
                       </td>
 
                       <td className="px-4 py-3 text-gray-700">
-                        {variant.mrp ? `â‚¹${variant.mrp}` : "â€”"}
+                        {variant.mrp ? `₹${variant.mrp}` : "—"}
                       </td>
 
                       <td className="px-4 py-3 font-semibold text-gray-800">
-                        {variant.sale_price ? `â‚¹${variant.sale_price}` : "â€”"}
+                        {variant.sale_price ? `₹${variant.sale_price}` : "—"}
                       </td>
 
                       <td className="px-4 py-3">
@@ -927,7 +908,7 @@ export default function ReviewProductPage() {
                           ? new Date(
                               variant.manufacturing_date,
                             ).toLocaleDateString("en-IN")
-                          : "â€”"}
+                          : "—"}
                       </td>
 
                       <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
@@ -935,7 +916,7 @@ export default function ReviewProductPage() {
                           ? new Date(variant.expiry_date).toLocaleDateString(
                               "en-IN",
                             )
-                          : "â€”"}
+                          : "—"}
                       </td>
                     </tr>
                   ))}
@@ -1029,7 +1010,7 @@ export default function ReviewProductPage() {
             <FormInput
               id="delivery_sla"
               label="Delivery SLA"
-              value={`${product.deliverySlaMinDays} â€“ ${product.deliverySlaMaxDays} days`}
+              value={`${product.deliverySlaMinDays} – ${product.deliverySlaMaxDays} days`}
             />
             <FormInput
               id="shippingClass"
@@ -1141,7 +1122,7 @@ export default function ReviewProductPage() {
                       )}
                       <button
                         onClick={() => downloadFile(fileUrl, doc.document_name)}
-                        className="w-9 h-9 flex items-center justify-center text-white rounded-xl bg-gradient-to-br from-[#852BAF] to-[#FC3F78] hover:opacity-90 shadow-sm cursor-pointer transition-all"
+                        className="w-9 h-9 flex items-center justify-center text-white rounded-xl bg-gradient-to-br from-[#852BAF] from-60% to-[#C13A8E] hover:opacity-90 shadow-sm cursor-pointer transition-all"
                       >
                         <FaDownload className="text-sm" />
                       </button>

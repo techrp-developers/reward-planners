@@ -128,10 +128,10 @@ export default function CancellationDetail() {
   const eligibleTotal = eligibleMoney + eligibleWallet;
 
   return (
-    <div className="min-h-screen p-6 md:p-10">
+    <div className="w-full pb-8">
       <div className="mb-8 flex items-center justify-between">
-        <button onClick={() => navigate(-1)} className="cursor-pointer rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-5 py-2.5 font-semibold text-white">← Back</button>
-        <h1 className="text-3xl font-bold">Item Cancellation</h1>
+        <button onClick={() => navigate(-1)} className="inline-flex w-fit items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">← Back</button>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Item Cancellation</h1>
       </div>
       <section className={card}>
         <h2 className="mb-4 text-xs font-bold uppercase tracking-widest text-gray-400">Item summary</h2>

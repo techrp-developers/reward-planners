@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiXCircle } from "react-icons/fi";
 import { api } from "../../../../common/api/api";
 
 interface ItemCancellation {
@@ -49,14 +48,11 @@ export default function CancellationRequests() {
     }).format(Number(value || 0));
 
   return (
-    <div className="min-h-screen w-full">
-      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg">
+    <div className="w-full pb-8">
+      <div>
         <div className="mb-8 flex items-start gap-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-r from-[#852BAF] to-[#FC3F78] shadow-md">
-            <FiXCircle className="text-xl text-white" />
-          </div>
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Item Cancellation Requests</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Item Cancellation Requests</h1>
             <p className="mt-1 text-sm text-gray-500">
               Review individual products without cancelling the remaining order.
             </p>
@@ -64,9 +60,9 @@ export default function CancellationRequests() {
         </div>
 
         {error && <div className="mb-4 rounded-xl bg-red-50 p-4 text-red-600">{error}</div>}
-        <div className="overflow-x-auto rounded-2xl border border-gray-100">
+        <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-white">
           <table className="min-w-full divide-y divide-gray-100">
-            <thead className="bg-gradient-to-r from-purple-50 to-pink-50">
+            <thead>
               <tr>
                 {["Order", "Product", "Customer", "Amount", "Status", "Requested", "Action"].map((heading) => (
                   <th key={heading} className="px-5 py-4 text-left text-xs font-bold uppercase tracking-wider text-gray-500">{heading}</th>

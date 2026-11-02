@@ -65,16 +65,7 @@ export default function PosterList() {
 
   return (
     <div className="space-y-6">
-      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#25103d] via-[#70248f] to-[#d63379] p-7 text-white shadow-2xl shadow-purple-200">
-        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-purple-200">Campaign studio</p>
-            <h1 className="mt-2 text-3xl font-black">Posters</h1>
-            <p className="mt-2 max-w-xl text-sm text-purple-100/80">Place posters on the ecommerce home, service home, or main dashboard, and choose what each one opens.</p>
-          </div>
-          <Link to={routes.manager.posters.create} className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-extrabold text-[#852BAF] shadow-lg transition hover:-translate-y-0.5"><FiPlus /> Create Poster</Link>
-        </div>
-      </section>
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><h1 className="text-2xl font-semibold tracking-tight text-slate-900">Posters</h1><p className="mt-1 text-sm text-slate-500">Place posters on the ecommerce home, service home, or main dashboard, and choose what each one opens.</p></div><Link to={routes.manager.posters.create} className="inline-flex w-fit items-center gap-2 rounded-lg bg-[#852BAF] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#702393]"><FiPlus /> Create poster</Link></header>
 
       <section className="overflow-hidden rounded-3xl border border-purple-100 bg-white shadow-[0_18px_55px_rgba(67,31,91,0.08)]">
         <div className="flex flex-col gap-3 border-b border-gray-100 p-5 sm:flex-row">

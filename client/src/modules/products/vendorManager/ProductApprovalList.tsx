@@ -640,11 +640,11 @@ export default function ProductManagerList() {
   );
 
   return (
-    <div className="min-h-screen">
+    <div className="pb-8">
       {reportModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget && !reportDownloading) setReportModalOpen(false); }}>
           <div role="dialog" aria-modal="true" aria-labelledby="manager-report-title" className="w-full max-w-2xl overflow-hidden rounded-3xl border border-white/70 bg-white shadow-[0_28px_90px_rgba(39,20,58,0.3)]">
-            <div className="relative overflow-hidden bg-gradient-to-br from-[#25103d] via-[#64248c] to-[#b72f72] px-6 py-6 text-white"><div className="absolute -right-10 -top-16 h-40 w-40 rounded-full bg-white/10 blur-2xl" /><div className="relative flex items-start justify-between gap-4"><div className="flex items-center gap-4"><div className="grid h-12 w-12 place-items-center rounded-2xl border border-white/15 bg-white/10"><FiDownload size={21} /></div><div><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-purple-200">Manager analytics</p><h2 id="manager-report-title" className="mt-1 text-xl font-extrabold">Download product report</h2><p className="mt-1 text-xs text-purple-100/75">Export products across vendors with precise filters.</p></div></div><button type="button" disabled={reportDownloading} onClick={() => setReportModalOpen(false)} className="grid h-9 w-9 place-items-center rounded-xl border border-white/15 bg-white/10 transition hover:bg-white/20" aria-label="Close"><FiX /></button></div></div>
+            <header className="flex items-start justify-between gap-4 border-b border-gray-100 px-6 py-5"><div><h2 id="manager-report-title" className="text-lg font-semibold text-gray-900">Download product report</h2><p className="mt-1 text-sm text-gray-500">Export products across vendors with precise filters.</p></div><button type="button" disabled={reportDownloading} onClick={() => setReportModalOpen(false)} className="rounded-md p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700" aria-label="Close"><FiX /></button></header>
             <div className="space-y-5 p-6">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div><label htmlFor="manager-report-vendor" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Vendor</label><select id="manager-report-vendor" value={vendorFilter} onChange={(event) => setVendorFilter(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-purple-400 focus:bg-white focus:ring-4 focus:ring-purple-100"><option value="">All vendors</option>{vendors.map((vendor) => <option key={vendor.vendor_id} value={vendor.vendor_id}>{vendor.full_name}</option>)}</select></div>
@@ -652,26 +652,22 @@ export default function ProductManagerList() {
                 <div className="sm:col-span-2"><label htmlFor="manager-report-status" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Product status</label><select id="manager-report-status" value={reportStatus} onChange={(event) => setReportStatus(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-purple-400 focus:bg-white focus:ring-4 focus:ring-purple-100"><option value="">All statuses</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="resubmission">Resubmission</option></select></div>
               </div>
               <div className="rounded-2xl border border-purple-100 bg-purple-50/50 p-4"><div className="mb-3 flex items-center gap-2"><FiCalendar className="text-[#852BAF]" /><div><p className="text-sm font-extrabold text-slate-800">Custom period</p><p className="text-xs text-slate-500">Leave both empty to include all dates.</p></div></div><div className="grid gap-3 sm:grid-cols-2"><div><label htmlFor="manager-report-from" className="mb-1.5 block text-xs font-semibold text-slate-500">From date</label><input id="manager-report-from" type="date" value={fromDate} max={toDate || undefined} onChange={(event) => setFromDate(event.target.value)} className="w-full rounded-xl border border-purple-100 bg-white px-3 py-2.5 text-sm outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100" /></div><div><label htmlFor="manager-report-to" className="mb-1.5 block text-xs font-semibold text-slate-500">To date</label><input id="manager-report-to" type="date" value={toDate} min={fromDate || undefined} onChange={(event) => setToDate(event.target.value)} className="w-full rounded-xl border border-purple-100 bg-white px-3 py-2.5 text-sm outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100" /></div></div></div>
-              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between"><button type="button" disabled={reportDownloading} onClick={() => { setVendorFilter(""); setReportBrand(""); setReportStatus(""); setFromDate(""); setToDate(""); }} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-500 transition hover:bg-slate-50">Clear filters</button><button type="button" disabled={reportDownloading} onClick={() => void handleDownloadReport()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-purple-500/20 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60">{reportDownloading ? <><FaSpinner className="animate-spin" /> Generating...</> : <><FiDownload /> Download Excel</>}</button></div>
+              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between"><button type="button" disabled={reportDownloading} onClick={() => { setVendorFilter(""); setReportBrand(""); setReportStatus(""); setFromDate(""); setToDate(""); }} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-500 transition hover:bg-slate-50">Clear filters</button><button type="button" disabled={reportDownloading} onClick={() => void handleDownloadReport()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] from-60% to-[#C13A8E] px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-purple-500/20 transition disabled:cursor-not-allowed disabled:opacity-60">{reportDownloading ? <><FaSpinner className="animate-spin" /> Generating...</> : <><FiDownload /> Download Excel</>}</button></div>
             </div>
           </div>
         </div>
       )}
-      <div className="p-4 bg-white border border-gray-200 shadow-lg rounded-2xl md:p-6">
+      <div>
         <div className="mb-8 mt-1 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div className="flex items-start gap-3">
-          <div className="w-12 h-12 bg-gradient-to-r from-[#852BAF] to-[#FC3F78] rounded-full flex items-center justify-center shrink-0">
-            <FiBox className="text-xl text-white" />
-          </div>
-
           <div>
-            <h2 className="text-3xl font-bold text-gray-900">Products</h2>
+            <h2 className="text-2xl font-semibold tracking-tight text-slate-900">Products</h2>
             <p className="mt-1 text-sm text-gray-500">
-              Manage your products, pricing, and stock â€” all in one place.
+              Manage your products, pricing, and stock — all in one place.
             </p>
           </div>
           </div>
-          <button type="button" onClick={() => { setVendorFilter(vendorSearch); setReportBrand(brandSearch); setReportStatus(statusFilter === "all" ? "" : statusFilter); setReportModalOpen(true); }} className="inline-flex items-center justify-center gap-2 rounded-xl border border-purple-200 bg-white px-4 py-2.5 text-sm font-bold text-[#852BAF] shadow-sm transition hover:-translate-y-0.5 hover:border-[#852BAF] hover:bg-purple-50 hover:shadow-md"><FiDownload /> Product report</button>
+          <button type="button" onClick={() => { setVendorFilter(vendorSearch); setReportBrand(brandSearch); setReportStatus(statusFilter === "all" ? "" : statusFilter); setReportModalOpen(true); }} className="inline-flex items-center justify-center gap-2 rounded-xl border border-purple-200 bg-white px-4 py-2.5 text-sm font-bold text-[#852BAF] shadow-sm transition hover:border-[#852BAF] hover:bg-purple-50 hover:shadow-md"><FiDownload /> Product report</button>
         </div>
         {/* STATS CARDS */}
         <div className="mb-6 inline-flex w-full rounded-2xl border border-purple-100 bg-purple-50/60 p-1.5 sm:w-auto">
@@ -796,7 +792,7 @@ export default function ProductManagerList() {
           )}
 
           <table className="min-w-full divide-y divide-gray-100">
-            <thead style={{ background: "linear-gradient(135deg, #fdf8ff 0%, #fff5f8 100%)" }}>
+            <thead>
               <tr>
                 <th
                   onClick={() => handleSort("product_name")}
@@ -886,7 +882,7 @@ export default function ProductManagerList() {
                         {product.rejection_reason}
                       </span>
                     ) : (
-                      <span className="text-xs text-gray-300">â€”</span>
+                      <span className="text-xs text-gray-300">—</span>
                     )}
                   </td>
 
@@ -897,7 +893,7 @@ export default function ProductManagerList() {
                           month: "long",
                           year: "numeric",
                         })
-                      : "â€”"}
+                      : "—"}
                   </td>
 
                   <td className="px-4 py-4">
@@ -933,7 +929,7 @@ export default function ProductManagerList() {
                         </>
                       )}
 
-                      {/* Resubmission â€” brand purple */}
+                      {/* Resubmission — brand purple */}
                       <button
                         onClick={() => handleProductAction("request_resubmission", product)}
                         className="w-8 h-8 inline-flex items-center justify-center rounded-lg bg-purple-50 border border-purple-200 text-[#852BAF] hover:bg-[#852BAF] hover:text-white hover:border-[#852BAF] transition-all shadow-sm cursor-pointer"
