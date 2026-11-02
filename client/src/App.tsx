@@ -28,6 +28,7 @@ const RmLayout = lazy(() => import("./modules/rm/RmLayout.tsx"));
 const VendorDashboard = lazy(() => import("./modules/products/vendor/Dashboard.tsx"));
 const ManagerDashboard = lazy(() => import("./modules/products/vendorManager/Dashboard.tsx"));
 const RmDashboard = lazy(() => import("./modules/rm/Dashboard.tsx"));
+const RmPromotions = lazy(() => import("./modules/rm/promotions/Promotions.tsx"));
 const RmEmployeeDirectory = lazy(() => import("./modules/rm/employees/EmployeeDirectory.tsx"));
 const RmCompanyEmployees = lazy(() => import("./modules/rm/employees/CompanyEmployees.tsx"));
 const RmReportPage = lazy(() => import("./modules/rm/reports/RmReportPage.tsx"));
@@ -621,6 +622,7 @@ export default function App() {
       {/* ========== RM ========== */}
       <Route element={<RmLayout />}>
         <Route path={routes.rm.dashboard} element={<RmDashboard />} />
+        <Route path={routes.rm.promotions} element={<RmPromotions />} />
         <Route path={routes.rm.employees} element={<RmEmployeeDirectory />} />
         <Route path={routes.rm.companyEmployees} element={<RmCompanyEmployees />} />
         <Route path={routes.rm.reports.usage} element={<RmReportPage />} />

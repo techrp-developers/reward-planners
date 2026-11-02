@@ -1,6 +1,7 @@
 const express = require("express");
 const multer = require("multer");
 const router = express.Router();
+router.use('/promotions', require('./promotionRoutes'));
 const db = require("../config/database");
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 const managerController = require("../controllers/managerController");

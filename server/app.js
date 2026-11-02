@@ -22,6 +22,7 @@ if (String(process.env.RUN_SCHEDULED_JOBS ?? "true").toLowerCase() === "true") {
   require("./services/ExpressBees/cron/shipmentCron");
   require("./services/Status/statusCleanupCron");
   require("./services/rewards/transactionRewardCron");
+  require("./services/promotions/worker");
 } else {
   console.warn(
     "[COURIER_BOOKING] Cron OFF: RUN_SCHEDULED_JOBS is not true, so this process will not book or track shipments",

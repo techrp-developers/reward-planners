@@ -9,6 +9,7 @@ const groups = [
   { title: "Workspace", links: [
     { label: "Overview", to: routes.rm.dashboard, Icon: FiGrid },
     { label: "Employees", to: routes.rm.employees, Icon: FiUsers },
+    { label: "Promotions", to: routes.rm.promotions, Icon: FiBriefcase },
     { label: "Client approvals", to: routes.rm.clientApprovals, Icon: FiBriefcase },
     { label: "Support enquiries", to: routes.rm.supportTickets, Icon: FiHelpCircle },
   ] },

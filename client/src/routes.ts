@@ -180,6 +180,7 @@ export const routes = {
     settings: "/service/settings",
   },
   rm: {
+    promotions: "/rm/promotions",
     dashboard: "/rm/dashboard",
     changePassword: "/rm/change-password",
     profile: "/rm/profile",

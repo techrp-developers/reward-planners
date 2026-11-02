@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node app.js",
     "dev": "nodemon app.js",
+    "test:promotions": "node --test tests/rmPromotions.test.js",
+    "migrate:rm-promotions": "node scripts/migrate-rm-promotions.js",
     "migrate:flea-market-invoices": "node scripts/migrate-invoices-add-flea-market-schedule.js",
     "migrate:flea-market-stock": "node scripts/migrate-allocations-to-vendor-stock.js",
     "migrate:client-onboarding": "node scripts/migrate-client-onboarding.js",
