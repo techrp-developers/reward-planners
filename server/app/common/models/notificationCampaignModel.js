@@ -243,12 +243,16 @@ class NotificationCampaignModel {
   }
 
   async audit({ campaignId = null, actor, action, decision = "allowed", details = null, ip = null }) {
+    // The decision column is ENUM('allowed','denied'): a failed send is stored
+    // as denied with outcome "failed", or the row would be rejected and lost.
+    const failed = decision === "failed";
+    const stored = failed ? { ...details, outcome: "failed" } : details;
     try {
       await db.query(
         `INSERT INTO notification_campaign_audit_logs
          (campaign_id, actor_user_id, actor_role, action, decision, details, ip_address)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [campaignId, actor.user_id, actor.role, action, decision, details ? JSON.stringify(details) : null, ip ? String(ip).slice(0, 64) : null],
+        [campaignId, actor.user_id, actor.role, action, failed ? "denied" : decision, stored ? JSON.stringify(stored) : null, ip ? String(ip).slice(0, 64) : null],
       );
     } catch (error) {
       console.error("[Campaign Audit] Failed to record audit entry:", error.message);

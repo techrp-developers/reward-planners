@@ -223,6 +223,10 @@ Always send both:
 `200` `{ "success": true, "message": "Logged out successfully" }`. Clear local storage
 regardless of the response.
 
+New builds should also send `"push_scope": "device"`, which never affects other
+devices even when `fcm_token` is missing. See [logout-push-scope.md](logout-push-scope.md)
+for the contract, all-device logout and the rollout order.
+
 ---
 
 ## Not for the mobile app

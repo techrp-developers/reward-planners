@@ -106,6 +106,10 @@ class NotificationController {
         }
       }
 
+      if (req.query.limit !== undefined && !/^[1-9]\d*$/.test(String(req.query.limit))) {
+        return res.status(400).json({ success: false, message: "limit must be a positive whole number" });
+      }
+
       const notifications =
         await NotificationModel.getByUser(userId, req.query.limit, beforeId);
 
@@ -114,7 +118,7 @@ class NotificationController {
         data: notifications,
       });
     } catch (error) {
-      console.error("Fetch Notifications Error:", error);
+      console.error("Fetch Notifications Error:", { code: error.code, errno: error.errno, message: error.message, stack: error.stack });
 
       return res.status(500).json({
         success: false,

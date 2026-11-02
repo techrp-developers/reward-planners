@@ -30,6 +30,7 @@
     enqueueWhatsApp,
   } = require("../../../services/whatsapp/waEnqueueService");
 const { notifyUser } = require("../utils/notification");
+const { LOGOUT_PUSH_SCOPES, auditUnscopedLogout, logoutAllDevices, logoutDevice } = require("../utils/logoutScope");
 const { uploadToR2 } = require("../../../utils/r2upload");
 const { deleteFromR2 } = require("../../../utils/r2delete");
 const { getPublicUrl } = require("../../../utils/publicUrl");
@@ -1079,6 +1080,19 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
     ====================================================== */
     async logoutUser(req, res) {
       try {
+        const pushScope = req.body?.push_scope ?? null;
+        if (pushScope !== null && !LOGOUT_PUSH_SCOPES.includes(pushScope)) {
+          return res.status(400).json({
+            success: false,
+            code: "INVALID_PUSH_SCOPE",
+            message: `push_scope must be one of: ${LOGOUT_PUSH_SCOPES.join(", ")}.`,
+          });
+        }
+        if (pushScope === "device") return await logoutDevice(req, res);
+        if (pushScope === "all_devices") return await logoutAllDevices(req, res);
+
+        // No push_scope: the unchanged contract of every released app build
+        // (docs/logout-push-scope.md).
         // The access token is often expired by the time someone logs out, so
         // the refresh session also identifies the employee.
         const sessionUserId = await revokeCustomerSession(req, res);
@@ -1088,6 +1102,7 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
         // Neither token identified anyone: the device still proves it holds
         // this (unguessable) FCM token, so it may at least stop its own pushes.
         else if (fcmToken) await AuthModel.deactivateFcmTokenByValue(fcmToken);
+        await auditUnscopedLogout(req, userId, fcmToken);
 
         return res.json({
           success: true,

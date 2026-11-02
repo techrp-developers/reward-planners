@@ -197,13 +197,24 @@ test("my-notification pages with before_id and rejects invalid values", async ()
   const first = await list({ limit: "20" });
   assert.equal(first.res.body.success, true);
   assert.doesNotMatch(first.select.sql, /notification_id < \?/);
-  assert.deepEqual(first.select.params, [100, 20]);
+  // MySQL 8 rejects a bound LIMIT in execute(), so it must stay out of the params.
+  assert.match(first.select.sql, /LIMIT 20\s*$/);
+  assert.deepEqual(first.select.params, [100]);
 
   const older = await list({ limit: "20", before_id: "5000" });
   assert.match(older.select.sql, /user_id = \? AND notification_id < \?/);
-  assert.deepEqual(older.select.params, [100, 5000, 20]);
+  assert.match(older.select.sql, /LIMIT 20\s*$/);
+  assert.deepEqual(older.select.params, [100, 5000]);
+
+  assert.match((await list({})).select.sql, /LIMIT 50\s*$/);
+  assert.match((await list({ limit: "1000" })).select.sql, /LIMIT 100\s*$/);
 
   for (const bad of ["abc", "0", "-1", "1.5"]) {
     assert.equal((await list({ before_id: bad })).res.statusCode, 400, bad);
+  }
+  for (const bad of ["abc", "0", "-1", "1.5", "", "1;DROP TABLE notifications", ["20", "30"]]) {
+    const { res, select } = await list({ limit: bad });
+    assert.equal(res.statusCode, 400, String(bad));
+    assert.equal(select, undefined, "an invalid limit never reaches the database");
   }
 });

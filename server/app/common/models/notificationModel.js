@@ -148,6 +148,8 @@ class NotificationModel {
   ================================= */
   /** Newest first; beforeId (a notification_id) loads the next older page. */
   async getByUser(userId, limit = 50, beforeId = null) {
+    // MySQL 8 rejects a bound LIMIT in execute() (ER_WRONG_ARGUMENTS), so it is
+    // inlined. normalizeLimit only ever returns an integer from 1 to 100.
     const [rows] = await db.execute(
       `
       SELECT
@@ -167,9 +169,9 @@ class NotificationModel {
       FROM notifications
       WHERE user_id = ?${beforeId ? " AND notification_id < ?" : ""}
       ORDER BY notification_id DESC
-      LIMIT ?
+      LIMIT ${normalizeLimit(limit)}
       `,
-      beforeId ? [userId, beforeId, normalizeLimit(limit)] : [userId, normalizeLimit(limit)],
+      beforeId ? [userId, beforeId] : [userId],
     );
 
     return rows.map((row) => ({

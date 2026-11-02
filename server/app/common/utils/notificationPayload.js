@@ -120,6 +120,7 @@ const GENERAL_CHANNEL_ID = "reward_planners_general";
 // Android drawable packaged in the app (monochrome status-bar icon). A
 // resource NAME only: the backend never references app files, paths or URLs.
 const ANDROID_SMALL_ICON = "ic_stat_notification";
+const IOS_BUNDLE_ID = "com.mpstech.rewardsplanners";
 const DELIVERY_PROFILES = {
   // Orders, payments, bookings, chat, account: HIGH channel, delivered at once.
   operational: { channelId: GENERAL_CHANNEL_ID, androidPriority: "high", apnsPriority: "10", interruptionLevel: "active", sound: true },
@@ -203,9 +204,30 @@ function buildPushMessage(data, fcmToken) {
   };
 }
 
+/**
+ * The same message for one known iOS device: an explicit APNs alert for the
+ * app's bundle id, and none of the Android-only fields. buildPushMessage stays
+ * the shared multi-platform message used by every other sender.
+ */
+function buildIosPushMessage(data, fcmToken) {
+  const { android: _android, data: fields, apns, ...message } = buildPushMessage(data, fcmToken);
+  const { android_channel_id: _channel, ...iosFields } = fields;
+  const { title, body } = message.notification;
+  return {
+    ...message,
+    data: iosFields,
+    apns: {
+      ...apns,
+      headers: { ...apns.headers, "apns-topic": IOS_BUNDLE_ID },
+      payload: { aps: { alert: { title, body }, ...apns.payload.aps } },
+    },
+  };
+}
+
 module.exports = {
   buildNotificationPayload,
   buildPushMessage,
+  buildIosPushMessage,
   androidPriorityFor,
   buildWindowedIdempotencyKey,
   DELIVERY_PROFILES,

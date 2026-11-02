@@ -212,8 +212,8 @@ function checkPromotionalEligibility({ category, preferences, sentToday = 0, dai
   if (preferences.missing) return { allowed: false, reason: "no_consent_record" };
 
   const optedIn = category === "marketing"
-    ? Number(preferences.marketing_enabled ?? 1) === 1
-    : Number(preferences.engagement_enabled ?? 1) === 1;
+    ? Number(preferences.marketing_enabled ?? 0) === 1
+    : Number(preferences.engagement_enabled ?? 0) === 1;
   if (!optedIn) return { allowed: false, reason: "opted_out" };
 
   if (isWithinQuietHours(preferences.quiet_hours_start, preferences.quiet_hours_end, nowMinutes)) {

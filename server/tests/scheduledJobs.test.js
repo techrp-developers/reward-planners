@@ -39,3 +39,31 @@ test('reconciliation skips overlap, releases guard, and only heartbeats successf
   const failure=createReconcileRunner({steps:[['failure',async()=>{throw new Error('Schema mismatch');}]],ping:()=>assert.fail('False healthy heartbeat'),logger:{error:x=>errors.push(x)}});
   assert.equal((await failure()).failed,1);assert.equal(errors.length,1);
 });
+
+test("importing the birthday job schedules it only where scheduled jobs are enabled", () => {
+  const moduleFile = require.resolve("../services/Todo/birthdayReminderCron");
+  const replaced = ["node-cron", "../config/database", "../app/common/utils/notification"].map((name) => require.resolve(name));
+  const saved = replaced.map((file) => require.cache[file]);
+  const savedEnv = { ...process.env };
+  let scheduled = 0;
+  require.cache[replaced[0]] = { exports: { schedule: () => { scheduled += 1; } } };
+  require.cache[replaced[1]] = { exports: {} };
+  require.cache[replaced[2]] = { exports: { notifyUserAndWait: async () => {} } };
+  const importWith = (env) => {
+    Object.assign(process.env, env);
+    delete require.cache[moduleFile];
+    require(moduleFile);
+  };
+  try {
+    importWith({ NODE_ENV: "development", ENABLE_LOCAL_SCHEDULED_JOBS: "false", RUN_SCHEDULED_JOBS: "false" });
+    assert.equal(scheduled, 0);
+    importWith({ NODE_ENV: "production", ENABLE_LOCAL_SCHEDULED_JOBS: "false", RUN_SCHEDULED_JOBS: "true" });
+    assert.equal(scheduled, 1);
+  } finally {
+    delete require.cache[moduleFile];
+    replaced.forEach((file, index) => {
+      if (saved[index]) require.cache[file] = saved[index]; else delete require.cache[file];
+    });
+    process.env = savedEnv;
+  }
+});
