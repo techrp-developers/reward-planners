@@ -28,6 +28,8 @@ const pollRoutes = require("./pollRoutes");
 // dashboard Routes
 // Expose app-global endpoints when this router is mounted at /api/crm.
 router.use("/v1/global", require("../app/common/routes/globalRoute"));
+// BBPS operator logos are managed from the vendor manager portal.
+router.use("/v1/bills", require("../app/bbps/v1/routes/billRoute"));
 router.use("/auth", authRoutes);
 router.use("/vendor", vendorRoutes);
 router.use("/manager", managerRoutes);
