@@ -37,7 +37,7 @@ const {
   notificationStorageKey,
 } = require("../utils/notificationImage");
 const { IMAGE_HOSTS } = require("../utils/notificationPayload");
-const { BLOCKER_MESSAGES, describeWorkerState, diagnoseCampaign, sendBlockers } = require("../utils/campaignDiagnostics");
+const { BLOCKER_MESSAGES, campaignExpired, describeWorkerState, diagnoseCampaign, sendBlockers } = require("../utils/campaignDiagnostics");
 const { TestPushError, listTestDevices, sendToSingleDevice } = require("../utils/singleDeviceTestPush");
 const { campaignWorkerEnabled, campaignWorkerRuntime } = require("../../../config/scheduledJobs");
 const { uploadToR2 } = require("../../../utils/r2upload");
@@ -100,6 +100,12 @@ async function deny(req, res, { action, reason, campaignId = null, status = 403 
 // Each RM manages the campaigns it created (no role sees every campaign).
 function canManage(user, campaign) {
   return canManagePushNotifications(user) && Number(campaign.created_by) === Number(user.user_id);
+}
+
+// An expired campaign stays closed: clearing or moving its expiry must not
+// bring an old message back, so it is refused before any edit or send.
+function refuseExpired(res) {
+  return res.status(409).json({ success: false, code: "CAMPAIGN_EXPIRED", message: "This campaign has expired and can no longer be edited, tested or sent. Create a new campaign instead." });
 }
 
 function humanize(key) {
@@ -807,6 +813,7 @@ class RmNotificationController {
       if (!EDITABLE_STATUSES.includes(campaign.status) || (campaign.status === "scheduled" && campaign.occurrences_started > 0)) {
         return res.status(409).json({ success: false, message: "This campaign has started sending. Cancel it and create a new campaign instead." });
       }
+      if (campaignExpired(campaign)) return refuseExpired(res);
 
       const { value, errors } = await this.buildCampaignValues(req, campaign);
       if (!errors.length) errors.push(...(await validateRichContent(value)).errors);
@@ -847,6 +854,7 @@ class RmNotificationController {
       if (["cancelled", "expired"].includes(campaign.status)) {
         return res.status(409).json({ success: false, message: "Cancelled campaigns cannot be tested." });
       }
+      if (campaignExpired(campaign)) return refuseExpired(res);
 
       const testUsers = await AudienceModel.getTestUsers();
       if (!testUsers.length) {
@@ -962,6 +970,7 @@ class RmNotificationController {
       if (!SENDABLE_STATUSES.includes(campaign.status) || (campaign.status === "scheduled" && !notStarted)) {
         return res.status(409).json({ success: false, message: "This campaign has already started sending or is closed." });
       }
+      if (campaignExpired(campaign)) return refuseExpired(res);
 
       const mode = req.body?.mode === "now" ? "now" : "schedule";
       const now = new Date();
@@ -1091,6 +1100,7 @@ class RmNotificationController {
       if (!["completed", "partially_failed", "failed"].includes(campaign.status)) {
         return res.status(409).json({ success: false, message: "Only finished campaigns with failures can be retried." });
       }
+      if (campaignExpired(campaign)) return refuseExpired(res);
       if (!firebaseStatus.enabled) {
         return res.status(409).json({ success: false, code: "FIREBASE_UNAVAILABLE", message: "Push sending is not configured on the server, so a retry would fail again." });
       }
@@ -1160,7 +1170,15 @@ class RmNotificationController {
       const eligible = value.category === "marketing" ? preview.marketingConsented
         : value.category === "engagement" ? preview.engagementConsented
           : preview.total;
-      return res.json({ success: true, data: { allowed: true, ...preview, eligible, category: value.category } });
+      const readiness = await AudienceModel.deliveryReadiness(value.audience_type, value.audience_filter, scope, value.category, sendableProjectIds());
+      return res.json({
+        success: true,
+        data: {
+          allowed: true, ...preview, eligible, category: value.category,
+          // Why employees drop out, and who is reachable on the current app build.
+          optedOut: readiness.optedOut, reachable: readiness.reachable, unknownProjectDevices: readiness.unknownProjectDevices,
+        },
+      });
     } catch (error) {
       return handleError(res, error, "audience preview");
     }

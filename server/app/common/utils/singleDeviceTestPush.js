@@ -13,6 +13,7 @@ const NotificationModel = require("../models/notificationModel");
 const { buildNotificationPayload, buildPushMessage } = require("./notificationPayload");
 const { maskToken } = require("./pushDelivery");
 const { recordPushAttempts } = require("./notification");
+const { sessionToUtcSql } = require("./campaignSchedule");
 
 const TEST_CONTENT = Object.freeze({
   module: "common",
@@ -126,7 +127,7 @@ async function listTestDevices(userIds, deps = {}) {
   const query = deps.query || ((sql, params) => db.query(sql, params));
   const projectId = deps.projectId || firebaseStatus.projectId;
   const [rows] = await query(
-    `SELECT id, user_id, fcm_token, platform, last_seen_at FROM user_push_tokens
+    `SELECT id, user_id, fcm_token, platform, ${sessionToUtcSql("last_seen_at")} AS last_seen_at FROM user_push_tokens
      WHERE is_active = 1 AND firebase_project_id = ? AND user_id IN (${userIds.map(() => "?").join(",")})
      ORDER BY user_id, last_seen_at DESC`,
     [projectId, ...userIds],

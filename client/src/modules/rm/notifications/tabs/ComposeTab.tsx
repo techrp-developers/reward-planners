@@ -6,7 +6,7 @@ import type { AudiencePreview, AudienceType, Campaign, Category, ContentType, De
 import { Card, LanguageTabs, Modal, Notice, NotificationPreviews, Spinner, Tag, inputCls, labelCls, primaryBtn, secondaryBtn } from "../components";
 import MediaDestinationSection, { type MediaDestinationValue } from "./MediaDestinationSection";
 import TestDevicePicker, { type TestTarget } from "./TestDevicePicker";
-import { defaultTestTarget, sendNowBlockedReason, expiryTooSoon, zonedInputsToUtc, AUDIENCE_LABELS, LANGUAGE_LABELS, SKIP_REASON_LABELS, apiErrorMessage, campaignVariablesNeeded, newClientRequestId, toZonedInputs } from "../notificationUtils";
+import { campaignExpired, defaultTestTarget, firebaseUnavailableText, sendNowBlockedReason, expiryTooSoon, zonedInputsToUtc, AUDIENCE_LABELS, LANGUAGE_LABELS, SKIP_REASON_LABELS, apiErrorMessage, campaignVariablesNeeded, newClientRequestId, toZonedInputs } from "../notificationUtils";
 import type { TabNavigation } from "../NotificationManager";
 
 const TIMEZONES = ["Asia/Kolkata", "UTC", "Asia/Dubai", "Asia/Singapore", "Europe/London", "America/New_York"];
@@ -116,13 +116,14 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
   // second click that lands before React re-renders the disabled button.
   const [testUsers, setTestUsers] = useState<TestDeviceUser[] | null>(null);
   const [testTarget, setTestTarget] = useState<TestTarget>(null);
+  const [testDevicesError, setTestDevicesError] = useState("");
   const sending = useRef(false);
   useEffect(() => {
     if (!meta.testUsers.length) { setTestUsers([]); return; }
     let active = true;
     notificationApi.testDevices()
-      .then((users) => { if (!active) return; setTestUsers(users); setTestTarget(defaultTestTarget(users)); })
-      .catch(() => { if (active) setTestUsers([]); });
+      .then((users) => { if (!active) return; setTestUsers(users); setTestTarget(defaultTestTarget(users)); setTestDevicesError(""); })
+      .catch((error) => { if (active) { setTestUsers([]); setTestDevicesError(apiErrorMessage(error)); } });
     return () => { active = false; };
   }, [meta.testUsers.length]);
   const [companies, setCompanies] = useState<{ company_id: number; company_name: string; active_employees: number }[]>([]);
@@ -138,7 +139,8 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
   const [clientRequestId, setClientRequestId] = useState(newClientRequestId);
   const addAssets = (list: MediaAsset[]) => setAssets((current) => ({ ...current, ...Object.fromEntries(list.map((asset) => [asset.media_id, asset])) }));
 
-  const editable = !campaign || (campaign.can_manage && (
+  const expired = campaign !== null && campaignExpired(campaign);
+  const editable = !campaign || (campaign.can_manage && !expired && (
     ["draft", "rejected", "pending_approval", "approved"].includes(campaign.status) ||
     (campaign.status === "scheduled" && Number(campaign.occurrences_started) === 0)
   ));
@@ -319,7 +321,10 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
     if (sending.current) return;
     sending.current = true;
     try {
-      const saved = await save();
+      // Saving a campaign that left draft would take it off its schedule (or be
+      // refused once it has run), and a test must not change the campaign. Those
+      // are tested as stored.
+      const saved = campaign && campaign.status !== "draft" ? campaign : await save();
       if (!saved) return;
       setBusy("test");
       const results = await notificationApi.testCampaign(saved.campaign_id, {
@@ -358,8 +363,9 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
         ...(mode === "schedule" ? { send_date: form.send_date, send_time: form.send_time, timezone: form.timezone } : {}),
         confirm_recipients: audience?.total,
       });
-      if (result.warning) toast.warning(result.warning);
-      toast.success(mode === "now" ? "Queued for sending now." : "Campaign scheduled.");
+      // "Queued" is the most that is known here: delivery is reported in Campaign History.
+      if (result.warning) toast.warning(`${mode === "now" ? "Queued, nothing sent yet" : "Saved on the schedule, nothing sent yet"}: ${result.warning}`);
+      else toast.success(mode === "now" ? "Queued for sending. Campaign History shows what Firebase accepted." : "Campaign scheduled.");
       setConfirmSend(null);
       setClientRequestId(newClientRequestId());
       nav.go(mode === "now" ? "campaigns" : "scheduled");
@@ -372,7 +378,13 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
   };
 
   if (loading) return <Spinner />;
-  const sendNowBlocked = sendNowBlockedReason(meta);
+  const realAudience = form.audience_type !== "test" && audience?.allowed;
+  const audienceBlocked = !realAudience ? null
+    : audience.eligible === 0 ? (form.category === "announcement" ? "This audience has no active employees." : `No employee in this audience has opted in to ${form.category} notifications, so nothing can be sent.`)
+      : audience.reachable === 0 ? "No eligible employee has a device registered on the current app build, so nothing can be sent."
+        : null;
+  const sendNowBlocked = sendNowBlockedReason(meta) ?? audienceBlocked;
+  const workerRunning = Boolean(meta.scheduler?.running);
 
   const titleField = `title_${lang}` as const;
   const bodyField = `body_${lang}` as const;
@@ -395,7 +407,7 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
             Editing campaign #{campaign.campaign_id} ({campaign.status.replace("_", " ")}).
             {campaign.status === "rejected" && campaign.rejection_reason && <> Rejected: “{campaign.rejection_reason}”.</>}
             {campaign.status === "scheduled" && editable && " Saving changes takes it off the schedule until you send or schedule it again."}
-            {!editable && " This campaign can no longer be edited."}
+            {expired ? " It has expired, so it can no longer be edited, tested or sent. Create a new campaign instead." : !editable && " This campaign can no longer be edited."}
           </Notice>
         )}
 
@@ -608,6 +620,8 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
                   <p className="text-xs text-gray-500">
                     {audience.withDevice} with a registered device · EN {audience.languages?.en} · HI {audience.languages?.hi} · MR {audience.languages?.mr}
                     {form.category !== "announcement" && ` · ${audience.noPreferenceRecord} without a consent record (not sent)`}
+                    {form.category !== "announcement" && audience.optedOut ? ` · ${audience.optedOut} opted out (not sent)` : ""}
+                    {audience.reachable !== undefined && ` · ${audience.reachable} eligible and reachable on the current app build`}
                   </p>
                 </div>
               )}
@@ -675,11 +689,12 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
             <label className="flex items-center gap-2 text-sm text-gray-700">
               <input type="checkbox" disabled={!editable} checked={saveAsTemplate} onChange={(event) => setSaveAsTemplate(event.target.checked)} /> Also save as a reusable template
             </label>
-            {meta.testUsers.length > 0 && <TestDevicePicker users={testUsers} value={testTarget} onChange={setTestTarget} disabled={busy !== null} />}
+            {meta.testUsers.length > 0 && <TestDevicePicker users={testUsers} value={testTarget} onChange={setTestTarget} disabled={busy !== null} error={testDevicesError} />}
+            {campaign && campaign.status !== "draft" && !expired && <p className="text-[11px] text-gray-500">Send test uses the saved campaign and does not change its status.</p>}
             <div className="grid gap-2">
               <button type="button" className={secondaryBtn} disabled={!tablesReady || !editable || busy !== null} onClick={saveDraft}><FiSave /> {busy === "save" ? "Saving…" : "Save draft"}</button>
-              <button type="button" className={secondaryBtn} disabled={!tablesReady || busy !== null || !meta.testUsers.length || !testTarget || (campaign !== null && !campaign.can_manage)} onClick={sendTest}
-                title={!meta.testUsers.length ? "No test users are configured" : !testTarget ? "Choose the test device" : "Saves, then sends one test to the chosen device only"}>
+              <button type="button" className={secondaryBtn} disabled={!tablesReady || busy !== null || !meta.firebase.enabled || !meta.testUsers.length || !testTarget || expired || (campaign !== null && (!campaign.can_manage || ["cancelled", "expired"].includes(campaign.status)))} onClick={sendTest}
+                title={expired ? "This campaign has expired" : !meta.firebase.enabled ? firebaseUnavailableText(meta.firebase) : !meta.testUsers.length ? "No test users are configured" : !testTarget ? "Choose the test device" : "Sends one test to the chosen device only"}>
                 <FiZap /> {busy === "test" ? "Sending test…" : `Send test${previewLang !== "en" ? ` (${LANGUAGE_LABELS[previewLang]})` : ""}`}
               </button>
               {meta.permissions.send && (
@@ -691,12 +706,13 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
                   </button>
                   <button type="button" className={secondaryBtn} disabled={!tablesReady || !editable || busy !== null || form.audience_type === "test" || !audience?.allowed || form.delivery_mode === "now"}
                     onClick={() => startSend("schedule")}
-                    title={form.delivery_mode === "now" ? "Choose “Schedule once” or “Recurring” in Delivery" : undefined}>
+                    title={form.delivery_mode === "now" ? "Choose “Schedule once” or “Recurring” in Delivery" : !workerRunning ? "Saves the schedule; nothing is sent until a worker runs" : undefined}>
                     <FiCalendar /> Schedule
                   </button>
                 </>
               )}
             </div>
+            {!meta.firebase.enabled && !meta.permissions.send && <p role="status" className="text-xs font-semibold text-amber-700">{firebaseUnavailableText(meta.firebase)}</p>}
             {sendNowBlocked && meta.permissions.send && (
               <p role="status" className="text-xs font-semibold text-amber-700">{sendNowBlocked}</p>
             )}
@@ -717,6 +733,8 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
               <div><dt className="text-xs font-bold text-gray-500">Languages</dt><dd>English{confirmSend.campaign.approved_languages.map((code) => `, ${LANGUAGE_LABELS[code]}`).join("")}{confirmSend.campaign.approved_languages.length < 2 ? " (others receive English)" : ""}</dd></div>
               <div><dt className="text-xs font-bold text-gray-500">Image</dt><dd>{confirmSend.campaign.content_type === "standard" ? "None (text only)" : previewImage ? "Yes" : "Selected; checked again before sending"}</dd></div>
             </dl>
+            {!workerRunning && <Notice tone="red">Campaign worker unavailable. {meta.scheduler?.reason || "It is not running on this server."} This saves the schedule, but nothing is sent until a worker runs, and it is never sent if it expires first.</Notice>}
+            {confirmSend.mode === "schedule" && audienceBlocked && <Notice>{audienceBlocked} Unless that changes before the send time, this schedule reaches nobody.</Notice>}
             {form.category !== "announcement" && <Notice tone="blue">Only employees who opted in to {form.category} notifications receive it; quiet hours and daily limits are applied.</Notice>}
             {audience?.total && audience.total > meta.limits.largeSendThreshold ? <Notice>This is a large send ({audience.total} employees). Confirming sends it to this exact audience.</Notice> : null}
             <p className="text-xs text-gray-500">This confirms your own send; no admin approval is involved. Your name is recorded in the campaign audit log.</p>

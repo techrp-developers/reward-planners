@@ -150,8 +150,8 @@ export default function NotificationManager() {
           {tab === "history" && <HistoryTab meta={meta} />}
           {tab === "templates" && <TemplatesTab meta={meta} nav={nav} />}
           {tab === "compose" && <ComposeTab meta={meta} nav={nav} campaignId={Number(params.get("campaign")) || null} templateId={Number(params.get("template")) || null} />}
-          {tab === "scheduled" && <CampaignsTab meta={meta} nav={nav} mode="scheduled" />}
-          {tab === "campaigns" && <CampaignsTab meta={meta} nav={nav} mode="history" />}
+          {tab === "scheduled" && <CampaignsTab meta={meta} nav={nav} mode="scheduled" onRefreshMeta={loadMeta} />}
+          {tab === "campaigns" && <CampaignsTab meta={meta} nav={nav} mode="history" onRefreshMeta={loadMeta} />}
           {tab === "analytics" && <AnalyticsTab meta={meta} />}
           {tab === "settings" && <SettingsTab meta={meta} onRefresh={loadMeta} />}
           {tab === "companies" && canManageCompanies && <CompaniesTab meta={meta} onChanged={loadMeta} />}

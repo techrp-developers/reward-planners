@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { FiEdit2, FiRefreshCw, FiSearch } from "react-icons/fi";
 import { notificationApi, type AttemptRow, type RecipientRow, type TestDeviceUser } from "../notificationApi";
@@ -11,7 +11,7 @@ import type { TabNavigation } from "../NotificationManager";
 
 const LIMIT = 20;
 const SCHEDULED_STATUSES = "scheduled,sending";
-export default function CampaignsTab({ meta, nav, mode }: { meta: ManagerMeta; nav: TabNavigation; mode: "scheduled" | "history" }) {
+export default function CampaignsTab({ meta, nav, mode, onRefreshMeta }: { meta: ManagerMeta; nav: TabNavigation; mode: "scheduled" | "history"; onRefreshMeta?: () => void }) {
   const [filters, setFilters] = useState({ status: "", module: "", search: "" });
   const [page, setPage] = useState(1);
   const [data, setData] = useState<{ total: number; rows: Campaign[] } | null>(null);
@@ -30,12 +30,14 @@ export default function CampaignsTab({ meta, nav, mode }: { meta: ManagerMeta; n
   }, [filters, page, mode]);
   useEffect(load, [load]);
 
-  // Keep sending campaigns live while the tab is open.
+  // Keep waiting and sending campaigns live while the tab is open, along with
+  // the worker state their labels depend on.
+  const refresh = useCallback(() => { load(); onRefreshMeta?.(); }, [load, onRefreshMeta]);
   useEffect(() => {
-    if (!data?.rows.some((row) => row.status === "sending")) return undefined;
-    const timer = window.setInterval(load, 15000);
+    if (!data?.rows.some((row) => row.status === "sending" || row.status === "scheduled")) return undefined;
+    const timer = window.setInterval(refresh, 15000);
     return () => window.clearInterval(timer);
-  }, [data, load]);
+  }, [data, refresh]);
 
   if (!meta.infrastructure.campaignTables) {
     return <Card><EmptyState title="Campaign tables are not installed" text="Apply migrations/20261027_01_create_notification_campaigns.sql to enable drafts, scheduling and reports." /></Card>;
@@ -51,7 +53,7 @@ export default function CampaignsTab({ meta, nav, mode }: { meta: ManagerMeta; n
       <Card
         title={mode === "scheduled" ? "Scheduled & queued" : "Campaign history"}
         subtitle="Campaigns you created"
-        actions={<button type="button" className={secondaryBtn} onClick={load}><FiRefreshCw /> Refresh</button>}
+        actions={<button type="button" className={secondaryBtn} onClick={refresh}><FiRefreshCw /> Refresh</button>}
       >
         <div className="grid gap-3 border-b border-gray-100 p-4 sm:grid-cols-3">
           <label className="relative"><span className={labelCls}>Search</span><FiSearch className="absolute bottom-2.5 left-3 text-gray-400" />
@@ -76,25 +78,28 @@ export default function CampaignsTab({ meta, nav, mode }: { meta: ManagerMeta; n
         {data && !data.rows.length && <EmptyState title={mode === "scheduled" ? "Nothing scheduled" : "No campaigns yet"} action={<button type="button" className={primaryBtn} onClick={() => nav.go("compose")}>Create notification</button>} />}
         {data && data.rows.length > 0 && (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1000px] text-left text-sm">
+            <table className="w-full min-w-[1240px] text-left text-sm">
               <thead className="bg-gray-50 text-[11px] font-bold uppercase tracking-wider text-gray-500">
                 <tr>
                   <th className="px-4 py-3">Campaign</th><th className="px-4 py-3">Creator</th><th className="px-4 py-3">{mode === "scheduled" ? "Next run" : "Scheduled"}</th>
-                  <th className="px-4 py-3 text-right">Recipients</th><th className="px-4 py-3 text-right">Queued</th><th className="px-4 py-3 text-right">Accepted</th>
-                  <th className="px-4 py-3 text-right">Failed</th><th className="px-4 py-3 text-right">Retrying</th><th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3 text-right">Candidates</th><th className="px-4 py-3 text-right">Eligible</th><th className="px-4 py-3 text-right">Queued</th><th className="px-4 py-3 text-right">FCM accepted</th>
+                  <th className="px-4 py-3 text-right">Failed</th><th className="px-4 py-3 text-right">Retrying</th><th className="px-4 py-3 text-right">Expired</th><th className="px-4 py-3 text-right">Cancelled</th><th className="px-4 py-3">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {data.rows.map((campaign) => (
                   <tr key={campaign.campaign_id} className="cursor-pointer hover:bg-purple-50/30" onClick={() => setOpenId(campaign.campaign_id)}>
-                    <td className="px-4 py-3"><p className="font-semibold text-gray-900">{campaign.name}</p><p className="text-xs text-gray-500">#{campaign.campaign_id} · {campaign.module} · {campaign.category}</p></td>
+                    <td className="px-4 py-3"><p className="font-semibold text-gray-900">{campaign.name}</p><p className="text-xs text-gray-500">#{campaign.campaign_id} · {campaign.module} · {campaign.category}</p><p className="text-xs text-gray-500">{AUDIENCE_LABELS[campaign.audience_type]}</p></td>
                     <td className="px-4 py-3 text-gray-700">{campaign.created_by_name || "—"}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-600">{formatInZone(mode === "scheduled" ? campaign.next_run_at || campaign.scheduled_at : campaign.scheduled_at, campaign.timezone)}</td>
                     <td className="px-4 py-3 text-right font-semibold">{toNumber(campaign.recipients) || (campaign.estimated_recipients != null ? `~${campaign.estimated_recipients}` : "—")}</td>
+                    <td className="px-4 py-3 text-right">{toNumber(campaign.recipients) ? toNumber(campaign.recipients) - toNumber(campaign.consent_excluded) : "—"}</td>
                     <td className="px-4 py-3 text-right">{toNumber(campaign.queued)}</td>
                     <td className="px-4 py-3 text-right text-emerald-700">{toNumber(campaign.firebase_accepted)}</td>
                     <td className="px-4 py-3 text-right text-red-600">{toNumber(campaign.failed)}</td>
                     <td className="px-4 py-3 text-right text-amber-700">{toNumber(campaign.pending_retry)}</td>
+                    <td className="px-4 py-3 text-right">{toNumber(campaign.recipients_expired)}</td>
+                    <td className="px-4 py-3 text-right">{toNumber(campaign.recipients_cancelled)}</td>
                     <td className="px-4 py-3">
                       <StatusPill status={displayStatus(campaign, Boolean(meta.scheduler?.running))} />
                       {waitingNote(campaign, Boolean(meta.scheduler?.running)) && <p className="mt-1 text-[11px] text-gray-500">{waitingNote(campaign, Boolean(meta.scheduler?.running))}</p>}
@@ -115,30 +120,36 @@ export default function CampaignsTab({ meta, nav, mode }: { meta: ManagerMeta; n
 
 function CampaignDetail({ meta, nav, campaignId, onClose, onChanged }: { meta: ManagerMeta; nav: TabNavigation; campaignId: number; onClose: () => void; onChanged: () => void }) {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
+  const [loadError, setLoadError] = useState("");
   const [section, setSection] = useState<"overview" | "delivery" | "recipients" | "attempts" | "audit">("overview");
   const [lang, setLang] = useState<Language>("en");
   const [busy, setBusy] = useState(false);
+  // Blocks a second click that lands before React disables the button.
+  const acting = useRef(false);
   const [reschedule, setReschedule] = useState({ date: "", time: "" });
   const [recipients, setRecipients] = useState<{ total: number; rows: RecipientRow[] } | null>(null);
   const [recipientStatus, setRecipientStatus] = useState("");
   const [recipientPage, setRecipientPage] = useState(1);
   const [attempts, setAttempts] = useState<{ available: boolean; rows: AttemptRow[] } | null>(null);
+  const [sectionError, setSectionError] = useState("");
   const [testUsers, setTestUsers] = useState<TestDeviceUser[] | null>(null);
   const [testTarget, setTestTarget] = useState<TestTarget>(null);
+  const [testDevicesError, setTestDevicesError] = useState("");
   useEffect(() => {
     if (!meta.testUsers.length) return undefined;
     let active = true;
     notificationApi.testDevices()
-      .then((users) => { if (!active) return; setTestUsers(users); setTestTarget(defaultTestTarget(users)); })
-      .catch(() => { if (active) setTestUsers([]); });
+      .then((users) => { if (!active) return; setTestUsers(users); setTestTarget(defaultTestTarget(users)); setTestDevicesError(""); })
+      .catch((error) => { if (active) { setTestUsers([]); setTestDevicesError(apiErrorMessage(error)); } });
     return () => { active = false; };
   }, [meta.testUsers.length]);
 
   const load = useCallback(() => {
     notificationApi.campaign(campaignId).then((result) => {
       setCampaign(result);
+      setLoadError("");
       setReschedule(toZonedInputs(result.scheduled_at, result.timezone));
-    }).catch((error) => toast.error(apiErrorMessage(error)));
+    }).catch((error) => setLoadError(apiErrorMessage(error, "This campaign could not be loaded.")));
   }, [campaignId]);
   useEffect(load, [load]);
 
@@ -146,24 +157,30 @@ function CampaignDetail({ meta, nav, campaignId, onClose, onChanged }: { meta: M
     if (section !== "recipients") return;
     const params: Record<string, string | number> = { page: recipientPage, limit: 50 };
     if (recipientStatus) params.status = recipientStatus;
-    notificationApi.recipients(campaignId, params).then(setRecipients).catch((error) => toast.error(apiErrorMessage(error)));
+    setSectionError("");
+    notificationApi.recipients(campaignId, params).then(setRecipients).catch((error) => setSectionError(apiErrorMessage(error, "Recipients could not be loaded.")));
   }, [section, campaignId, recipientStatus, recipientPage]);
 
   useEffect(() => {
     if (section !== "attempts") return;
-    notificationApi.attempts(campaignId, { limit: 100 }).then(setAttempts).catch((error) => toast.error(apiErrorMessage(error)));
+    setSectionError("");
+    notificationApi.attempts(campaignId, { limit: 100 }).then(setAttempts).catch((error) => setSectionError(apiErrorMessage(error, "Firebase attempts could not be loaded.")));
   }, [section, campaignId]);
 
   const run = async (label: string, action: () => Promise<unknown>) => {
+    if (acting.current) return;
+    acting.current = true;
     setBusy(true);
     try {
-      await action();
-      toast.success(label);
+      const result = await action() as { warning?: string | null } | undefined;
+      if (result?.warning) toast.warning(`Saved, nothing sent yet: ${result.warning}`);
+      else toast.success(label);
       load();
       onChanged();
     } catch (error) {
       toast.error(apiErrorMessage(error));
     } finally {
+      acting.current = false;
       setBusy(false);
     }
   };
@@ -181,7 +198,7 @@ function CampaignDetail({ meta, nav, campaignId, onClose, onChanged }: { meta: M
     });
     if (!(await confirm(campaign.estimated_recipients))) return;
     const body = { mode, ...(mode === "schedule" ? { send_date: reschedule.date, send_time: reschedule.time, timezone: campaign.timezone } : {}) };
-    await run(mode === "now" ? "Queued for sending now." : "Campaign scheduled.", async () => {
+    await run(mode === "now" ? "Queued for sending. The figures here show what Firebase accepted." : "Campaign scheduled.", async () => {
       try {
         return await notificationApi.sendCampaign(campaign.campaign_id, { ...body, confirm_recipients: campaign.estimated_recipients ?? undefined });
       } catch (error) {
@@ -192,7 +209,13 @@ function CampaignDetail({ meta, nav, campaignId, onClose, onChanged }: { meta: M
     });
   };
 
-  if (!campaign) return <Modal title="Campaign" onClose={onClose}><Spinner /></Modal>;
+  if (!campaign) {
+    return (
+      <Modal title="Campaign" onClose={onClose}>
+        {loadError ? <Notice tone="red">{loadError} <button type="button" className="ml-2 font-bold underline" onClick={() => { setLoadError(""); load(); }}>Retry</button></Notice> : <Spinner />}
+      </Modal>
+    );
+  }
   const actions = campaignActions(campaign);
   const summary = campaign.summary;
   const showLang: Language = lang !== "en" && campaign[`title_${lang}`] ? lang : "en";
@@ -214,6 +237,7 @@ function CampaignDetail({ meta, nav, campaignId, onClose, onChanged }: { meta: M
           <Notice tone="red">{SCHEDULER_OFF_MESSAGE} {meta.scheduler?.reason || "The campaign worker does not run on this server."} This campaign will not be sent from here. Open "Delivery check" for details.</Notice>
         )}
         {campaign.rejection_reason && <Notice tone="red">{campaign.status === "rejected" ? "Rejected: " : ""}{campaign.rejection_reason}</Notice>}
+        {displayStatus(campaign, Boolean(meta.scheduler?.running)) === "draft_expired" && <Notice>This draft has expired, so it can no longer be edited, tested or sent. Create a new campaign instead.</Notice>}
         {(campaign.warnings || []).map((warning) => <Notice key={warning}>{warning}</Notice>)}
 
         <div className="flex gap-1 border-b border-gray-100">
@@ -295,9 +319,9 @@ function CampaignDetail({ meta, nav, campaignId, onClose, onChanged }: { meta: M
 
               <div className="flex flex-wrap gap-2">
                 {actions.edit && <button type="button" className={secondaryBtn} onClick={() => { onClose(); nav.go("compose", { campaign: String(campaign.campaign_id) }); }}><FiEdit2 /> Edit</button>}
-                {actions.test && meta.testUsers.length > 0 && <div className="w-full"><TestDevicePicker users={testUsers} value={testTarget} onChange={setTestTarget} disabled={busy} /></div>}
-                {actions.test && <button type="button" className={secondaryBtn} disabled={busy || !meta.testUsers.length || !testTarget}
-                  title={!meta.testUsers.length ? "No test users are configured" : !testTarget ? "Choose the test device" : "One test to the chosen device only"}
+                {actions.test && meta.testUsers.length > 0 && <div className="w-full"><TestDevicePicker users={testUsers} value={testTarget} onChange={setTestTarget} disabled={busy} error={testDevicesError} /></div>}
+                {actions.test && <button type="button" className={secondaryBtn} disabled={busy || !meta.firebase.enabled || !meta.testUsers.length || !testTarget}
+                  title={!meta.firebase.enabled ? firebaseUnavailableText(meta.firebase) : !meta.testUsers.length ? "No test users are configured" : !testTarget ? "Choose the test device" : "One test to the chosen device only"}
                   onClick={() => testTarget && run("Test accepted by Firebase. Check the test phone.", () => notificationApi.testCampaign(campaign.campaign_id, { user_id: testTarget.userId, device_id: testTarget.deviceId }))}>Send test</button>}
                 {actions.retry && <button type="button" className={secondaryBtn} disabled={busy || !meta.firebase.enabled} onClick={() => run("Retryable failures were queued again.", () => notificationApi.retryCampaign(campaign.campaign_id))}>Retry failed</button>}
                 {actions.cancel && <button type="button" className={dangerBtn} disabled={busy} onClick={async () => {
@@ -317,7 +341,7 @@ function CampaignDetail({ meta, nav, campaignId, onClose, onChanged }: { meta: M
               <option value="">All recipients</option>
               {["pending", "processing", "sent", "inbox_only", "failed", "skipped", "cancelled"].map((status) => <option key={status} value={status}>{status === "sent" ? "accepted by Firebase" : status.replace("_", " ")}</option>)}
             </select>
-            {!recipients ? <Spinner /> : !recipients.rows.length ? <EmptyState title="No recipients yet" text="Recipients are created when the campaign starts sending." /> : (
+            {sectionError ? <Notice tone="red">{sectionError}</Notice> : !recipients ? <Spinner /> : !recipients.rows.length ? <EmptyState title="No recipients yet" text="Recipients are created when the campaign starts sending." /> : (
               <div className="overflow-x-auto rounded-xl border border-gray-100">
                 <table className="w-full min-w-[760px] text-left text-sm">
                   <thead className="bg-gray-50 text-[11px] font-bold uppercase tracking-wider text-gray-500">
@@ -344,7 +368,7 @@ function CampaignDetail({ meta, nav, campaignId, onClose, onChanged }: { meta: M
         )}
 
         {section === "attempts" && (
-          !attempts ? <Spinner /> : !attempts.available
+          sectionError ? <Notice tone="red">{sectionError}</Notice> : !attempts ? <Spinner /> : !attempts.available
             ? <Notice>Per-device attempts need the <code>notification_push_attempts</code> table (migration 20261026_02).</Notice>
             : !attempts.rows.length ? <EmptyState title="No Firebase attempts recorded yet" /> : (
               <div className="overflow-x-auto rounded-xl border border-gray-100">

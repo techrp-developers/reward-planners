@@ -290,7 +290,9 @@ function validateCampaignInput(body = {}) {
   if (value.delivery_mode === "recurring" && value.recurrence_type === "none") errors.push("Choose daily, weekly or monthly recurrence.");
 
   value.scheduled_at = null;
-  if (value.delivery_mode !== "now" && (body.send_date || body.send_time)) {
+  // The date decides: the form always carries a default time, so a draft with
+  // no date yet has no schedule rather than an invalid one.
+  if (value.delivery_mode !== "now" && body.send_date) {
     value.scheduled_at = localToUtc(body.send_date, body.send_time, value.timezone);
     if (!value.scheduled_at) errors.push("Send date/time is invalid.");
   }

@@ -69,6 +69,8 @@ const RECIPIENT_COUNTS = `
     SUM(status = 'inbox_only') AS inbox_only,
     SUM(status = 'failed') AS failed,
     SUM(status = 'skipped') AS skipped,
+    SUM(status = 'skipped' AND skip_reason = 'campaign_expired') AS expired,
+    SUM(status = 'skipped' AND skip_reason IN ('no_consent_record', 'opted_out')) AS consent_excluded,
     SUM(status = 'cancelled') AS cancelled
   FROM notification_campaign_recipients
 `;
@@ -149,7 +151,8 @@ class NotificationCampaignModel {
     const [[{ total }]] = await db.query(`SELECT COUNT(*) AS total FROM notification_campaigns nc WHERE ${where.join(" AND ")}`, params);
     const [rows] = await db.query(
       `SELECT nc.*, ${UTC("nc.created_at")} AS created_at, eu.name AS created_by_name, rc.recipients, rc.queued, rc.pending_retry, rc.attempted,
-              rc.sent, rc.firebase_accepted, rc.inbox_only, rc.failed, rc.skipped, rc.cancelled AS recipients_cancelled
+              rc.sent, rc.firebase_accepted, rc.inbox_only, rc.failed, rc.skipped, rc.expired AS recipients_expired, rc.consent_excluded,
+              rc.cancelled AS recipients_cancelled
        FROM notification_campaigns nc
        LEFT JOIN eusers eu ON eu.user_id = nc.created_by
        LEFT JOIN (${RECIPIENT_COUNTS} GROUP BY campaign_id) rc ON rc.campaign_id = nc.campaign_id
@@ -189,7 +192,8 @@ class NotificationCampaignModel {
       recipients: n(row?.recipients), queued: n(row?.queued), pendingRetry: n(row?.pending_retry),
       attempted: n(row?.attempted), inboxCreated: n(row?.inbox_created), sent: n(row?.sent),
       firebaseAccepted: n(row?.firebase_accepted), inboxOnly: n(row?.inbox_only),
-      failed: n(row?.failed), skipped: n(row?.skipped), cancelled: n(row?.cancelled), opened,
+      failed: n(row?.failed), skipped: n(row?.skipped), expired: n(row?.expired), consentExcluded: n(row?.consent_excluded),
+      cancelled: n(row?.cancelled), opened,
     };
   }
 

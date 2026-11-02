@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const { describeWorkerState, diagnoseCampaign, expiryTooClose, sendBlockers } = require("../utils/campaignDiagnostics");
 const { campaignWorkerRuntime, startScheduledJobs } = require("../../../config/scheduledJobs");
 const { localToUtc, toSqlUtc } = require("../utils/campaignSchedule");
+const { validateCampaignInput } = require("../utils/campaignRules");
 const { buildPushMessage } = require("../utils/notificationPayload");
 
 // The "Diwali Ussav" campaign as stored locally: Send Now at 16:14:14 IST,
@@ -20,6 +21,15 @@ const firebase = { enabled: true, projectId: "reward-planners-2324d" };
 test("IST wall-clock times are stored as the matching UTC instant", () => {
   assert.equal(toSqlUtc(localToUtc("2026-10-30", "16:14", "Asia/Kolkata")), "2026-10-30 10:44:00");
   assert.equal(toSqlUtc(localToUtc("2026-10-31", "00:15", "Asia/Kolkata")), "2026-10-30 18:45:00"); // crosses midnight
+});
+
+test("a default send time with no date yet is an unscheduled draft, not an invalid one", () => {
+  const draft = { name: "Check", module: "common", category: "marketing", title_en: "Hi", body_en: "There", audience_type: "test", delivery_mode: "once" };
+  const withDefaultTime = validateCampaignInput({ ...draft, send_date: "", send_time: "09:00" });
+  assert.deepEqual(withDefaultTime.errors, []);
+  assert.equal(withDefaultTime.value.scheduled_at, null);
+  assert.equal(toSqlUtc(validateCampaignInput({ ...draft, send_date: "2026-12-01", send_time: "10:00" }).value.scheduled_at), "2026-12-01 04:30:00");
+  assert.deepEqual(validateCampaignInput({ ...draft, send_date: "not-a-date", send_time: "09:00" }).errors, ["Send date/time is invalid."]);
 });
 
 test("send blockers: scheduler off, expiry too close, consent and devices", () => {

@@ -1,15 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { makeMeta } from "./fixtures";
 import type { Campaign, CampaignDiagnostics } from "../notificationTypes";
 
-const api = vi.hoisted(() => ({ campaigns: vi.fn(), diagnostics: vi.fn() }));
+const api = vi.hoisted(() => ({ campaigns: vi.fn(), campaign: vi.fn(), diagnostics: vi.fn(), testDevices: vi.fn(), testCampaign: vi.fn(), sendCampaign: vi.fn() }));
 vi.mock("../notificationApi", () => ({ notificationApi: api, assignmentApi: {} }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() } }));
 
 import CampaignsTab, { DeliveryCheck } from "../tabs/CampaignsTab";
-import { STATUS_META, displayStatus, waitingNote } from "../notificationUtils";
+import { STATUS_META, campaignActions, campaignExpired, displayStatus, waitingNote } from "../notificationUtils";
 import SettingsTab from "../tabs/SettingsTab";
 
 afterEach(cleanup);
@@ -37,7 +37,7 @@ describe("scheduled campaign status is truthful", () => {
     expect(displayStatus(diwali, true, new Date("2026-10-30T10:44:30Z"))).toBe("scheduled_due");
     expect(displayStatus(diwali, true, new Date("2026-10-30T11:00:00Z"))).toBe("scheduled_expired");
     expect(displayStatus(diwali, true, new Date("2026-10-30T10:00:00Z"))).toBe("scheduled");
-    expect(displayStatus({ ...diwali, status: "completed" }, false)).toBe("completed");
+    expect(displayStatus({ ...diwali, status: "completed", firebase_accepted: 1 }, false)).toBe("completed");
     expect(Object.values(STATUS_META).some((entry) => /queued/i.test(entry.label))).toBe(false);
   });
 
@@ -48,6 +48,60 @@ describe("scheduled campaign status is truthful", () => {
     expect(screen.getByText("Scheduled · worker unavailable")).toBeTruthy();
     expect(screen.getByText("Scheduler not running here")).toBeTruthy();
     expect(screen.queryByText("Scheduled / queued")).toBeNull();
+  });
+
+  it("shows the real history figures and never calls acceptance delivery", async () => {
+    api.campaigns.mockResolvedValue({ total: 1, rows: [{ ...diwali, status: "partially_failed", occurrences_started: 1, audience_type: "selected", recipients: 10, consent_excluded: 4, queued: 1, firebase_accepted: 2, failed: 1, pending_retry: 1, recipients_expired: 2, recipients_cancelled: 1 }] });
+    render(<CampaignsTab meta={makeMeta({ scheduler: { running: true } })} nav={{ go: vi.fn() }} mode="history" />);
+    expect(await screen.findByText("Selected employees")).toBeTruthy();
+    const headers = screen.getAllByRole("columnheader").map((cell) => cell.textContent);
+    const cells = screen.getAllByRole("cell").map((cell) => cell.textContent);
+    for (const [label, value] of [["Candidates", "10"], ["Eligible", "6"], ["Queued", "1"], ["FCM accepted", "2"], ["Failed", "1"], ["Retrying", "1"], ["Expired", "2"], ["Cancelled", "1"]]) {
+      expect(cells[headers.indexOf(label)]).toBe(value);
+    }
+    expect(screen.queryByText(/delivered/i)).toBeNull();
+  });
+
+  it("re-reads campaigns and the worker state while a campaign is waiting", async () => {
+    const spy = vi.spyOn(window, "setInterval");
+    const onRefreshMeta = vi.fn();
+    api.campaigns.mockResolvedValue({ total: 1, rows: [diwali] });
+    render(<CampaignsTab meta={makeMeta({ scheduler: { running: false } })} nav={{ go: vi.fn() }} mode="scheduled" onRefreshMeta={onRefreshMeta} />);
+    await screen.findByText("Diwali Ussav");
+    const pollCall = () => spy.mock.calls.find(([, delay]) => delay === 15000);
+    await waitFor(() => expect(pollCall()).toBeTruthy());
+    const tick = pollCall()?.[0] as () => void;
+    const before = api.campaigns.mock.calls.length;
+    tick();
+    expect(onRefreshMeta).toHaveBeenCalledTimes(1);
+    expect(api.campaigns.mock.calls.length).toBe(before + 1);
+    spy.mockRestore();
+  });
+
+  it("shows an error, not a spinner, when a campaign cannot be opened", async () => {
+    const user = userEvent.setup();
+    api.campaigns.mockResolvedValue({ total: 1, rows: [diwali] });
+    api.campaign.mockRejectedValue({ response: { data: { message: "Campaign not found" } } });
+    render(<CampaignsTab meta={makeMeta({ scheduler: { running: true } })} nav={{ go: vi.fn() }} mode="history" />);
+    await user.click(await screen.findByText("Diwali Ussav"));
+    expect(await screen.findByText(/Campaign not found/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+  });
+
+  it("an expired draft offers no action but cancel, and is labelled as not sent", () => {
+    const draft = { ...diwali, status: "draft", can_manage: true, can_send: true, audience_type: "selected" };
+    expect(campaignExpired(draft)).toBe(true);
+    expect(displayStatus(draft, true)).toBe("draft_expired");
+    expect(campaignActions(draft)).toMatchObject({ edit: false, test: false, sendNow: false, schedule: false, retry: false, cancel: true });
+    expect(campaignActions({ ...draft, expires_at: "2099-01-01 00:00:00" })).toMatchObject({ edit: true, test: true, sendNow: true });
+  });
+
+  it("a completed campaign that reached nobody is not shown as Completed", () => {
+    const done = { ...diwali, status: "completed", occurrences_started: 1 };
+    expect(displayStatus(done, true)).toBe("completed_empty");
+    expect(displayStatus({ ...done, firebase_accepted: 1 }, true)).toBe("completed");
+    expect(displayStatus({ ...done, inbox_only: 1 }, true)).toBe("completed");
+    expect(displayStatus({ ...done, summary: { firebaseAccepted: 0, inboxOnly: 0, failed: 0 } }, true)).toBe("completed_empty");
   });
 
   it("Settings shows the worker's real state, not the environment flag", () => {

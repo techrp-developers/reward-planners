@@ -12,6 +12,8 @@ export const STATUS_META: Record<string, { label: string; cls: string }> = {
   scheduled_due: { label: "Due · waiting for worker", cls: "bg-amber-100 text-amber-800" },
   scheduled_unavailable: { label: "Scheduled · worker unavailable", cls: "bg-red-100 text-red-700" },
   scheduled_expired: { label: "Expired · not sent", cls: "bg-gray-200 text-gray-600" },
+  draft_expired: { label: "Expired draft · not sent", cls: "bg-gray-200 text-gray-600" },
+  completed_empty: { label: "Finished · nothing sent", cls: "bg-amber-100 text-amber-800" },
   sending: { label: "Sending", cls: "bg-blue-100 text-blue-800" },
   completed: { label: "Completed", cls: "bg-emerald-100 text-emerald-800" },
   partially_failed: { label: "Partially failed", cls: "bg-orange-100 text-orange-800" },
@@ -95,20 +97,28 @@ export function toNumber(value: unknown): number {
 
 const UNSENT = ["draft", "rejected", "pending_approval", "approved"];
 
+/** Past its expiry. The server refuses edits, tests and sends for these. */
+export function campaignExpired(campaign: { expires_at?: string | Date | null }, now = new Date()): boolean {
+  const value = campaign.expires_at;
+  const expires = value instanceof Date ? value : parseUtc(value);
+  return Boolean(expires && expires <= now);
+}
+
 /**
  * Which actions the UI offers; the backend enforces the same rules. There is
  * no approval step: the sender sends or schedules directly.
  */
-export function campaignActions(campaign: { status: string; can_manage: boolean; can_send?: boolean; audience_type: string; occurrences_started: number; failed?: number | string | null }) {
+export function campaignActions(campaign: { status: string; can_manage: boolean; can_send?: boolean; audience_type: string; occurrences_started: number; failed?: number | string | null; expires_at?: string | Date | null }) {
   const { status } = campaign;
   const notStarted = Number(campaign.occurrences_started || 0) === 0;
-  const sendable = Boolean(campaign.can_send) && campaign.audience_type !== "test" && (UNSENT.includes(status) || (status === "scheduled" && notStarted));
+  const expired = campaignExpired(campaign);
+  const sendable = Boolean(campaign.can_send) && !expired && campaign.audience_type !== "test" && (UNSENT.includes(status) || (status === "scheduled" && notStarted));
   return {
-    edit: campaign.can_manage && (UNSENT.includes(status) || (status === "scheduled" && notStarted)),
-    test: campaign.can_manage && !["cancelled", "expired"].includes(status),
+    edit: campaign.can_manage && !expired && (UNSENT.includes(status) || (status === "scheduled" && notStarted)),
+    test: campaign.can_manage && !expired && !["cancelled", "expired"].includes(status),
     sendNow: sendable,
     schedule: sendable,
-    retry: Boolean(campaign.can_send) && ["completed", "partially_failed", "failed"].includes(status) && Number(campaign.failed || 0) > 0,
+    retry: Boolean(campaign.can_send) && !expired && ["completed", "partially_failed", "failed"].includes(status) && Number(campaign.failed || 0) > 0,
     cancel: campaign.can_manage && ["draft", "pending_approval", "approved", "scheduled", "sending"].includes(status),
   };
 }
@@ -146,7 +156,15 @@ export const SCHEDULER_OFF_MESSAGE = "Scheduled delivery is unavailable in this 
  * started is never labelled as queued or progressing: the label says whether
  * this server can actually pick it up. Stored statuses are unchanged.
  */
-export function displayStatus(campaign: { status: string; occurrences_started: number | null; expires_at: string | null; next_run_at: string | null }, workerRunning: boolean, now = new Date()): string {
+export function displayStatus(campaign: { status: string; occurrences_started: number | null; expires_at: string | null; next_run_at: string | null; firebase_accepted?: number | string | null; inbox_only?: number | string | null; failed?: number | string | null; summary?: { firebaseAccepted: number; inboxOnly?: number; failed: number } }, workerRunning: boolean, now = new Date()): string {
+  if (UNSENT.includes(campaign.status) && campaignExpired(campaign, now)) return "draft_expired";
+  // "Completed" with nobody reached (all skipped) must not read as delivered.
+  if (campaign.status === "completed") {
+    const reached = campaign.summary
+      ? campaign.summary.firebaseAccepted + toNumber(campaign.summary.inboxOnly) + campaign.summary.failed
+      : toNumber(campaign.firebase_accepted) + toNumber(campaign.inbox_only) + toNumber(campaign.failed);
+    if (!reached) return "completed_empty";
+  }
   const note = waitingNote(campaign, workerRunning, now);
   if (!note) return campaign.status;
   if (!workerRunning) return "scheduled_unavailable";

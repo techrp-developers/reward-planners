@@ -188,6 +188,9 @@ export interface Campaign {
   can_send: boolean;
   // list rows carry recipient counts
   recipients?: number | string | null;
+  consent_excluded?: number | string | null;
+  recipients_expired?: number | string | null;
+  recipients_cancelled?: number | string | null;
   queued?: number | string | null;
   pending_retry?: number | string | null;
   attempted?: number | string | null;
@@ -209,6 +212,10 @@ export interface AudiencePreview {
   marketingConsented?: number;
   engagementConsented?: number;
   noPreferenceRecord?: number;
+  optedOut?: number;
+  /** Eligible employees with a device on a Firebase project this server can send to. */
+  reachable?: number;
+  unknownProjectDevices?: number;
   category?: Category;
 }
 

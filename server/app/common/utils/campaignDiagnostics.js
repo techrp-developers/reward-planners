@@ -68,6 +68,12 @@ function describeWorkerState({ runtime = {}, heartbeat = {}, configured = false,
 const toDate = (value) => (value instanceof Date ? value : value ? new Date(value) : null);
 const minutesBetween = (from, to) => (to.getTime() - from.getTime()) / 60000;
 
+/** Past its expiry: never sent, tested or revived, whatever its stored status. */
+function campaignExpired(campaign, now = new Date()) {
+  const expires = toDate(campaign?.expires_at);
+  return Boolean(expires && expires <= now);
+}
+
 function expiryTooClose(startAt, expiresAt) {
   const start = toDate(startAt);
   const expires = toDate(expiresAt);
@@ -168,4 +174,4 @@ function diagnoseCampaign({ campaign, now = new Date(), schedulerRunning, worker
   };
 }
 
-module.exports = { BLOCKER_MESSAGES, MIN_DELIVERY_WINDOW_MIN, describeWorkerState, diagnoseCampaign, expiryTooClose, sendBlockers };
+module.exports = { BLOCKER_MESSAGES, MIN_DELIVERY_WINDOW_MIN, campaignExpired, describeWorkerState, diagnoseCampaign, expiryTooClose, sendBlockers };

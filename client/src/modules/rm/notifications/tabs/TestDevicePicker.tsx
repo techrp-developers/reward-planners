@@ -9,12 +9,15 @@ export type TestTarget = { userId: number; deviceId: number } | null;
  * registered devices are offered (tokens arrive masked); one is preselected
  * only when it is the only one, so a test never silently picks between phones.
  */
-export default function TestDevicePicker({ users, value, onChange, disabled }: {
+export default function TestDevicePicker({ users, value, onChange, disabled, error }: {
   users: TestDeviceUser[] | null;
   value: TestTarget;
   onChange: (target: TestTarget) => void;
   disabled?: boolean;
+  /** The device list could not be loaded (not the same as "no device"). */
+  error?: string;
 }) {
+  if (error) return <p role="alert" className="text-xs font-semibold text-red-600">Test devices could not be loaded: {error}</p>;
   if (users === null) return <p className="text-xs text-gray-500">Loading test devices…</p>;
   const options = users.flatMap((user) => user.devices.map((device) => ({ user, device })));
   if (!options.length) {
