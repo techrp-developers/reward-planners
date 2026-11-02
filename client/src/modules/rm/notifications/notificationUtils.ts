@@ -222,3 +222,19 @@ export function sendNowBlockedReason(meta: { firebase: { enabled: boolean; crede
   if (!meta.scheduler?.running) return `Campaign worker unavailable: ${(meta.scheduler?.reason || "it is not running on this server").replace(/.$/, "")}. Send now is off; a schedule is saved but only sent once a worker runs.`;
   return null;
 }
+
+const TITLE_ADVISED_LENGTH = 55;
+
+/** What the Live preview tells the sender before a test: tap target and content warnings. */
+export function campaignPreviewNotes(input: {
+  title: string; message: string; contentType: string; hasImage: boolean;
+  destinationLabel: string | null; category: string;
+}): { tapDestination: string; warnings: string[] } {
+  const warnings: string[] = [];
+  if (!input.message.trim()) warnings.push("The message is empty.");
+  if (input.title.trim().length > TITLE_ADVISED_LENGTH) warnings.push(`The title is over ${TITLE_ADVISED_LENGTH} characters and may be cut off on phones.`);
+  if (input.contentType !== "standard" && !input.hasImage) warnings.push("No image is selected, so this is sent as text only.");
+  if (!input.destinationLabel) warnings.push("No destination is selected, so tapping opens the notification inbox.");
+  if (input.category === "marketing") warnings.push("Marketing arrives quietly on iPhone: no banner or sound, only Notification Centre.");
+  return { tapDestination: input.destinationLabel || "Notification inbox", warnings };
+}

@@ -9,7 +9,7 @@ const fakeDb = { query: (...args) => dbHandler(...args), execute: (...args) => d
 const dbPath = require.resolve(path.join(__dirname, "../../../config/database"));
 require.cache[dbPath] = { id: dbPath, filename: dbPath, loaded: true, exports: fakeDb };
 
-const { buildPushMessage } = require("../utils/notificationPayload");
+const { buildIosPushMessage, buildPushMessage } = require("../utils/notificationPayload");
 const { destinationsForModule, resolveDestination, validateDestination, DESTINATIONS } = require("../utils/notificationDestinations");
 const { assertAllowedUrl, checkImageAvailable, fetchAllowedImage, normalizeNotificationImage } = require("../utils/notificationImage");
 const { mediaIdForLanguage, mediaLanguageWarnings, validateCampaignInput } = require("../utils/campaignRules");
@@ -85,6 +85,35 @@ test("standard and untrusted-image payloads stay text-only", () => {
   const untrusted = buildPushMessage({ title: "t", message: "m", image_url: "https://evil.example.com/x.jpg" }, "token");
   assert.equal(untrusted.data.media_type, "standard");
   assert.equal(untrusted.android.notification.imageUrl, undefined);
+});
+
+test("iOS image payload: visible alert, attachment, bundle id, destination and no Android fields", () => {
+  const imageUrl = "https://cdn.rewardplanners.com/public/notifications/2026/10/a.jpg";
+  const message = buildIosPushMessage({
+    title: "Festive offers", message: "Explore", module: "ecommerce", type: "campaign_marketing", image_url: imageUrl,
+    destination_type: "product", target_id: "42", target_route: { path: ["App", "ProductDetails"], params: { productId: 42 } },
+    notification_id: 77, metadata: { campaign_id: 5 },
+  }, "token");
+  assert.deepEqual(message.apns.payload.aps.alert, { title: "Festive offers", body: "Explore" });
+  assert.equal(message.apns.payload.aps["mutable-content"], 1);
+  assert.equal(message.apns.fcmOptions.imageUrl, imageUrl);
+  assert.equal(message.apns.headers["apns-topic"], "com.mpstech.rewardsplanners");
+  assert.equal(message.data.image_url, imageUrl);
+  assert.equal(message.data.notification_id, "77");
+  assert.equal(message.data.target_route, JSON.stringify({ path: ["App", "ProductDetails"], params: { productId: 42 } }));
+  assert.ok(Object.values(message.data).every((value) => typeof value === "string"));
+  assert.doesNotMatch(JSON.stringify(message), /android|channelId|ic_stat/i);
+});
+
+test("iOS payload without a usable image stays a plain alert", () => {
+  for (const image_url of [undefined, "", "not a url", "http://cdn.rewardplanners.com/a.jpg", "https://example.com/offer.jpg", "http://192.168.1.247:5057/uploads/a.jpg"]) {
+    const message = buildIosPushMessage({ title: "t", message: "m", image_url }, "token");
+    assert.deepEqual(message.apns.payload.aps.alert, { title: "t", body: "m" });
+    assert.equal(message.apns.payload.aps["mutable-content"], undefined);
+    assert.equal(message.apns.fcmOptions, undefined);
+    assert.equal(message.notification.imageUrl, undefined);
+    assert.equal(message.data.media_type, "standard");
+  }
 });
 
 /* ---------- image pipeline ---------- */

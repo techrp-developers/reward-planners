@@ -889,7 +889,6 @@ class RmNotificationController {
       // Same image/destination checks as a real send, so the test is faithful.
       const delivery = await buildDeliveryContext(campaign);
       const payload = buildCampaignPayload(campaign, { user_id: user.user_id, occurrence_no: 0 }, rendered, delivery);
-      payload.title = `[TEST] ${payload.title}`.slice(0, 255);
       payload.metadata = { ...payload.metadata, test: true };
       payload.idempotency_key = undefined;
       payload.reference_id = `campaign-test-${campaign.campaign_id}-${Date.now()}`;

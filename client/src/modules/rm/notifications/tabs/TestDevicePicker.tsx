@@ -39,7 +39,7 @@ export default function TestDevicePicker({ users, value, onChange, disabled, err
           </option>
         ))}
       </select>
-      <span className="mt-1 block text-[11px] text-gray-500">The test goes to this one device only, once, prefixed “[TEST]”.</span>
+      <span className="mt-1 block text-[11px] text-gray-500">The test goes to this one device only, once, exactly as employees see it.</span>
     </label>
   );
 }

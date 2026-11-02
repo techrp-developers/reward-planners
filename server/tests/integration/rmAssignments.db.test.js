@@ -215,7 +215,7 @@ if (!ENABLED) {
   test("a due campaign is claimed by exactly one worker run", async () => {
     await admin.query(
       `INSERT INTO notification_campaigns (campaign_id, name, source, module, category, title_en, body_en, created_by, created_by_role, status, audience_type, next_run_at)
-       VALUES (901, 'Due test', 'custom', 'common', 'marketing', 'T', 'B', 18, 'rm', 'scheduled', 'selected', DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 MINUTE))`,
+       VALUES (901, 'Due test', 'manual', 'common', 'marketing', 'T', 'B', 18, 'rm', 'scheduled', 'selected', DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 MINUTE))`,
     );
     const [a, b] = await Promise.all([models.campaigns.claimDueCampaigns(), models.campaigns.claimDueCampaigns()]);
     assert.equal([...a, ...b].filter((campaign) => campaign.campaign_id === 901).length, 1);
@@ -225,7 +225,7 @@ if (!ENABLED) {
     await admin.query("INSERT INTO notification_preferences (user_id, marketing_enabled, engagement_enabled) VALUES (100, 1, 1)");
     await admin.query(
       `INSERT INTO notification_campaigns (campaign_id, name, source, module, category, title_en, body_en, created_by, created_by_role, status, audience_type, audience_filter, next_run_at, expires_at)
-       VALUES (903, 'Old Diwali', 'custom', 'common', 'marketing', 'T', 'B', 18, 'rm', 'scheduled', 'selected', '{"user_ids":[100]}',
+       VALUES (903, 'Old Diwali', 'manual', 'common', 'marketing', 'T', 'B', 18, 'rm', 'scheduled', 'selected', '{"user_ids":[100]}',
                DATE_SUB(UTC_TIMESTAMP(), INTERVAL 2 HOUR), DATE_SUB(UTC_TIMESTAMP(), INTERVAL 119 MINUTE))`,
     );
     await models.worker.activateDueCampaigns();
@@ -677,7 +677,7 @@ if (!ENABLED) {
       assert.equal(sent.status, 200, JSON.stringify(sent.body));
       assert.equal(fcmSends.length, 1, "exactly one FCM send");
       assert.equal(fcmSends[0].token, "token-phone-b-abcdefghijklmnopqrstuvwxyz");
-      assert.match(fcmSends[0].notification.title, /^\[TEST\] Hello/);
+      assert.equal(fcmSends[0].notification.title, "Hello"); // no system prefix; metadata.test records it
       assert.equal(fcmSends[0].android.notification.channelId, "reward_planners_offers"); // marketing category
       const [result] = sent.body.data;
       assert.equal(result.firebase_accepted, 1);

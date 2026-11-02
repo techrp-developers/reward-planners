@@ -6,7 +6,7 @@ import type { AudiencePreview, AudienceType, Campaign, Category, ContentType, De
 import { Card, LanguageTabs, Modal, Notice, NotificationPreviews, Spinner, Tag, inputCls, labelCls, primaryBtn, secondaryBtn } from "../components";
 import MediaDestinationSection, { type MediaDestinationValue } from "./MediaDestinationSection";
 import TestDevicePicker, { type TestTarget } from "./TestDevicePicker";
-import { campaignExpired, defaultTestTarget, firebaseUnavailableText, sendNowBlockedReason, expiryTooSoon, zonedInputsToUtc, AUDIENCE_LABELS, LANGUAGE_LABELS, SKIP_REASON_LABELS, apiErrorMessage, campaignVariablesNeeded, newClientRequestId, toZonedInputs } from "../notificationUtils";
+import { campaignPreviewNotes, campaignExpired, defaultTestTarget, firebaseUnavailableText, sendNowBlockedReason, expiryTooSoon, zonedInputsToUtc, AUDIENCE_LABELS, LANGUAGE_LABELS, SKIP_REASON_LABELS, apiErrorMessage, campaignVariablesNeeded, newClientRequestId, toZonedInputs } from "../notificationUtils";
 import type { TabNavigation } from "../NotificationManager";
 
 const TIMEZONES = ["Asia/Kolkata", "UTC", "Asia/Dubai", "Asia/Singapore", "Europe/London", "America/New_York"];
@@ -398,6 +398,12 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
     catalog_product_ids: form.catalog_product_ids, media: form.media,
   };
 
+  const previewNotes = campaignPreviewNotes({
+    title: shown?.title || form.title_en, message: shown?.message || form.body_en,
+    contentType: form.content_type, hasImage: Boolean(previewImage), category: form.category,
+    destinationLabel: meta.destinations.find((item) => item.key === form.destination_type)?.label || null,
+  });
+
   return (
     <div className="grid gap-5 xl:grid-cols-[1.5fr_1fr]">
       <div className="space-y-5">
@@ -681,6 +687,15 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
               ? <Notice tone="red">{shown.error}</Notice>
               : <NotificationPreviews title={shown?.title || form.title_en} message={shown?.message || form.body_en} imageUrl={previewImage}
                   note={shown?.fallback ? `An employee who chose ${LANGUAGE_LABELS[previewLang]} receives English text (translation missing or not approved).` : "{{first_name}} is shown as “Asha”."} />}
+            <dl className="space-y-1 text-xs text-gray-600">
+              <div className="flex justify-between gap-3"><dt className="font-bold text-gray-500">Tap opens</dt><dd data-testid="preview-tap-destination">{previewNotes.tapDestination}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="font-bold text-gray-500">Campaign name</dt><dd>Internal only, never sent</dd></div>
+            </dl>
+            {previewNotes.warnings.length > 0 && (
+              <ul data-testid="preview-warnings" className="list-disc space-y-1 pl-4 text-xs text-amber-700">
+                {previewNotes.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+              </ul>
+            )}
           </div>
         </Card>
 
