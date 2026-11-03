@@ -161,7 +161,7 @@ const PREVIEW_MODES: [PreviewMode, string][] = [["ios_compact", "iOS compact"], 
  * app's inbox card. Only the inbox card is drawn by Reward Planners; the
  * system notifications are laid out by the phone.
  */
-export function NotificationPreviews({ title, message, imageUrl, note }: { title?: string; message?: string; imageUrl?: string | null; note?: string }) {
+export function NotificationPreviews({ title, message, imageUrl, note, tapOpens }: { title?: string; message?: string; imageUrl?: string | null; note?: string; tapOpens?: string }) {
   const [mode, setMode] = useState<PreviewMode>("ios_compact");
   const heading = title || "Notification title";
   const body = message || "Notification message";
@@ -234,6 +234,9 @@ export function NotificationPreviews({ title, message, imageUrl, note }: { title
         </div>
       )}
 
+      {tapOpens && (
+        <p data-testid="preview-tap-destination" className="rounded-lg bg-purple-50 px-3 py-2 text-xs text-gray-700"><span className="font-bold text-[#852BAF]">Tap opens:</span> {tapOpens}</p>
+      )}
       <p className="text-[11px] text-gray-500">Approximate previews. Actual appearance depends on the phone, OS version and notification settings.{note ? ` ${note}` : ""}</p>
     </div>
   );

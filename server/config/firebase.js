@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "../.env") });
 const { initializeApp, cert, applicationDefault, getApp, getApps } = require("firebase-admin/app");
+const { resetApplicationDefaultClient } = require("./firebaseAdcReset");
 
 // Firebase Admin credentials:
 //   FIREBASE_CREDENTIAL_MODE=application_default - keyless Google Application
@@ -226,8 +227,8 @@ async function verifyPrimaryCredentials() {
   if (!status.credentialCheck) return status; // never initialised
   const keyless = status.credentialMode === "application_default";
   try {
-    // Until a token is obtained google-auth-library re-reads the ADC source on
-    // every attempt, and it may have changed since startup: re-check its project.
+    // The ADC file may have changed since startup (a re-login): re-check its
+    // project. The cached auth client is rebuilt after a rejection, below.
     if (keyless && status.credentialCheck !== "verified") {
       const adc = inspectAdcSource(status.expectedProjectId);
       status.adcSource = adc.source;
@@ -244,6 +245,9 @@ async function verifyPrimaryCredentials() {
     // Keys keep their previous behaviour on network trouble; ADC fails closed.
     status.enabled = !keyless && network;
     status.credentialCheck = network ? "unverified" : "failed";
+    if (keyless && !network && !resetApplicationDefaultClient()) {
+      console.warn("Firebase: could not reset the cached ADC client; restart the server after re-login.");
+    }
     // A network problem says nothing about the credentials, so no re-login hint.
     status.reason = keyless && network
       ? `Could not reach Google to verify Application Default Credentials (${detail}). Retrying in ${NETWORK_RECHECK_MS / 1000}s.`

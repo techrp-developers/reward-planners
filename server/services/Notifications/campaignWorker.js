@@ -10,6 +10,7 @@ const NotificationMediaModel = require("../../app/common/models/notificationMedi
 const { checkAudiencePermission, mediaIdForLanguage, renderCampaignForRecipient } = require("../../app/common/utils/campaignRules");
 const { getDestination, resolveDestination } = require("../../app/common/utils/notificationDestinations");
 const { checkImageAvailable } = require("../../app/common/utils/notificationImage");
+const { safeImageUrl } = require("../../app/common/utils/notificationPayload");
 const {
   TemplateRenderError,
   checkPromotionalEligibility,
@@ -138,23 +139,6 @@ async function buildDeliveryContext(campaign, deps = {}) {
   const checkImage = deps.checkImage || checkImageAvailable;
   const context = { blocked: null, destination: null, images: {}, imageFallback: {} };
 
-  if (campaign.destination_type) {
-    const destination = getDestination(campaign.destination_type);
-    let productIds = (campaign.catalog_product_ids || []).map(Number);
-    if (destination?.entity) {
-      const status = await media.entityStatus(destination.entity, campaign.destination_id, productIds);
-      if (!status.ok) context.blocked = "destination_unavailable";
-      // Never advertise products that went out of stock or were delisted.
-      if (status.products) productIds = status.products.filter((product) => product.available).map((product) => Number(product.product_id));
-    }
-    context.destination = resolveDestination({
-      module: campaign.module,
-      destinationType: campaign.destination_type,
-      destinationId: campaign.destination_id,
-      productIds,
-    });
-  }
-
   if (campaign.content_type && campaign.content_type !== "standard" && campaign.media) {
     const rows = await media.findActiveByIds(Object.values(campaign.media));
     const byId = new Map(rows.map((row) => [Number(row.media_id), row]));
@@ -168,6 +152,29 @@ async function buildDeliveryContext(campaign, deps = {}) {
       context.imageFallback[language] = !ok;
     }
   }
+
+  if (campaign.destination_type) {
+    const destination = getDestination(campaign.destination_type);
+    let productIds = (campaign.catalog_product_ids || []).map(Number);
+    let status = null;
+    if (destination?.entity) {
+      status = await media.entityStatus(destination.entity, campaign.destination_id, productIds);
+      if (!status.ok) context.blocked = "destination_unavailable";
+      // Never advertise products that went out of stock or were delisted.
+      if (status.products) productIds = status.products.filter((product) => product.available).map((product) => Number(product.product_id));
+    }
+    context.destination = resolveDestination({
+      module: campaign.module,
+      destinationType: campaign.destination_type,
+      destinationId: campaign.destination_id,
+      productIds,
+      // Landing screens show the chosen record's name and the campaign's own
+      // image; never the internal campaign name.
+      title: status?.label || campaign.title_en || "",
+      bannerUrl: safeImageUrl(context.images.en?.url) || safeImageUrl(status?.bannerUrl),
+    });
+  }
+
   return context;
 }
 

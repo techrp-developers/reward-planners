@@ -30,4 +30,8 @@ describe("campaignPreviewNotes", () => {
   it("does not ask for an image on a text notification", () => {
     expect(campaignPreviewNotes({ ...input, contentType: "standard", hasImage: false }).warnings).toEqual([]);
   });
+  it("names the record the tap opens, and asks for one when it is missing", () => {
+    expect(campaignPreviewNotes({ ...input, destinationName: "Anti Tarnish Bow Chain", needsRecord: true }).tapDestination).toBe("Product details — Anti Tarnish Bow Chain");
+    expect(campaignPreviewNotes({ ...input, destinationName: null, needsRecord: true }).warnings).toEqual(["Choose which product details to open."]);
+  });
 });

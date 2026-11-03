@@ -80,6 +80,7 @@ test("missing Gmail credentials warn once and skip SMTP verification", () => {
 test("missing Firebase credentials warn once without failing module load", () => {
   const result = loadConfig("config/firebase.js", {}, {
     fs: { existsSync() { return false; } },
+    "./firebaseAdcReset": { resetApplicationDefaultClient() { assert.fail("Nothing to reset without credentials"); } },
     "firebase-admin/app": { getApps() { return []; }, cert() { assert.fail("No credentials to certify"); }, initializeApp() { assert.fail("No credentials to initialize"); } },
   });
   assert.equal(result.warnings.length, 1);
@@ -90,11 +91,12 @@ test("missing Firebase credentials warn once without failing module load", () =>
 // ADC mode with an injectable ADC file and access-token behaviour. Nothing
 // contacts Google: firebase-admin/app and fs are replaced.
 function loadAdcFirebase({ adcFile = null, tokens, env = {}, fetch, cert }) {
-  const state = { adcFile, initialized: 0, tokenCalls: 0, timers: [], apps: [] };
+  const state = { adcFile, initialized: 0, tokenCalls: 0, resets: 0, timers: [], apps: [] };
   const credential = { async getAccessToken() { return tokens[state.tokenCalls++](); } };
   const result = loadConfig("config/firebase.js", {
     FIREBASE_CREDENTIAL_MODE: "application_default", FIREBASE_PROJECT_ID: "reward-planners-2324d", HOME: "/home/test", ...env,
   }, {
+    "./firebaseAdcReset": { resetApplicationDefaultClient() { state.resets += 1; return true; } },
     fs: { existsSync: (file) => Boolean(state.adcFile) && /application_default_credentials\.json$/.test(file), readFileSync: () => JSON.stringify(state.adcFile) },
     "firebase-admin/app": {
       getApps: () => state.apps.map((name) => ({ name })),
@@ -141,12 +143,15 @@ test("failed ADC stays disabled, is re-checked, and recovers without a second ap
   assert.match(exports.firebaseStatus.reason, /\(Could not load the default credentials\.\)\. For local development run: gcloud/);
   assert.equal(state.timers.length, 1);
   assert.equal(state.timers[0].ms, 5 * 60 * 1000);
+  // The rejected client is dropped, so the re-check reads a re-login's new token.
+  assert.equal(state.resets, 1);
 
   state.timers[0].callback();
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(exports.firebaseStatus.enabled, true);
   assert.equal(exports.firebaseStatus.reason, null);
   assert.equal(state.initialized, 1);
+  assert.equal(state.resets, 1);
 });
 
 test("a token request that never answers ends 'Verifying...' with a network diagnostic and a quick re-check", async () => {
@@ -163,6 +168,7 @@ test("a token request that never answers ends 'Verifying...' with a network diag
   assert.equal(exports.firebaseStatus.credentialCheck, "unverified");
   assert.ok(exports.firebaseStatus.reason.startsWith("Could not reach Google to verify Application Default Credentials (ETIMEDOUT"));
   assert.doesNotMatch(exports.firebaseStatus.reason, /gcloud auth/); // not a credentials problem
+  assert.equal(state.resets, 0); // the cached client is still good
   const recheck = state.timers.find((timer) => timer !== guard);
   assert.equal(recheck.ms, 60 * 1000);
   recheck.callback();

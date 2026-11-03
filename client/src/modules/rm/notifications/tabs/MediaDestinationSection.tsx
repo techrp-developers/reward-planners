@@ -25,15 +25,18 @@ interface Props {
   approvedLanguages: Language[];
   hasHindi: boolean;
   hasMarathi: boolean;
+  /** Name of the record the notification opens, for "Tap opens" in the preview. */
+  onDestinationName?: (name: string | null) => void;
 }
 
 const SLOT_LABELS: Record<MediaSlot, string> = { default: "Default image (all languages)", en: "English image", hi: "Hindi image", mr: "Marathi image" };
 const formatPrice = (value: number | null) => (value == null ? "—" : `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`);
 
-export default function MediaDestinationSection({ meta, editable, module, value, onChange, assets, onAssets, approvedLanguages, hasHindi, hasMarathi }: Props) {
+export default function MediaDestinationSection({ meta, editable, module, value, onChange, assets, onAssets, approvedLanguages, hasHindi, hasMarathi, onDestinationName }: Props) {
   const mediaReady = meta.infrastructure.mediaTables;
   const backendModule = meta.modules.find((option) => option.value === module)?.module || "common";
-  const destinations = meta.destinations.filter((item) => item.campaignAllowed && (item.module === backendModule || item.module === "common"));
+  // A campaign may only open a screen the app has; the server refuses the rest.
+  const destinations = meta.destinations.filter((item) => item.campaignAllowed && item.mobileRoute === "verified" && (item.module === backendModule || item.module === "common"));
   const destination = meta.destinations.find((item) => item.key === value.destination_type) || null;
   const [pickerSlot, setPickerSlot] = useState<MediaSlot | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -150,19 +153,19 @@ export default function MediaDestinationSection({ meta, editable, module, value,
                 ? <option value={value.catalog_product_ids.length === 1 ? "product" : "product_collection"}>{value.catalog_product_ids.length === 1 ? "Product details" : "Selected products (collection)"}</option>
                 : <>
                   <option value="">Module default screen</option>
-                  {destinations.filter((item) => item.entity !== "product_list").map((item) => <option key={item.key} value={item.key}>{item.label}{item.mobileRoute === "not_in_app" ? " (app route pending)" : ""}</option>)}
+                  {destinations.filter((item) => item.entity !== "product_list").map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
                 </>}
             </select>
           </label>
           {value.content_type !== "catalog" && destination?.entity && destination.entity !== "published_quiz" && (
-            <EntityPicker entity={destination.entity} editable={editable} value={value.destination_id} onChange={(id) => onChange({ destination_id: id })} />
+            <EntityPicker entity={destination.entity} editable={editable} value={value.destination_id} onChange={(id) => onChange({ destination_id: id })} onName={onDestinationName} />
           )}
         </div>
         {(destination || value.content_type === "catalog") && (
           <p className="text-xs text-gray-500">
-            {(destination?.mobileRoute === "not_in_app" || value.content_type === "catalog")
-              ? "This screen still has to be registered in the mobile app. Until then the app opens the module's home screen or the inbox."
-              : "Opens this screen in Reward Planners. If the item is no longer available, the app falls back to the inbox."}
+            {value.content_type === "catalog" && value.catalog_product_ids.length > 1
+              ? "Opens a product page in Reward Planners listing these products, with this notification's image as its banner. Tapping a product opens its details."
+              : "Opens this screen in Reward Planners. If the item is no longer available when it is sent, the notification is held back."}
             {destination?.entity === "published_quiz" && " Only offered while a quiz is published."}
           </p>
         )}
@@ -179,20 +182,37 @@ export default function MediaDestinationSection({ meta, editable, module, value,
   );
 }
 
-function EntityPicker({ entity, editable, value, onChange }: { entity: string; editable: boolean; value: string; onChange: (id: string) => void }) {
-  const [options, setOptions] = useState<{ id: number; label: string }[] | null>(null);
+type PickerOption = { id: number; label: string; image: string | null; detail: string | null };
+const OPTION_LISTS: Record<string, { kind: Parameters<typeof notificationApi.catalogOptions>[0]; label: string; empty: string; map: (row: CatalogOption) => PickerOption }> = {
+  category: { kind: "categories", label: "Product category", empty: "No visible categories.", map: (row) => ({ id: Number(row.category_id), label: String(row.category_name ?? ""), image: row.cover_image ?? null, detail: null }) },
+  service: { kind: "services", label: "Service", empty: "No active services.", map: (row) => ({ id: Number(row.service_id), label: String(row.name ?? ""), image: null, detail: row.price == null ? null : formatPrice(Number(row.price)) }) },
+  service_category: { kind: "service-categories", label: "Service category", empty: "No active service categories.", map: (row) => ({ id: Number(row.category_id), label: String(row.name ?? ""), image: null, detail: null }) },
+  offer_campaign: { kind: "promotions", label: "Promotion", empty: "No offer campaign is live with products right now, so there is nothing to open.", map: (row) => ({ id: Number(row.campaign_id), label: String(row.title ?? ""), image: row.banner_image ?? null, detail: `${row.product_count} products` }) },
+  promo_content: { kind: "promotional-banners", label: "Promotional banner", empty: "No product promotional banner is active right now.", map: (row) => ({ id: Number(row.content_id), label: String(row.title ?? ""), image: row.image_url ?? null, detail: null }) },
+};
+
+function EntityPicker({ entity, editable, value, onChange, onName }: { entity: string; editable: boolean; value: string; onChange: (id: string) => void; onName?: (name: string | null) => void }) {
+  // Results remember what they were loaded for, so a stale answer never shows.
+  const [loaded, setLoaded] = useState<{ entity: string; options: PickerOption[] } | null>(null);
   const [search, setSearch] = useState("");
   const [products, setProducts] = useState<CatalogProduct[]>([]);
+  const [shopProduct, setShopProduct] = useState<{ id: string; product: CatalogProduct | null } | null>(null);
+  const list = OPTION_LISTS[entity];
+  const options = loaded?.entity === entity ? loaded.options : null;
 
   useEffect(() => {
-    const kinds: Record<string, "categories" | "services" | "service-categories"> = { category: "categories", service: "services", service_category: "service-categories" };
-    const kind = kinds[entity];
-    if (!kind) return;
-    notificationApi.catalogOptions(kind).then((rows: CatalogOption[]) => setOptions(rows.map((row) => ({
-      id: Number(row.service_id ?? row.category_id),
-      label: String(row.name ?? row.category_name ?? ""),
-    })))).catch(() => setOptions([]));
-  }, [entity]);
+    if (!list) return;
+    notificationApi.catalogOptions(list.kind).then((rows: CatalogOption[]) => setLoaded({ entity, options: rows.map(list.map) }))
+      .catch(() => setLoaded({ entity, options: [] }));
+  }, [entity, list]);
+
+  // The chosen product as it is in the shop now: image, name, price, stock.
+  useEffect(() => {
+    if (entity !== "product" || !value) return;
+    notificationApi.catalogProducts({ ids: value }).then((rows) => setShopProduct({ id: value, product: rows[0] || null }))
+      .catch(() => setShopProduct({ id: value, product: null }));
+  }, [entity, value]);
+  const selectedProduct = entity === "product" && shopProduct?.id === value ? shopProduct.product : null;
 
   useEffect(() => {
     if (entity !== "product" || search.trim().length < 2) return undefined;
@@ -200,12 +220,24 @@ function EntityPicker({ entity, editable, value, onChange }: { entity: string; e
     return () => window.clearTimeout(timer);
   }, [entity, search]);
 
+  const chosen = entity === "product" ? null : options?.find((option) => String(option.id) === value) || null;
+  const name = entity === "product" ? selectedProduct?.product_name || null : chosen?.label || null;
+  useEffect(() => { onName?.(name); }, [name, onName]);
+
   if (entity === "product") {
     return (
       <div>
         <span className={labelCls}>Product *</span>
-        {value && <p className="mb-1 text-xs font-semibold text-[#852BAF]">Selected product #{value}</p>}
-        <input className={inputCls} disabled={!editable} placeholder="Search listed products" value={search} onChange={(event) => setSearch(event.target.value)} />
+        {value && (
+          <div data-testid="selected-product" className="mb-2 flex items-center gap-3 rounded-xl border border-purple-100 bg-purple-50/50 p-2">
+            {selectedProduct?.image_url ? <img src={selectedProduct.image_url} alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover" /> : <span className="h-10 w-10 shrink-0 rounded-lg bg-gray-100" />}
+            <div className="min-w-0 text-xs">
+              <p className="truncate font-semibold text-gray-900">{selectedProduct ? selectedProduct.product_name : "This product is no longer listed"}</p>
+              {selectedProduct && <p className="text-gray-500">{formatPrice(selectedProduct.price_from)}{selectedProduct.available ? "" : " · unavailable"}</p>}
+            </div>
+          </div>
+        )}
+        <input className={inputCls} disabled={!editable} placeholder={value ? "Search to change the product" : "Search listed products"} value={search} onChange={(event) => setSearch(event.target.value)} />
         {products.length > 0 && search.trim().length >= 2 && (
           <div className="mt-1 max-h-44 overflow-y-auto rounded-xl border border-gray-100">
             {products.map((product) => (
@@ -221,12 +253,17 @@ function EntityPicker({ entity, editable, value, onChange }: { entity: string; e
   }
 
   return (
-    <label><span className={labelCls}>{entity === "category" ? "Product category" : entity === "service" ? "Service" : "Service category"} *</span>
-      <select className={inputCls} disabled={!editable || !options} value={value} onChange={(event) => onChange(event.target.value)}>
-        <option value="">{options ? "Select…" : "Loading…"}</option>
-        {options?.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-      </select>
-    </label>
+    <div>
+      <label><span className={labelCls}>{list?.label || "Record"} *</span>
+        <select className={inputCls} disabled={!editable || !options} value={value} onChange={(event) => onChange(event.target.value)}>
+          <option value="">{options ? "Select…" : "Loading…"}</option>
+          {options?.map((option) => <option key={option.id} value={option.id}>{option.label}{option.detail ? ` · ${option.detail}` : ""}</option>)}
+        </select>
+      </label>
+      {options && options.length === 0 && list && <p className="mt-1 text-[11px] text-amber-700">{list.empty}</p>}
+      {value && options && !chosen && <p className="mt-1 text-[11px] text-red-600">The selected record is no longer available. Choose another.</p>}
+      {chosen?.image && <img src={chosen.image} alt="" className="mt-2 aspect-[2/1] w-full rounded-lg object-cover" />}
+    </div>
   );
 }
 

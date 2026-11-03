@@ -229,6 +229,8 @@ const TITLE_ADVISED_LENGTH = 55;
 export function campaignPreviewNotes(input: {
   title: string; message: string; contentType: string; hasImage: boolean;
   destinationLabel: string | null; destinationInApp?: boolean; category: string;
+  /** The chosen record (product, category, promotion…); null when none is picked yet. */
+  destinationName?: string | null; needsRecord?: boolean;
 }): { tapDestination: string; warnings: string[] } {
   const warnings: string[] = [];
   if (!input.title.trim()) warnings.push("The title is empty.");
@@ -237,9 +239,11 @@ export function campaignPreviewNotes(input: {
   if (input.contentType !== "standard" && !input.hasImage) warnings.push("No image is selected, so this is sent as text only.");
   if (!input.destinationLabel) warnings.push("No destination is selected, so tapping opens the notification inbox.");
   else if (input.destinationInApp === false) warnings.push(`The app has no ${input.destinationLabel} screen yet, so tapping opens the module home or the inbox.`);
+  else if (input.needsRecord && !input.destinationName) warnings.push(`Choose which ${input.destinationLabel.toLowerCase()} to open.`);
   if (input.category === "marketing") warnings.push("Marketing arrives quietly on iPhone: no banner or sound, only Notification Centre. Only employees who allowed marketing notifications get it, and quiet hours delay it.");
   if (input.category === "engagement") warnings.push("Only employees who allowed engagement notifications get it, and quiet hours delay it.");
   const tapDestination = !input.destinationLabel ? "Notification inbox"
-    : input.destinationInApp === false ? `${input.destinationLabel} (not in the app yet; opens a fallback)` : input.destinationLabel;
+    : input.destinationInApp === false ? `${input.destinationLabel} (not in the app yet; opens a fallback)`
+      : input.destinationName ? `${input.destinationLabel} — ${input.destinationName}` : input.destinationLabel;
   return { tapDestination, warnings };
 }

@@ -1085,17 +1085,7 @@ class ProductModel {
         v.mrp,
         v.variant_id,
         v.sale_price,
-
-        GROUP_CONCAT(
-          DISTINCT CONCAT(
-            pi.image_id, '::',
-            pi.image_url, '::',
-            pi.type, '::',
-            pi.sort_order, '::',
-            pi.updated_at
-          )
-          ORDER BY pi.sort_order ASC
-        ) AS images
+        img.images
 
       FROM eproducts p
 
@@ -1128,17 +1118,35 @@ class ProductModel {
       LEFT JOIN sub_categories sc ON sc.subcategory_id = p.subcategory_id 
       LEFT JOIN sub_sub_categories ssc ON ssc.sub_subcategory_id = p.sub_subcategory_id 
 
-      /* ---- Images ---- */
-      LEFT JOIN product_images pi ON p.product_id = pi.product_id
+      /* ---- Images, one row per product ----
+         Every join above matches at most one row per product (primary keys,
+         a single chosen variant, grouped reviews), so no outer GROUP BY is
+         needed and ONLY_FULL_GROUP_BY holds. */
+      LEFT JOIN (
+        SELECT
+          product_id,
+          GROUP_CONCAT(
+            DISTINCT CONCAT(
+              image_id, '::',
+              image_url, '::',
+              type, '::',
+              sort_order, '::',
+              updated_at
+            )
+            ORDER BY sort_order ASC, image_id ASC
+          ) AS images
+        FROM product_images
+        GROUP BY product_id
+      ) img ON img.product_id = p.product_id
 
       ${whereClause}
 
-      GROUP BY p.product_id
-      ORDER BY p.${sortBy} ${sortOrder}
+      ORDER BY p.${sortBy} ${sortOrder}, p.product_id ${sortOrder}
       LIMIT ? OFFSET ?
     `;
 
-      const dataParams = [...params, limit, offset];
+      // MySQL 8 rejects numeric LIMIT/OFFSET bindings from execute(); strings work.
+      const dataParams = [...params, String(limit), String(offset)];
       const [rows] = await db.execute(query, dataParams);
 
       /* ===============================
@@ -1200,6 +1208,14 @@ class ProductModel {
           LIMIT 1
         )
 
+      /* The rating filter reads rev, so the count joins it too. */
+      LEFT JOIN (
+        SELECT product_id, ROUND(AVG(rating), 1) AS avg_rating
+        FROM product_reviews
+        WHERE status = 'approved'
+        GROUP BY product_id
+      ) rev ON p.product_id = rev.product_id
+
       ${whereClause}
       `,
         params,
@@ -1214,6 +1230,58 @@ class ProductModel {
       console.error("Error fetching products:", error);
       throw error;
     }
+  }
+
+  /**
+   * Listed products by id, for a notification's product collection: the same
+   * listing rules and cheapest visible variant as getProductsByCategory, in the
+   * requested order. Unknown or unlisted ids are omitted.
+   */
+  async getListedProductsByIds(ids) {
+    if (!ids.length) return [];
+    const placeholders = ids.map(() => "?").join(",");
+    const [rows] = await db.query(
+      `
+      SELECT
+        p.product_id,
+        p.product_name,
+        p.brand_name,
+        p.category_id,
+        p.subcategory_id,
+        p.is_discount_eligible,
+        v.variant_id,
+        v.mrp,
+        v.sale_price AS original_price,
+        v.sale_price AS final_price,
+        NULL AS campaign_id,
+        pi.image_url,
+        pi.updated_at AS image_updated_at
+      FROM eproducts p
+      JOIN product_variants v
+        ON v.variant_id = (
+          SELECT pv2.variant_id
+          FROM product_variants pv2
+          WHERE pv2.product_id = p.product_id
+            AND pv2.is_visible = 1
+            AND pv2.sale_price IS NOT NULL
+          ORDER BY pv2.sale_price ASC, pv2.variant_id ASC
+          LIMIT 1
+        )
+      LEFT JOIN product_images pi
+        ON pi.image_id = (
+          SELECT MIN(pi2.image_id) FROM product_images pi2
+          WHERE pi2.product_id = p.product_id AND pi2.type = 'gallery'
+        )
+      WHERE p.product_id IN (${placeholders})
+        AND p.status = 'approved'
+        AND p.is_visible = 1
+        AND p.is_deleted = 0
+        AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
+      ORDER BY FIELD(p.product_id, ${placeholders})
+      `,
+      [...ids, ...ids],
+    );
+    return rows;
   }
 
   async getProductsBySubcategory({

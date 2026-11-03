@@ -169,7 +169,8 @@ test("destinations use the app's real nested navigator paths", () => {
   assert.equal(byKey.bus_search.route.path.join(">"), "App>Home>DineOutModule>BookingHomeScreen");
   assert.equal(byKey.service.route.path.join(">"), "App>Home>ServicesModule>ServiceDescription");
   assert.equal(byKey.fitness_dashboard.route.path.join(">"), "App>RewardStack>Dashboard");
-  assert.equal(byKey.product_collection.mobileRoute, "not_in_app");
+  assert.equal(byKey.product_collection.route.path.join(">"), "App>Home>ProductModule>CampaignProducts");
+  assert.equal(byKey.announcements.route, null); // still no screen in the app
   const service = resolveDestination({ module: "service", destinationType: "service", destinationId: "5" });
   assert.deepEqual(service.target_route.params, { serviceId: 5 });
 });

@@ -69,7 +69,7 @@ export interface AnalyticsData {
   opensAvailable: boolean;
 }
 
-export interface CatalogOption { category_id?: number; service_id?: number; banner_id?: number; name?: string; category_name?: string; title?: string; price?: number | null; image_url?: string | null; service_image?: string | null; cover_image?: string | null }
+export interface CatalogOption { category_id?: number; service_id?: number; banner_id?: number; campaign_id?: number; content_id?: number; banner_image?: string | null; product_count?: number; name?: string; category_name?: string; title?: string; price?: number | null; image_url?: string | null; service_image?: string | null; cover_image?: string | null }
 
 export const notificationApi = {
   meta: () => unwrap<ManagerMeta>(api.get(`${BASE}/meta`)),
@@ -90,7 +90,7 @@ export const notificationApi = {
     unwrap<{ user_id: number; name: string; email: string | null; company_id: number; company_name: string | null }[]>(api.get(`${BASE}/audience/employees`, { params })),
 
   catalogProducts: (params: Record<string, string | number>) => unwrap<CatalogProduct[]>(api.get(`${BASE}/catalog/products`, { params })),
-  catalogOptions: (kind: "categories" | "services" | "service-categories" | "service-banners", params: Record<string, string> = {}) =>
+  catalogOptions: (kind: "categories" | "services" | "service-categories" | "service-banners" | "promotions" | "promotional-banners", params: Record<string, string> = {}) =>
     unwrap<CatalogOption[]>(api.get(`${BASE}/catalog/${kind}`, { params })),
   media: (params: Record<string, string | number>) => unwrap<Paged<MediaAsset>>(api.get(`${BASE}/media`, { params })),
   uploadMedia: (file: File, language: Language | "", label: string) => {

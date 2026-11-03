@@ -24,6 +24,9 @@ const PAYMENTS = [APP, "Home", "PaymentsModule"];
 const BUS = [APP, "Home", "DineOutModule"];
 
 const route = (path, params) => ({ path, params: params || (() => ({})) });
+// The app's product landing (CampaignProducts) shows `bannerUrl` above the
+// products; callers pass only a verified CDN image URL.
+const landing = (params, title, bannerUrl) => ({ ...params, title: title || "", ...(bannerUrl ? { bannerUrl } : {}) });
 
 const MODULE_FALLBACK_ROUTES = {
   common: [APP, "Notification"],
@@ -51,7 +54,9 @@ const DESTINATIONS = [
   { key: "ecommerce_home", module: "ecommerce", label: "Shop home", route: route([...PRODUCT, "Home"]), deepLink: "rp://shop" },
   { key: "product", module: "ecommerce", label: "Product details", entity: "product", route: route([APP, "ProductDetails"], ({ id }) => ({ productId: Number(id) })), deepLink: "rp://product/{id}" },
   { key: "product_category", module: "ecommerce", label: "Product category", entity: "category", route: route([...PRODUCT, "Category"], ({ id, title }) => ({ categoryId: Number(id), title: title || "" })), deepLink: "rp://category/{id}" },
-  { key: "product_collection", module: "ecommerce", label: "Selected products (collection)", entity: "product_list", route: null, deepLink: "rp://collection?ids={ids}" },
+  { key: "product_collection", module: "ecommerce", label: "Selected products (collection)", entity: "product_list", route: route([...PRODUCT, "CampaignProducts"], ({ ids, title, bannerUrl }) => landing({ productIds: ids.map(String).join(",") }, title, bannerUrl)), deepLink: "rp://collection?ids={ids}" },
+  { key: "promotion", module: "ecommerce", label: "Promotion (offer campaign)", entity: "offer_campaign", route: route([...PRODUCT, "CampaignProducts"], ({ id, title, bannerUrl }) => landing({ campaignId: Number(id) }, title, bannerUrl)), deepLink: "rp://promotion/{id}" },
+  { key: "promotional_banner", module: "ecommerce", label: "Promotional banner", entity: "promo_content", route: route([...PRODUCT, "CampaignProducts"], ({ id, title, bannerUrl }) => landing({ contentId: Number(id) }, title, bannerUrl)), deepLink: "rp://offers/{id}" },
   { key: "cart", module: "ecommerce", label: "Cart", route: route([APP, "Cart"]), deepLink: "rp://cart" },
   { key: "order_details", module: "ecommerce", label: "My orders (owner only)", route: route([APP, "Orders"]), deepLink: "rp://order/{id}", campaignAllowed: false },
 
@@ -137,6 +142,10 @@ function validateDestination({ module, destinationType, destinationId, productId
   if (campaign && !destination.campaignAllowed) {
     return { destination, errors: [`"${destination.label}" is private to one employee and cannot be used in a campaign.`] };
   }
+  // A campaign must open what the RM chose, never a silent fallback.
+  if (campaign && !destination.route) {
+    return { destination, errors: [`The app has no "${destination.label}" screen yet. Choose another destination.`] };
+  }
   if (destination.module !== "common" && destination.module !== module) {
     return { destination, errors: [`"${destination.label}" belongs to a different module.`] };
   }
@@ -153,13 +162,13 @@ function validateDestination({ module, destinationType, destinationId, productId
  * params; fallback_route is used when the target is missing or unavailable.
  * FCM data values must be strings, so buildPushMessage JSON-encodes objects.
  */
-function resolveDestination({ module, destinationType, destinationId, productIds = [], title = "" }) {
+function resolveDestination({ module, destinationType, destinationId, productIds = [], title = "", bannerUrl = null }) {
   const destination = getDestination(destinationType);
   if (!destination) return null;
 
   const fallback = { path: fallbackPath(module), params: {} };
   const target = destination.route
-    ? { path: destination.route.path, params: destination.route.params({ id: destinationId, ids: productIds, title }) }
+    ? { path: destination.route.path, params: destination.route.params({ id: destinationId, ids: productIds, title, bannerUrl }) }
     : fallback;
   const deepLink = destination.deepLink
     .replace("{id}", encodeURIComponent(String(destinationId || "")))

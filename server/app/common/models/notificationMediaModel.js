@@ -1,5 +1,19 @@
 const db = require("../../../config/database");
 const { getPublicUrl } = require("../../../utils/publicUrl");
+const ContentZoneModel = require("../../../models/contentZoneModel");
+const CampaignModel = require("../../../models/campaignModel");
+
+// CMS banners whose landing lists products (the app's CampaignProducts screen).
+const PROMO_ZONES = ["offers_banner", "promotional_banner", "brand_promotional_banner"];
+// Candidate offer campaigns; each is then checked with the same product query
+// the app's landing uses (flash sales add their own window and stock rules).
+const OFFER_CAMPAIGN_ACTIVE = `c.status = 'active'
+  AND (c.start_at IS NULL OR c.start_at <= NOW()) AND (c.end_at IS NULL OR c.end_at >= NOW())
+  AND EXISTS (SELECT 1 FROM campaign_items ci WHERE ci.campaign_id = c.campaign_id)`;
+
+async function offerCampaignProductCount(campaignId) {
+  return (await CampaignModel.getCampaignProducts(campaignId)).length;
+}
 
 // Same rules the shop uses before a product is shown to employees.
 const PRODUCT_LISTED = "p.status = 'approved' AND p.is_visible = 1 AND p.is_deleted = 0";
@@ -119,7 +133,30 @@ class NotificationMediaModel {
     return rows.map((row) => ({ ...row, image_url: getPublicUrl(row.image_url) }));
   }
 
-  /** Does the destination entity exist and may it be promoted right now? */
+  async listOfferCampaigns() {
+    const [rows] = await db.query(
+      `SELECT c.campaign_id, c.title, c.campaign_type, c.banner_image, c.end_at
+       FROM campaigns c WHERE ${OFFER_CAMPAIGN_ACTIVE} ORDER BY c.display_order, c.campaign_id DESC LIMIT 100`,
+    );
+    const counted = await Promise.all(rows.map(async (row) => ({
+      ...row, banner_image: getPublicUrl(row.banner_image), product_count: await offerCampaignProductCount(row.campaign_id),
+    })));
+    return counted.filter((row) => row.product_count > 0);
+  }
+
+  async listPromotionalBanners() {
+    const { entries } = await ContentZoneModel.getEntries({ module: "product", status: "active", pageSize: 100 });
+    return entries.filter((entry) => PROMO_ZONES.includes(entry.zone)).map((entry) => ({
+      content_id: entry.content_id, title: entry.title, zone: entry.zone, end_at: entry.end_at,
+      image_url: entry.image_url ? getPublicUrl(entry.image_url) : null,
+    }));
+  }
+
+  /**
+   * Does the destination entity exist and may it be promoted right now?
+   * `label` names it for the CRM and the landing title; `bannerUrl` is its own
+   * banner, used when the campaign has no image.
+   */
   async entityStatus(entity, id, productIds = []) {
     if (entity === "product" || entity === "product_list") {
       const ids = entity === "product" ? [Number(id)] : productIds;
@@ -127,22 +164,36 @@ class NotificationMediaModel {
       const available = found.filter((product) => product.available);
       return {
         ok: available.length > 0 && (entity === "product_list" || available.length === 1),
+        label: entity === "product" ? found[0]?.product_name || null : null,
         products: found,
         missing: ids.filter((pid) => !found.some((product) => Number(product.product_id) === Number(pid))),
         unavailable: found.filter((product) => !product.available).map((product) => product.product_id),
       };
     }
     if (entity === "category") {
-      const [[row]] = await db.query("SELECT 1 AS ok FROM categories WHERE category_id = ? AND status = 1 AND is_visible_in_ui = 1", [id]);
-      return { ok: Boolean(row) };
+      const [[row]] = await db.query("SELECT category_name FROM categories WHERE category_id = ? AND status = 1 AND is_visible_in_ui = 1", [id]);
+      return { ok: Boolean(row), label: row?.category_name || null };
     }
     if (entity === "service") {
-      const [[row]] = await db.query("SELECT 1 AS ok FROM services WHERE id = ? AND status = 1", [id]);
-      return { ok: Boolean(row) };
+      const [[row]] = await db.query("SELECT name FROM services WHERE id = ? AND status = 1", [id]);
+      return { ok: Boolean(row), label: row?.name || null };
     }
     if (entity === "service_category") {
       const [[row]] = await db.query("SELECT 1 AS ok FROM service_categories WHERE id = ? AND status = 1", [id]);
       return { ok: Boolean(row) };
+    }
+    if (entity === "offer_campaign") {
+      const [[row]] = await db.query(`SELECT c.title, c.banner_image FROM campaigns c WHERE c.campaign_id = ? AND ${OFFER_CAMPAIGN_ACTIVE}`, [id]);
+      const ok = Boolean(row) && (await offerCampaignProductCount(id)) > 0;
+      return { ok, label: row?.title || null, bannerUrl: ok && row.banner_image ? getPublicUrl(row.banner_image) : null };
+    }
+    if (entity === "promo_content") {
+      const entry = await ContentZoneModel.getEntryById(id).catch((error) => {
+        if (error.statusCode === 404) return null;
+        throw error;
+      });
+      const ok = Boolean(entry) && entry.status === "active" && entry.module === "product" && PROMO_ZONES.includes(entry.zone);
+      return { ok, label: entry?.title || null, bannerUrl: ok && entry.image_url ? getPublicUrl(entry.image_url) : null };
     }
     if (entity === "published_quiz") {
       const [[row]] = await db.query("SELECT COUNT(*) AS total FROM quiz_questions WHERE active = 1");

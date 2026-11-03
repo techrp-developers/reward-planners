@@ -57,6 +57,37 @@ test("resolved destinations give the app a screen, typed params, deep link and f
   assert.equal(resolveDestination({ module: "wallet", destinationType: "wallet" }).fallback_screen, "WalletHistory");
 });
 
+test("promotions and collections open the product landing; unrouted destinations are refused for campaigns", () => {
+  const promo = resolveDestination({ module: "ecommerce", destinationType: "promotion", destinationId: "16", title: "Flash Deals" });
+  assert.deepEqual(promo.target_route, { path: ["App", "Home", "ProductModule", "CampaignProducts"], params: { campaignId: 16, title: "Flash Deals" } });
+  const banner = resolveDestination({ module: "ecommerce", destinationType: "promotional_banner", destinationId: "13", title: "Navratri", bannerUrl: "https://cdn.rewardplanners.com/x.jpg" });
+  assert.deepEqual(banner.target_route.params, { contentId: 13, title: "Navratri", bannerUrl: "https://cdn.rewardplanners.com/x.jpg" });
+  const category = resolveDestination({ module: "ecommerce", destinationType: "product_category", destinationId: "3", title: "Beauty" });
+  assert.deepEqual(category.target_route.params, { categoryId: 3, title: "Beauty" });
+
+  assert.match(validateDestination({ module: "common", destinationType: "events" }).errors[0], /no "Events" screen/);
+  assert.match(validateDestination({ module: "service", destinationType: "service_category", destinationId: "2" }).errors[0], /no "Service category" screen/);
+  assert.deepEqual(validateDestination({ module: "common", destinationType: "events" }, { campaign: false }).errors, []);
+  assert.ok(DESTINATIONS.filter((item) => ["promotion", "promotional_banner"].includes(item.key)).every((item) => item.entity));
+});
+
+test("the landing title is the chosen record's name, never the internal campaign name; banners must be on the CDN", async () => {
+  const promo = { ...campaign, name: "INTERNAL-Q4-blast", content_type: "standard", media: null, destination_type: "promotion", destination_id: "16", catalog_product_ids: null };
+  const withBanner = await buildDeliveryContext(promo, {
+    media: { entityStatus: async () => ({ ok: true, label: "Flash Deals", bannerUrl: "https://cdn.rewardplanners.com/promo.jpg" }) },
+  });
+  assert.deepEqual(withBanner.destination.target_route.params, { campaignId: 16, title: "Flash Deals", bannerUrl: "https://cdn.rewardplanners.com/promo.jpg" });
+  assert.doesNotMatch(JSON.stringify(withBanner.destination), /INTERNAL/);
+
+  const offHost = await buildDeliveryContext(promo, {
+    media: { entityStatus: async () => ({ ok: true, label: null, bannerUrl: "https://evil.example.com/promo.jpg" }) },
+  });
+  assert.deepEqual(offHost.destination.target_route.params, { campaignId: 16, title: "Deals" });
+
+  const ended = await buildDeliveryContext(promo, { media: { entityStatus: async () => ({ ok: false, label: null }) } });
+  assert.equal(ended.blocked, "destination_unavailable");
+});
+
 /* ---------- FCM payload ---------- */
 
 test("rich payload keeps legacy keys and uses only string data values", () => {
@@ -241,9 +272,12 @@ test("broken images fall back to text; localized images follow the recipient lan
   const en = buildCampaignPayload(campaign, recipient, { title: "t", message: "m", language: "en" }, context);
   assert.equal(en.image_url, "https://cdn.rewardplanners.com/a.jpg");
   assert.equal(en.metadata.media_id, 11);
-  // No collection screen exists in the app: the shop home is the safe target.
-  assert.equal(en.screen, "Home");
-  assert.deepEqual(en.target_route.path, ["App", "Home", "ProductModule", "Home"]);
+  // The collection opens the app's product landing with the campaign image as its banner.
+  assert.equal(en.screen, "CampaignProducts");
+  assert.deepEqual(en.target_route, {
+    path: ["App", "Home", "ProductModule", "CampaignProducts"],
+    params: { productIds: "1", title: "Deals", bannerUrl: "https://cdn.rewardplanners.com/a.jpg" },
+  });
   assert.equal(en.deep_link, "rp://collection?ids=1");
   const hi = buildCampaignPayload(campaign, recipient, { title: "t", message: "m", language: "hi" }, context);
   assert.equal(hi.image_url, undefined);

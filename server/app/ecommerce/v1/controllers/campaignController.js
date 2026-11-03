@@ -1,5 +1,6 @@
 const db = require("../../../../config/database");
 const CampaignModel = require("../../../../models/campaignModel");
+const ProductModel = require("../models/productModel");
 const RewardModel = require("../../../../models/rewardModel");
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
 function getPublicUrl(path, updatedAt) {
@@ -64,6 +65,54 @@ async function addWishlistStatus(products, userId) {
   return products;
 }
 
+const MAX_PRODUCT_IDS = 50;
+
+/** Price, offer, reward and wishlist fields for product cards. */
+async function presentProducts(products, userId) {
+  const offers = await getOfferCandidates(products.map((product) => product.variant_id));
+
+  const data = await Promise.all(
+    products.map(async (product) => {
+      // Lowest live offer wins, matching what cart and checkout will charge.
+      const best = pickOffer(offers.get(Number(product.variant_id)));
+      const salePrice = best ? best.price : Number(product.final_price);
+      const rules = await RewardModel.getProductRewards(product.product_id, product.variant_id, product.category_id, product.subcategory_id, salePrice, product.is_discount_eligible);
+      const earnCoins = calculateReward(salePrice, rules);
+      const mrp = Number(product.mrp) || 0;
+
+      const mrpDiscountPercent =
+        mrp > 0 ? Math.max(0, Math.round(((mrp - salePrice) / mrp) * 100)) : 0;
+
+      const { image_url, image_updated_at, ...rest } = product;
+
+      return {
+        ...rest,
+
+        image: getPublicUrl(image_url, image_updated_at),
+
+        price: `₹${salePrice.toFixed(2)}`,
+        originalPrice: mrp ? `₹${mrp.toFixed(2)}` : null,
+
+        discount: `${mrpDiscountPercent}%`,
+        campaign_id: best ? best.campaignId : product.campaign_id,
+        content_id: best ? best.contentId : null,
+
+        reward: {
+          enabled: earnCoins > 0,
+          coins: earnCoins,
+          label: earnCoins > 0 ? `Earn up to ${earnCoins} coins` : null,
+        },
+
+        redeem_coins: 0,
+        rp_price: null,
+      };
+    }),
+  );
+
+  await addWishlistStatus(data, userId);
+  return data;
+}
+
 class CampaignController {
   // ========================================user==========================================
   async getHomeCampaigns(req, res) {
@@ -117,49 +166,7 @@ class CampaignController {
 
   async getCampaignProducts(req, res) {
     try {
-      const products = await CampaignModel.getCampaignProducts(req.params.id);
-      const offers = await getOfferCandidates(products.map((product) => product.variant_id));
-
-      const data = await Promise.all(
-        products.map(async (product) => {
-          // Lowest live offer wins, matching what cart and checkout will charge.
-          const best = pickOffer(offers.get(Number(product.variant_id)));
-          const salePrice = best ? best.price : Number(product.final_price);
-          const rules = await RewardModel.getProductRewards(product.product_id, product.variant_id, product.category_id, product.subcategory_id, salePrice, product.is_discount_eligible);
-          const earnCoins = calculateReward(salePrice, rules);
-          const mrp = Number(product.mrp) || 0;
-
-          const mrpDiscountPercent =
-            mrp > 0 ? Math.max(0, Math.round(((mrp - salePrice) / mrp) * 100)) : 0;
-
-          const { image_url, image_updated_at, ...rest } = product;
-
-          return {
-            ...rest,
-
-            image: getPublicUrl(image_url, image_updated_at),
-
-            price: `₹${salePrice.toFixed(2)}`,
-            originalPrice: mrp ? `₹${mrp.toFixed(2)}` : null,
-
-            discount: `${mrpDiscountPercent}%`,
-            campaign_id: best ? best.campaignId : product.campaign_id,
-            content_id: best ? best.contentId : null,
-
-            reward: {
-              enabled: earnCoins > 0,
-              coins: earnCoins,
-              label: earnCoins > 0 ? `Earn up to ${earnCoins} coins` : null,
-            },
-
-            redeem_coins: 0,
-            rp_price: null,
-          };
-        }),
-      );
-
-      await addWishlistStatus(data, req.user?.user_id);
-
+      const data = await presentProducts(await CampaignModel.getCampaignProducts(req.params.id), req.user?.user_id);
       return res.json({
         success: true,
         count: data.length,
@@ -171,6 +178,22 @@ class CampaignController {
         success: false,
         message: err.message,
       });
+    }
+  }
+
+  // GET /v1/product/by-ids?ids=12,34 - a notification's product collection.
+  // Same item shape as campaign products, in the requested order; ids that are
+  // unknown or not currently listed are left out.
+  async getProductsByIds(req, res) {
+    const ids = String(req.query.ids || "").split(",").map((id) => id.trim()).filter(Boolean);
+    if (!ids.length || ids.length > MAX_PRODUCT_IDS || !ids.every((id) => /^[1-9][0-9]{0,9}$/.test(id))) {
+      return res.status(400).json({ success: false, message: `ids must be 1-${MAX_PRODUCT_IDS} comma-separated product ids` });
+    }
+    try {
+      const data = await presentProducts(await ProductModel.getListedProductsByIds([...new Set(ids.map(Number))]), req.user?.user_id);
+      return res.json({ success: true, count: data.length, data });
+    } catch (err) {
+      return res.status(err.statusCode || 500).json({ success: false, message: err.message });
     }
   }
 }

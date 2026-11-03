@@ -1326,6 +1326,8 @@ class RmNotificationController {
         services: () => MediaModel.listServices({ search: String(req.query.search || "").trim().slice(0, 80) }),
         "service-categories": () => MediaModel.listServiceCategories(),
         "service-banners": () => MediaModel.listServiceBanners(),
+        promotions: () => MediaModel.listOfferCampaigns(),
+        "promotional-banners": () => MediaModel.listPromotionalBanners(),
       };
       if (!loaders[kind]) return res.status(404).json({ success: false, message: "Unknown catalog list" });
       return res.json({ success: true, data: await loaders[kind]() });

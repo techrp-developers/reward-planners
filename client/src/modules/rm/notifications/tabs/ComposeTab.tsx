@@ -116,6 +116,7 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
   const [loading, setLoading] = useState(Boolean(campaignId));
   const [lang, setLang] = useState<Language>("en");
   const [previewLang, setPreviewLang] = useState<Language>("en");
+  const [destinationName, setDestinationName] = useState<string | null>(null);
   const [rendered, setRendered] = useState<Record<Language, RenderedPreview> | null>(null);
   const [audience, setAudience] = useState<AudiencePreview | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -407,13 +408,18 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
     catalog_product_ids: form.catalog_product_ids, media: form.media,
   };
 
-  const previewDestination = meta.destinations.find((item) => item.key === form.destination_type) || null;
+  // A catalog campaign opens its single product, or a collection of them.
+  const catalogCount = form.catalog_product_ids.length;
+  const previewDestination = meta.destinations.find((item) => item.key === (form.content_type === "catalog" ? (catalogCount === 1 ? "product" : "product_collection") : form.destination_type)) || null;
   const previewNotes = campaignPreviewNotes({
     title: shown?.title || form.title_en, message: shown?.message || form.body_en,
     contentType: form.content_type, hasImage: Boolean(previewImage), category: form.category,
-    destinationLabel: previewDestination?.label || (form.content_type === "catalog" ? "Selected products" : null),
-    destinationInApp: form.content_type === "catalog" ? false : previewDestination ? previewDestination.mobileRoute === "verified" : undefined,
+    destinationLabel: form.content_type === "catalog" && !catalogCount ? null : previewDestination?.label || null,
+    destinationInApp: previewDestination ? previewDestination.mobileRoute === "verified" : undefined,
+    destinationName: form.content_type === "catalog" ? (catalogCount > 1 ? `${catalogCount} products` : null) : destinationName,
+    needsRecord: form.content_type !== "catalog" && Boolean(previewDestination?.entity && previewDestination.entity !== "published_quiz"),
   });
+
 
   return (
     <div className="grid gap-5 xl:grid-cols-[1.5fr_1fr]">
@@ -490,6 +496,7 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
         </Card>
 
         <MediaDestinationSection
+          onDestinationName={setDestinationName}
           meta={meta}
           editable={editable}
           module={form.module}
@@ -712,10 +719,9 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
             <LanguageTabs value={previewLang} onChange={setPreviewLang} approved={form.approved_languages} available={{ hi: Boolean(form.title_hi && form.body_hi), mr: Boolean(form.title_mr && form.body_mr) }} />
             {shown?.error
               ? <Notice tone="red">{shown.error}</Notice>
-              : <NotificationPreviews title={shown?.title || form.title_en} message={shown?.message || form.body_en} imageUrl={previewImage}
+              : <NotificationPreviews title={shown?.title || form.title_en} message={shown?.message || form.body_en} imageUrl={previewImage} tapOpens={previewNotes.tapDestination}
                   note={shown?.fallback ? `An employee who chose ${LANGUAGE_LABELS[previewLang]} receives English text (translation missing or not approved).` : "{{first_name}} is shown as “Asha”."} />}
             <dl className="space-y-1 text-xs text-gray-600">
-              <div className="flex justify-between gap-3"><dt className="font-bold text-gray-500">Tap opens</dt><dd data-testid="preview-tap-destination">{previewNotes.tapDestination}</dd></div>
               <div className="flex justify-between gap-3"><dt className="font-bold text-gray-500">Campaign name</dt><dd>Internal only, never sent</dd></div>
             </dl>
             {previewNotes.warnings.length > 0 && (
