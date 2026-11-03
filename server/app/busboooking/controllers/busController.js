@@ -290,7 +290,8 @@ const searchBuses = async (req, res) => {
         |--------------------------------------------------------------------------
         */
 
-        if (!isValidTime(journeyTime)) {
+        const effectiveJourneyTime = journeyTime && isValidTime(journeyTime) ? journeyTime : "00:00";
+        if (journeyTime && !isValidTime(journeyTime)) {
 
             return res
                 .status(400)
@@ -417,6 +418,22 @@ const searchBuses = async (req, res) => {
                 apiData.Error.ErrorCode
             ) !== 0
         ) {
+            const errCode = Number(apiData.Error.ErrorCode);
+            const errMsg = String(apiData.Error.ErrorMessage || "");
+            if (errCode === 100 || /no (data|bus) found/i.test(errMsg)) {
+                return res.status(200).json({
+                    success: true,
+                    count: 0,
+                    buses: [],
+                    message: "No buses found for this route and date",
+                    search: {
+                        sourceCity: sourceCity?.city_name || String(sourceCityCode),
+                        destinationCity: destinationCity?.city_name || String(destinationCityCode),
+                        journeyDate,
+                        journeyTime: effectiveJourneyTime,
+                    }
+                });
+            }
 
             return res
                 .status(400)
@@ -653,11 +670,9 @@ const getSeatLayout = async (req, res) => {
         |--------------------------------------------------------------------------
         */
 
-        const {
-            traceId,
-            srdvIndex,
-            resultIndex
-        } = req.body;
+        const traceId = req.body?.traceId;
+        const srdvIndex = req.body?.srdvIndex || req.body?.resultIndex;
+        const resultIndex = req.body?.resultIndex || req.body?.srdvIndex;
 
 
         console.log("======================================");
@@ -1172,11 +1187,9 @@ const getBoardingDroppingPoints = async (
     |--------------------------------------------------------------------------
     */
 
-    const {
-      traceId,
-      srdvIndex,
-      resultIndex,
-    } = req.body;
+    const traceId = req.body?.traceId;
+    const srdvIndex = req.body?.srdvIndex || req.body?.resultIndex;
+    const resultIndex = req.body?.resultIndex || req.body?.srdvIndex;
 
 
     console.log(
@@ -1882,6 +1895,10 @@ const blockSeat =
               ...passenger,
               Email:
                 passengerEmail,
+              IdType:
+                passenger?.IdType || "PanCard",
+              IdNumber:
+                passenger?.IdNumber || "ABCDE1234F",
             };
           }
         );

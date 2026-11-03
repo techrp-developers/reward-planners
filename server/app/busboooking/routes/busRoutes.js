@@ -21,6 +21,9 @@ const router =
 const auth =
     require("../middlewares/auth");
 
+const optionalAuth =
+    auth.optionalAuth || auth;
+
 const customerOnly = (req, res, next) => {
     if (req.user?.auth_source !== "customer") {
         return res.status(403).json({
@@ -169,8 +172,7 @@ router.get(
 
 router.post(
     "/search",
-    auth,
-    customerOnly,
+    optionalAuth,
     providerReadLimiter,
     searchBuses
 );
@@ -184,8 +186,7 @@ router.post(
 
 router.post(
     "/seat-layout",
-    auth,
-    customerOnly,
+    optionalAuth,
     providerReadLimiter,
     getSeatLayout
 );
@@ -199,8 +200,7 @@ router.post(
 
 router.post(
     "/boarding-dropping-points",
-    auth,
-    customerOnly,
+    optionalAuth,
     providerReadLimiter,
     getBoardingDroppingPoints
 );
