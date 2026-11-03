@@ -7,7 +7,7 @@ class CategoryDocumentModel {
             const documentType = data.documentType ? data.documentType : ''; 
 
             const [result] = await db.execute(
-                `INSERT INTO category_documents (category_id,document_type,status created_at) VALUES (?,?,1, NOW())`, 
+                `INSERT INTO category_documents (category_id, document_type_id, status, created_at) VALUES (?, ?, 1, NOW())`, 
                 [categoryID,documentType]
             );
 
