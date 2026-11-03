@@ -78,19 +78,15 @@ const OrderDetail: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
-      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#25103d] via-[#64248c] to-[#b72f72] p-6 text-white shadow-[0_20px_55px_rgba(83,31,111,0.24)] sm:p-8">
-        <div className="absolute -right-12 -top-20 h-56 w-56 rounded-full bg-white/10 blur-2xl" />
-        <div className="relative flex flex-col justify-between gap-6 sm:flex-row sm:items-center">
-          <div>
-            <button onClick={() => navigate("/vendor/orders/summary")} className="mb-5 inline-flex items-center gap-2 text-xs font-bold text-purple-100 transition hover:text-white"><FiArrowLeft /> Back to all orders</button>
-            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-purple-200">Order details</p>
-            <div className="mt-2 flex flex-wrap items-center gap-3"><h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">#{order.order_ref}</h1><button onClick={() => void copyReference()} aria-label="Copy order reference" className="rounded-lg border border-white/15 bg-white/10 p-2 text-purple-100 hover:bg-white/20"><FiCopy size={14} /></button><span className="text-xs font-semibold text-purple-100">{copied ? "Copied" : "Copy reference"}</span></div>
-            <p className="mt-2 flex items-center gap-2 text-sm text-purple-100/80"><FiCalendar /> Placed {dateTime(order.created_at)}</p>
-          </div>
-          <div className="rounded-2xl border border-white/15 bg-white/10 p-5 backdrop-blur-sm sm:min-w-56">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-purple-200">Vendor total</p><p className="mt-1 text-3xl font-extrabold">{money(order.vendor_total)}</p>
-            <span className={`mt-3 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold capitalize ${status.badge}`}><StatusIcon />{order.shipping_status}</span>
-          </div>
+      <section className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <button onClick={() => navigate("/vendor/orders/summary")} className="mb-3 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-900"><FiArrowLeft /> Back to all orders</button>
+          <div className="flex flex-wrap items-center gap-3"><h1 className="text-2xl font-semibold tracking-tight text-slate-900">Order #{order.order_ref}</h1><button onClick={() => void copyReference()} aria-label="Copy order reference" className="rounded-md p-2 text-slate-400 hover:bg-purple-50 hover:text-[#852BAF]"><FiCopy size={14} /></button><span className="text-xs text-slate-500">{copied ? "Copied" : "Copy reference"}</span></div>
+          <p className="mt-1 flex items-center gap-2 text-sm text-slate-500"><FiCalendar /> Placed {dateTime(order.created_at)}</p>
+        </div>
+        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm sm:min-w-56">
+          <p className="text-sm font-medium text-slate-500">Vendor total</p><p className="mt-1 text-2xl font-semibold text-gray-900">{money(order.vendor_total)}</p>
+          <span className={`mt-3 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold capitalize ${status.badge}`}><StatusIcon />{order.shipping_status}</span>
         </div>
       </section>
 
@@ -102,7 +98,7 @@ const OrderDetail: React.FC = () => {
           <div className="divide-y divide-gray-100 px-6">
             {items.map((item) => (
               <article key={item.order_item_id} className="flex flex-col gap-4 py-5 sm:flex-row sm:items-center">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-gray-50 to-purple-50">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-gray-100 bg-gray-50">
                   {item.image ? <img src={item.image} alt="" className="h-full w-full object-cover" /> : <FiPackage className="text-purple-300" size={23} />}
                 </div>
                 <div className="min-w-0 flex-1"><p className="font-extrabold text-gray-900">{item.product_name}</p><p className="mt-0.5 text-xs font-semibold text-gray-400">{item.brand_name}</p><div className="mt-2 flex flex-wrap gap-1.5">{Object.entries(item.attributes || {}).map(([key, value]) => <span key={key} className="rounded-lg border border-purple-100 bg-purple-50 px-2 py-1 text-[10px] font-bold text-purple-700">{key}: {value}</span>)}</div></div>
@@ -110,13 +106,13 @@ const OrderDetail: React.FC = () => {
               </article>
             ))}
           </div>
-          <div className="m-5 rounded-2xl bg-gradient-to-r from-purple-50 to-pink-50 p-5"><div className="flex justify-between text-sm font-semibold text-gray-500"><span>Items subtotal</span><span>{money(summary.item_total)}</span></div><div className="my-3 h-px bg-purple-100" /><div className="flex items-end justify-between"><span className="font-extrabold text-gray-900">Your order total</span><span className="text-2xl font-extrabold text-[#852BAF]">{money(summary.vendor_total)}</span></div></div>
+          <div className="m-5 rounded-xl bg-gray-50 p-5"><div className="flex justify-between text-sm font-semibold text-gray-500"><span>Items subtotal</span><span>{money(summary.item_total)}</span></div><div className="my-3 h-px bg-purple-100" /><div className="flex items-end justify-between"><span className="font-extrabold text-gray-900">Your order total</span><span className="text-2xl font-extrabold text-[#852BAF]">{money(summary.vendor_total)}</span></div></div>
         </section>
 
         <aside className="space-y-5">
           <section className="rounded-3xl border border-gray-100 bg-white p-6 shadow-[0_10px_35px_rgba(52,22,68,0.07)]"><div className="mb-5 flex items-center gap-3"><div className="rounded-xl bg-purple-50 p-2.5 text-[#852BAF]"><FiUser /></div><h2 className="font-extrabold text-gray-900">Customer</h2></div><p className="font-extrabold text-gray-900">{customer.name}</p><a href={`mailto:${customer.email}`} className="mt-3 flex items-center gap-3 text-sm text-gray-500 hover:text-[#852BAF]"><FiMail className="shrink-0" />{customer.email}</a><a href={`tel:${customer.phone}`} className="mt-3 flex items-center gap-3 text-sm text-gray-500 hover:text-[#852BAF]"><FiPhone className="shrink-0" />{customer.phone}</a></section>
-          <section className="rounded-3xl border border-gray-100 bg-white p-6 shadow-[0_10px_35px_rgba(52,22,68,0.07)]"><div className="mb-5 flex items-center gap-3"><div className="rounded-xl bg-pink-50 p-2.5 text-[#FC3F78]"><FiMapPin /></div><div><h2 className="font-extrabold text-gray-900">Shipping address</h2><p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{address.type || "Delivery"}</p></div></div><p className="font-bold text-gray-800">{address.name}</p><p className="mt-2 text-sm leading-6 text-gray-500">{addressLine}</p>{address.landmark && <p className="mt-2 rounded-xl bg-gray-50 px-3 py-2 text-xs text-gray-500">Near {address.landmark}</p>}<p className="mt-3 flex items-center gap-2 text-sm font-semibold text-gray-600"><FiPhone />{address.phone}</p></section>
-          <section className="rounded-3xl border border-gray-100 bg-white p-6 shadow-[0_10px_35px_rgba(52,22,68,0.07)]"><div className="mb-4 flex items-center gap-3"><div className="rounded-xl bg-indigo-50 p-2.5 text-indigo-600"><FiTruck /></div><h2 className="font-extrabold text-gray-900">Shipment</h2></div>{order.awb_number ? <><p className="text-xs font-bold uppercase tracking-widest text-gray-400">{order.courier_name || "Courier"}</p><p className="mt-2 rounded-xl bg-indigo-50 px-3 py-2.5 font-mono text-sm font-bold text-indigo-700">AWB {order.awb_number}</p></> : <p className="text-sm leading-6 text-gray-500">Tracking details will appear here once this order is shipped.</p>}</section>
+          <section className="rounded-3xl border border-gray-100 bg-white p-6 shadow-[0_10px_35px_rgba(52,22,68,0.07)]"><div className="mb-5 flex items-center gap-3"><div className="rounded-xl bg-purple-50 p-2.5 text-[#852BAF]"><FiMapPin /></div><div><h2 className="font-extrabold text-gray-900">Shipping address</h2><p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{address.type || "Delivery"}</p></div></div><p className="font-bold text-gray-800">{address.name}</p><p className="mt-2 text-sm leading-6 text-gray-500">{addressLine}</p>{address.landmark && <p className="mt-2 rounded-xl bg-gray-50 px-3 py-2 text-xs text-gray-500">Near {address.landmark}</p>}<p className="mt-3 flex items-center gap-2 text-sm font-semibold text-gray-600"><FiPhone />{address.phone}</p></section>
+          <section className="rounded-3xl border border-gray-100 bg-white p-6 shadow-[0_10px_35px_rgba(52,22,68,0.07)]"><div className="mb-4 flex items-center gap-3"><div className="rounded-xl bg-purple-50 p-2.5 text-[#852BAF]"><FiTruck /></div><h2 className="font-extrabold text-gray-900">Shipment</h2></div>{order.awb_number ? <><p className="text-xs font-bold uppercase tracking-widest text-gray-400">{order.courier_name || "Courier"}</p><p className="mt-2 rounded-xl bg-indigo-50 px-3 py-2.5 font-mono text-sm font-bold text-indigo-700">AWB {order.awb_number}</p></> : <p className="text-sm leading-6 text-gray-500">Tracking details will appear here once this order is shipped.</p>}</section>
         </aside>
       </div>
     </div>

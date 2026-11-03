@@ -153,7 +153,7 @@ function SectionHeader({
 }) {
   return (
     <div className="flex items-center space-x-4 pb-4 border-b border-gray-100 mb-6">
-      <div className="p-4 text-white rounded-2xl" style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)", boxShadow: "0 6px 20px rgba(133,43,175,0.25)" }}>
+      <div className="p-4 text-white rounded-2xl" style={{ background: "linear-gradient(90deg, #852BAF 60%, #C13A8E 100%)", boxShadow: "0 6px 20px rgba(133,43,175,0.25)" }}>
         <Icon className="text-2xl sm:text-3xl" />
       </div>
       <div>
@@ -1006,13 +1006,13 @@ export default function Onboarding() {
     <div className="w-full py-2 sm:py-4">
       {/* Header Section */}
       <div className="mb-8 text-left">
-        <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
           {vendorStatus === "approved" ? "Your " : "Complete Your "}
           <span className="gradient-text-brand">
             {vendorStatus === "approved" ? "Onboarding Details" : "Onboarding"}
           </span>
         </h1>
-        <p className="text-gray-500 mt-2 font-medium">
+        <p className="mt-1 text-sm text-slate-500">
           {vendorStatus === "approved"
             ? "Review the verified business information submitted for your vendor account."
             : "Verify your business details to start selling."}
@@ -1681,7 +1681,7 @@ export default function Onboarding() {
               <button
                 type="submit"
                 className="flex items-center justify-center w-full px-6 py-3 text-lg font-bold text-white rounded-full transition-all duration-300 cursor-pointer hover:opacity-90 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
-                style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)", boxShadow: "0 8px 24px rgba(133,43,175,0.3)" }}
+                style={{ background: "linear-gradient(90deg, #852BAF 60%, #C13A8E 100%)", boxShadow: "0 8px 24px rgba(133,43,175,0.3)" }}
               >
                 Submit Application
               </button>

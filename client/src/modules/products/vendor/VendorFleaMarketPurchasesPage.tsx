@@ -95,7 +95,7 @@ export default function VendorFleaMarketPurchasesPage({ embedded = false }: Vend
       >
         <div
           className="flex items-center justify-center shrink-0 w-11 h-11 rounded-2xl"
-          style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)", boxShadow: "0 6px 18px rgba(133,43,175,0.28)" }}
+          style={{ background: "linear-gradient(90deg, #852BAF 60%, #C13A8E 100%)", boxShadow: "0 6px 18px rgba(133,43,175,0.28)" }}
         >
           <FiBox className="text-lg text-white" />
         </div>
@@ -219,7 +219,7 @@ export default function VendorFleaMarketPurchasesPage({ embedded = false }: Vend
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left">
                 <thead>
-                  <tr style={{ background: "linear-gradient(135deg, rgba(133,43,175,0.06) 0%, rgba(252,63,120,0.03) 100%)" }}>
+                  <tr>
                     {["Date", "Event", "Client Company", "Product", "SKU", "Qty", "Unit Price", "Line Total", "Customer"].map(
                       (h) => (
                         <th key={h} className="px-5 py-4 text-xs font-bold tracking-wider text-gray-500 uppercase">
@@ -285,16 +285,14 @@ export default function VendorFleaMarketPurchasesPage({ embedded = false }: Vend
                   <button
                     disabled={page === 1}
                     onClick={() => setPage((prev) => prev - 1)}
-                    className="px-4 py-2 text-sm font-semibold text-white transition-all rounded-xl active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-                    style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }}
+                    className="px-4 py-2 text-sm font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 transition-all rounded-xl disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     ← Prev
                   </button>
                   <button
                     disabled={page >= totalPages}
                     onClick={() => setPage((prev) => prev + 1)}
-                    className="px-4 py-2 text-sm font-semibold text-white transition-all rounded-xl active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-                    style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }}
+                    className="px-4 py-2 text-sm font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 transition-all rounded-xl disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Next →
                   </button>

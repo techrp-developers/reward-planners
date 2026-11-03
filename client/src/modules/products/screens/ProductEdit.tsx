@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import type { ChangeEvent, FormEvent } from "react";
-import type { ComponentType } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import QuillEditor from "../components/QuillEditor";
 import CustomAttributeBuilder, { type CustomAttributeRow } from "../components/CustomAttributeBuilder";
@@ -8,7 +7,6 @@ import { RETURN_WINDOW_LABEL } from "../utils/returnPolicy";
 import { FaArrowLeft } from "react-icons/fa";
 // import imageCompression from "browser-image-compression";
 
-type IconComp = ComponentType<any>;
 
 interface ImagePreview {
   file: File;
@@ -18,33 +16,6 @@ interface ImagePreview {
 interface VideoPreview {
   file: File;
   url: string;
-}
-
-function SectionHeader({
-  icon: Icon,
-  title,
-  description,
-}: {
-  icon: IconComp;
-  title: string;
-  description?: string;
-}) {
-  return (
-    <div className="flex items-start space-x-3">
-      <div
-        className="p-3 text-white rounded-md"
-        style={{ background: "linear-gradient(to right, #852BAF, #FC3F78)" }}
-      >
-        <Icon />
-      </div>
-      <div>
-        <h3 className="text-lg font-semibold">{title}</h3>
-        {description && (
-          <p className="mt-1 text-sm text-gray-500">{description}</p>
-        )}
-      </div>
-    </div>
-  );
 }
 
 function FormInput(props: {
@@ -101,6 +72,7 @@ import {
 
 // const API_BASE = import.meta.env.VITE_API_URL;
 import { api } from "../../../common/api/api";
+import SectionHeader from "./SectionHeader";
 // const API_BASEIMAGE_URL = "https://rewardplanners.com/api/crm";
 const R2_BASE_URL = "https://cdn.rewardplanners.com";
 
@@ -998,11 +970,11 @@ export default function EditProductPage() {
   const coverImage = product.existingImages?.[0];
 
   return (
-    <div className="p-6 premium-form" style={{ backgroundColor: "#FFFAFB" }}>
+    <div className="premium-form pb-8">
       <div className="p-6 mx-auto bg-white border border-gray-100 shadow-xl rounded-2xl max-w-7xl">
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h1 className="mb-1 text-3xl font-bold text-gray-900">
+            <h1 className="mb-1 text-2xl font-semibold tracking-tight text-slate-900">
               Edit Product Details
             </h1>
             <p className="text-sm text-gray-600">
@@ -1732,7 +1704,7 @@ export default function EditProductPage() {
               disabled={isSubmitting}
               className="flex items-center justify-center w-full px-6 py-3 text-lg font-bold text-white rounded-full transition-all duration-300 cursor-pointer hover:opacity-90 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
               style={{
-                background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
+                background: "linear-gradient(90deg, #852BAF 60%, #C13A8E 100%)",
                 boxShadow: "0 8px 24px rgba(133,43,175,0.3)",
               }}
             >

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../../../common/api/api";
-import { FiArrowUpRight, FiBox, FiCheckCircle, FiClock, FiPackage, FiShoppingCart, FiTrendingUp } from "react-icons/fi";
+import { FiCheckCircle, FiClock, FiTrendingUp } from "react-icons/fi";
 import VendorFleaMarketPurchasesPage from "./VendorFleaMarketPurchasesPage";
 
 interface Order {
@@ -22,16 +22,15 @@ interface OrderListResponse {
   total: number;
 }
 
-const statusStyles: Record<string, { bg: string; text: string }> = {
-  pending:   { bg: "bg-amber-100",   text: "text-amber-800" },
-  paid:      { bg: "bg-blue-100",    text: "text-blue-800" },
-  shipped:   { bg: "bg-indigo-100",  text: "text-indigo-700" },
-  delivered: { bg: "bg-emerald-100", text: "text-emerald-700" },
-  cancelled: { bg: "bg-red-100",     text: "text-red-700" },
+const statusStyles: Record<string, string> = {
+  pending: "bg-amber-50 text-amber-700",
+  paid: "bg-blue-50 text-blue-700",
+  shipped: "bg-blue-50 text-blue-700",
+  delivered: "bg-emerald-50 text-emerald-700",
+  cancelled: "bg-red-50 text-red-700",
 };
 
-const getStatusStyle = (status: string) =>
-  statusStyles[status.toLowerCase()] ?? { bg: "bg-gray-100", text: "text-gray-700" };
+const getStatusStyle = (status: string) => statusStyles[status.toLowerCase()] ?? "bg-gray-100 text-gray-700";
 
 const OrderSummary: React.FC = () => {
   const navigate = useNavigate();
@@ -84,44 +83,17 @@ const OrderSummary: React.FC = () => {
   const activeOrders = orders.filter((order) => !["delivered", "cancelled"].includes(order.shipping_status.toLowerCase())).length;
 
   return (
-    <div>
-      {/* PAGE HEADER */}
-      <div
-        className="relative mb-6 overflow-hidden rounded-3xl p-6 sm:p-7"
-        style={{
-          background: "linear-gradient(120deg, #25103d 0%, #64248c 52%, #b72f72 100%)",
-          boxShadow: "0 18px 45px rgba(83,31,111,0.2)",
-        }}
-      >
-        <div className="absolute -right-12 -top-16 h-48 w-48 rounded-full bg-white/10 blur-2xl" />
-        <div className="relative flex items-center justify-between gap-5">
-          <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-white/15 shadow-lg backdrop-blur-sm">
-              <FiShoppingCart className="text-xl text-white" />
-            </div>
-            <div>
-              <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.22em] text-purple-200">Vendor commerce</p>
-              <h2 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">Orders</h2>
-              <p className="mt-1 text-sm font-medium text-purple-100/80">Track purchases, fulfillment and revenue in one place.</p>
-            </div>
-          </div>
-          <div className="hidden rounded-2xl border border-white/15 bg-white/10 px-5 py-3 text-right backdrop-blur-sm sm:block">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-purple-200">Total orders</p>
-            <p className="mt-0.5 text-2xl font-extrabold text-white">{orders.length}</p>
-          </div>
-        </div>
-      </div>
+    <div className="space-y-5 pb-8">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Orders</h1>
+        <p className="mt-1 text-sm text-slate-500">Track purchases, fulfilment and revenue.</p>
+      </header>
 
-      <div
-        className="mb-6 flex w-full gap-2 rounded-2xl bg-white p-2 sm:w-fit"
-        style={{ border: "1px solid rgba(133,43,175,0.1)", boxShadow: "0 4px 20px rgba(133,43,175,0.06)" }}
-        role="tablist"
-        aria-label="Order channels"
-      >
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Order channels">
         {[
-          { id: "online", label: "Online Orders", Icon: FiShoppingCart },
-          { id: "flea-market", label: "Flea Market Purchases", Icon: FiBox },
-        ].map(({ id, label, Icon }) => {
+          { id: "online", label: "Online orders" },
+          { id: "flea-market", label: "Flea market purchases" },
+        ].map(({ id, label }) => {
           const selected = activeTab === id;
           return (
             <button
@@ -130,12 +102,8 @@ const OrderSummary: React.FC = () => {
               role="tab"
               aria-selected={selected}
               onClick={() => setSearchParams(id === "online" ? {} : { tab: "flea-market" })}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition-all sm:flex-none ${
-                selected ? "text-white shadow-md" : "text-gray-500 hover:bg-purple-50 hover:text-[#852BAF]"
-              }`}
-              style={selected ? { background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" } : undefined}
+              className={`rounded-md px-3 py-2 text-sm font-semibold ${selected ? "bg-[#852BAF] text-white" : "border border-gray-200 bg-white text-gray-600"}`}
             >
-              <Icon size={16} />
               {label}
             </button>
           );
@@ -146,146 +114,82 @@ const OrderSummary: React.FC = () => {
         <VendorFleaMarketPurchasesPage embedded />
       ) : (
       <div className="space-y-5">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <section className="grid gap-4 sm:grid-cols-3">
           {[
-            { label: "Page vendor total", value: formatCurrency(visibleVendorTotal), Icon: FiTrendingUp, tint: "text-purple-700 bg-purple-50" },
-            { label: "Active orders", value: activeOrders.toLocaleString(), Icon: FiClock, tint: "text-amber-700 bg-amber-50" },
-            { label: "Delivered", value: deliveredOrders.toLocaleString(), Icon: FiCheckCircle, tint: "text-emerald-700 bg-emerald-50" },
+            { label: "Total on this page", value: formatCurrency(visibleVendorTotal), Icon: FiTrendingUp, tint: "bg-purple-50 text-[#852BAF]" },
+            { label: "Active", value: activeOrders.toLocaleString(), Icon: FiClock, tint: "bg-amber-50 text-amber-700" },
+            { label: "Delivered", value: deliveredOrders.toLocaleString(), Icon: FiCheckCircle, tint: "bg-emerald-50 text-emerald-700" },
           ].map(({ label, value, Icon, tint }) => (
-            <div key={label} className="rounded-2xl border border-gray-100 bg-white p-5 shadow-[0_8px_30px_rgba(52,22,68,0.06)]">
-              <div className="flex items-center justify-between gap-3">
-                <div><p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">{label}</p><p className="mt-1.5 text-xl font-extrabold text-gray-900">{value}</p></div>
-                <div className={`flex h-11 w-11 items-center justify-center rounded-2xl ${tint}`}><Icon size={19} /></div>
+            <article key={label} className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+              <div className="flex items-start justify-between gap-4">
+                <div><p className="text-sm font-medium text-slate-500">{label}</p><p className="mt-2 text-2xl font-semibold tracking-tight text-gray-900">{value}</p></div>
+                <span className={`flex h-10 w-10 items-center justify-center rounded-lg ${tint}`}><Icon size={18} /></span>
               </div>
-            </div>
+            </article>
           ))}
-        </div>
-      <div
-        className="overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-[0_12px_38px_rgba(52,22,68,0.08)]"
-      >
-        {/* Loader */}
-        {loading && (
-          <div className="flex items-center justify-center py-16">
-            <div
-              className="w-10 h-10 rounded-full border-4 border-purple-100 border-t-[#852BAF] animate-spin"
-            />
-          </div>
-        )}
+        </section>
 
-        {/* Error */}
-        {error && (
-          <div className="m-6 p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 font-medium">
-            {error}
-          </div>
-        )}
+        {error && <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p>}
 
-        {/* Table */}
-        {!loading && !error && (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
-                <thead>
-                  <tr className="border-b border-purple-100 bg-gradient-to-r from-purple-50/90 to-pink-50/60">
-                    {["Order Ref", "Vendor Total", "Status", "Date", "Items", "Action"].map((h) => (
-                      <th key={h} className="px-5 py-4 text-xs font-bold uppercase tracking-wider text-gray-500">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-
-                <tbody className="divide-y divide-gray-50">
-                  {orders.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="py-16 text-center text-sm text-gray-400 font-medium">
-                        No orders found
+        <section className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-left text-sm">
+              <thead className="border-b border-gray-200 bg-gray-50 text-xs text-gray-500">
+                <tr>
+                  <th className="px-5 py-3">Order</th>
+                  <th className="px-5 py-3">Vendor total</th>
+                  <th className="px-5 py-3">Status</th>
+                  <th className="px-5 py-3">Date</th>
+                  <th className="px-5 py-3">Items</th>
+                  <th className="px-5 py-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {loading ? (
+                  <tr><td colSpan={6} className="px-5 py-14 text-center text-gray-500">Loading orders…</td></tr>
+                ) : error ? null : orders.length === 0 ? (
+                  <tr><td colSpan={6} className="px-5 py-14 text-center text-gray-500">No orders found.</td></tr>
+                ) : (
+                  orders.map((order) => (
+                    <tr key={order.vendor_order_id} className="hover:bg-gray-50">
+                      <td className="px-5 py-4">
+                        <p className="font-semibold text-gray-900">#{order.order_ref}</p>
+                        {order.awb_number && <p className="mt-0.5 text-xs text-gray-500">AWB {order.awb_number}{order.courier_name ? ` · ${order.courier_name}` : ""}</p>}
+                      </td>
+                      <td className="px-5 py-4 font-semibold text-gray-800">{formatCurrency(order.vendor_total)}</td>
+                      <td className="px-5 py-4">
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${getStatusStyle(order.shipping_status)}`}>{order.shipping_status}</span>
+                      </td>
+                      <td className="px-5 py-4 text-gray-600">
+                        {new Date(order.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                      </td>
+                      <td className="px-5 py-4 text-gray-600">{order.item_count}</td>
+                      <td className="px-5 py-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/vendor/orders/details/${order.vendor_order_id}`)}
+                          className="inline-flex items-center rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 hover:border-purple-300 hover:text-[#852BAF]"
+                        >
+                          View
+                        </button>
                       </td>
                     </tr>
-                  ) : (
-                    orders.map((order, index) => {
-                      const { bg, text } = getStatusStyle(order.shipping_status);
-                      return (
-                        <tr
-                          key={order.vendor_order_id}
-                          className="row-animate hover:bg-purple-50/30 transition-colors duration-150"
-                          style={{ animationDelay: `${index * 35}ms` }}
-                        >
-                          <td className="px-5 py-5 font-semibold text-gray-900">
-                            <div className="flex items-center gap-3">
-                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-purple-100 to-pink-100 text-[#852BAF]"><FiPackage size={17} /></div>
-                              <div><p className="font-extrabold">#{order.order_ref}</p>
-                            {order.awb_number && (
-                              <div className="mt-0.5 text-[11px] font-medium text-indigo-500">
-                                AWB: {order.awb_number}
-                              </div>
-                            )}</div></div>
-                          </td>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
 
-                          <td className="px-5 py-4 font-bold text-gray-800">
-                            {formatCurrency(order.vendor_total)}
-                          </td>
-
-                          <td className="px-5 py-4">
-                            <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold capitalize ${bg} ${text}`}>
-                              <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />{order.shipping_status}
-                            </span>
-                          </td>
-
-                          <td className="px-5 py-4 text-gray-600">
-                            {new Date(order.created_at).toLocaleDateString("en-IN", {
-                              day: "2-digit",
-                              month: "short",
-                              year: "numeric",
-                            })}
-                          </td>
-
-                          <td className="px-5 py-4 text-gray-700">{order.item_count}</td>
-
-                          <td className="px-5 py-4">
-                            <button
-                              className="group inline-flex cursor-pointer items-center gap-2 rounded-xl border border-purple-200 bg-white px-3.5 py-2 text-xs font-bold text-[#852BAF] shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#852BAF] hover:bg-purple-50 hover:shadow-md"
-                              onClick={() => navigate(`/vendor/orders/details/${order.vendor_order_id}`)}
-                            >
-                              View order <FiArrowUpRight className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" size={14} />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination */}
-            {orders.length > 0 && (
-              <div className="flex items-center justify-center gap-4 py-5 border-t border-gray-50">
-                <button
-                  disabled={page === 1}
-                  onClick={() => setPage((prev) => prev - 1)}
-                  className="px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                  style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }}
-                >
-                  ← Prev
-                </button>
-
-                <span className="text-sm font-semibold text-gray-500">
-                  Page <span className="text-gray-900">{page}</span> of <span className="text-gray-900">{totalPages}</span>
-                </span>
-
-                <button
-                  disabled={page >= totalPages}
-                  onClick={() => setPage((prev) => prev + 1)}
-                  className="px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                  style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }}
-                >
-                  Next →
-                </button>
+          {!loading && !error && orders.length > 0 && (
+            <div className="flex items-center justify-between border-t border-gray-100 px-5 py-3 text-sm text-gray-500">
+              <span>Page {page} of {totalPages}</span>
+              <div className="flex gap-2">
+                <button type="button" disabled={page === 1} onClick={() => setPage((prev) => prev - 1)} className="rounded-lg border border-gray-200 px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40">Previous</button>
+                <button type="button" disabled={page >= totalPages} onClick={() => setPage((prev) => prev + 1)} className="rounded-lg border border-gray-200 px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40">Next</button>
               </div>
-            )}
-          </>
-        )}
-      </div>
+            </div>
+          )}
+        </section>
       </div>
       )}
     </div>

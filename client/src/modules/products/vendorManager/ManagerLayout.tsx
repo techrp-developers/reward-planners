@@ -7,7 +7,7 @@ import { routes } from "../../../routes";
 import { useNotification } from "../../../common/notifications/useNotification";
 import { startPollingWatcher } from "../../../common/notifications/pollingWatcher";
 import PremiumPortalShell from "../../../common/layouts/PremiumPortalShell";
-import "./manager.css";
+import "../../../common/layouts/plainPortal.css";
 
 interface VendorListItem {
   vendor_id: number;
@@ -49,6 +49,6 @@ export default function ManagerLayout() {
   if (!user || user.role !== "vendor_manager") return <Navigate to="/login" replace />;
 
   return <PremiumPortalShell variant="plain" themeKey="manager-theme" sidebar={<ManagerNavbar />} roleLabel="Vendor Manager Portal" userLabel={user.name || user.email}>
-    <div className="manager-portal mx-auto max-w-7xl"><Outlet /></div>
+    <div className="plain-portal mx-auto max-w-7xl"><Outlet /></div>
   </PremiumPortalShell>;
 }

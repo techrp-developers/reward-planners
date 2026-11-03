@@ -194,7 +194,7 @@ function BulkValidationReport({ result, uploading, onUpload }: { result: BulkVal
           </div>
         )}
 
-        {result.validCount > 0 && <div className="mt-6 flex flex-col gap-4 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-extrabold text-emerald-900">{result.validCount} product{result.validCount === 1 ? "" : "s"} ready to create</p><p className="mt-1 text-xs text-emerald-700">Only rows that passed every check will be uploaded.</p></div><button onClick={onUpload} disabled={uploading} className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-emerald-600/20 transition hover:-translate-y-0.5 hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60">{uploading ? "Creating products..." : `Upload ${result.validCount} product${result.validCount === 1 ? "" : "s"}`}</button></div>}
+        {result.validCount > 0 && <div className="mt-6 flex flex-col gap-4 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-extrabold text-emerald-900">{result.validCount} product{result.validCount === 1 ? "" : "s"} ready to create</p><p className="mt-1 text-xs text-emerald-700">Only rows that passed every check will be uploaded.</p></div><button onClick={onUpload} disabled={uploading} className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60">{uploading ? "Creating products..." : `Upload ${result.validCount} product${result.validCount === 1 ? "" : "s"}`}</button></div>}
       </div>
     </section>
   );
@@ -1222,7 +1222,7 @@ export default function ProductManagerList() {
   const invalidBulkRows = validationResult?.invalidRows ?? [];
 
   return (
-    <div className="min-h-screen">
+    <div className="pb-8">
       <ActionModal
         isOpen={modalState.isOpen}
         onClose={closeModal}
@@ -1251,10 +1251,7 @@ export default function ProductManagerList() {
       {reportModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget && !reportDownloading) setReportModalOpen(false); }}>
           <div role="dialog" aria-modal="true" aria-labelledby="product-report-title" className="w-full max-w-xl overflow-hidden rounded-3xl border border-white/70 bg-white shadow-[0_28px_90px_rgba(39,20,58,0.3)]">
-            <div className="relative overflow-hidden bg-gradient-to-br from-[#25103d] via-[#64248c] to-[#b72f72] px-6 py-6 text-white">
-              <div className="absolute -right-10 -top-16 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
-              <div className="relative flex items-start justify-between gap-4"><div className="flex items-center gap-4"><div className="grid h-12 w-12 place-items-center rounded-2xl border border-white/15 bg-white/10"><FiDownload size={21} /></div><div><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-purple-200">Product analytics</p><h2 id="product-report-title" className="mt-1 text-xl font-extrabold">Download product report</h2><p className="mt-1 text-xs text-purple-100/75">Export only the products that match your selection.</p></div></div><button type="button" disabled={reportDownloading} onClick={() => setReportModalOpen(false)} className="grid h-9 w-9 place-items-center rounded-xl border border-white/15 bg-white/10 transition hover:bg-white/20" aria-label="Close"><FiX /></button></div>
-            </div>
+            <header className="flex items-start justify-between gap-4 border-b border-gray-100 px-6 py-5"><div><h2 id="product-report-title" className="text-lg font-semibold text-gray-900">Download product report</h2><p className="mt-1 text-sm text-gray-500">Export your products with the filters below.</p></div><button type="button" disabled={reportDownloading} onClick={() => setReportModalOpen(false)} className="rounded-md p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700" aria-label="Close"><FiX /></button></header>
 
             <div className="space-y-5 p-6">
               <div className="grid gap-4 sm:grid-cols-2">
@@ -1264,41 +1261,19 @@ export default function ProductManagerList() {
 
               <div className="rounded-2xl border border-purple-100 bg-purple-50/50 p-4"><div className="mb-3 flex items-center gap-2"><FiCalendar className="text-[#852BAF]" /><div><p className="text-sm font-extrabold text-slate-800">Custom period</p><p className="text-xs text-slate-500">Leave both empty to include all dates.</p></div></div><div className="grid gap-3 sm:grid-cols-2"><div><label htmlFor="report-from" className="mb-1.5 block text-xs font-semibold text-slate-500">From date</label><input id="report-from" type="date" value={reportFilters.fromDate} max={reportFilters.toDate || undefined} onChange={(event) => setReportFilters((previous) => ({ ...previous, fromDate: event.target.value }))} className="w-full rounded-xl border border-purple-100 bg-white px-3 py-2.5 text-sm outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100" /></div><div><label htmlFor="report-to" className="mb-1.5 block text-xs font-semibold text-slate-500">To date</label><input id="report-to" type="date" value={reportFilters.toDate} min={reportFilters.fromDate || undefined} onChange={(event) => setReportFilters((previous) => ({ ...previous, toDate: event.target.value }))} className="w-full rounded-xl border border-purple-100 bg-white px-3 py-2.5 text-sm outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100" /></div></div></div>
 
-              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between"><button type="button" disabled={reportDownloading} onClick={() => setReportFilters({ brand: "", status: "", fromDate: "", toDate: "" })} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-500 transition hover:bg-slate-50">Clear filters</button><button type="button" disabled={reportDownloading} onClick={() => void handleDownloadReport()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-purple-500/20 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60">{reportDownloading ? <><FaSpinner className="animate-spin" /> Generating...</> : <><FiDownload /> Download Excel</>}</button></div>
+              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between"><button type="button" disabled={reportDownloading} onClick={() => setReportFilters({ brand: "", status: "", fromDate: "", toDate: "" })} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-500 transition hover:bg-slate-50">Clear filters</button><button type="button" disabled={reportDownloading} onClick={() => void handleDownloadReport()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] from-60% to-[#C13A8E] px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-purple-500/20 transition disabled:cursor-not-allowed disabled:opacity-60">{reportDownloading ? <><FaSpinner className="animate-spin" /> Generating...</> : <><FiDownload /> Download Excel</>}</button></div>
             </div>
           </div>
         </div>
       )}
 
-      <div
-        className="bg-white rounded-3xl overflow-hidden"
-        style={{ border: "1px solid rgba(133,43,175,0.1)", boxShadow: "0 4px 32px rgba(133,43,175,0.07)" }}
-      >
+      <div>
         {/* HEADER */}
-        <div
-          className="flex flex-col justify-between px-6 py-5 md:flex-row md:items-center rounded-t-3xl"
-          style={{
-            background:
-              "linear-gradient(135deg, rgba(133,43,175,0.04) 0%, rgba(252,63,120,0.03) 100%)",
-            borderBottom: "1px solid rgba(133,43,175,0.08)",
-          }}
-        >
-          <div className="flex items-center mb-4 md:mb-0">
-            <div
-              className="flex items-center justify-center w-12 h-12 mr-4 shadow-lg rounded-2xl"
-              style={{
-                background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
-                boxShadow: "0 6px 20px rgba(133,43,175,0.3)",
-              }}
-            >
-              <FiPackage className="text-xl text-white" />
-            </div>
+        <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-center">
+          <div>
             <div>
-              <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 md:text-3xl">
-                Product{" "}
-                <span className="gradient-text-brand">Management</span>
-              </h1>
-              <p className="text-sm text-gray-500 font-medium mt-0.5">
+              <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Product management</h1>
+              <p className="mt-1 text-sm text-slate-500">
                 Review, manage and track all your products
               </p>
             </div>
@@ -1317,7 +1292,7 @@ export default function ProductManagerList() {
                 setReportFilters((previous) => ({ ...previous, brand: brandFilter, status: statusFilter === "all" ? "" : statusFilter }));
                 setReportModalOpen(true);
               }}
-              className="flex items-center gap-2 rounded-xl border border-purple-200 bg-white px-4 py-2.5 text-sm font-bold text-[#852BAF] shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#852BAF] hover:bg-purple-50 hover:shadow-md"
+              className="flex items-center gap-2 rounded-xl border border-purple-200 bg-white px-4 py-2.5 text-sm font-bold text-[#852BAF] shadow-sm transition-all hover:border-[#852BAF] hover:bg-purple-50 hover:shadow-md"
             >
               <FiDownload /> Report
             </button>
@@ -1326,7 +1301,7 @@ export default function ProductManagerList() {
               onClick={() => setBulkModalOpen(true)}
               className="px-4 py-2.5 text-white rounded-xl cursor-pointer flex items-center gap-2 font-semibold text-sm transition-all duration-200 hover:opacity-90 active:scale-95"
               style={{
-                background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
+                background: "linear-gradient(90deg, #852BAF 60%, #C13A8E 100%)",
                 boxShadow: "0 4px 14px rgba(133,43,175,0.28)",
               }}
             >
@@ -1336,7 +1311,7 @@ export default function ProductManagerList() {
           </div>
         </div>
 
-        <div className="p-5 md:p-6">
+        <div>
 
         {/* STATS */}
         <div className="grid grid-cols-2 gap-4 mb-6 md:grid-cols-6">
@@ -1397,20 +1372,18 @@ export default function ProductManagerList() {
 
         {/* FILTERS + SEARCH */}
         <div
-          className="flex flex-col gap-3 mb-6 md:flex-row p-4 rounded-2xl"
-          style={{ background: "rgba(133,43,175,0.03)", border: "1px solid rgba(133,43,175,0.08)" }}
+          className="mb-6 flex flex-col gap-3 lg:flex-row lg:items-center"
         >
-          <div className="w-80">
+          <div className="w-full lg:max-w-sm">
             <div className="relative">
               <input
                 type="text"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="Search by product name..."
-                className="w-full py-2.5 pl-10 pr-16 text-sm font-medium border rounded-xl outline-none transition-all duration-200 focus:ring-2 focus:ring-[#852BAF]/30 focus:border-[#852BAF] bg-white"
-                style={{ borderColor: "rgba(133,43,175,0.2)" }}
+                className="w-full py-2.5 pl-10 pr-16 text-sm font-medium border border-gray-200 rounded-xl outline-none transition-all duration-200 focus:ring-2 focus:ring-[#852BAF]/30 focus:border-[#852BAF] bg-white"
               />
-              <FaSearch className="absolute left-3 top-3 text-[#852BAF]/40 pointer-events-none text-sm" />
+              <FaSearch className="absolute left-3 top-3 text-gray-400 pointer-events-none text-sm" />
 
               {searchInput?.length > 0 && (
                 <button
@@ -1424,17 +1397,16 @@ export default function ProductManagerList() {
             </div>
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <div className="relative">
               <input
                 type="text"
                 value={brandInput}
                 onChange={(e) => setBrandInput(e.target.value)}
                 placeholder="Filter by brand..."
-                className="w-80 py-2.5 pl-9 pr-3 text-sm font-medium border rounded-xl outline-none transition-all duration-200 focus:ring-2 focus:ring-[#852BAF]/30 focus:border-[#852BAF] bg-white"
-                style={{ borderColor: "rgba(133,43,175,0.2)" }}
+                className="w-full lg:w-64 py-2.5 pl-9 pr-3 text-sm font-medium border border-gray-200 rounded-xl outline-none transition-all duration-200 focus:ring-2 focus:ring-[#852BAF]/30 focus:border-[#852BAF] bg-white"
               />
-              <FaSearch className="absolute left-3 top-3 text-[#852BAF]/40 pointer-events-none text-sm" />
+              <FaSearch className="absolute left-3 top-3 text-gray-400 pointer-events-none text-sm" />
             </div>
 
             <div className="relative">
@@ -1444,8 +1416,7 @@ export default function ProductManagerList() {
                   setStatusFilter(e.target.value);
                   setPagination((prev) => ({ ...prev, currentPage: 1 }));
                 }}
-                className="appearance-none pl-9 pr-8 py-2.5 text-sm font-medium border rounded-xl outline-none bg-white focus:ring-2 focus:ring-[#852BAF]/30 focus:border-[#852BAF] cursor-pointer transition-all"
-                style={{ borderColor: "rgba(133,43,175,0.2)" }}
+                className="appearance-none pl-9 pr-8 py-2.5 text-sm font-medium border border-gray-200 rounded-xl outline-none bg-white focus:ring-2 focus:ring-[#852BAF]/30 focus:border-[#852BAF] cursor-pointer transition-all"
               >
                 <option value="all">All Status</option>
                 <option value="pending">Pending</option>
@@ -1454,7 +1425,7 @@ export default function ProductManagerList() {
                 <option value="rejected">Rejected</option>
                 <option value="resubmission">Resubmission</option>
               </select>
-              <FaFilter className="absolute left-3 top-3 text-[#852BAF]/40 pointer-events-none text-xs" />
+              <FaFilter className="absolute left-3 top-3 text-gray-400 pointer-events-none text-xs" />
             </div>
 
             <select
@@ -1465,8 +1436,7 @@ export default function ProductManagerList() {
                 setSortOrder(order as "asc" | "desc");
                 setPagination((prev) => ({ ...prev, currentPage: 1 }));
               }}
-              className="px-4 py-2.5 text-sm font-medium border rounded-xl outline-none bg-white focus:ring-2 focus:ring-[#852BAF]/30 focus:border-[#852BAF] cursor-pointer transition-all"
-              style={{ borderColor: "rgba(133,43,175,0.2)" }}
+              className="px-4 py-2.5 text-sm font-medium border border-gray-200 rounded-xl outline-none bg-white focus:ring-2 focus:ring-[#852BAF]/30 focus:border-[#852BAF] cursor-pointer transition-all"
             >
               <option value="created_at:desc">Newest First</option>
               <option value="created_at:asc">Oldest First</option>
@@ -1477,7 +1447,7 @@ export default function ProductManagerList() {
         </div>
 
         {/* TABLE */}
-        <div className="relative overflow-x-auto bg-white rounded-2xl" style={{ border: "1px solid rgba(133,43,175,0.1)", boxShadow: "0 2px 16px rgba(133,43,175,0.06)" }}>
+        <div className="relative overflow-x-auto rounded-xl border border-gray-200 bg-white">
           {tableLoading && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 backdrop-blur-sm">
               <FaSpinner className="animate-spin text-3xl text-[#852BAF]" />
@@ -1487,12 +1457,7 @@ export default function ProductManagerList() {
           <table className="min-w-full divide-y divide-gray-100">
             {/* TABLE HEADER */}
             <thead className="sticky top-0 z-10">
-              <tr
-                style={{
-                  background:
-                    "linear-gradient(135deg, rgba(133,43,175,0.06) 0%, rgba(252,63,120,0.04) 100%)",
-                }}
-              >
+              <tr className="bg-gray-50">
                 {[
                   "Product",
                   "Brand",
@@ -1508,7 +1473,7 @@ export default function ProductManagerList() {
                 ].map((head) => (
                   <th
                     key={head}
-                    className="px-5 py-3.5 text-[10px] font-bold tracking-widest text-gray-500 uppercase whitespace-nowrap"
+                    className="px-5 py-3 text-left text-xs font-semibold text-gray-500 whitespace-nowrap"
                   >
                     {head}
                   </th>
@@ -1518,28 +1483,27 @@ export default function ProductManagerList() {
 
             {/* TABLE BODY */}
             <tbody className="divide-y divide-gray-100">
-              {products.map((product, index) => (
+              {products.map((product) => (
                 <tr
                   key={product.product_id}
-                  className="transition-colors duration-150 bg-white hover:bg-purple-50/40 row-animate"
-                  style={{ animationDelay: `${index * 35}ms` }}
+                  className="bg-white transition-colors hover:bg-gray-50"
                 >
                   {/* PRODUCT */}
                   <td className="px-4 py-3.5">
                     <div className="flex items-center gap-3 min-w-[180px] max-w-[220px]">
                       {product.main_image ? (
-                        <div className="w-11 h-11 overflow-hidden bg-gray-100 rounded-xl shrink-0" style={{ border: "1px solid rgba(133,43,175,0.12)" }}>
+                        <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
                           <img
                             src={`${R2_BASE_URL}/${product.main_image}`}
                             alt={product.product_name}
                             loading="lazy"
                             decoding="async"
-                            className="object-cover w-full h-full hover:scale-110 transition-transform duration-300"
+                            className="h-full w-full object-cover"
                           />
                         </div>
                       ) : (
-                        <div className="flex items-center justify-center w-11 h-11 rounded-xl shrink-0" style={{ background: "rgba(133,43,175,0.06)", border: "1px dashed rgba(133,43,175,0.2)" }}>
-                          <FaBox className="text-sm" style={{ color: "#852BAF" }} />
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50">
+                          <FaBox className="text-sm text-gray-400" />
                         </div>
                       )}
                       <div>
@@ -1737,7 +1701,7 @@ export default function ProductManagerList() {
               <button
                 onClick={handleConfirmUpload}
                 disabled={bulkUploading}
-                className="rounded-xl px-5 py-3 text-sm font-bold text-white transition-all hover:-translate-y-0.5 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-xl px-5 py-3 text-sm font-bold text-white transition-all hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
                 style={{ background: "linear-gradient(135deg, #059669 0%, #10b981 100%)", boxShadow: "0 4px 14px rgba(5,150,105,0.3)" }}
               >
                 {bulkUploading ? "Uploading..." : "Upload Valid Rows"}
@@ -1827,7 +1791,7 @@ export default function ProductManagerList() {
                     onClick={() => handlePageChange(pageNum)}
                     className="w-8 h-8 text-xs font-bold rounded-xl cursor-pointer transition-all"
                     style={isActive
-                      ? { background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)", color: "#fff", boxShadow: "0 2px 8px rgba(133,43,175,0.3)" }
+                      ? { background: "linear-gradient(90deg, #852BAF 60%, #C13A8E 100%)", color: "#fff", boxShadow: "0 2px 8px rgba(133,43,175,0.3)" }
                       : { background: "white", color: "#555", border: "1px solid rgba(133,43,175,0.2)" }
                     }
                   >

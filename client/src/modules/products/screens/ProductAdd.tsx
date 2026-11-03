@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import type { ChangeEvent, FormEvent } from "react";
-import type { ComponentType } from "react";
 import { api } from "../../../common/api/api";
 import QuillEditor from "../components/QuillEditor";
 import CustomAttributeBuilder, { type CustomAttributeRow } from "../components/CustomAttributeBuilder";
@@ -9,7 +8,6 @@ import Swal from "sweetalert2";
 import { validateCoverFile, coverImageError, hasExhaustedCoverCredits } from "../utils/coverImage";
 import { RETURN_WINDOW_LABEL } from "../utils/returnPolicy";
 
-type IconComp = ComponentType<any>;
 
 interface ImagePreview {
   file: File;
@@ -19,40 +17,6 @@ interface ImagePreview {
 interface VideoPreview {
   file: File;
   url: string;
-}
-
-function SectionHeader({
-  icon: Icon,
-  title,
-  description,
-}: {
-  icon: IconComp;
-  title: string;
-  description?: string;
-}) {
-  return (
-    <div className="flex items-center space-x-4 pb-4 border-b border-gray-100 mb-6">
-      <div
-        className="p-3.5 text-white rounded-2xl shrink-0"
-        style={{
-          background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
-          boxShadow: "0 6px 20px rgba(133,43,175,0.25)",
-        }}
-      >
-        <Icon className="text-lg" />
-      </div>
-      <div>
-        <h3 className="text-base font-extrabold text-gray-800 tracking-tight">
-          {title}
-        </h3>
-        {description && (
-          <p className="mt-0.5 text-xs text-gray-500 font-medium">
-            {description}
-          </p>
-        )}
-      </div>
-    </div>
-  );
 }
 
 const inputCls =
@@ -110,6 +74,7 @@ import {
   FaTrash,
   FaSpinner,
 } from "react-icons/fa";
+import SectionHeader from "./SectionHeader";
 
 // --- Interfaces matching your backend ---
 interface Category {
@@ -665,11 +630,7 @@ export default function ProductListingDynamic() {
     if (requiredDocs.length === 0) return null;
     return (
       <section
-        className="bg-white rounded-2xl p-6 sm:p-8 vendor-section-card"
-        style={{
-          border: "1px solid rgba(133,43,175,0.08)",
-          boxShadow: "0 4px 24px rgba(133,43,175,0.06)",
-        }}
+        className="bg-white rounded-2xl p-6 sm:p-8 border border-gray-100 shadow-sm"
       >
         <SectionHeader
           icon={FaFileUpload}
@@ -750,26 +711,19 @@ export default function ProductListingDynamic() {
   return (
     <div className="max-w-7xl mx-auto">
       {/* ── PAGE HEADER ── */}
-      <div
-        className="flex items-center justify-between mb-6 p-5 rounded-2xl"
-        style={{
-          background:
-            "linear-gradient(135deg, rgba(133,43,175,0.06) 0%, rgba(252,63,120,0.04) 100%)",
-          border: "1px solid rgba(133,43,175,0.1)",
-        }}
-      >
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
             New <span className="gradient-text-brand">Product Listing</span>
           </h1>
-          <p className="text-xs text-gray-500 font-medium mt-0.5">
+          <p className="mt-1 text-sm text-slate-500">
             Fill in the details below to list your product
           </p>
         </div>
         {/* <div
           className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-white"
           style={{
-            background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
+            background: "linear-gradient(90deg, #852BAF 60%, #C13A8E 100%)",
           }}
         >
           <FaPlus size={10} /> New Product
@@ -803,11 +757,7 @@ export default function ProductListingDynamic() {
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* ── CATEGORY SELECTION ── */}
         <section
-          className="bg-white rounded-2xl p-6 sm:p-8 vendor-section-card"
-          style={{
-            border: "1px solid rgba(133,43,175,0.08)",
-            boxShadow: "0 4px 24px rgba(133,43,175,0.06)",
-          }}
+          className="bg-white rounded-2xl p-6 sm:p-8 border border-gray-100 shadow-sm"
         >
           <SectionHeader
             icon={FaTag}
@@ -1006,11 +956,7 @@ export default function ProductListingDynamic() {
 
         {/* ── PRODUCT IDENTIFICATION ── */}
         <section
-          className="bg-white rounded-2xl p-6 sm:p-8 vendor-section-card"
-          style={{
-            border: "1px solid rgba(133,43,175,0.08)",
-            boxShadow: "0 4px 24px rgba(133,43,175,0.06)",
-          }}
+          className="bg-white rounded-2xl p-6 sm:p-8 border border-gray-100 shadow-sm"
         >
           <SectionHeader
             icon={FaTag}
@@ -1063,11 +1009,7 @@ export default function ProductListingDynamic() {
 
         {/* ── PRODUCT ATTRIBUTES ── */}
         <section
-          className="bg-white rounded-2xl p-6 sm:p-8 vendor-section-card"
-          style={{
-            border: "1px solid rgba(133,43,175,0.08)",
-            boxShadow: "0 4px 24px rgba(133,43,175,0.06)",
-          }}
+          className="bg-white rounded-2xl p-6 sm:p-8 border border-gray-100 shadow-sm"
         >
           <SectionHeader
             icon={FaBox}
@@ -1221,11 +1163,7 @@ export default function ProductListingDynamic() {
 
         {/* ── PRODUCT DESCRIPTION ── */}
         <section
-          className="bg-white rounded-2xl p-6 sm:p-8 vendor-section-card"
-          style={{
-            border: "1px solid rgba(133,43,175,0.08)",
-            boxShadow: "0 4px 24px rgba(133,43,175,0.06)",
-          }}
+          className="bg-white rounded-2xl p-6 sm:p-8 border border-gray-100 shadow-sm"
         >
           <SectionHeader
             icon={FaBox}
@@ -1294,11 +1232,7 @@ export default function ProductListingDynamic() {
 
         {/* ── PRICING & COMMERCIAL ── */}
         <section
-          className="bg-white rounded-2xl p-6 sm:p-8 vendor-section-card"
-          style={{
-            border: "1px solid rgba(133,43,175,0.08)",
-            boxShadow: "0 4px 24px rgba(133,43,175,0.06)",
-          }}
+          className="bg-white rounded-2xl p-6 sm:p-8 border border-gray-100 shadow-sm"
         >
           <SectionHeader
             icon={FaTag}
@@ -1397,11 +1331,7 @@ export default function ProductListingDynamic() {
 
         {/* ── LOGISTICS ── */}
         <section
-          className="bg-white rounded-2xl p-6 sm:p-8 vendor-section-card"
-          style={{
-            border: "1px solid rgba(133,43,175,0.08)",
-            boxShadow: "0 4px 24px rgba(133,43,175,0.06)",
-          }}
+          className="bg-white rounded-2xl p-6 sm:p-8 border border-gray-100 shadow-sm"
         >
           <SectionHeader
             icon={FaBox}
@@ -1459,11 +1389,7 @@ export default function ProductListingDynamic() {
 
         {/* ── COVER IMAGE ── */}
         <section
-          className="bg-white rounded-2xl p-6 sm:p-8 vendor-section-card"
-          style={{
-            border: "1px solid rgba(133,43,175,0.08)",
-            boxShadow: "0 4px 24px rgba(133,43,175,0.06)",
-          }}
+          className="bg-white rounded-2xl p-6 sm:p-8 border border-gray-100 shadow-sm"
         >
           <SectionHeader
             icon={FaImages}
@@ -1492,7 +1418,7 @@ export default function ProductListingDynamic() {
             <button type="button" disabled={isCoverProcessing || isSubmitting}
               onClick={() => coverInput.current?.click()}
               className="cursor-pointer px-4 py-2 text-xs font-semibold rounded-xl text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
-              style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }}>
+              style={{ background: "linear-gradient(90deg, #852BAF 60%, #C13A8E 100%)" }}>
               {product.productImages.length ? "Replace Image" : "Choose Image"}
             </button>
             <input ref={coverInput} type="file" hidden accept="image/jpeg,image/png,image/webp"
@@ -1539,11 +1465,7 @@ export default function ProductListingDynamic() {
 
         {/* ── PRODUCT VIDEO ── */}
         <section
-          className="bg-white rounded-2xl p-6 sm:p-8 vendor-section-card"
-          style={{
-            border: "1px solid rgba(133,43,175,0.08)",
-            boxShadow: "0 4px 24px rgba(133,43,175,0.06)",
-          }}
+          className="bg-white rounded-2xl p-6 sm:p-8 border border-gray-100 shadow-sm"
         >
           <SectionHeader
             icon={FaImages}
@@ -1572,7 +1494,7 @@ export default function ProductListingDynamic() {
             <label
               className="cursor-pointer px-4 py-2 text-xs font-semibold rounded-xl text-white transition-all hover:opacity-90 active:scale-95"
               style={{
-                background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
+                background: "linear-gradient(90deg, #852BAF 60%, #C13A8E 100%)",
               }}
             >
               Choose Video
@@ -1620,7 +1542,7 @@ export default function ProductListingDynamic() {
             disabled={isSubmitting || isCoverProcessing || !product.productImages.length || !!imageError}
             className="flex items-center justify-center w-full px-6 py-4 text-base font-bold text-white rounded-2xl transition-all duration-300 cursor-pointer hover:opacity-90 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
             style={{
-              background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
+              background: "linear-gradient(90deg, #852BAF 60%, #C13A8E 100%)",
               boxShadow: "0 8px 32px rgba(133,43,175,0.3)",
             }}
           >
