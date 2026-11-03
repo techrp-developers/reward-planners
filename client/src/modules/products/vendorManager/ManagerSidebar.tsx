@@ -105,6 +105,7 @@ export default function ManagerNavbar() {
         { label: "Mobile Dashboard", to: routes.manager.content.mobileDashboard },
         { label: "Module Icons", to: routes.manager.content.moduleIcons },
         { label: "App Icons", to: routes.manager.content.appIcons },
+        { label: "Dynamic Splash Screens", to: routes.manager.content.splashscreens },
       ],
     },
     {

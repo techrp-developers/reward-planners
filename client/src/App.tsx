@@ -64,6 +64,7 @@ const SubSubCategoryManagement = lazy(() => import("./modules/products/vendorMan
 const ContentManagement = lazy(() => import("./modules/products/content_manager/component/ContentManagement.tsx"));
 const ModuleIcon = lazy(() => import("./modules/products/content_manager/component/module_icon/ModuleIcon.tsx"));
 const AppIcons = lazy(() => import("./modules/products/content_manager/component/app_icon/AppIcons.tsx"));
+const SplashScreens = lazy(() => import("./modules/products/content_manager/component/splash/SplashScreens.tsx"));
 const ProductViewPage = lazy(() => import("./modules/products/vendorManager/ProductViewPage.tsx"));
 const Onboarding = lazy(() => import("./modules/products/vendor/Onboarding.tsx"));
 const ChangePasswordPage = lazy(() => import("./common/auth/changePassword.tsx"));
@@ -364,6 +365,8 @@ export default function App() {
         <Route path={routes.manager.content.mobileDashboard} element={<ContentManagement module="mobile_dashboard" />} />
         <Route path={routes.manager.content.moduleIcons} element={<ModuleIcon />} />
         <Route path={routes.manager.content.appIcons} element={<AppIcons />} />
+        {/* Inside ManagerLayout, which admits only vendor_manager. */}
+        <Route path={routes.manager.content.splashscreens} element={<SplashScreens />} />
 
         <Route path={routes.manager.flashSales.list} element={<FlashSaleList />} />
         <Route path={routes.manager.flashSales.create} element={<FlashSaleEditor />} />

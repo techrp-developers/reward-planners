@@ -7,6 +7,26 @@ const {
   validateMotion,
 } = require("../utils/contentMotion");
 
+// Entries used by a Dynamic Splash Screen campaign belong to the splash
+// manager: they are shown through /content/splashscreens/resolved only, so
+// they never take over their CMS zone, block its schedule or appear in the
+// ordinary content lists. Until the splash tables exist nothing is excluded.
+const NOT_SPLASH_LINKED = `NOT EXISTS (SELECT 1 FROM cms_splashscreen_placements sp WHERE sp.content_id = content_zone_entries.content_id)
+  AND NOT EXISTS (SELECT 1 FROM cms_splashscreen_defaults sd WHERE sd.default_content_id = content_zone_entries.content_id)`;
+let splashTablesSeen = false;
+let splashTablesCheckedAt = 0;
+async function splashExclusion() {
+  if (!splashTablesSeen && Date.now() - splashTablesCheckedAt > 60_000) {
+    splashTablesCheckedAt = Date.now();
+    const [[row]] = await db.query(
+      `SELECT COUNT(*) AS n FROM information_schema.tables
+       WHERE table_schema = DATABASE() AND table_name IN ('cms_splashscreen_placements', 'cms_splashscreen_defaults')`,
+    );
+    splashTablesSeen = Number(row.n) === 2;
+  }
+  return splashTablesSeen ? NOT_SPLASH_LINKED : null;
+}
+
 const MODULES = [
   "product",
   "service",
@@ -240,6 +260,8 @@ class ContentZoneModel {
       where.push("title LIKE ?");
       params.push(`%${search}%`);
     }
+    const notSplash = await splashExclusion();
+    if (notSplash) where.push(notSplash);
 
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
@@ -337,6 +359,7 @@ class ContentZoneModel {
     zone,
     { allowDefaultFallback = true } = {},
   ) {
+    const notSplash = await splashExclusion();
     const [rows] = await db.query(
       `
       SELECT *
@@ -347,6 +370,7 @@ class ContentZoneModel {
         AND is_default = 0
         AND (start_at IS NULL OR start_at <= NOW())
         AND (end_at IS NULL OR end_at >= NOW())
+        ${notSplash ? `AND ${notSplash}` : ""}
       ORDER BY priority DESC, created_at DESC
       LIMIT 1
       `,
@@ -808,6 +832,15 @@ class ContentZoneModel {
 
   /** Other published, non-default entries in the same module+zone whose window overlaps. */
   async findConflicts(contentModule, zone, startAt, endAt, excludeId = null) {
+    // A splash campaign never competes for its zone, so it has nothing to conflict with.
+    const notSplash = await splashExclusion();
+    if (notSplash && excludeId) {
+      const [[linked]] = await db.query(
+        `SELECT NOT (${NOT_SPLASH_LINKED}) AS linked FROM content_zone_entries WHERE content_id = ?`,
+        [excludeId],
+      );
+      if (Number(linked?.linked)) return [];
+    }
     const params = [
       contentModule,
       zone,
@@ -830,6 +863,7 @@ class ContentZoneModel {
       sql += ` AND content_id != ?`;
       params.push(excludeId);
     }
+    if (notSplash) sql += ` AND ${notSplash}`;
 
     const [rows] = await db.query(sql, params);
 
@@ -962,6 +996,8 @@ class ContentZoneModel {
               ? JSON.stringify(parseTargetIds(data[key]))
               : null,
           );
+        // An empty date clears it (e.g. removing an end date = no expiry).
+        else if (key === "start_at" || key === "end_at") values.push(data[key] === "" ? null : data[key]);
         else values.push(data[key]);
       }
     }

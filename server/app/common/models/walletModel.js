@@ -147,7 +147,8 @@ class WalletModel {
      ORDER BY transaction_id DESC
      LIMIT ? OFFSET ?`,
 
-      [userId, limitNum, offset],
+      // MySQL 8 rejects numeric LIMIT/OFFSET bindings from execute(); strings work.
+      [userId, String(limitNum), String(offset)],
     );
 
     return rows;

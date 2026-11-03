@@ -90,6 +90,8 @@ export const routes = {
       mobileDashboard: "/manager/content/mobile-dashboard",
       moduleIcons: "/manager/content/module-icons",
       appIcons: "/manager/content/app-icons",
+      // Vendor Managers only; deliberately absent from admin.content.
+      splashscreens: "/manager/content/splashscreens",
     },
   },
   admin: {
