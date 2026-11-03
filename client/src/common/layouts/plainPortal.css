@@ -1,0 +1,84 @@
+/* The RM treatment for the vendor and vendor manager portals, including shared
+   screens rendered inside their layouts (returns, profile, product forms). */
+.role-portal:has(.plain-portal) :is(button:not(:disabled), a[href], select:not(:disabled), summary, label[for]) {
+  cursor: pointer;
+}
+
+.plain-portal :is(button:disabled, select:disabled) {
+  cursor: not-allowed;
+}
+
+.plain-portal :is(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid #a760c9;
+  outline-offset: 3px;
+}
+
+.plain-portal :is(.font-bold, .font-extrabold, .font-black) { font-weight: 600; }
+.plain-portal :is(.rounded-2xl, .rounded-3xl) { border-radius: 0.75rem; }
+.plain-portal .shadow-sm { box-shadow: 0 1px 2px rgb(15 23 42 / 4%); }
+.plain-portal :is(.shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl, [class*="shadow-["]) { box-shadow: 0 1px 2px rgb(15 23 42 / 4%); }
+.plain-portal table { font-size: 0.875rem; }
+.plain-portal table thead { background: #f7f6f9; }
+.plain-portal table th { text-transform: none; letter-spacing: normal; font-weight: 600; font-size: 0.75rem; }
+.plain-portal :is(input, select, textarea) { border-radius: 0.5rem; }
+.plain-portal :is(input[type="checkbox"], input[type="radio"]) { border-radius: revert; }
+
+/* Eyebrows and field labels read as plain sentence-case text. */
+.plain-portal :is(p, span, label, h3, h4).uppercase { text-transform: none; letter-spacing: normal; }
+.plain-portal :is(p, span, label, h3, h4).uppercase[class*="text-[1"] { font-size: 0.75rem; }
+
+.plain-portal .gradient-text-brand { background: none; -webkit-text-fill-color: currentColor; }
+.plain-portal .row-animate { animation: none; }
+.plain-portal .vendor-section-card:hover { transform: none; box-shadow: none; }
+
+.hr-dark .plain-portal [class~="text-[#68258d]"] { color: #c99aeb; }
+
+/* Coloured cards and panels layer translucent white over their gradient;
+   the shared dark theme would otherwise turn those overlays into dark blobs. */
+.hr-dark .plain-portal .text-white :is(.bg-white, [class*="bg-white/"]) { background-color: rgb(255 255 255 / 15%); }
+.hr-dark .plain-portal .text-white .bg-white[class*="opacity-"] { background-color: #fff; }
+
+/* The vendor sidebar shows the account status as a tinted pill. */
+.hr-dark .role-portal:has(.plain-portal) nav [class~="bg-emerald-50"] { background-color: #18352b; color: #86d9b1; }
+.hr-dark .role-portal:has(.plain-portal) nav [class~="bg-amber-50"] { background-color: #382d1b; color: #e8c57e; }
+.hr-dark .plain-portal table thead { background: #292235; }
+
+/* Status and accent tints; the shared dark theme only covers neutrals. */
+.hr-dark .plain-portal :is([class~="bg-emerald-50"], [class~="bg-emerald-100"], [class~="bg-green-50"], [class~="bg-green-100"]) { background-color: #18352b; }
+.hr-dark .plain-portal :is([class~="text-emerald-600"], [class~="text-emerald-700"], [class~="text-emerald-800"], [class~="text-green-600"], [class~="text-green-700"], [class~="text-green-800"]) { color: #86d9b1; }
+.hr-dark .plain-portal :is([class~="bg-amber-50"], [class~="bg-amber-100"], [class~="bg-yellow-50"], [class~="bg-yellow-100"]) { background-color: #382d1b; }
+.hr-dark .plain-portal :is([class~="text-amber-600"], [class~="text-amber-700"], [class~="text-amber-800"], [class~="text-amber-900"], [class~="text-yellow-700"], [class~="text-yellow-800"]) { color: #e8c57e; }
+.hr-dark .plain-portal :is([class~="bg-red-50"], [class~="bg-red-100"], [class~="bg-pink-50"]) { background-color: #3c222a; }
+.hr-dark .plain-portal :is([class~="text-red-500"], [class~="text-red-600"], [class~="text-red-700"], [class~="text-red-800"], [class~="text-pink-700"], [class~="text-[#FC3F78]"]) { color: #f3a2ac; }
+.hr-dark .plain-portal :is([class~="bg-blue-50"], [class~="bg-blue-100"], [class~="bg-indigo-100"], [class~="bg-sky-50"], [class~="bg-cyan-50"], [class~="bg-violet-50"]) { background-color: #20294a; }
+.hr-dark .plain-portal :is([class~="text-blue-600"], [class~="text-blue-700"], [class~="text-blue-800"], [class~="text-indigo-800"], [class~="text-sky-700"], [class~="text-cyan-700"], [class~="text-violet-700"]) { color: #a9bcf5; }
+.hr-dark .plain-portal :is([class~="bg-gray-200"], [class~="bg-gray-300"]) { background-color: #3b3249; }
+.hr-dark .plain-portal :is([class*="border-red-"], [class*="border-amber-"], [class*="border-yellow-"], [class*="border-green-"], [class*="border-emerald-"], [class*="border-blue-"], [class*="border-indigo-"], [class*="border-pink-"], [class*="border-gray-3"], [class*="border-slate-3"]) { border-color: #493c58; }
+.hr-dark .plain-portal :is([class~="from-purple-50"], [class*="from-purple-50/"]) { --tw-gradient-from: #292235; --tw-gradient-to: #292235; }
+.hr-dark .plain-portal [class~="text-purple-800"] { color: #c99aeb; }
+
+/* The reward form keeps its own stylesheet. */
+.plain-portal .order-page { min-height: 0; padding: 0 0 2rem; background: transparent; }
+.hr-dark .plain-portal .form-container { background: #1c1926; box-shadow: none; }
+.hr-dark .plain-portal :is(.form-container h2, .form-container h3, .form-group label, .label-text) { color: #e8e5ef !important; }
+.hr-dark .plain-portal .toggle-section { background: #292235; }
+.hr-dark .plain-portal .cancel-btn { background: transparent; border-color: #493c58; color: #e8e5ef; }
+.hr-dark .plain-portal .cancel-btn:hover { background: #32283e; }
+
+/* Product forms: premium-form paints white gradient borders, and Quill draws
+   its own toolbar, so both need explicit dark values. */
+.hr-dark .plain-portal .premium-form :is(input, select, textarea) { background: #211c2c; border-color: #493c58; color: #e8e5ef; }
+.hr-dark .plain-portal .premium-form :is(input, textarea):hover { background-color: #211c2c; }
+.hr-dark .plain-portal .premium-form .bg-gray-50 { background: #292235; }
+.hr-dark .plain-portal :is(.ql-toolbar, .ql-container) { border-color: #493c58 !important; }
+.hr-dark .plain-portal .ql-toolbar { background: #292235; }
+.hr-dark .plain-portal .ql-editor { color: #e8e5ef; }
+.hr-dark .plain-portal .ql-editor.ql-blank::before { color: #a69bb7; }
+.hr-dark .plain-portal .ql-toolbar .ql-stroke { stroke: #b1a9c0; }
+.hr-dark .plain-portal .ql-toolbar .ql-fill { fill: #b1a9c0; }
+.hr-dark .plain-portal .ql-toolbar .ql-picker { color: #b1a9c0; }
+.hr-dark .plain-portal .ql-picker-options { background: #1c1926; }
+
+@media (prefers-reduced-motion: reduce) {
+  .role-portal:has(.plain-portal) .page-enter { animation: none; }
+}

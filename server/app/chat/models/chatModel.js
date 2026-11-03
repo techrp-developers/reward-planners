@@ -11,6 +11,23 @@ function resolveImage(row, field = "user_image", versionField = `${field}_update
 }
 
 class ChatModel {
+  async birthdayRecipient(userId, employeeId) {
+    const me = await this.identity(userId);
+    if (!me) throw Object.assign(new Error("An active company membership is required"), { status: 403 });
+    const [[recipient]] = await db.execute(
+      `SELECT c.user_id, c.name,
+              (MONTH(cu.dob) = MONTH(CURDATE()) AND DAY(cu.dob) = DAY(CURDATE())) AS is_birthday_today,
+              DATE_FORMAT(CURDATE(), '%Y-%m-%d') AS today
+       FROM customer c
+       JOIN company_users cu ON cu.id = c.company_user_id
+       WHERE cu.id = ? AND cu.company_id = ? AND cu.status = 1 AND c.status = 1 LIMIT 1`,
+      [employeeId, me.company_id]);
+    if (!recipient) throw Object.assign(new Error("Employee has no active chat account in your company"), { status: 404 });
+    if (Number(recipient.user_id) === Number(userId)) throw Object.assign(new Error("You cannot send a birthday wish to yourself"), { status: 422 });
+    if (!Number(recipient.is_birthday_today)) throw Object.assign(new Error("It is not this employee's birthday today"), { status: 422 });
+    return recipient;
+  }
+
   async identity(userId, conn = db) {
     const [rows] = await conn.execute(
       `SELECT c.user_id, c.name, c.user_image, cu.company_id
@@ -82,7 +99,7 @@ class ChatModel {
 
   async listConversations(userId) {
     const [rows] = await db.execute(
-      `SELECT c.conversation_id, c.type, c.name, c.description, c.image_url, c.updated_at, m.role,
+      `SELECT c.conversation_id, c.type, c.name, c.description, c.image_url, c.theme_key, c.updated_at, m.role,
               lm.message_id AS last_message_id,
               CASE WHEN lm.deleted_at IS NOT NULL THEN 'This message was deleted' ELSE lm.body END AS last_message,
               CASE WHEN lm.deleted_at IS NOT NULL THEN 'text' ELSE lm.message_type END AS last_message_type,
@@ -296,6 +313,17 @@ class ChatModel {
     if (!member || member.type !== "group") throw Object.assign(new Error("Group not found"), { status: 404 });
     if (member.role !== "admin") throw Object.assign(new Error("Group admin permission required"), { status: 403 });
     await db.execute(`UPDATE chat_conversations SET name = COALESCE(?, name), description = COALESCE(?, description) WHERE conversation_id = ?`, [data.name ?? null, data.description ?? null, conversationId]);
+  }
+
+  async setTheme(userId, conversationId, themeKey) {
+    if (!await this.assertMember(userId, conversationId)) {
+      throw Object.assign(new Error("Conversation not found"), { status: 404 });
+    }
+    await db.execute(
+      `UPDATE chat_conversations SET theme_key = ?, updated_at = NOW() WHERE conversation_id = ?`,
+      [themeKey, conversationId],
+    );
+    return { conversation_id: conversationId, theme_key: themeKey, updated_by: userId };
   }
 
   async addMembers(userId, conversationId, memberIds) {

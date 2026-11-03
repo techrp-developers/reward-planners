@@ -3,6 +3,8 @@ import ServiceNavbar from "./ServiceSidebar";
 import { useAuth } from "../../../common/auth/useAuth";
 import PremiumPortalShell from "../../../common/layouts/PremiumPortalShell";
 
+import "./serviceManager.css";
+
 export default function ServiceLayout() {
   const { user, loading } = useAuth();
 
@@ -10,8 +12,8 @@ export default function ServiceLayout() {
   if (!user || user.role !== "service_manager") return <Navigate to="/login" replace />;
 
   return (
-    <PremiumPortalShell sidebar={<ServiceNavbar />} roleLabel="Service manager workspace" userLabel={user.name || user.email}>
-      <div className="service-manager-ui">
+    <PremiumPortalShell sidebar={<ServiceNavbar />} variant="plain" themeKey="service-manager-theme" roleLabel="Service Manager" userLabel={user.name || user.email}>
+      <div className="service-manager-ui mx-auto max-w-7xl">
         <Outlet />
       </div>
     </PremiumPortalShell>

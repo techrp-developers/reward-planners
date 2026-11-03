@@ -229,29 +229,25 @@ export default function ContentManagement({ module }: ContentManagementProps) {
 
   return (
     <main className="space-y-6">
-      <header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#25103d] via-[#68258d] to-[#c33076] p-7 text-white shadow-[0_24px_65px_rgba(91,33,124,0.24)]">
-        <div className="absolute -right-16 -top-24 h-64 w-64 rounded-full bg-white/10 blur-2xl" />
-        <div className="relative flex flex-wrap items-center justify-between gap-5">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-purple-200">Content Management · {moduleLabel}</p>
-            <h1 className="mt-1 text-3xl font-black">Home Screen Content</h1>
-            <p className="mt-2 text-sm text-purple-100/80">Manage the Navbar, Promotional Banner and Offers Banner shown on the {moduleLabel} home screen.</p>
-          </div>
-          <div className="flex gap-2 rounded-2xl bg-white/10 p-1.5">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Home screen content</h1>
+          <p className="mt-1 text-sm text-slate-500">Manage the navbar, promotional banner and offers banner shown on the {moduleLabel} home screen.</p>
+        </div>
+          <div className="flex w-fit gap-1 rounded-lg border border-gray-200 bg-white p-1">
             <button
               onClick={() => setView("table")}
-              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition ${view === "table" ? "bg-white text-[#852BAF] shadow" : "text-white/80 hover:bg-white/10"}`}
+              className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition ${view === "table" ? "bg-[#852BAF] text-white" : "text-slate-600 hover:bg-purple-50"}`}
             >
               <FiList /> Content
             </button>
             <button
               onClick={startAdd}
-              className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition ${view === "form" ? "bg-white text-[#852BAF] shadow" : "text-white/80 hover:bg-white/10"}`}
+              className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition ${view === "form" ? "bg-[#852BAF] text-white" : "text-slate-600 hover:bg-purple-50"}`}
             >
               <FiPlus /> Create
             </button>
           </div>
-        </div>
       </header>
 
       {view === "table" ? (

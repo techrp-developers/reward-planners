@@ -11,7 +11,6 @@ import {
   FiTag,
   FiX,
   FiSave,
-  FiLayers,
 } from "react-icons/fi";
 // import imageCompression from "browser-image-compression";
 
@@ -382,19 +381,9 @@ export default function SubcategoryManagement() {
   };
 
   return (
-    <div className="min-h-screen p-8 bg-[#FAFAFE]">
+    <div className="w-full pb-8">
       {/* PAGE HEADER */}
-      <div className="mb-10">
-        <h1 className="flex items-center gap-4 text-3xl font-black tracking-tight text-gray-900">
-          <div className="p-3 bg-white shadow-sm rounded-2xl text-[#852BAF]">
-            <FiLayers />
-          </div>
-          Subcategory Management
-        </h1>
-        <p className="mt-2 ml-16 font-medium text-gray-400">
-          Deepen your catalog organization
-        </p>
-      </div>
+      <header className="mb-6"><h1 className="text-2xl font-semibold tracking-tight text-slate-900">Subcategory Management</h1><p className="mt-1 text-sm text-slate-500">Deepen your catalog organization</p></header>
       {error && (
         <div className="mb-8 p-4 rounded-xl bg-red-50 border border-red-200 text-red-600 font-semibold">
           {error}
@@ -418,7 +407,7 @@ export default function SubcategoryManagement() {
         {/* ➕ Add */}
         <button
           onClick={() => setAddModalOpen(true)}
-          className="flex items-center justify-center gap-2 px-8 py-3 font-bold text-white transition-all shadow-lg bg-gradient-to-r from-[#852BAF] to-[#FC3F78] rounded-xl hover:bg-gradient-to-r hover:from-[#FC3F78] hover:to-[#852BAF]
+          className="flex items-center justify-center gap-2 px-8 py-3 font-bold text-white transition-all shadow-lg bg-gradient-to-r from-[#852BAF] from-60% to-[#C13A8E] rounded-xl hover:bg-gradient-to-r hover:from-[#FC3F78] hover:to-[#852BAF]
                            hover:shadow-xl active:scale-95
                            disabled:opacity-60 disabled:cursor-not-allowed
                            inline-flex items-center justify-center cursor-pointer"
@@ -603,7 +592,7 @@ export default function SubcategoryManagement() {
           >
             <div className="p-8 border-b border-gray-50">
               <div className="flex items-center justify-between mb-6">
-                <div className="w-12 h-12 bg-gradient-to-tr from-[#852BAF] to-[#FC3F78] rounded-2xl flex items-center justify-center text-white text-xl shadow-lg shadow-purple-200">
+                <div className="w-12 h-12 bg-gradient-to-tr from-[#852BAF] from-60% to-[#C13A8E] rounded-2xl flex items-center justify-center text-white text-xl shadow-lg shadow-purple-200">
                   <FiTag />
                 </div>
                 <button
@@ -765,7 +754,7 @@ export default function SubcategoryManagement() {
                     <button
                       onClick={handleSaveEdit}
                       disabled={loadingSave}
-                      className="w-full py-4 font-black text-white bg-gradient-to-r from-[#852BAF] to-[#FC3F78] rounded-2xl shadow-lg shadow-purple-200 hover:opacity-90 transition-all cursor-pointer"
+                      className="w-full py-4 font-black text-white bg-gradient-to-r from-[#852BAF] from-60% to-[#C13A8E] rounded-2xl shadow-lg shadow-purple-200 hover:opacity-90 transition-all cursor-pointer"
                     >
                       <FiSave className="inline-block mr-2" />
                       {loadingSave ? "Saving…" : "Save Changes"}
@@ -897,7 +886,7 @@ export default function SubcategoryManagement() {
 
               <button
                 onClick={handleAdd}
-                className="w-full py-4 text-white font-black rounded-2xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] cursor-pointer hover:opacity-90 transition-all"
+                className="w-full py-4 text-white font-black rounded-2xl bg-gradient-to-r from-[#852BAF] from-60% to-[#C13A8E] cursor-pointer hover:opacity-90 transition-all"
               >
                 Create Subcategory
               </button>

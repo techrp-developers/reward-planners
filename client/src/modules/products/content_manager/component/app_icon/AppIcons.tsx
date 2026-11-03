@@ -50,8 +50,8 @@ export default function AppIcons() {
   const rows = (campaigns.data ?? []).filter((campaign) => !filter || campaign.platform === filter);
 
   return <main className="space-y-6">
-    <header className="flex flex-wrap items-center justify-between gap-4 border-b border-purple-100 pb-5">
-      <div><p className="text-xs font-semibold text-[#852BAF]">Content management</p><h1 className="mt-1 text-3xl font-bold text-slate-900">App Icons</h1></div>
+    <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div><h1 className="text-2xl font-semibold tracking-tight text-slate-900">App icons</h1></div>
       <button onClick={() => setForm({})} disabled={campaigns.isPending || campaigns.isError || busy !== null} className="inline-flex items-center gap-2 rounded-lg bg-[#852BAF] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"><FiPlus />New campaign</button>
     </header>
     <section aria-labelledby="live-icons-title"><h2 id="live-icons-title" className="mb-3 text-base font-semibold text-slate-800">Currently live</h2><div className="grid gap-4 sm:grid-cols-2"><LiveIcon platform="ios" /><LiveIcon platform="android" /></div></section>

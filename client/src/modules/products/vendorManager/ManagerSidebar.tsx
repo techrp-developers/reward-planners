@@ -1,39 +1,41 @@
+import BrandLogo from "../../../common/components/BrandLogo";
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
-  FiGrid,
-  FiUsers,
-  FiPackage,
-  FiTag,
-  FiChevronDown,
-  FiChevronRight,
-  FiLogOut,
-  FiSliders,
-  FiShoppingCart,
-  FiGift,
-  FiLock,
-  FiUser,
   FiBarChart2,
-  FiZap,
+  FiChevronDown,
+  FiChevronUp,
+  FiFileText,
+  FiGift,
+  FiGrid,
   FiImage,
+  FiKey,
+  FiLogOut,
+  FiPackage,
+  FiShoppingCart,
+  FiSliders,
+  FiTag,
+  FiUser,
+  FiUsers,
+  FiZap,
 } from "react-icons/fi";
-import { FaFileAlt } from "react-icons/fa";
 import { useAuth } from "../../../common/auth/useAuth";
 import { routes } from "../../../routes";
-import logo from "../../../common/assets/logo.svg";
 import { useNotification } from "../../../common/notifications/useNotification";
 
 interface NavChild {
   label: string;
   to: string;
+  // Detail routes that should keep this link highlighted.
+  matches?: string[];
 }
 
 interface NavItem {
   label: string;
   to?: string;
   Icon: React.ElementType;
-  type: "link" | "dropdown";
   children?: NavChild[];
+  matches?: string[];
   badgeCount?: number;
 }
 
@@ -41,388 +43,143 @@ export default function ManagerNavbar() {
   const { pathname } = useLocation();
   const { user, logout } = useAuth();
   const { unreadCountByCategory } = useNotification();
+  const [accountOpen, setAccountOpen] = useState(false);
 
-  const [openDropdown, setOpenDropdown] = useState<string | null>(
-    pathname.startsWith("/manager/content/") ? "Content" : null,
-  );
-  const [isProfileOpen, setIsProfileOpen] = useState(true);
-
-  const isActive = (to: string) => pathname === to;
-
-  const navItems: NavItem[] = [
+  const groups: { title: string; items: NavItem[] }[] = [
     {
-      label: "Dashboard",
-      to: routes.manager.dashboard,
-      Icon: FiGrid,
-      type: "link",
-    },
-    {
-      label: "Vendors",
-      to: routes.manager.vendors,
-      Icon: FiUsers,
-      type: "link",
-      badgeCount: unreadCountByCategory("vendor_onboarding"),
-    },
-    {
-      label: "Products",
-      to: routes.manager.products,
-      Icon: FiPackage,
-      type: "link",
-    },
-    {
-      label: "Category",
-      Icon: FiTag,
-      type: "dropdown",
-      children: [
-        { label: "Categories", to: routes.manager.categories },
-        { label: "Subcategories", to: routes.manager.subcategories },
-        { label: "Type / Sub-type", to: routes.manager.subsubcategories },
+      title: "Workspace",
+      items: [
+        { label: "Overview", to: routes.manager.dashboard, Icon: FiGrid },
+        { label: "Vendors", to: routes.manager.vendors, Icon: FiUsers, matches: ["/manager/vendor-review/"], badgeCount: unreadCountByCategory("vendor_onboarding") },
+        { label: "Products", to: routes.manager.products, Icon: FiPackage, matches: ["/manager/product/"] },
       ],
     },
     {
-      label: "Document",
-      Icon: FaFileAlt,
-      type: "dropdown",
-      children: [
-        { label: "Add Document", to: routes.manager.addDocument },
-        { label: "Category Link Document", to: routes.manager.linkDocument },
-      ],
-    },
-    {
-      label: "Category Attributes",
-      to: routes.manager.attributes,
-      Icon: FiSliders,
-      type: "link",
-    },
-    {
-      label: "Content",
-      Icon: FiImage,
-      type: "dropdown",
-      children: [
-        { label: "Product", to: routes.manager.content.product },
-        { label: "Service", to: routes.manager.content.service },
-        { label: "Payment", to: routes.manager.content.payment },
-        { label: "Mobile Dashboard", to: routes.manager.content.mobileDashboard },
-        { label: "Module Icons", to: routes.manager.content.moduleIcons },
-        { label: "App Icons", to: routes.manager.content.appIcons },
-      ],
-    },
-    {
-      label: "Orders",
-      Icon: FiShoppingCart,
-      type: "dropdown",
-      children: [
-        { label: "Order List", to: routes.manager.orders.orderList },
+      title: "Catalog",
+      items: [
         {
-          label: "Cancellation Request",
-          to: routes.manager.orders.cancellationRequest,
+          label: "Categories",
+          Icon: FiTag,
+          children: [
+            { label: "Categories", to: routes.manager.categories },
+            { label: "Subcategories", to: routes.manager.subcategories },
+            { label: "Type / Sub-type", to: routes.manager.subsubcategories },
+          ],
+        },
+        {
+          label: "Documents",
+          Icon: FiFileText,
+          children: [
+            { label: "Add document", to: routes.manager.addDocument },
+            { label: "Category link document", to: routes.manager.linkDocument },
+          ],
+        },
+        { label: "Category attributes", to: routes.manager.attributes, Icon: FiSliders },
+      ],
+    },
+    {
+      title: "Sales",
+      items: [
+        {
+          label: "Orders",
+          Icon: FiShoppingCart,
+          children: [
+            { label: "Order list", to: routes.manager.orders.orderList, matches: ["/manager/order-view/"] },
+            { label: "Returns & replacements", to: routes.manager.orders.returns },
+            { label: "Cancellation requests", to: routes.manager.orders.cancellationRequest, matches: ["/manager/cancellation-detail/"] },
+          ],
+        },
+        { label: "Flash sales", to: routes.manager.flashSales.list, Icon: FiZap, matches: ["/manager/flash-sales/"] },
+        {
+          label: "Rewards",
+          Icon: FiGift,
+          children: [
+            { label: "Reward rules", to: routes.manager.rewards.rewardRule, matches: ["/manager/reward-create", "/manager/reward-edit/"] },
+            { label: "BBPS & bus rewards", to: routes.manager.rewards.transactionRanges },
+            { label: "Reward mapping", to: routes.manager.rewards.mapping },
+          ],
         },
       ],
     },
     {
-      label: "Flash Sales",
-      to: routes.manager.flashSales.list,
-      Icon: FiZap,
-      type: "link",
-    },
-    {
-      label: "BBPS Logos",
-      to: routes.manager.bbpsLogos,
-      Icon: FiImage,
-      type: "link",
-    },
-    {
-      label: "Reports",
-      Icon: FiBarChart2,
-      type: "dropdown",
-      children: [
-        { label: "Stock Report", to: routes.manager.reports.stock },
-        { label: "Order Report", to: routes.manager.reports.orders },
+      title: "Content",
+      items: [
+        {
+          label: "Home screens",
+          Icon: FiImage,
+          children: [
+            { label: "Product", to: routes.manager.content.product },
+            { label: "Service", to: routes.manager.content.service },
+            { label: "Payment", to: routes.manager.content.payment },
+            { label: "Mobile dashboard", to: routes.manager.content.mobileDashboard },
+            { label: "Module icons", to: routes.manager.content.moduleIcons },
+            { label: "App icons", to: routes.manager.content.appIcons },
+          ],
+        },
+        { label: "Posters", to: routes.manager.posters.list, Icon: FiImage, matches: ["/manager/posters/"] },
+        { label: "BBPS logos", to: routes.manager.bbpsLogos, Icon: FiImage },
       ],
     },
     {
-      label: "Rewards",
-      Icon: FiGift,
-      type: "dropdown",
-      children: [
-        { label: "Reward Rule", to: routes.manager.rewards.rewardRule },
-        { label: "Reward Mapping", to: routes.manager.rewards.mapping },
+      title: "Reports",
+      items: [
+        { label: "Stock report", to: routes.manager.reports.stock, Icon: FiBarChart2 },
+        { label: "Order report", to: routes.manager.reports.orders, Icon: FiBarChart2 },
       ],
     },
   ];
 
-  return (
-    <nav
-      className="premium-role-sidebar fixed top-0 left-0 flex flex-col w-64 h-full font-sans"
-      style={{
-        background:
-          "linear-gradient(180deg, #ffffff 0%, #fdf8ff 60%, #fff5f8 100%)",
-        borderRight: "1px solid rgba(133,43,175,0.1)",
-        boxShadow: "4px 0 32px rgba(133,43,175,0.08)",
-        animation: "slideInLeft 0.35s cubic-bezier(.22,.68,0,1.2) both",
-      }}
-    >
-      {/* ── BRAND LOGO ── */}
-      <div className="px-6 pb-5 pt-7">
-        <div className="flex items-center gap-3">
-          <div
-            className="flex items-center justify-center overflow-hidden h-11 w-11 rounded-2xl logo-glow-pulse"
-            style={{
-              background: "linear-gradient(135deg, #ffffff 0%, #fff5f8 100%)",
-              boxShadow: "0 6px 20px rgba(133,43,175,0.35)",
-            }}
-          >
-            <img
-              src={logo}
-              alt="Rewards Logo"
-              className="object-contain w-7 h-7"
-            />
-          </div>
-          <div>
-            <h1 className="text-[17px] font-extrabold text-gray-900 leading-none tracking-tight">
-              Reward Planners
-            </h1>
-            <p className="text-[9px] uppercase tracking-[0.18em] font-bold mt-1.5 gradient-text-brand">
-              Manager Portal
-            </p>
-          </div>
-        </div>
+  const active = ({ to, matches }: { to?: string; matches?: string[] }) => pathname === to || !!matches?.some((path) => pathname.startsWith(path));
+  const hasActiveChild = (item: NavItem) => !!item.children?.some(active);
+  const [openDropdown, setOpenDropdown] = useState<string | null>(() => groups.flatMap((group) => group.items).find(hasActiveChild)?.label ?? null);
 
-        <div
-          className="w-full h-px mt-5 rounded-full"
-          style={{
-            background:
-              "linear-gradient(90deg, rgba(133,43,175,0.25) 0%, rgba(252,63,120,0.15) 60%, transparent 100%)",
-          }}
-        />
-      </div>
+  const linkClass = (selected: boolean) => `flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${selected ? "bg-purple-50 font-semibold text-[#852BAF]" : "text-slate-600 hover:bg-purple-50/70 hover:text-[#852BAF]"}`;
 
-      {/* ── MANAGER BADGE ── */}
-      {/* <div className="px-4 mb-2">
-        <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold bg-purple-50 text-purple-700 border border-purple-100">
-          <FiGrid className="shrink-0" size={13} />
-          <span>Manager Console</span>
-          <div className="ml-auto w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
-        </div>
-      </div> */}
-
-      {/* ── NOTIFICATIONS ── */}
-      {/* ── NAVIGATION ── */}
-      <div className="flex-1 px-3 space-y-0.5 overflow-y-auto vendor-sidebar-scroll pb-2">
-        {navItems.map((item, i) => {
-          const isDropdownOpen = openDropdown === item.label;
-          const isItemActive =
-            item.type === "link" && !!item.to && isActive(item.to);
-
-          return (
-            <div
-              key={item.label}
-              className="outline-none"
-              style={{
-                animation: "slideInLeft 0.3s ease both",
-                animationDelay: `${i * 45}ms`,
-              }}
-            >
-              {item.type === "dropdown" ? (
-                <>
-                  <button
-                    onClick={() =>
-                      setOpenDropdown(isDropdownOpen ? null : item.label)
-                    }
-                    className={`flex items-center justify-between w-full gap-3 px-4 py-3 rounded-xl transition-all duration-200 group cursor-pointer ${
-                      isDropdownOpen
-                        ? "bg-purple-50/70"
-                        : "hover:bg-purple-50/40 text-gray-500"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <item.Icon
-                        className={`text-lg transition-colors ${
-                          isDropdownOpen
-                            ? "text-[#852BAF]"
-                            : "text-gray-400 group-hover:text-[#852BAF]"
-                        }`}
-                      />
-                      <span
-                        className={`text-sm font-semibold ${
-                          isDropdownOpen ? "text-gray-900" : "text-gray-600"
-                        }`}
-                      >
-                        {item.label}
-                      </span>
-                    </div>
-                    <FiChevronDown
-                      className={`transition-transform duration-300 ${
-                        isDropdownOpen
-                          ? "rotate-180 text-[#852BAF]"
-                          : "text-gray-400"
-                      }`}
-                    />
-                  </button>
-
-                  <div
-                    style={{
-                      maxHeight: isDropdownOpen
-                        ? `${(item.children?.length ?? 0) * 48}px`
-                        : 0,
-                    }}
-                    className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                      isDropdownOpen
-                        ? "opacity-100 mt-1"
-                        : "opacity-0"
-                    }`}
-                  >
-                    <div
-                      className="ml-9 space-y-0.5"
-                      style={{ borderLeft: "2px solid rgba(133,43,175,0.15)" }}
-                    >
-                      {item.children?.map((child) => (
-                        <Link
-                          key={child.to}
-                          to={child.to}
-                          className={`flex items-center gap-2 py-2.5 px-4 text-sm transition-all duration-200 rounded-r-xl border-l-2 -ml-0.5 ${
-                            isActive(child.to)
-                              ? "border-[#852BAF] text-[#852BAF] font-semibold bg-purple-50/60"
-                              : "border-transparent text-gray-500 hover:text-[#852BAF] hover:bg-purple-50/60"
-                          }`}
-                        >
-                          <FiChevronRight
-                            className={`text-xs transition-all duration-200 ${
-                              isActive(child.to)
-                                ? "text-[#852BAF] translate-x-1"
-                                : "text-gray-300"
-                            }`}
-                          />
-                          <span>{child.label}</span>
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <Link
-                  to={item.to!}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
-                    isItemActive
-                      ? "text-white sidebar-link-active"
-                      : "text-gray-500 hover:bg-purple-50/50 hover:text-[#852BAF]"
-                  }`}
-                  style={
-                    isItemActive
-                      ? {
-                          background:
-                            "linear-gradient(135deg, #852BAF 0%, #C64EFE 100%)",
-                        }
-                      : {}
-                  }
-                >
-                  <item.Icon
-                    className={`text-lg transition-colors ${
-                      isItemActive
-                        ? "text-white"
-                        : "text-gray-400 group-hover:text-[#852BAF]"
-                    }`}
-                  />
-                  <span className="text-sm font-semibold">{item.label}</span>
-                  {!!item.badgeCount && (
-                    <span
-                      className={`ml-auto flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[10px] font-bold rounded-full ${
-                        isItemActive ? "bg-white/25 text-white" : "bg-red-500 text-white"
-                      }`}
-                    >
-                      {item.badgeCount > 99 ? "99+" : item.badgeCount}
-                    </span>
-                  )}
-                </Link>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* ── PROFILE SECTION ── */}
-      <div
-        className="p-3 m-3 rounded-2xl"
-        style={{
-          background:
-            "linear-gradient(135deg, rgba(133,43,175,0.06) 0%, rgba(252,63,120,0.04) 100%)",
-          border: "1px solid rgba(133,43,175,0.12)",
-        }}
-      >
-        <button
-          onClick={() => setIsProfileOpen((p) => !p)}
-          className="flex items-center w-full gap-3 group cursor-pointer"
-        >
-          <div className="relative shrink-0">
-            <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white text-[15px] transition-transform duration-200 group-hover:scale-105"
-              style={{
-                background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
-                boxShadow: "0 4px 12px rgba(133,43,175,0.3)",
-              }}
-            >
-              {user?.email?.charAt(0).toUpperCase() || "M"}
-            </div>
-            <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-white rounded-full flex items-center justify-center shadow-sm">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-              </span>
-            </div>
-          </div>
-
-          <div className="flex-1 min-w-0 overflow-hidden text-left">
-            <p className="text-[13px] font-semibold text-gray-900 truncate leading-tight">
-              {user?.name || user?.email}
-            </p>
-            <p className="text-[10px] text-[#852BAF] font-bold uppercase tracking-wider mt-0.5">
-              {user?.role}
-            </p>
-          </div>
-
-          <FiChevronDown
-            className={`text-gray-400 shrink-0 transition-transform duration-300 ${
-              isProfileOpen ? "rotate-180" : ""
-            }`}
-          />
-        </button>
-
-        <div
-          className={`overflow-hidden transition-all duration-300 ${
-            isProfileOpen ? "max-h-44 mt-3 opacity-100" : "max-h-0 opacity-0"
-          }`}
-        >
-          <div
-            className="w-full h-px mb-2"
-            style={{
-              background:
-                "linear-gradient(90deg, rgba(133,43,175,0.2), transparent)",
-            }}
-          />
-          <div className="space-y-0.5">
-            <Link
-              to={routes.manager.profile}
-              className="flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-white/80 hover:text-[#852BAF] rounded-xl transition-all duration-150"
-            >
-              <FiUser className="text-base text-gray-400 shrink-0" />
-              Profile
-            </Link>
-            <Link
-              to="/manager/change-password"
-              className="flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-white/80 hover:text-[#852BAF] rounded-xl transition-all duration-150"
-            >
-              <FiLock className="text-base text-gray-400 shrink-0" />
-              Change Password
-            </Link>
-            <button
-              onClick={logout}
-              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm font-medium text-red-500 hover:bg-red-50 hover:text-red-600 rounded-xl transition-all duration-150 cursor-pointer"
-            >
-              <FiLogOut className="text-base shrink-0" /> Sign Out
+  return <nav aria-label="Vendor manager navigation" className="flex h-full w-64 flex-col border-r border-purple-100 bg-white">
+    <div className="flex h-16 shrink-0 items-center gap-3 border-b border-purple-100 px-4">
+      <BrandLogo className="w-32" />
+      <div><p className="text-[11px] text-[#852BAF]">Vendor manager</p></div>
+    </div>
+    <div className="flex-1 space-y-6 overflow-y-auto px-3 py-5">
+      {groups.map((group) => <div key={group.title}>
+        <p className="mb-2 px-3 text-xs font-medium text-slate-400">{group.title}</p>
+        <div className="space-y-1">{group.items.map((item) => {
+          if (!item.children) {
+            const selected = active(item);
+            return <Link key={item.label} to={item.to!} aria-current={selected ? "page" : undefined} className={linkClass(selected)}>
+              <item.Icon className="h-4 w-4 shrink-0" />
+              <span className="min-w-0 flex-1 truncate">{item.label}</span>
+              {!!item.badgeCount && <span className="grid h-5 min-w-5 place-items-center rounded-full bg-red-500 px-1.5 text-[10px] font-semibold text-white">{item.badgeCount > 99 ? "99+" : item.badgeCount}</span>}
+            </Link>;
+          }
+          const expanded = openDropdown === item.label;
+          return <div key={item.label}>
+            <button type="button" onClick={() => setOpenDropdown(expanded ? null : item.label)} aria-expanded={expanded} className={linkClass(hasActiveChild(item) && !expanded)}>
+              <item.Icon className="h-4 w-4 shrink-0" />
+              <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
+              <FiChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${expanded ? "rotate-180" : ""}`} />
             </button>
-          </div>
-        </div>
-      </div>
-    </nav>
-  );
+            {expanded && <div className="ml-5 mt-1 space-y-1 border-l border-purple-100 pl-3">
+              {item.children.map((child) => {
+                const selected = active(child);
+                return <Link key={child.to} to={child.to} aria-current={selected ? "page" : undefined} className={`block rounded-lg px-3 py-2 text-sm transition-colors ${selected ? "bg-purple-50 font-semibold text-[#852BAF]" : "text-slate-600 hover:bg-purple-50/70 hover:text-[#852BAF]"}`}>{child.label}</Link>;
+              })}
+            </div>}
+          </div>;
+        })}</div>
+      </div>)}
+    </div>
+    <div className="m-3 rounded-xl border border-purple-100 p-2">
+      {accountOpen && <div className="mb-2 space-y-1 border-b border-purple-100 pb-2">
+        <Link to={routes.manager.profile} className={linkClass(pathname === routes.manager.profile)}><FiUser />Profile</Link>
+        <Link to={routes.manager.changePassword} className={linkClass(pathname === routes.manager.changePassword)}><FiKey />Change password</Link>
+        <button type="button" onClick={logout} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-red-600 hover:bg-red-50"><FiLogOut />Sign out</button>
+      </div>}
+      <button type="button" onClick={() => setAccountOpen((value) => !value)} aria-expanded={accountOpen} className="flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-purple-50">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-purple-50 text-sm font-semibold text-[#852BAF]">{(user?.name || user?.email || "M").charAt(0).toUpperCase()}</span>
+        <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-slate-800">{user?.name || user?.email}</span>{user?.name && <span className="block truncate text-xs text-slate-500">{user.email}</span>}</span>
+        <FiChevronUp className={`h-4 w-4 text-slate-400 ${accountOpen ? "" : "rotate-180"}`} />
+      </button>
+    </div>
+  </nav>;
 }

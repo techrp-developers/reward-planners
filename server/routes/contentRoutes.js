@@ -100,6 +100,16 @@ router.delete(
 );
 
 // ============================ ADMIN: Offers Banner campaign images ============================
+// Offer prices are charged at checkout, so only content admins may set them.
+const pricingAdmin = [authenticateToken, authorizeRoles("admin", "vendor_manager")];
+router.get('/entries/:id/product-pricing', pricingAdmin, contentController.getProductPricing);
+router.get('/entries/:id/discount-rule', pricingAdmin, contentController.getDiscountRule);
+router.put('/entries/:id/discount-rule', pricingAdmin, contentController.saveDiscountRule);
+router.put('/entries/:id/product-pricing/:variantId', pricingAdmin, contentController.saveProductPricing);
+router.get('/entries/:id/service-pricing', pricingAdmin, contentController.getServicePricing);
+router.put('/entries/:id/service-pricing/:variantId', pricingAdmin, contentController.saveServicePricing);
+router.get('/entries/:id/bundle-pricing', pricingAdmin, contentController.getBundlePricing);
+router.put('/entries/:id/bundle-pricing/:bundleId', pricingAdmin, contentController.saveBundlePricing);
 
 router.post(
   "/entries/:id/images",
@@ -115,6 +125,11 @@ router.patch(
 router.delete(
   "/entries/:id/images/:imageId",
   contentController.deleteEntryImage,
+);
+
+router.patch(
+  "/entries/:id/images/:imageId/target",
+  contentController.updateImageTarget,
 );
 
 router.patch(

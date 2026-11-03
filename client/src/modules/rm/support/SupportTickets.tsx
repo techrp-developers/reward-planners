@@ -13,6 +13,7 @@ import {
 import Swal from "sweetalert2";
 import { api } from "../../../common/api/api";
 import { useDebounce } from "../../../common/hooks/useDebounce";
+import WebsiteEnquiries from "./WebsiteEnquiries";
 
 type TicketStatus = "open" | "in_progress" | "resolved" | "closed";
 
@@ -22,6 +23,7 @@ interface Ticket {
   user_name: string | null;
   user_email: string | null;
   user_phone: string | null;
+  company_name: string | null;
   subject: string;
   description: string;
   category_id: number;
@@ -100,6 +102,20 @@ const nextActions: Record<TicketStatus, { status: TicketStatus; label: string }[
 };
 
 export default function SupportTickets() {
+  const [tab, setTab] = useState<"support" | "website">("support");
+  return <div className="mx-auto max-w-7xl space-y-6">
+    <nav aria-label="Enquiry source" className="flex flex-wrap gap-2 rounded-xl border border-purple-100 bg-white p-2">
+      {([['support', 'Support Tickets'], ['website', 'Website Enquiries']] as const).map(([value, label]) =>
+        <button key={value} type="button" aria-pressed={tab === value} onClick={() => setTab(value)}
+          className={`rounded-lg px-5 py-2.5 text-sm font-semibold ${tab === value ? 'bg-[#852BAF] text-white' : 'text-gray-600 hover:bg-purple-50'}`}>
+          {label}
+        </button>)}
+    </nav>
+    {tab === "website" ? <WebsiteEnquiries /> : <SupportTicketList />}
+  </div>;
+}
+
+function SupportTicketList() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [filter, setFilter] = useState<FilterValue>("all");
   const [loading, setLoading] = useState(true);
@@ -167,22 +183,17 @@ export default function SupportTickets() {
     <div className="mx-auto space-y-6 max-w-7xl">
       {/* ── PAGE HEADER ── */}
       <div
-        className="flex items-center justify-between p-5 rounded-2xl"
-        style={{
-          background: "linear-gradient(135deg, rgba(133,43,175,0.06) 0%, rgba(252,63,120,0.04) 100%)",
-          border: "1px solid rgba(133,43,175,0.1)",
-        }}
+        className="flex flex-wrap items-center justify-between gap-4"
       >
         <div className="flex items-center gap-4">
           <div
-            className="flex items-center justify-center text-white w-11 h-11 rounded-2xl shrink-0"
-            style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)", boxShadow: "0 6px 20px rgba(133,43,175,0.25)" }}
+            className="flex items-center justify-center bg-purple-50 text-[#852BAF] w-10 h-10 rounded-lg shrink-0"
           >
             <FiHelpCircle size={20} />
           </div>
           <div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">
-              Support <span className="gradient-text-brand">Enquiries</span>
+            <h1 className="text-2xl font-semibold tracking-tight text-gray-900">
+              Support <span className="text-slate-900">Enquiries</span>
             </h1>
             <p className="text-xs text-gray-500 font-medium mt-0.5">
               Review and resolve customer support tickets
@@ -190,20 +201,19 @@ export default function SupportTickets() {
           </div>
         </div>
 
-        <span className="px-3 py-1.5 rounded-xl text-xs font-bold" style={{ background: "rgba(133,43,175,0.07)", color: "#852BAF" }}>
+        <span className="px-3 py-1.5 rounded-lg bg-purple-50 text-xs font-medium text-[#852BAF]">
           {counts.all} ticket{counts.all !== 1 ? "s" : ""}
         </span>
       </div>
 
       {/* ── MAIN CARD ── */}
       <div
-        className="overflow-hidden bg-white rounded-2xl"
-        style={{ border: "1px solid rgba(133,43,175,0.08)", boxShadow: "0 4px 24px rgba(133,43,175,0.06)" }}
+        className="overflow-hidden rounded-xl border border-purple-100 bg-white shadow-sm"
       >
         {/* FILTER BAR */}
         <div className="px-6 pt-5 pb-4 border-b border-gray-50">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex gap-1 p-1 rounded-xl" style={{ background: "rgba(133,43,175,0.04)", border: "1px solid rgba(133,43,175,0.08)" }}>
+            <div className="flex flex-wrap gap-1 rounded-lg border border-purple-100 bg-purple-50 p-1">
               {filterTabs.map(({ label, value }) => (
                 <button
                   key={value}
@@ -211,7 +221,7 @@ export default function SupportTickets() {
                   className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all duration-200 cursor-pointer ${
                     filter === value ? "text-white shadow-sm" : "text-gray-500 hover:text-[#852BAF]"
                   }`}
-                  style={filter === value ? { background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" } : {}}
+                  style={filter === value ? { background: "#852BAF" } : {}}
                 >
                   {label}
                   {value !== "all" && counts[value] > 0 ? ` (${counts[value]})` : ""}
@@ -243,12 +253,13 @@ export default function SupportTickets() {
           <div className="overflow-x-auto">
             <table className="min-w-full">
               <thead>
-                <tr style={{ background: "linear-gradient(90deg, rgba(133,43,175,0.04) 0%, rgba(252,63,120,0.02) 100%)" }}>
+                <tr style={{ background: "transparent" }}>
                   <th className="px-6 py-4 text-xs font-bold tracking-wider text-left text-gray-400 uppercase">Ticket</th>
                   <th className="px-6 py-4 text-xs font-bold tracking-wider text-left text-gray-400 uppercase">Customer</th>
+                  <th className="px-6 py-4 text-xs font-bold tracking-wider text-left text-gray-400 uppercase">Company</th>
                   <th className="px-6 py-4 text-xs font-bold tracking-wider text-left text-gray-400 uppercase">Category / Module</th>
                   <th className="px-6 py-4 text-xs font-bold tracking-wider text-left text-gray-400 uppercase">Status</th>
-                  <th className="px-6 py-4 text-xs font-bold tracking-wider text-left text-gray-400 uppercase">Actions</th>
+                  <th className="w-64 px-4 py-4 text-xs font-bold tracking-wider text-left text-gray-400 uppercase">Actions</th>
                 </tr>
               </thead>
 
@@ -280,6 +291,10 @@ export default function SupportTickets() {
                     </td>
 
                     <td className="px-6 py-4">
+                      <p className="text-sm text-gray-700">{ticket.company_name ?? "—"}</p>
+                    </td>
+
+                    <td className="px-6 py-4">
                       <p className="text-sm text-gray-700">{ticket.category_name ?? "—"}</p>
                       <p className="text-xs text-gray-400 mt-0.5 capitalize">{ticket.support_module.replace("_", " ")}</p>
                       {ticket.reference_label && (
@@ -291,21 +306,22 @@ export default function SupportTickets() {
                       <StatusChip status={ticket.status} />
                     </td>
 
-                    <td className="px-6 py-4">
-                      <div className="flex flex-wrap items-center gap-2">
+                    <td className="w-64 px-4 py-4 align-middle">
+                      <div className="grid w-60 grid-cols-2 gap-2">
                         <button
+                          type="button"
                           onClick={() => setSelectedTicket(ticket)}
-                          className="flex items-center gap-1.5 rounded-xl border border-purple-200 px-3.5 py-2 text-xs font-bold text-[#852BAF] transition-all hover:bg-purple-50 active:scale-95"
+                          className="inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-purple-200 px-2 text-xs font-medium text-[#852BAF] transition-colors hover:bg-purple-50"
                         >
                           <FiEye size={14} /> View
                         </button>
                         {nextActions[ticket.status].map((action) => (
                           <button
+                            type="button"
                             key={action.status}
                             disabled={updatingId === ticket.ticket_id}
                             onClick={() => void updateStatus(ticket, action.status)}
-                            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white rounded-xl cursor-pointer transition-all hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
-                            style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }}
+                            className={`inline-flex h-9 cursor-pointer items-center justify-center whitespace-nowrap rounded-lg border px-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${action.status === "closed" ? "border-gray-200 text-gray-600 hover:bg-gray-50" : "border-purple-200 bg-purple-50 text-[#852BAF] hover:bg-purple-100"}`}
                           >
                             {updatingId === ticket.ticket_id ? "…" : action.label}
                           </button>
@@ -323,7 +339,7 @@ export default function SupportTickets() {
           <div className="py-16 text-center">
             <div
               className="flex items-center justify-center w-16 h-16 mx-auto mb-4 rounded-2xl"
-              style={{ background: "linear-gradient(135deg, rgba(133,43,175,0.08) 0%, rgba(252,63,120,0.05) 100%)" }}
+
             >
               <FiHelpCircle className="text-[#852BAF] opacity-50" size={24} />
             </div>
@@ -347,12 +363,12 @@ export default function SupportTickets() {
             <header className="sticky top-0 z-10 flex items-start justify-between border-b border-gray-100 bg-white px-6 py-5">
               <div className="min-w-0 pr-4">
                 <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-extrabold uppercase tracking-wider text-[#852BAF]">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-[#852BAF]">
                     Ticket #{selectedTicket.ticket_id}
                   </span>
                   <StatusChip status={selectedTicket.status} />
                 </div>
-                <h2 id="support-ticket-title" className="text-xl font-extrabold text-gray-900">
+                <h2 id="support-ticket-title" className="text-xl font-semibold text-gray-900">
                   {selectedTicket.subject}
                 </h2>
               </div>
@@ -367,7 +383,7 @@ export default function SupportTickets() {
 
             <div className="space-y-6 p-6">
               <div>
-                <h3 className="mb-2 text-xs font-extrabold uppercase tracking-wider text-gray-400">Description</h3>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">Description</h3>
                 <p className="whitespace-pre-wrap rounded-xl bg-gray-50 p-4 text-sm leading-6 text-gray-700">
                   {selectedTicket.description || "No description provided."}
                 </p>
@@ -376,6 +392,7 @@ export default function SupportTickets() {
               <div className="grid gap-3 sm:grid-cols-2">
                 {[
                   ["Customer", selectedTicket.user_name || "Unknown"],
+                  ["Company", selectedTicket.company_name || "Not provided"],
                   ["Email", selectedTicket.user_email || "Not provided"],
                   ["Phone", selectedTicket.user_phone || "Not provided"],
                   ["Category", selectedTicket.category_name || "Not specified"],
@@ -385,7 +402,7 @@ export default function SupportTickets() {
                   ["Last updated", new Date(selectedTicket.updated_at).toLocaleString()],
                 ].map(([label, value]) => (
                   <div key={label} className="rounded-xl border border-gray-100 p-4">
-                    <p className="text-[11px] font-extrabold uppercase tracking-wider text-gray-400">{label}</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{label}</p>
                     <p className="mt-1 break-words text-sm font-semibold capitalize text-gray-800">{value}</p>
                   </div>
                 ))}
@@ -402,14 +419,15 @@ export default function SupportTickets() {
                 </a>
               )}
 
-              <div className="flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 pt-5">
+              <div className="flex flex-col gap-2 border-t border-gray-100 pt-5 sm:flex-row sm:flex-wrap sm:justify-end">
                 {nextActions[selectedTicket.status].map((action) => (
                   <button
+                    type="button"
                     key={action.status}
                     disabled={updatingId === selectedTicket.ticket_id}
                     onClick={() => void updateStatus(selectedTicket, action.status)}
-                    className="rounded-xl px-4 py-2.5 text-sm font-bold text-white transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                    style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }}
+                    className="min-h-10 cursor-pointer whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    style={{ background: "#852BAF" }}
                   >
                     {updatingId === selectedTicket.ticket_id ? "Updating..." : action.label}
                   </button>

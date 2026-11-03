@@ -1,4 +1,6 @@
 const db = require("../config/database");
+const { validateDiscount } = require('../utils/contentDiscount');
+const { contentTargetIds } = require('../utils/contentNavigation');
 const {
   motionFields,
   motionValues,
@@ -26,7 +28,12 @@ const IMAGE_GALLERY_ZONES = [
 const CONTENT_TYPES = ["color", "image"];
 const DISPLAY_MODES = ["single", "carousel", "grid_2", "grid_3"];
 const DEFAULT_DISPLAY_MODE = "carousel";
-const TARGET_TYPES = ["product", "category", "subcategory"];
+const TARGET_TYPES = ["product", "category", "subcategory", "service", "service_category", "service_bundle"];
+const SERVICE_TARGETS = {
+  service: "services",
+  service_category: "service_categories",
+  service_bundle: "service_bundles",
+};
 const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
 const HEX_TEXT_COLOR_RE = /^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$/;
 const GRADIENT_DIRECTIONS = new Set([
@@ -73,7 +80,8 @@ const parseTargetIds = (value) => {
   if (Array.isArray(value)) return value;
   if (typeof value !== "string" || !value.trim()) return [];
   try {
-    return JSON.parse(value);
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
@@ -150,6 +158,10 @@ class ContentZoneModel {
     ) {
       if (!TARGET_TYPES.includes(data.target_type))
         errors.push(`target_type must be one of: ${TARGET_TYPES.join(", ")}`);
+      if (data.module && Object.hasOwn(SERVICE_TARGETS, data.target_type) && !["service", "mobile_dashboard"].includes(data.module))
+        errors.push("Service destinations require the service module or the mobile dashboard");
+      if (data.module === "service" && !Object.hasOwn(SERVICE_TARGETS, data.target_type))
+        errors.push("Choose a service, service category, or service bundle destination");
       if (
         !Number.isInteger(Number(data.target_id)) ||
         Number(data.target_id) <= 0
@@ -157,10 +169,10 @@ class ContentZoneModel {
         errors.push("target_id must be a positive integer");
       const targetIds = parseTargetIds(data.target_ids);
       if (
-        data.target_type === "product" &&
+        ["product", "service"].includes(data.target_type) &&
         targetIds.some((id) => !Number.isInteger(Number(id)) || Number(id) <= 0)
       ) {
-        errors.push("target_ids must contain only positive product IDs");
+        errors.push("target_ids must contain only positive item IDs");
       }
     }
 
@@ -388,10 +400,19 @@ class ContentZoneModel {
       throw error;
     }
     const term = `%${String(search).trim()}%`;
+    if (Object.hasOwn(SERVICE_TARGETS, type)) {
+      const table = SERVICE_TARGETS[type];
+      const selected = Number(selectedId);
+      const [rows] = await db.query(
+        `SELECT id, name AS label FROM ${table} WHERE status = 1 AND (name LIKE ? OR id = ?) ORDER BY name`,
+        [term, Number.isInteger(selected) && selected > 0 ? selected : 0],
+      );
+      return rows.map(row => ({ id: Number(row.id), label: row.label, imageUrl: null }));
+    }
     const queries = {
       product: [
-        "SELECT p.product_id AS id, p.product_name AS label, (SELECT pi.image_url FROM product_images pi WHERE pi.product_id = p.product_id ORDER BY pi.image_id ASC LIMIT 1) AS image_url FROM eproducts p WHERE p.is_deleted = 0 AND p.product_name LIKE ? ORDER BY p.product_name",
-        [term],
+        "SELECT p.product_id AS id, p.product_name AS label, (SELECT pi.image_url FROM product_images pi WHERE pi.product_id = p.product_id ORDER BY pi.image_id ASC LIMIT 1) AS image_url FROM eproducts p WHERE p.is_deleted = 0 AND (p.product_name LIKE ? OR p.brand_name LIKE ?) ORDER BY p.product_name",
+        [term, term],
       ],
       category: [
         "SELECT category_id AS id, category_name AS label FROM categories WHERE category_name LIKE ? ORDER BY category_name",
@@ -452,15 +473,19 @@ class ContentZoneModel {
     }
   }
 
-  /** Product cards linked to a promotional banner, in the same order selected in CMS. */
-  async getContentProducts(contentId) {
-    const entry = await this.getEntryById(contentId);
-    if (entry.target_type !== "product") return [];
+  /** Product cards linked to a banner, in the same order selected in CMS. */
+  async getContentProducts(contentId, imageId = null) {
+    const entry = await this.getImageTargetEntry(contentId, imageId);
+    if (!["product", "category", "subcategory"].includes(entry.target_type)) return [];
 
-    const ids = parseTargetIds(entry.target_ids)
+    let ids = parseTargetIds(entry.target_ids)
       .map(Number)
       .filter((id) => Number.isInteger(id) && id > 0);
-    if (!ids.length && entry.target_id) ids.push(Number(entry.target_id));
+    if (['category', 'subcategory'].includes(entry.target_type)) {
+      const column = entry.target_type === 'category' ? 'category_id' : 'subcategory_id';
+      const [products] = await db.query(`SELECT product_id FROM eproducts WHERE ${column} = ? AND is_deleted = 0`, [entry.target_id]);
+      ids = products.map(product => Number(product.product_id));
+    } else if (!ids.length && entry.target_id) ids.push(Number(entry.target_id));
     if (!ids.length) return [];
 
     const placeholders = ids.map(() => "?").join(", ");
@@ -490,8 +515,9 @@ class ContentZoneModel {
         WHERE pi2.product_id = p.product_id
         ORDER BY (pi2.type = 'gallery') DESC, pi2.sort_order ASC, pi2.image_id ASC LIMIT 1
       )
-      LEFT JOIN content_product_offers cpo
+      LEFT JOIN content_effective_product_offers cpo
         ON cpo.content_id = ? AND cpo.product_id = p.product_id AND cpo.variant_id = v.variant_id
+        AND cpo.offer_price <= v.sale_price
       WHERE p.product_id IN (${placeholders})
         AND p.status = 'approved' AND p.is_visible = 1 AND p.is_deleted = 0
         AND v.variant_id IS NOT NULL
@@ -499,6 +525,248 @@ class ContentZoneModel {
       [contentId, ...ids, ...ids],
     );
     return rows;
+  }
+
+  async getContentServices(contentId, imageId = null) {
+    const entry = await this.getImageTargetEntry(contentId, imageId);
+    if (!['service', 'service_category'].includes(entry.target_type)) return [];
+    let ids = contentTargetIds(entry);
+    if (entry.target_type === 'service_category') {
+      const [services] = await db.query('SELECT id FROM services WHERE category_id = ? AND status = 1 ORDER BY sort_order, id', [entry.target_id]);
+      ids = services.map(service => Number(service.id));
+    }
+    if (!ids.length) return [];
+    const placeholders = ids.map(() => '?').join(',');
+    const [rows] = await db.query(
+      `SELECT s.*, c.name AS category_name FROM services s
+       JOIN service_categories c ON c.id = s.category_id
+       WHERE s.status = 1 AND c.status = 1 AND s.id IN (${placeholders})
+       ORDER BY FIELD(s.id, ${placeholders})`,
+      [...ids, ...ids],
+    );
+    return rows;
+  }
+
+  /** Lowest live offer per service (and that variant's normal price) on a banner. */
+  async getLiveServiceOfferSummary(contentId, serviceIds) {
+    const ids = serviceIds.map(Number).filter((id) => Number.isInteger(id) && id > 0);
+    if (!ids.length) return new Map();
+    const { LIVE_SERVICE_OFFER_SQL } = require('../app/service/v1/utils/serviceOffers');
+    const [rows] = await db.query(
+      `SELECT live.service_id, live.offer_price, v.price AS regular_price
+       FROM (${LIVE_SERVICE_OFFER_SQL} AND cso.content_id = ?) live
+       JOIN service_variants v ON v.id = live.variant_id
+       WHERE live.service_id IN (${ids.map(() => '?').join(',')})
+         AND live.offer_price <= v.price
+       ORDER BY live.offer_price ASC`,
+      [contentId, ...ids],
+    );
+    const summary = new Map();
+    for (const row of rows) {
+      if (!summary.has(Number(row.service_id))) {
+        summary.set(Number(row.service_id), { offer_price: Number(row.offer_price), regular_price: Number(row.regular_price) });
+      }
+    }
+    return summary;
+  }
+
+  async getImageTargetEntry(contentId, imageId = null) {
+    const entry = await this.getEntryById(contentId);
+    if (imageId == null) return entry;
+    const image = await this.getImageById(imageId);
+    if (Number(image.content_id) !== Number(contentId) || !Number(image.is_active)) {
+      const error = new Error('Banner image not found');
+      error.statusCode = 404;
+      throw error;
+    }
+    return image.target_type ? { ...entry, target_type: image.target_type, target_id: image.target_id, target_ids: image.target_ids } : entry;
+  }
+
+  async updateImageTarget(contentId, imageId, data) {
+    const entry = await this.getEntryById(contentId);
+    const image = await this.getImageById(imageId);
+    if (Number(image.content_id) !== Number(contentId)) {
+      const error = new Error('Banner image not found');
+      error.statusCode = 404;
+      throw error;
+    }
+    if (!['product', 'service', 'mobile_dashboard'].includes(entry.module)) {
+      const error = new Error('Image destinations require ecommerce, service, or mobile dashboard content');
+      error.statusCode = 400;
+      throw error;
+    }
+    const type = data.target_type || null;
+    const multi = ['product', 'service'].includes(type);
+    const ids = multi ? parseTargetIds(data.target_ids) : [];
+    const targetId = type ? (ids.length ? ids[0] : data.target_id) : null;
+    this.validateEntry({ module: entry.module, target_type: type, target_id: targetId, target_ids: ids }, { isUpdate: true });
+    if (type) {
+      for (const id of ids.length ? ids : [targetId]) await this.validateTarget(type, id);
+    }
+    await db.query('UPDATE content_zone_entry_images SET target_type = ?, target_id = ?, target_ids = ? WHERE content_id = ? AND image_id = ?',
+      [type, type ? Number(targetId) : null, multi ? JSON.stringify(ids.length ? ids : [Number(targetId)]) : null, contentId, imageId]);
+    return this.getImageById(imageId);
+  }
+
+  async getDiscountRule(contentId) {
+    const entry = await this.getEntryById(contentId);
+    if (!['product', 'service'].includes(entry.module) || !IMAGE_GALLERY_ZONES.includes(entry.zone)) {
+      const error = new Error('Discount rules require an ecommerce or service banner'); error.statusCode = 400; throw error;
+    }
+    return { discount_type: entry.discount_type || 'none', discount_value: Number(entry.discount_value || 0) };
+  }
+
+  async saveDiscountRule(contentId, type, value) {
+    await this.getDiscountRule(contentId);
+    const rule = validateDiscount(type, value);
+    await db.query('UPDATE content_zone_entries SET discount_type = ?, discount_value = ? WHERE content_id = ?', [rule.discount_type, rule.discount_value, contentId]);
+    return rule;
+  }
+
+  async getPricingVariants(contentId) {
+    const entry = await this.getEntryById(contentId);
+    if (entry.module !== 'product' || !IMAGE_GALLERY_ZONES.includes(entry.zone)) {
+      const error = new Error('Product pricing requires an ecommerce banner');
+      error.statusCode = 400;
+      throw error;
+    }
+    const targets = [entry, ...await this.getAllImagesByContentId(contentId)];
+    const conditions = [];
+    const params = [contentId];
+    for (const target of targets) {
+      if (target.target_type === 'product') {
+        const ids = contentTargetIds(target);
+        if (ids.length) { conditions.push(`p.product_id IN (${ids.map(() => '?').join(',')})`); params.push(...ids); }
+      } else if (['category', 'subcategory'].includes(target.target_type) && target.target_id) {
+        conditions.push(`p.${target.target_type === 'category' ? 'category_id' : 'subcategory_id'} = ?`);
+        params.push(Number(target.target_id));
+      }
+    }
+    if (!conditions.length) return [];
+    const [rows] = await db.query(`SELECT p.product_id, p.product_name, p.brand_name,
+      v.variant_id, v.sku, v.sale_price, v.mrp, o.offer_price
+      FROM eproducts p JOIN product_variants v ON v.product_id = p.product_id
+      LEFT JOIN content_product_offers o ON o.content_id = ? AND o.product_id = p.product_id AND o.variant_id = v.variant_id
+      WHERE p.is_deleted = 0 AND (${conditions.join(' OR ')})
+      ORDER BY p.product_name, v.variant_id`, params);
+    return rows;
+  }
+
+  async saveVariantPrice(contentId, variantId, offerPrice) {
+    const variants = await this.getPricingVariants(contentId);
+    const variant = variants.find(row => Number(row.variant_id) === Number(variantId));
+    if (!variant) {
+      const error = new Error('Variant is not linked to this banner'); error.statusCode = 400; throw error;
+    }
+    if (offerPrice === null) {
+      await db.query('DELETE FROM content_product_offers WHERE content_id = ? AND variant_id = ?', [contentId, variantId]);
+      return;
+    }
+    const price = Number(offerPrice);
+    if (!Number.isFinite(price) || price <= 0) {
+      const error = new Error('Enter a positive offer price, or null to use the normal price'); error.statusCode = 400; throw error;
+    }
+    if (price > Number(variant.sale_price)) {
+      const error = new Error(`Offer price cannot exceed the normal price of ₹${variant.sale_price}`); error.statusCode = 400; throw error;
+    }
+    await db.query(`INSERT INTO content_product_offers (content_id, product_id, variant_id, offer_price)
+      VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE offer_price = VALUES(offer_price)`, [contentId, variant.product_id, variantId, price]);
+  }
+
+  /** Active service variants a service banner covers, with any individual price. */
+  async getServicePricingVariants(contentId) {
+    const entry = await this.getEntryById(contentId);
+    if (entry.module !== 'service' || !IMAGE_GALLERY_ZONES.includes(entry.zone)) {
+      const error = new Error('Service pricing requires a service banner');
+      error.statusCode = 400;
+      throw error;
+    }
+    const targets = [entry, ...await this.getAllImagesByContentId(contentId)];
+    const conditions = [];
+    const params = [contentId];
+    for (const target of targets) {
+      if (target.target_type === 'service') {
+        const ids = contentTargetIds(target);
+        if (ids.length) { conditions.push(`s.id IN (${ids.map(() => '?').join(',')})`); params.push(...ids); }
+      } else if (target.target_type === 'service_category' && target.target_id) {
+        conditions.push('s.category_id = ?');
+        params.push(Number(target.target_id));
+      }
+    }
+    if (!conditions.length) return [];
+    const [rows] = await db.query(`SELECT s.id AS service_id, s.name AS service_name,
+      v.id AS variant_id, v.variant_name, v.title, v.price, o.offer_price
+      FROM services s JOIN service_variants v ON v.service_id = s.id AND v.status = 1
+      LEFT JOIN content_service_offers o ON o.content_id = ? AND o.service_id = s.id AND o.variant_id = v.id
+      WHERE (${conditions.join(' OR ')})
+      ORDER BY s.name, v.id`, params);
+    return rows;
+  }
+
+  async saveServiceVariantPrice(contentId, variantId, offerPrice) {
+    const variants = await this.getServicePricingVariants(contentId);
+    const variant = variants.find(row => Number(row.variant_id) === Number(variantId));
+    if (!variant) {
+      const error = new Error('Service variant is not linked to this banner'); error.statusCode = 400; throw error;
+    }
+    if (offerPrice === null) {
+      await db.query('DELETE FROM content_service_offers WHERE content_id = ? AND variant_id = ?', [contentId, variantId]);
+      return;
+    }
+    const price = Number(offerPrice);
+    if (!Number.isFinite(price) || price <= 0 || Math.round(price * 100) / 100 !== price) {
+      const error = new Error('Enter a positive offer price with at most two decimals, or null to use the shared discount'); error.statusCode = 400; throw error;
+    }
+    if (price > Number(variant.price)) {
+      const error = new Error(`Offer price cannot exceed the normal price of ₹${variant.price}`); error.statusCode = 400; throw error;
+    }
+    await db.query(`INSERT INTO content_service_offers (content_id, service_id, variant_id, offer_price)
+      VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE offer_price = VALUES(offer_price)`, [contentId, variant.service_id, variantId, price]);
+  }
+
+  /** Bundles a service banner (or its images) links to, with normal and individual prices. */
+  async getServiceBundlePricing(contentId) {
+    const entry = await this.getEntryById(contentId);
+    if (entry.module !== 'service' || !IMAGE_GALLERY_ZONES.includes(entry.zone)) {
+      const error = new Error('Bundle pricing requires a service banner');
+      error.statusCode = 400;
+      throw error;
+    }
+    const targets = [entry, ...await this.getAllImagesByContentId(contentId)];
+    const ids = [...new Set(targets
+      .filter((target) => target.target_type === 'service_bundle' && target.target_id)
+      .map((target) => Number(target.target_id)))];
+    if (!ids.length) return [];
+    const [rows] = await db.query(`SELECT b.id AS bundle_id, b.name AS bundle_name, b.type AS bundle_type,
+      COALESCE(SUM(i.price), 0) AS bundle_total, COUNT(i.id) AS item_count, o.offer_price
+      FROM service_bundles b
+      LEFT JOIN service_bundle_items i ON i.bundle_id = b.id
+      LEFT JOIN content_bundle_offers o ON o.content_id = ? AND o.bundle_id = b.id
+      WHERE b.id IN (${ids.map(() => '?').join(',')})
+      GROUP BY b.id, b.name, b.type, o.offer_price
+      ORDER BY b.name`, [contentId, ...ids]);
+    return rows.map((row) => ({ ...row, bundle_total: Number(row.bundle_total), item_count: Number(row.item_count) }));
+  }
+
+  async saveServiceBundlePrice(contentId, bundleId, offerPrice) {
+    const bundles = await this.getServiceBundlePricing(contentId);
+    const bundle = bundles.find((row) => Number(row.bundle_id) === Number(bundleId));
+    if (!bundle) {
+      const error = new Error('Bundle is not linked to this banner'); error.statusCode = 400; throw error;
+    }
+    if (offerPrice === null) {
+      await db.query('DELETE FROM content_bundle_offers WHERE content_id = ? AND bundle_id = ?', [contentId, bundleId]);
+      return;
+    }
+    const price = Number(offerPrice);
+    if (!Number.isFinite(price) || price <= 0 || Math.round(price * 100) / 100 !== price) {
+      const error = new Error('Enter a positive bundle price with at most two decimals, or null to use the shared discount'); error.statusCode = 400; throw error;
+    }
+    if (price > bundle.bundle_total) {
+      const error = new Error(`Bundle price cannot exceed the bundle total of ₹${bundle.bundle_total}`); error.statusCode = 400; throw error;
+    }
+    await db.query(`INSERT INTO content_bundle_offers (content_id, bundle_id, offer_price)
+      VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE offer_price = VALUES(offer_price)`, [contentId, Number(bundleId), price]);
   }
 
   async getProductOffers(contentId) {
@@ -614,7 +882,7 @@ class ContentZoneModel {
         data.redirect_link || null,
         data.target_type || null,
         data.target_type ? Number(data.target_id) : null,
-        data.target_type === "product"
+        ["product", "service"].includes(data.target_type)
           ? JSON.stringify(parseTargetIds(data.target_ids))
           : null,
         startAt,
@@ -655,7 +923,12 @@ class ContentZoneModel {
     }
 
     validateMotion(data, existing.zone);
-    this.validateEntry(data, { isUpdate: true });
+    this.validateEntry({
+      ...data,
+      module: data.module ?? existing.module,
+      target_type: data.target_type === undefined ? existing.target_type : data.target_type,
+      target_id: data.target_id === undefined ? existing.target_id : data.target_id,
+    }, { isUpdate: true });
 
     if (
       existing.is_default &&
@@ -701,7 +974,7 @@ class ContentZoneModel {
           );
         else if (key === "target_ids")
           values.push(
-            data.target_type === "product"
+            ["product", "service"].includes(data.target_type === undefined ? existing.target_type : data.target_type)
               ? JSON.stringify(parseTargetIds(data[key]))
               : null,
           );
@@ -751,9 +1024,9 @@ class ContentZoneModel {
       `
       INSERT INTO content_zone_entries (
         module, zone, content_type, display_mode, color_value, text_color, image_url, title, cta_text,
-        redirect_link, target_type, target_id, target_ids, start_at, end_at, priority, is_default, is_published, created_by_name, motion_effect, motion_intensity, motion_speed
+        redirect_link, target_type, target_id, target_ids, start_at, end_at, priority, is_default, is_published, created_by_name, motion_effect, motion_intensity, motion_speed, discount_type, discount_value
       )
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,?,?,?,?)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,?,?,?,?,?,?)
       `,
       [
         original.module,
@@ -768,7 +1041,7 @@ class ContentZoneModel {
         original.redirect_link,
         original.target_type,
         original.target_id,
-        original.target_type === "product"
+        ["product", "service"].includes(original.target_type)
           ? JSON.stringify(parseTargetIds(original.target_ids))
           : null,
         original.start_at,
@@ -776,6 +1049,8 @@ class ContentZoneModel {
         original.priority,
         original.created_by_name,
         ...Object.values(motionValues(original)),
+        original.discount_type || "none",
+        Number(original.discount_value || 0),
       ],
     );
 
@@ -829,7 +1104,7 @@ class ContentZoneModel {
   async getImagesByContentId(contentId) {
     const [rows] = await db.query(
       `
-      SELECT image_id, content_id, image_url, sort_order, is_active
+      SELECT image_id, content_id, image_url, sort_order, is_active, target_type, target_id, target_ids
       FROM content_zone_entry_images
       WHERE content_id = ?
         AND is_active = 1
@@ -845,7 +1120,7 @@ class ContentZoneModel {
   async getAllImagesByContentId(contentId) {
     const [rows] = await db.query(
       `
-      SELECT image_id, content_id, image_url, sort_order, is_active
+      SELECT image_id, content_id, image_url, sort_order, is_active, target_type, target_id, target_ids
       FROM content_zone_entry_images
       WHERE content_id = ?
       `,
@@ -858,7 +1133,7 @@ class ContentZoneModel {
   async getImageById(imageId) {
     const [rows] = await db.query(
       `
-      SELECT image_id, content_id, image_url, sort_order, is_active
+      SELECT image_id, content_id, image_url, sort_order, is_active, target_type, target_id, target_ids
       FROM content_zone_entry_images
       WHERE image_id = ?
       LIMIT 1

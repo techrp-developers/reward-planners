@@ -95,7 +95,7 @@ const parseTargetIds = (value) => {
 const validateTargets = async (body) => {
   if (!body.target_type) return;
 
-  if (body.target_type === "product") {
+  if (["product", "service"].includes(body.target_type)) {
     const ids = parseTargetIds(body.target_ids);
     if (ids.length) {
       await Promise.all(
@@ -228,6 +228,9 @@ const withOffersImages = async (entry, { includeInactive = false } = {}) => {
         image_url: getEntryImageUrl(row.image_url),
         sort_order: row.sort_order,
         is_active: row.is_active,
+        target_type: row.target_type || null,
+        target_id: row.target_id ?? null,
+        target_ids: parseTargetIds(row.target_ids),
       }))
     : entry.image_url && !allImages?.length
       ? [
@@ -452,9 +455,9 @@ class ContentController {
       const existing = await ContentZoneModel.getEntryById(id);
       const body = { ...req.body };
       validateMotion(body, existing.zone);
-      if (body.target_type !== undefined || body.target_id !== undefined) {
-        body.target_type = body.target_type || null;
-        await validateTargets(body);
+      if (body.target_type !== undefined || body.target_id !== undefined || body.target_ids !== undefined) {
+        body.target_type = body.target_type === undefined ? existing.target_type : body.target_type || null;
+        await validateTargets({ ...existing, ...body });
       }
 
       if (
@@ -563,16 +566,17 @@ class ContentController {
         );
 
         for (const image of originalImages) {
-          const copiedPath = copyContentImageFile(
+          const copiedPath = await copyContentImageFile(
             image.image_url,
             entry.content_id,
           );
           if (copiedPath) {
-            await ContentZoneModel.createEntryImage(
+            const copiedImage = await ContentZoneModel.createEntryImage(
               entry.content_id,
               copiedPath,
               image.sort_order,
             );
+            if (image.target_type) await ContentZoneModel.updateImageTarget(entry.content_id, copiedImage.image_id, image);
           }
         }
       }
@@ -695,6 +699,61 @@ class ContentController {
         success: false,
         message: err.message,
       });
+    }
+  }
+
+  async getDiscountRule(req, res) {
+    try { return res.json({ success: true, data: await ContentZoneModel.getDiscountRule(req.params.id) }); }
+    catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.message }); }
+  }
+
+  async saveDiscountRule(req, res) {
+    try { return res.json({ success: true, data: await ContentZoneModel.saveDiscountRule(req.params.id, req.body.discount_type, req.body.discount_value) }); }
+    catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.message }); }
+  }
+
+  async getProductPricing(req, res) {
+    try { return res.json({ success: true, data: await ContentZoneModel.getPricingVariants(req.params.id) }); }
+    catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.message }); }
+  }
+
+  async saveProductPricing(req, res) {
+    try {
+      await ContentZoneModel.saveVariantPrice(req.params.id, req.params.variantId, req.body.offer_price);
+      return res.json({ success: true });
+    } catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.message }); }
+  }
+
+  async getServicePricing(req, res) {
+    try { return res.json({ success: true, data: await ContentZoneModel.getServicePricingVariants(req.params.id) }); }
+    catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.message }); }
+  }
+
+  async saveServicePricing(req, res) {
+    try {
+      await ContentZoneModel.saveServiceVariantPrice(req.params.id, req.params.variantId, req.body.offer_price);
+      return res.json({ success: true });
+    } catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.message }); }
+  }
+
+  async getBundlePricing(req, res) {
+    try { return res.json({ success: true, data: await ContentZoneModel.getServiceBundlePricing(req.params.id) }); }
+    catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.message }); }
+  }
+
+  async saveBundlePricing(req, res) {
+    try {
+      await ContentZoneModel.saveServiceBundlePrice(req.params.id, req.params.bundleId, req.body.offer_price);
+      return res.json({ success: true });
+    } catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.message }); }
+  }
+
+  async updateImageTarget(req, res) {
+    try {
+      const image = await ContentZoneModel.updateImageTarget(req.params.id, req.params.imageId, req.body);
+      return res.json({ success: true, data: { ...image, image_url: getEntryImageUrl(image.image_url) } });
+    } catch (error) {
+      return res.status(error.statusCode || 500).json({ success: false, message: error.message });
     }
   }
 

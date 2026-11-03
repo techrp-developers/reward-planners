@@ -135,20 +135,32 @@ class authModel {
   //   return rows[0];
   // }
 
+  // status = app account status (customer.status, managed by RM).
+  // employment_status = company_users.status (managed by company HR); NULL
+  // when the customer is not linked to an employee record.
   async findById(userId) {
     const [rows] = await db.execute(
       ` SELECT
-        user_id,
-        name,
-        email,
-        status,
-        is_verified,
-        last_login_at
-       FROM customer
-       WHERE user_id = ?`,
+        c.user_id,
+        c.name,
+        c.email,
+        c.status,
+        c.is_verified,
+        c.last_login_at,
+        cu.status AS employment_status
+       FROM customer c
+       LEFT JOIN company_users cu ON cu.id = c.company_user_id
+       WHERE c.user_id = ?`,
       [userId],
     );
     return rows[0];
+  }
+
+  // A customer can use the app only while both the app account (RM) and the
+  // employment record (HR) are active.
+  isCustomerActive(user) {
+    if (!user || Number(user.status) !== 1) return false;
+    return user.employment_status == null || Number(user.employment_status) === 1;
   }
 
   /* ======================================================
@@ -187,6 +199,23 @@ class authModel {
     );
 
     return rows[0];
+  }
+
+  // Employee that exists but was deactivated by HR.
+  async isEmployeeInactive({ id, email, phone }) {
+    let where;
+    let value;
+    if (id) [where, value] = ["id = ?", id];
+    else if (email) [where, value] = ["email = ?", email.toLowerCase()];
+    else if (phone) [where, value] = ["TRIM(contact) = ?", phone];
+    else return false;
+
+    const [rows] = await db.execute(
+      `SELECT id FROM company_users WHERE ${where} AND status != 1 LIMIT 1`,
+      [value],
+    );
+
+    return rows.length > 0;
   }
 
   async storeActivationOTP(email, otp) {
@@ -582,6 +611,7 @@ class authModel {
     // 1. Identify logged-in customer's exact company_id
     const [[loggedUser]] = await db.execute(
       `
+
       SELECT 
         c.user_id,
         c.company_user_id,
@@ -744,6 +774,7 @@ class authModel {
     } catch {
       return [];
     }
+
   }
 
   // Delete Customer — soft delete only. The account and its cart/wishlist/

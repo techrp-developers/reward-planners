@@ -1,5 +1,6 @@
 const db = require("../../../../config/database");
 const CartModel = require("../models/serviceCartModel");
+const { getBestServiceOffer, getBestBundleOffer } = require("../utils/serviceOffers");
 
 class ServiceCartController {
   async addToCart(req, res) {
@@ -36,12 +37,16 @@ class ServiceCartController {
         });
       }
 
+      // The cart re-prices live; this records the offer in effect when added.
+      const offer = await getBestServiceOffer(variant_id);
+
       const cart = await CartModel.getOrCreateCart(userId);
 
       await CartModel.addItem(cart.id, {
         service_id,
         variant_id,
-        price: variant.price,
+        price: offer ? offer.price : variant.price,
+        promotional_content_id: offer ? offer.contentId : null,
       });
 
       // -------------------------------
@@ -184,6 +189,11 @@ class ServiceCartController {
 
       const selectedSet = new Set(selected_items || []);
       const insertedItems = [];
+      // The cart re-checks bundle offers live; this records the one in effect.
+      const bundleOffer = await getBestBundleOffer(
+        bundleId,
+        items.reduce((sum, item) => sum + Number(item.bundle_price), 0),
+      );
 
       for (let item of items) {
         //  if custom bundle → apply selection
@@ -204,6 +214,7 @@ class ServiceCartController {
           variant_id: item.variant_id,
           price: finalPrice,
           bundle_id: bundleId,
+          promotional_content_id: bundleOffer ? bundleOffer.contentId : null,
         });
 
         insertedItems.push(item.id);

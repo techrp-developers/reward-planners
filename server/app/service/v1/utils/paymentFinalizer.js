@@ -46,6 +46,8 @@ async function generateAndEmailInvoice(parentOrderId) {
   const [[invoiceRecipient]] = await db.execute(
     `SELECT
        si.invoice_number,
+       si.total_amount,
+       so.payment_id,
        si.invoice_url,
        c.name AS customer_name,
        c.email AS customer_email
@@ -76,6 +78,8 @@ async function generateAndEmailInvoice(parentOrderId) {
     customerName: invoiceRecipient.customer_name,
     parentOrderId,
     invoiceNumber: invoiceRecipient.invoice_number,
+    totalAmount: invoiceRecipient.total_amount,
+    paymentId: invoiceRecipient.payment_id,
     pdf,
   });
 }

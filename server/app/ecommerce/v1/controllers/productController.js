@@ -16,6 +16,7 @@ const {
   resolveRedemption,
   calculateRedeemableCoins,
 } = require("../utils/rewardCalculate");
+const { applyActiveOffers } = require("../utils/activeOffers");
 
 function positiveInt(value, fallback, max = 100) {
   const parsed = Number.parseInt(value, 10);
@@ -136,8 +137,20 @@ async function addWishlistStatus(products, userId) {
 }
 
 class ProductController {
+  async getProductsByBrand(req, res) {
+    const brandName = req.query.brand;
+    if (typeof brandName !== "string" || !brandName.trim() || brandName.trim().length > 255) {
+      return res.status(400).json({ success: false, message: "A brand name of 1–255 characters is required" });
+    }
+    return ProductController.prototype.listProducts(req, res, brandName.trim());
+  }
+
   // all the products
   async getAllProducts(req, res) {
+    return ProductController.prototype.listProducts(req, res);
+  }
+
+  async listProducts(req, res, brandName) {
     try {
       const page = positiveInt(req.query.page, 1, 10000);
       const limit = positiveInt(req.query.limit, 10, 50);
@@ -149,6 +162,7 @@ class ProductController {
         req.query.sortOrder?.toUpperCase() === "ASC" ? "ASC" : "DESC";
 
       const { products, totalItems } = await ProductModel.getAllProducts({
+        brandName,
         search,
         sortBy,
         sortOrder,
@@ -157,6 +171,8 @@ class ProductController {
       });
 
       const rewardCache = {};
+
+      await applyActiveOffers(products);
 
       const processedProducts = await Promise.all(
         products.map(async (product) => {
@@ -205,7 +221,7 @@ class ProductController {
           /* ===============================
               REDEMPTION (rule-based)
             =============================== */
-          const redemption = resolveRedemption(salePrice, rules);
+          const redemption = resolveRedemption(salePrice, product.is_offer_price ? [] : rules);
           const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
           const canRedeem = rules.some((r) => r.can_redeem_reward);
           const redemptionEnabled = canRedeem && redeem_coins > 0;
@@ -313,6 +329,8 @@ class ProductController {
 
       const rewardCache = {};
 
+      await applyActiveOffers(products);
+
       const processedProducts = await Promise.all(
         products.map(async (product) => {
           const imagePath = product.images?.length
@@ -357,7 +375,7 @@ class ProductController {
           /* ===============================
                 REDEMPTION (rule-based)
               =============================== */
-          const redemption = resolveRedemption(salePrice, rules);
+          const redemption = resolveRedemption(salePrice, product.is_offer_price ? [] : rules);
           const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
 
           const canRedeem = rules.some((r) => r.can_redeem_reward);
@@ -463,6 +481,8 @@ class ProductController {
 
       const rewardCache = {};
 
+      await applyActiveOffers(products);
+
       const processedProducts = await Promise.all(
         products.map(async (product) => {
           const imagePath = product.images?.length
@@ -507,7 +527,7 @@ class ProductController {
           /* ===============================
               REDEMPTION (rule-based)
             =============================== */
-          const redemption = resolveRedemption(salePrice, rules);
+          const redemption = resolveRedemption(salePrice, product.is_offer_price ? [] : rules);
 
           const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
 
@@ -593,14 +613,7 @@ class ProductController {
         });
       }
 
-      const campaignId = Number.parseInt(req.query.campaign_id, 10);
-      const contentId = Number.parseInt(req.query.content_id, 10);
-      const campaignOfferPrices = Number.isInteger(campaignId) && campaignId > 0
-        ? await ProductModel.getActiveCampaignOfferPrices(campaignId, productId)
-        : new Map();
-      const contentOfferPrices = Number.isInteger(contentId) && contentId > 0
-        ? await ProductModel.getActiveContentOfferPrices(contentId, productId)
-        : new Map();
+      await applyActiveOffers(product.variants);
 
       if (req.user?.user_id) {
         await db.execute(
@@ -617,20 +630,11 @@ class ProductController {
         ...product,
         variants: await Promise.all(
           product.variants.map(async (variant) => {
-            const campaignPrice = campaignOfferPrices.get(Number(variant.variant_id));
-            const contentPrice = contentOfferPrices.get(Number(variant.variant_id));
-            const isCampaignPrice = campaignPrice !== undefined;
-            const isContentPrice = !isCampaignPrice && contentPrice !== undefined;
-            const isOfferPrice = isCampaignPrice || isContentPrice;
-            const salePrice = isCampaignPrice
-              ? campaignPrice
-              : isContentPrice ? contentPrice
-              : Number(variant.sale_price) || 0;
+            const isOfferPrice = variant.is_offer_price;
+            const salePrice = Number(variant.sale_price) || 0;
             const mrp = Number(variant.mrp) || 0;
 
-            const rules = isOfferPrice
-              ? []
-              : await RewardModel.getProductRewards(
+            const rules = await RewardModel.getProductRewards(
                   product.product_id,
                   variant.variant_id,
                   product.category_id,
@@ -650,7 +654,7 @@ class ProductController {
             /* ===============================
                 REDEMPTION (rule-based)
               =============================== */
-            const redemption = resolveRedemption(salePrice, rules);
+            const redemption = resolveRedemption(salePrice, isOfferPrice ? [] : rules);
 
             const redeem_coins = calculateRedeemableCoins(
               salePrice,
@@ -678,12 +682,12 @@ class ProductController {
             return {
               ...variant,
               sale_price: salePrice,
-              original_sale_price: Number(variant.sale_price) || 0,
+              original_sale_price: variant.original_sale_price,
               offer_price: isOfferPrice ? salePrice : null,
               price: `₹${salePrice.toFixed(2)}`,
-              campaign_id: isCampaignPrice ? campaignId : null,
-              content_id: isContentPrice ? contentId : null,
-              promotional_offer_price: isContentPrice ? salePrice : null,
+              campaign_id: variant.campaign_id,
+              content_id: variant.content_id,
+              promotional_offer_price: variant.content_id ? salePrice : null,
               finalPrice: redemptionEnabled
                 ? `₹${finalPrice.toFixed(2)}`
                 : null,
@@ -901,6 +905,9 @@ class ProductController {
       const userId = req.user?.user_id;
       // const userId = 1;
       let recentlyViewed = [];
+      const limit = positiveInt(req.query.limit, 10, 50);
+      const offset = nonNegativeInt(req.query.offset);
+      const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
 
       if (!userId) {
         return res.json({ success: true, data: [] });
@@ -971,12 +978,14 @@ class ProductController {
         AND p.is_searchable = 1
         AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
 
+        AND (? = '' OR p.product_name LIKE CONCAT('%', ?, '%'))
       GROUP BY rv.product_id
-      ORDER BY rv.viewed_at DESC
-      LIMIT 10
+      ORDER BY MAX(rv.viewed_at) DESC, p.product_id DESC
+      LIMIT ? OFFSET ?
     `;
 
-      const [rows] = await db.execute(query, [userId]);
+      const [rows] = await db.execute(query, [userId, search, search, limit, offset]);
+      await applyActiveOffers(rows);
 
       const rewardCache = {};
 
@@ -1028,7 +1037,7 @@ class ProductController {
           /* ===============================
             REDEMPTION (rule-based)
           =============================== */
-          const redemption = resolveRedemption(salePrice, rules);
+          const redemption = resolveRedemption(salePrice, row.is_offer_price ? [] : rules);
 
           const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
 
@@ -1072,6 +1081,9 @@ class ProductController {
       return res.json({
         success: true,
         data: recentlyViewed,
+        hasMore: recentlyViewed.length === limit,
+        offset,
+        nextOffset: offset + recentlyViewed.length,
       });
     } catch (error) {
       console.error("Error fetching recent products:", error);
@@ -1086,6 +1098,7 @@ class ProductController {
       // const userId = 1;
       const limit = positiveInt(req.query.limit, 10, 50);
       const offset = nonNegativeInt(req.query.offset);
+      const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
 
       if (!userId) {
         return res.status(401).json({
@@ -1098,6 +1111,7 @@ class ProductController {
         userId,
         limit,
         offset,
+        search,
       );
 
       await addWishlistStatus(products, userId);
@@ -1122,8 +1136,9 @@ class ProductController {
     try {
       const limit = positiveInt(req.query.limit, 10, 50);
       const offset = nonNegativeInt(req.query.offset);
+      const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
 
-      const products = await ProductModel.getNewArrivals(limit, offset);
+      const products = await ProductModel.getNewArrivals(limit, offset, search);
 
       await addWishlistStatus(products, req.user?.user_id);
 
@@ -1217,8 +1232,9 @@ class ProductController {
       const limit = positiveInt(req.query.limit, 10, 50);
       const days = positiveInt(req.query.days, 30, 365);
       const offset = nonNegativeInt(req.query.offset);
+      const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
 
-      const products = await ProductModel.getBestSellers(limit, offset, days);
+      const products = await ProductModel.getBestSellers(limit, offset, days, search);
 
       await addWishlistStatus(products, req.user?.user_id);
 
@@ -1244,11 +1260,13 @@ class ProductController {
       const limit = positiveInt(req.query.limit, 10, 50);
       const days = positiveInt(req.query.days, 30, 365);
       const offset = nonNegativeInt(req.query.offset);
+      const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
 
       const products = await ProductModel.getMostViewedProducts(
         limit,
         offset,
         days,
+        search,
       );
 
       await addWishlistStatus(products, req.user?.user_id);
@@ -1274,8 +1292,9 @@ class ProductController {
     try {
       const limit = positiveInt(req.query.limit, 10, 50);
       const offset = nonNegativeInt(req.query.offset);
+      const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
 
-      const products = await ProductModel.getTopRatedProducts(limit, offset);
+      const products = await ProductModel.getTopRatedProducts(limit, offset, search);
 
       await addWishlistStatus(products, req.user?.user_id);
 
@@ -1467,6 +1486,8 @@ class ProductController {
         offset,
       });
 
+      await applyActiveOffers(products);
+
       const processedProducts = await Promise.all(
         products.map(async (product) => {
           const imagePath =
@@ -1499,7 +1520,7 @@ class ProductController {
           /* ===============================
        REDEMPTION
     =============================== */
-          const redemption = resolveRedemption(salePrice, rules);
+          const redemption = resolveRedemption(salePrice, product.is_offer_price ? [] : rules);
 
           const redeem_coins = calculateRedeemableCoins(salePrice, redemption);
 

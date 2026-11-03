@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../../../common/api/api";
-import { FiShoppingCart } from "react-icons/fi";
 
 interface Order {
   order_id: number;
@@ -10,6 +9,7 @@ interface Order {
   status: string;
   created_at: string;
   item_count: number;
+  offer_item_count: number;
   product_name: string | null;
   brand_name: string | null;
   awb_number?: string;
@@ -76,16 +76,13 @@ const OrderList: React.FC = () => {
   };
 
   return (
-    <div className="w-full min-h-screen">
-      <div className="p-6 bg-white border border-gray-200 shadow-lg rounded-2xl">
+    <div className="w-full pb-8">
+      <div>
 
         {/* Header */}
         <div className="flex items-start gap-4 mb-8">
-          <div className="w-12 h-12 bg-gradient-to-r from-[#852BAF] to-[#FC3F78] rounded-full flex items-center justify-center shrink-0 shadow-md">
-            <FiShoppingCart className="text-xl text-white" />
-          </div>
           <div>
-            <h2 className="text-3xl font-bold text-gray-900">Order List</h2>
+            <h2 className="text-2xl font-semibold tracking-tight text-slate-900">Order List</h2>
             <p className="mt-1 text-sm text-gray-500">Manage and monitor all customer orders</p>
           </div>
         </div>
@@ -103,9 +100,9 @@ const OrderList: React.FC = () => {
         {!loading && !error && (
           <>
             {/* Table */}
-            <div className="overflow-hidden border border-gray-100 rounded-2xl">
+            <div className="overflow-hidden border border-gray-100 rounded-2xl bg-white">
               <table className="min-w-full divide-y divide-gray-100">
-                <thead style={{ background: "linear-gradient(135deg, #fdf8ff 0%, #fff5f8 100%)" }}>
+                <thead>
                   <tr>
                     {["Order Ref", "Product", "Brand", "Total", "Status", "Date", "Items", "Action"].map((h) => (
                       <th key={h} className="px-5 py-4 text-xs font-bold tracking-wider text-left text-gray-500 uppercase">
@@ -134,6 +131,9 @@ const OrderList: React.FC = () => {
                           </a>
                           {order.awb_number && (
                             <div className="text-xs text-gray-400 mt-0.5">AWB: {order.awb_number}</div>
+                          )}
+                          {Number(order.offer_item_count) > 0 && (
+                            <span className="mt-1 inline-flex rounded-full border border-pink-200 bg-pink-50 px-2 py-0.5 text-[10px] font-bold text-[#FC3F78]">Offer applied</span>
                           )}
                         </td>
 

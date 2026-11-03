@@ -29,10 +29,11 @@ const bbpsAuth = (req, res, next) => {
           });
         }
 
-        if (Number(user.status) !== 1) {
+        if (!AuthModel.isCustomerActive(user)) {
           return res.status(403).json({
             success: false,
-            message: "User account is inactive",
+            code: "USER_INACTIVE",
+            message: "User inactive. Please contact your HR.",
           });
         }
 

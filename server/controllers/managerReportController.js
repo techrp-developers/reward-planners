@@ -10,6 +10,13 @@ const dateRange = (req, column, params) => {
   return ` AND DATE(${column}) BETWEEN ? AND ?`;
 };
 
+const usageModules = [
+  { key: "step_counter", module: "Step Counter", table: "fitness_steps", date: "step_date", activities: "COUNT(*)", condition: "steps > 0" },
+  { key: "ecommerce", module: "Ecommerce", table: "eorders", date: "created_at", activities: "COUNT(*)", condition: "status NOT IN ('pending_payment','cancelled')" },
+  { key: "service", module: "Service", table: "service_orders", date: "created_at", activities: "COUNT(DISTINCT parent_order_id)", condition: "payment_status = 'paid'" },
+  { key: "bbps", module: "BBPS", table: "bbps_transactions", date: "created_at", activities: "COUNT(*)", condition: "LOWER(bbps_status) IN ('success','successful','completed')" },
+];
+
 class ManagerReportController {
   async inactiveUsers(req, res) {
     try {
@@ -30,23 +37,39 @@ class ManagerReportController {
 
   async usage(req, res) {
     try {
-      const modules = [
-        { module: "Step Counter", table: "fitness_steps", date: "step_date", users: "COUNT(DISTINCT user_id)", activities: "COUNT(*)", condition: "steps > 0" },
-        { module: "Ecommerce", table: "eorders", date: "created_at", users: "COUNT(DISTINCT user_id)", activities: "COUNT(*)", condition: "status NOT IN ('pending_payment','cancelled')" },
-        { module: "Service", table: "service_orders", date: "created_at", users: "COUNT(DISTINCT user_id)", activities: "COUNT(DISTINCT parent_order_id)", condition: "payment_status = 'paid'" },
-        { module: "BBPS", table: "bbps_transactions", date: "created_at", users: "COUNT(DISTINCT user_id)", activities: "COUNT(*)", condition: "LOWER(bbps_status) IN ('success','successful','completed')" },
-      ];
       const rows = [];
-      for (const item of modules) {
+      for (const item of usageModules) {
         const params = [];
         const range = dateRange(req, item.date, params);
-        const [[row]] = await db.execute(`SELECT ${item.users} AS active_users, ${item.activities} AS activities FROM ${item.table} WHERE ${item.condition}${range}`, params);
-        rows.push({ module: item.module, active_users: Number(row.active_users) || 0, activities: Number(row.activities) || 0 });
+        const [[row]] = await db.execute(`SELECT COUNT(DISTINCT user_id) AS active_users, ${item.activities} AS activities FROM ${item.table} WHERE ${item.condition}${range}`, params);
+        rows.push({ key: item.key, module: item.module, active_users: Number(row.active_users) || 0, activities: Number(row.activities) || 0 });
       }
       const totalActivities = rows.reduce((sum, row) => sum + row.activities, 0);
       rows.forEach((row) => { row.usage_share = totalActivities ? Number(((row.activities / totalActivities) * 100).toFixed(1)) : 0; });
       return res.json({ success: true, rows, summary: { totalActivities, leadingModule: [...rows].sort((a, b) => b.active_users - a.active_users)[0]?.module || "—" } });
     } catch (error) { return res.status(error.status || 500).json({ success: false, message: error.status ? error.message : "Unable to load usage report" }); }
+  }
+
+  async usageUsers(req, res) {
+    try {
+      const item = usageModules.find((m) => m.key === req.params.module);
+      if (!item) return res.status(404).json({ success: false, message: "Unknown module" });
+      const params = [];
+      const range = dateRange(req, item.date, params);
+      const [rows] = await db.execute(`
+        SELECT u.user_id, c.name, c.email, c.phone, co.company_name, u.activities, u.last_activity
+        FROM (
+          SELECT user_id, ${item.activities} AS activities, MAX(${item.date}) AS last_activity
+          FROM ${item.table}
+          WHERE ${item.condition}${range}
+          GROUP BY user_id
+        ) u
+        LEFT JOIN customer c ON c.user_id = u.user_id
+        LEFT JOIN companies co ON co.company_id = c.company_id
+        ORDER BY u.activities DESC, c.name ASC
+      `, params);
+      return res.json({ success: true, module: item.module, rows: rows.map((r) => ({ ...r, activities: Number(r.activities) || 0 })) });
+    } catch (error) { return res.status(error.status || 500).json({ success: false, message: error.status ? error.message : "Unable to load module users" }); }
   }
 
   async stock(req, res) {

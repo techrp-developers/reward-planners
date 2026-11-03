@@ -1,14 +1,13 @@
 import React, { useState, useEffect, useRef } from "react";
 import type { ChangeEvent, FormEvent } from "react";
-import type { ComponentType } from "react";
 import { api } from "../../../common/api/api";
 import QuillEditor from "../components/QuillEditor";
 import CustomAttributeBuilder, { type CustomAttributeRow } from "../components/CustomAttributeBuilder";
 import ManualCoverEditor from "../components/ManualCoverEditor";
 import Swal from "sweetalert2";
 import { validateCoverFile, coverImageError, hasExhaustedCoverCredits } from "../utils/coverImage";
+import { RETURN_WINDOW_LABEL } from "../utils/returnPolicy";
 
-type IconComp = ComponentType<any>;
 
 interface ImagePreview {
   file: File;
@@ -18,40 +17,6 @@ interface ImagePreview {
 interface VideoPreview {
   file: File;
   url: string;
-}
-
-function SectionHeader({
-  icon: Icon,
-  title,
-  description,
-}: {
-  icon: IconComp;
-  title: string;
-  description?: string;
-}) {
-  return (
-    <div className="flex items-center space-x-4 pb-4 border-b border-gray-100 mb-6">
-      <div
-        className="p-3.5 text-white rounded-2xl shrink-0"
-        style={{
-          background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
-          boxShadow: "0 6px 20px rgba(133,43,175,0.25)",
-        }}
-      >
-        <Icon className="text-lg" />
-      </div>
-      <div>
-        <h3 className="text-base font-extrabold text-gray-800 tracking-tight">
-          {title}
-        </h3>
-        {description && (
-          <p className="mt-0.5 text-xs text-gray-500 font-medium">
-            {description}
-          </p>
-        )}
-      </div>
-    </div>
-  );
 }
 
 const inputCls =
@@ -109,6 +74,7 @@ import {
   FaTrash,
   FaSpinner,
 } from "react-icons/fa";
+import SectionHeader from "./SectionHeader";
 
 // --- Interfaces matching your backend ---
 interface Category {
@@ -162,6 +128,7 @@ interface ProductData {
   isDiscountEligible: 1 | 0;
   isReturnable: 1 | 0;
   isReplaceable: 1 | 0;
+  openBoxDelivery: 1 | 0;
   returnWindowDays: string;
   deliveryMinDays: string;
   deliveryMaxDays: string;
@@ -185,6 +152,7 @@ const initialProductData: ProductData = {
   isDiscountEligible: 1,
   isReturnable: 1,
   isReplaceable: 1,
+  openBoxDelivery: 0,
   returnWindowDays: "",
   deliveryMinDays: "1",
   deliveryMaxDays: "3",
@@ -552,10 +520,10 @@ export default function ProductListingDynamic() {
           "Minimum delivery days cannot exceed maximum delivery days",
         );
 
-      if (product.isReturnable === 1) {
+      if (product.isReturnable === 1 || product.isReplaceable === 1) {
         const days = Number(product.returnWindowDays);
         if (!days || days < 1 || days > 30)
-          throw new Error("Return window must be between 1 and 30 days");
+          throw new Error("Return / replacement window must be between 1 and 30 days");
       }
 
       for (const doc of requiredDocs) {
@@ -599,7 +567,8 @@ export default function ProductListingDynamic() {
       );
       formData.append("is_returnable", String(product.isReturnable));
       formData.append("is_replaceable", String(product.isReplaceable));
-      if (product.isReturnable === 1 && product.returnWindowDays)
+      formData.append("open_box_delivery", String(product.openBoxDelivery));
+      if ((product.isReturnable === 1 || product.isReplaceable === 1) && product.returnWindowDays)
         formData.append("return_window_days", product.returnWindowDays);
       formData.append("delivery_sla_min_days", product.deliveryMinDays);
       formData.append("delivery_sla_max_days", product.deliveryMaxDays);
@@ -661,11 +630,7 @@ export default function ProductListingDynamic() {
     if (requiredDocs.length === 0) return null;
     return (
       <section
-        className="bg-white rounded-2xl p-6 sm:p-8 vendor-section-card"
-        style={{
-          border: "1px solid rgba(133,43,175,0.08)",
-          boxShadow: "0 4px 24px rgba(133,43,175,0.06)",
-        }}
+        className="bg-white rounded-2xl p-6 sm:p-8 border border-gray-100 shadow-sm"
       >
         <SectionHeader
           icon={FaFileUpload}
@@ -746,26 +711,19 @@ export default function ProductListingDynamic() {
   return (
     <div className="max-w-7xl mx-auto">
       {/* ── PAGE HEADER ── */}
-      <div
-        className="flex items-center justify-between mb-6 p-5 rounded-2xl"
-        style={{
-          background:
-            "linear-gradient(135deg, rgba(133,43,175,0.06) 0%, rgba(252,63,120,0.04) 100%)",
-          border: "1px solid rgba(133,43,175,0.1)",
-        }}
-      >
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
             New <span className="gradient-text-brand">Product Listing</span>
           </h1>
-          <p className="text-xs text-gray-500 font-medium mt-0.5">
+          <p className="mt-1 text-sm text-slate-500">
             Fill in the details below to list your product
           </p>
         </div>
         {/* <div
           className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-white"
           style={{
-            background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
+            background: "linear-gradient(90deg, #852BAF 60%, #C13A8E 100%)",
           }}
         >
           <FaPlus size={10} /> New Product
@@ -799,11 +757,7 @@ export default function ProductListingDynamic() {
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* ── CATEGORY SELECTION ── */}
         <section
-          className="bg-white rounded-2xl p-6 sm:p-8 vendor-section-card"
-          style={{
-            border: "1px solid rgba(133,43,175,0.08)",
-            boxShadow: "0 4px 24px rgba(133,43,175,0.06)",
-          }}
+          className="bg-white rounded-2xl p-6 sm:p-8 border border-gray-100 shadow-sm"
         >
           <SectionHeader
             icon={FaTag}
@@ -1002,11 +956,7 @@ export default function ProductListingDynamic() {
 
         {/* ── PRODUCT IDENTIFICATION ── */}
         <section
-          className="bg-white rounded-2xl p-6 sm:p-8 vendor-section-card"
-          style={{
-            border: "1px solid rgba(133,43,175,0.08)",
-            boxShadow: "0 4px 24px rgba(133,43,175,0.06)",
-          }}
+          className="bg-white rounded-2xl p-6 sm:p-8 border border-gray-100 shadow-sm"
         >
           <SectionHeader
             icon={FaTag}
@@ -1059,11 +1009,7 @@ export default function ProductListingDynamic() {
 
         {/* ── PRODUCT ATTRIBUTES ── */}
         <section
-          className="bg-white rounded-2xl p-6 sm:p-8 vendor-section-card"
-          style={{
-            border: "1px solid rgba(133,43,175,0.08)",
-            boxShadow: "0 4px 24px rgba(133,43,175,0.06)",
-          }}
+          className="bg-white rounded-2xl p-6 sm:p-8 border border-gray-100 shadow-sm"
         >
           <SectionHeader
             icon={FaBox}
@@ -1217,11 +1163,7 @@ export default function ProductListingDynamic() {
 
         {/* ── PRODUCT DESCRIPTION ── */}
         <section
-          className="bg-white rounded-2xl p-6 sm:p-8 vendor-section-card"
-          style={{
-            border: "1px solid rgba(133,43,175,0.08)",
-            boxShadow: "0 4px 24px rgba(133,43,175,0.06)",
-          }}
+          className="bg-white rounded-2xl p-6 sm:p-8 border border-gray-100 shadow-sm"
         >
           <SectionHeader
             icon={FaBox}
@@ -1290,11 +1232,7 @@ export default function ProductListingDynamic() {
 
         {/* ── PRICING & COMMERCIAL ── */}
         <section
-          className="bg-white rounded-2xl p-6 sm:p-8 vendor-section-card"
-          style={{
-            border: "1px solid rgba(133,43,175,0.08)",
-            boxShadow: "0 4px 24px rgba(133,43,175,0.06)",
-          }}
+          className="bg-white rounded-2xl p-6 sm:p-8 border border-gray-100 shadow-sm"
         >
           <SectionHeader
             icon={FaTag}
@@ -1321,6 +1259,12 @@ export default function ProductListingDynamic() {
               </select>
             </div>
 
+
+              <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-purple-100 bg-purple-50/40 p-4 text-sm text-slate-700">
+                <input type="checkbox" checked={product.openBoxDelivery === 1} onChange={event => setProduct(prev => ({ ...prev, openBoxDelivery: event.target.checked ? 1 : 0 }))} className="h-4 w-4 accent-[#852BAF]" />
+                <span><span className="block font-semibold">Open-box delivery</span><span className="block text-xs text-slate-500">Allow the customer to inspect the product at delivery.</span></span>
+              </label>
+              {product.isReplaceable === 1 && <p className="rounded-xl border border-purple-100 bg-purple-50/40 p-4 text-sm text-slate-600">Customers must upload a video showing the damaged product when requesting a replacement.</p>}
             <div>
               <label className={labelCls}>Returnable</label>
               <select
@@ -1329,6 +1273,7 @@ export default function ProductListingDynamic() {
                 onChange={(e) => {
                   const val = Number(e.target.value) as 1 | 0;
 
+                  // Turning returns off defaults replacement to off too; the vendor can switch it back on.
                   setProduct((prev) => ({
                     ...prev,
                     isReturnable: val,
@@ -1348,23 +1293,27 @@ export default function ProductListingDynamic() {
               <select
                 name="isReplaceable"
                 value={product.isReplaceable}
-                disabled={product.isReturnable === 0}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const val = Number(e.target.value) as 1 | 0;
                   setProduct((prev) => ({
                     ...prev,
-                    isReplaceable: Number(e.target.value) as 1 | 0,
-                  }))
-                }
-                className={`${inputCls} disabled:bg-gray-100 disabled:cursor-not-allowed`}
+                    isReplaceable: val,
+                    returnWindowDays:
+                      val === 0 && prev.isReturnable === 0 ? "" : prev.returnWindowDays,
+                  }));
+                }}
+                className={inputCls}
               >
                 <option value={1}>Yes</option>
                 <option value={0}>No</option>
               </select>
             </div>
 
-            {product.isReturnable === 1 && (
+            {(product.isReturnable === 1 || product.isReplaceable === 1) && (
               <div>
-                <label className={labelCls}>Return Window (Days)</label>
+                <label className={labelCls}>
+                  {RETURN_WINDOW_LABEL} (Days)
+                </label>
                 <input
                   type="number"
                   name="returnWindowDays"
@@ -1382,11 +1331,7 @@ export default function ProductListingDynamic() {
 
         {/* ── LOGISTICS ── */}
         <section
-          className="bg-white rounded-2xl p-6 sm:p-8 vendor-section-card"
-          style={{
-            border: "1px solid rgba(133,43,175,0.08)",
-            boxShadow: "0 4px 24px rgba(133,43,175,0.06)",
-          }}
+          className="bg-white rounded-2xl p-6 sm:p-8 border border-gray-100 shadow-sm"
         >
           <SectionHeader
             icon={FaBox}
@@ -1444,11 +1389,7 @@ export default function ProductListingDynamic() {
 
         {/* ── COVER IMAGE ── */}
         <section
-          className="bg-white rounded-2xl p-6 sm:p-8 vendor-section-card"
-          style={{
-            border: "1px solid rgba(133,43,175,0.08)",
-            boxShadow: "0 4px 24px rgba(133,43,175,0.06)",
-          }}
+          className="bg-white rounded-2xl p-6 sm:p-8 border border-gray-100 shadow-sm"
         >
           <SectionHeader
             icon={FaImages}
@@ -1477,7 +1418,7 @@ export default function ProductListingDynamic() {
             <button type="button" disabled={isCoverProcessing || isSubmitting}
               onClick={() => coverInput.current?.click()}
               className="cursor-pointer px-4 py-2 text-xs font-semibold rounded-xl text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
-              style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }}>
+              style={{ background: "linear-gradient(90deg, #852BAF 60%, #C13A8E 100%)" }}>
               {product.productImages.length ? "Replace Image" : "Choose Image"}
             </button>
             <input ref={coverInput} type="file" hidden accept="image/jpeg,image/png,image/webp"
@@ -1524,11 +1465,7 @@ export default function ProductListingDynamic() {
 
         {/* ── PRODUCT VIDEO ── */}
         <section
-          className="bg-white rounded-2xl p-6 sm:p-8 vendor-section-card"
-          style={{
-            border: "1px solid rgba(133,43,175,0.08)",
-            boxShadow: "0 4px 24px rgba(133,43,175,0.06)",
-          }}
+          className="bg-white rounded-2xl p-6 sm:p-8 border border-gray-100 shadow-sm"
         >
           <SectionHeader
             icon={FaImages}
@@ -1557,7 +1494,7 @@ export default function ProductListingDynamic() {
             <label
               className="cursor-pointer px-4 py-2 text-xs font-semibold rounded-xl text-white transition-all hover:opacity-90 active:scale-95"
               style={{
-                background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
+                background: "linear-gradient(90deg, #852BAF 60%, #C13A8E 100%)",
               }}
             >
               Choose Video
@@ -1605,7 +1542,7 @@ export default function ProductListingDynamic() {
             disabled={isSubmitting || isCoverProcessing || !product.productImages.length || !!imageError}
             className="flex items-center justify-center w-full px-6 py-4 text-base font-bold text-white rounded-2xl transition-all duration-300 cursor-pointer hover:opacity-90 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
             style={{
-              background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
+              background: "linear-gradient(90deg, #852BAF 60%, #C13A8E 100%)",
               boxShadow: "0 8px 32px rgba(133,43,175,0.3)",
             }}
           >

@@ -2,7 +2,11 @@ const db = require("../../../../config/database");
 const {
   enqueueWhatsApp,
 } = require("../../../../services/whatsapp/waEnqueueService");
-const xpressService = require("../../../../services/ExpressBees/xpressbees_service");
+const courierService = require("../../../../services/courier/courierService");
+const {
+  BOOKING_UNCONFIRMED,
+  selectNextCourier,
+} = require("../../../../services/courier/courierPolicy");
 const { sendOpsAlert } = require("../../../../services/alertService");
 const { sendEcommerceOrderPlacedEmails } = require("../../../../services/mailBuilder/ecommerceOrderPlaced");
 const { runNonBlocking } = require("../../../../utils/nonBlocking");
@@ -25,8 +29,8 @@ const {
   buildXpressOrderNumber,
 } = require("../../../../services/ExpressBees/xpressbees_policy");
 
-// booking payload
-async function buildXpressBookingPayload(orderId, vendorId) {
+// booking details shared by every courier provider
+async function loadBookingContext(orderId, vendorId) {
   // 1 Order + Customer Address
   const [[order]] = await db.query(
     `
@@ -63,6 +67,7 @@ async function buildXpressBookingPayload(orderId, vendorId) {
     `
     SELECT 
       v.company_name,
+      v.gstin,
       vc.primary_contact,
       va.line1,
       va.line2,
@@ -90,6 +95,7 @@ async function buildXpressBookingPayload(orderId, vendorId) {
       oi.final_price,
       oi.reward_discount,
       p.product_name,
+      p.hsn_sac_code,
       v.sku
     FROM eorder_items oi
     JOIN eproducts p ON oi.product_id = p.product_id
@@ -100,60 +106,28 @@ async function buildXpressBookingPayload(orderId, vendorId) {
     [orderId, vendorId],
   );
 
-  const orderItems = items.map((i) => ({
-    name: i.product_name,
-    qty: i.quantity.toString(),
-    price: i.price.toString(),
-    sku: i.sku,
-  }));
-
-  // Calculate vendor subtotal
-  const vendorSubtotal = items.reduce(
-    (sum, i) => sum + Number(i.final_price),
-    0,
-  );
-  const vendorDiscount = items.reduce(
-    (sum, i) => sum + Number(i.reward_discount || 0),
-    0,
+  // 5 Invoice is generated at payment, before booking starts
+  const [[invoice]] = await db.query(
+    `
+    SELECT invoice_number, invoice_date
+    FROM invoices
+    WHERE order_id = ? AND vendor_id = ?
+    LIMIT 1
+    `,
+    [orderId, vendorId],
   );
 
   return {
-    order_number: buildXpressOrderNumber(order.order_ref, vendorId),
-    unique_order_number: "yes",
-    shipping_charges: shipment.shipping_charges,
-    discount: vendorDiscount,
-    cod_charges: 0,
-    payment_type: "prepaid",
-    order_amount: vendorSubtotal + Number(shipment.shipping_charges),
-
-    package_weight: shipment.weight,
-    package_length: shipment.length,
-    package_breadth: shipment.breadth,
-    package_height: shipment.height,
-    request_auto_pickup: "yes",
-
-    consignee: {
-      name: order.contact_name,
-      address: `${order.address1} ${order.address2 || ""}`,
-      city: order.city,
-      state: order.state_name,
-      pincode: order.zipcode,
-      phone: order.contact_phone,
+    vendorId,
+    orderNumber: buildXpressOrderNumber(order.order_ref, vendorId),
+    order,
+    shipment,
+    vendorAddress,
+    items,
+    invoice: invoice || {
+      invoice_number: `INV-${orderId}-${vendorId}`,
+      invoice_date: new Date().toISOString(),
     },
-
-    pickup: {
-      warehouse_name: "Vendor Warehouse",
-      name: vendorAddress.company_name,
-      address: `${vendorAddress.line1} ${vendorAddress.line2 || ""} ${vendorAddress.line3 || ""}`,
-      city: vendorAddress.city,
-      state: vendorAddress.state_name,
-      pincode: vendorAddress.pincode,
-      phone: vendorAddress.primary_contact,
-    },
-
-    courier_id: shipment.courier_id,
-    collectable_amount: 0,
-    order_items: orderItems,
   };
 }
 
@@ -366,7 +340,14 @@ async function processShipmentsAfterPayment(orderId) {
       [orderId],
     );
 
-    if (!order) return;
+    if (!order) {
+      console.warn(`[COURIER_BOOKING] Order ${orderId}: order not found`);
+      return;
+    }
+
+    console.log(
+      `[COURIER_BOOKING] Order ${orderId}: start, sync=${order.shipment_sync_status}, paid_at=${order.paid_at}`,
+    );
 
     const graceMinutes = getCancellationGraceMinutes();
     if (
@@ -380,7 +361,7 @@ async function processShipmentsAfterPayment(orderId) {
         graceMinutes,
       );
       console.log(
-        `[COURIER_GRACE_PERIOD] Holding order ${orderId} until ${eligibleAt.toISOString()}`,
+        `[COURIER_BOOKING][COURIER_GRACE_PERIOD] Holding order ${orderId} until ${eligibleAt.toISOString()}`,
       );
       return {
         skipped: true,
@@ -395,12 +376,13 @@ async function processShipmentsAfterPayment(orderId) {
       })
     ) {
       console.warn(
-        `[COURIER_TEST_MODE] Skipping courier booking for order ${orderId}, user ${order.user_id}`,
+        `[COURIER_BOOKING][COURIER_TEST_MODE] Skipping courier booking for order ${orderId}, user ${order.user_id}`,
       );
       return { skipped: true, reason: "courier_test_mode" };
     }
 
     if (order?.shipment_sync_status === "completed") {
+      console.log(`[COURIER_BOOKING] Order ${orderId}: already completed`);
       return;
     }
 
@@ -424,6 +406,10 @@ async function processShipmentsAfterPayment(orderId) {
         )
       `,
       [orderId],
+    );
+
+    console.log(
+      `[COURIER_BOOKING] Order ${orderId}: ${shipments.length} shipment row(s) ready: ${shipments.map((row) => row.id).join(",") || "none"}`,
     );
 
     if (shipments.length > 0) {
@@ -468,11 +454,18 @@ async function processShipmentsAfterPayment(orderId) {
         const allCouriers = JSON.parse(shipment.courier_options || "[]");
         const attempted = JSON.parse(shipment.attempted_couriers || "[]");
 
-        const remainingCouriers = allCouriers.filter(
-          (c) => !attempted.map(String).includes(String(c.id)),
+        // Pick the quoted courier first, skipping disabled providers
+        const nextCourier = selectNextCourier(
+          allCouriers,
+          attempted,
+          courierService.isProviderEnabled,
+          shipment.courier_id,
         );
 
-        if (remainingCouriers.length === 0) {
+        if (!nextCourier) {
+          console.warn(
+            `[COURIER_BOOKING] Order ${orderId}: shipment ${shipment.id} has no untried courier`,
+          );
           await conn.query(
             `
             UPDATE order_shipments
@@ -480,7 +473,7 @@ async function processShipmentsAfterPayment(orderId) {
                 booking_in_progress = 0,
                 booking_attempts = 5,
                 booking_last_attempt_at = NOW(),
-                last_booking_error = 'No untried courier remains'
+                last_booking_error = COALESCE(last_booking_error, 'No untried courier remains')
             WHERE id = ?
             `,
             [shipment.id],
@@ -488,33 +481,31 @@ async function processShipmentsAfterPayment(orderId) {
           continue;
         }
 
-        // Pick cheapest available courier
-        const nextCourier = remainingCouriers
-          .filter((c) => c.total_charges > 0)
-          .sort((a, b) => a.total_charges - b.total_charges)[0];
-
-        if (!nextCourier) {
-          throw new Error("No valid courier found");
-        }
         attemptedCourierId = nextCourier.id;
+        console.log(
+          `[COURIER_BOOKING] Order ${orderId}: booking shipment ${shipment.id} with ${nextCourier.id}`,
+        );
 
-        // 3 Build payload
-        const payload = await buildXpressBookingPayload(
+        // 3 Load booking details
+        const bookingContext = await loadBookingContext(
           orderId,
           shipment.vendor_id,
         );
 
-        // Override courier
-        payload.courier_id = nextCourier.id;
-
         // 4 Call booking API
-        const xpResponse = await xpressService.bookShipment(payload);
+        const bookingResponse = await courierService.bookShipment(
+          nextCourier,
+          bookingContext,
+        );
 
-        if (!xpResponse.status) {
-          throw new Error(xpResponse.message || "Courier booking failed");
+        if (!bookingResponse.status) {
+          throw new Error(bookingResponse.message || "Courier booking failed");
         }
 
-        const data = xpResponse.data;
+        const data = bookingResponse.data;
+        console.log(
+          `[COURIER_BOOKING] Order ${orderId}: shipment ${shipment.id} booked, awb=${data.awb_number}`,
+        );
 
         // update shipment row
         await conn.query(
@@ -554,7 +545,35 @@ async function processShipmentsAfterPayment(orderId) {
           [shipment.vendor_order_id],
         );
       } catch (err) {
+        console.error(
+          `[COURIER_BOOKING] Order ${orderId}: shipment ${shipment.id} failed with ${attemptedCourierId}: ${err.message}`,
+        );
         console.error(`Shipment booking failed for ${shipment.id}`, err);
+
+        // The courier may hold this shipment, so booking elsewhere could ship
+        // the order twice. Stop retries and let a person check the panel.
+        if (err.code === BOOKING_UNCONFIRMED) {
+          await conn.query(
+            `
+            UPDATE order_shipments
+            SET booking_in_progress = 0,
+                booking_attempts = 5,
+                last_booking_error = ?,
+                booking_last_attempt_at = NOW(),
+                shipping_status = 'booking_failed'
+            WHERE id = ?
+            `,
+            [err.message, shipment.id],
+          );
+          sendOpsAlert({
+            level: "critical",
+            category: "shipment_booking",
+            message: `Check courier panel before rebooking shipment ${shipment.id} of order ${orderId}: ${err.message}`,
+            meta: { orderId, shipmentId: shipment.id },
+          }).catch(() => {});
+          continue;
+        }
+
         //   HANDLE FAILURE + RELEASE LOCK
         await conn.query(
           `

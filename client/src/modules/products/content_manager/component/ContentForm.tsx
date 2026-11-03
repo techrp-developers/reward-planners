@@ -21,6 +21,8 @@ import ImageDimensionInfo from "./ImageDimensionInfo";
 import AssetSpecPanel from "./AssetSpecPanel";
 import MotionEffectFields from "./MotionEffectFields";
 import ContentTargetSelector from "./ContentTargetSelector";
+import ContentProductPricing from "./ContentProductPricing";
+import ContentServicePricing from "./ContentServicePricing";
 
 const inputClass = "mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100";
 const labelClass = "text-xs font-bold text-slate-500";
@@ -224,7 +226,7 @@ export default function ContentForm({ draft, entries, now, module, onChange, onS
                         key={preset.name}
                         type="button"
                         onClick={() => onChange({ colorValue: makeGradientColorValue(preset.colors, gradient.direction) })}
-                        className="overflow-hidden rounded-xl border border-white bg-white p-0 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                        className="overflow-hidden rounded-xl border border-white bg-white p-0 text-left shadow-sm transition hover:shadow-md"
                       >
                         <span className="block h-12" style={cmsColorToBackground(makeGradientColorValue(preset.colors, gradient.direction))} />
                         <span className="block px-3 py-2 text-xs font-black text-slate-700">{preset.name}</span>
@@ -238,6 +240,7 @@ export default function ContentForm({ draft, entries, now, module, onChange, onS
         ) : IMAGE_GALLERY_ZONES.includes(draft.zone) ? (
           draft.id ? (
             <OfferImagesManager
+              module={module}
               zone={draft.zone}
               allowActivation={draft.zone === "brand_promotional_banner"}
               contentId={draft.id}
@@ -328,15 +331,23 @@ export default function ContentForm({ draft, entries, now, module, onChange, onS
           <input value={draft.redirectLink} onChange={(event) => onChange({ redirectLink: event.target.value })} placeholder="https://..." className={inputClass} />
         </label>
 
-        {module === "product" && draft.zone !== "navbar_background" && (
+        {(module === "product" || module === "service" || module === "mobile_dashboard") && draft.zone !== "navbar_background" && (
+          <details className="sm:col-span-2 rounded-xl border border-slate-200 p-3">
+            <summary className="cursor-pointer text-sm font-semibold text-slate-600">Campaign fallback destination (optional)</summary>
+            <p className="my-2 text-xs text-slate-500">Set each image's destination using Set destination on its thumbnail. This fallback is used only when an image has no destination of its own.</p>
           <ContentTargetSelector
+            module={module}
             targetType={draft.targetType}
             targetId={draft.targetId}
             targetIds={draft.targetIds}
-            multiple={draft.zone === "promotional_banner"}
+            multiple={IMAGE_GALLERY_ZONES.includes(draft.zone)}
             onChange={(targetType, targetId, targetIds = targetId ? [targetId] : []) => onChange({ targetType, targetId, targetIds })}
           />
+          </details>
         )}
+
+        {module === "product" && draft.id > 0 && IMAGE_GALLERY_ZONES.includes(draft.zone) && <ContentProductPricing key={draft.id} contentId={draft.id} />}
+        {module === "service" && draft.id > 0 && IMAGE_GALLERY_ZONES.includes(draft.zone) && <ContentServicePricing key={draft.id} contentId={draft.id} />}
 
         <label className={labelClass}>
           Start Date &amp; Time
@@ -371,7 +382,7 @@ export default function ContentForm({ draft, entries, now, module, onChange, onS
         <button type="button" onClick={onSaveDraft} disabled={saving} className="inline-flex items-center gap-2 rounded-xl border border-purple-200 bg-purple-50 px-5 py-3 text-sm font-bold text-[#852BAF] hover:bg-purple-100 disabled:opacity-50">
           <FiSave /> Save as Draft
         </button>
-        <button type="button" onClick={onPublish} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-5 py-3 text-sm font-extrabold text-white shadow disabled:opacity-50">
+        <button type="button" onClick={onPublish} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] from-60% to-[#C13A8E] px-5 py-3 text-sm font-extrabold text-white shadow disabled:opacity-50">
           Publish
         </button>
       </div>

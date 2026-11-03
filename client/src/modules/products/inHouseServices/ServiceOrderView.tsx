@@ -1,3 +1,5 @@
+import ServiceStatusSelect from "./ServiceStatusSelect";
+import OfferTag, { type OrderOffer } from "../components/OfferTag";
 import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../../../common/api/api";
@@ -31,6 +33,7 @@ interface ServiceItem {
   title: string;
   image_url: string | null;
   price: number;
+  offer: OrderOffer | null;
   status: string;
   timeline: Array<{ status: string; completed: boolean }>;
 }
@@ -257,7 +260,7 @@ const ServiceOrderView: React.FC = () => {
   }
 
   if (error) {
-    return <div className="grid min-h-[65vh] place-items-center bg-gradient-to-br from-[#fdf8ff] via-white to-[#fff5f8] p-6 text-center"><div><div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-red-50 text-red-500"><FiFileText size={24} /></div><h2 className="mt-4 text-xl font-extrabold text-slate-900">Order unavailable</h2><p className="mt-1 text-sm text-slate-500">{error}</p><button onClick={() => navigate(-1)} className="mt-5 rounded-xl bg-[#852BAF] px-5 py-2.5 text-sm font-bold text-white">Return to orders</button></div></div>;
+    return <div className="grid min-h-[65vh] place-items-center bg-gradient-to-br from-[#fdf8ff] via-white to-[#fff5f8] p-6 text-center"><div><div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-red-50 text-red-500"><FiFileText size={24} /></div><h2 className="mt-4 text-xl font-extrabold text-slate-900">Order unavailable</h2><p className="mt-1 text-sm text-slate-500">{error}</p><button onClick={() => navigate(-1)} className="service-back-button mt-5 rounded-xl bg-[#852BAF] px-5 py-2.5 text-sm font-bold text-white">Return to orders</button></div></div>;
   }
 
   if (!data) {
@@ -276,7 +279,7 @@ const ServiceOrderView: React.FC = () => {
       <div className="relative mb-6 flex items-center justify-between overflow-hidden rounded-3xl bg-gradient-to-br from-[#25103d] via-[#68258d] to-[#c33076] p-6 text-white shadow-[0_24px_65px_rgba(91,33,124,0.24)] sm:p-8">
         <button
           onClick={() => navigate(-1)}
-          className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-white/20"
+          className="service-back-button inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-white/20"
         >
           ← Back
         </button>
@@ -531,6 +534,7 @@ const ServiceOrderView: React.FC = () => {
 
                   <td className="px-4 py-3 font-semibold">
                     {formatCurrency(item.price)}
+                    <OfferTag offer={item.offer} />
                   </td>
 
                   <td className="px-4 py-3">
@@ -542,27 +546,10 @@ const ServiceOrderView: React.FC = () => {
                       <span className={getStatusBadge(item.status)}>
                         {item.status.replaceAll("_", " ")}
                       </span>
-                      <select
-                        value=""
-                        disabled={
-                          item.status === "completed" ||
-                          item.status === "cancelled" ||
-                          updatingStatus
-                        }
-                        onChange={(e) =>
-                          updateServiceStatus(item.id, e.target.value)
-                        }
-                        className="px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                      >
-                        <option value="" disabled>
-                          Choose action
-                        </option>
-                        {STATUS_OPTIONS.map((status) => (
-                          <option key={status} value={status}>
-                            {status.replaceAll("_", " ")}
-                          </option>
-                        ))}
-                      </select>
+                      <ServiceStatusSelect value={item.status} options={STATUS_OPTIONS}
+                        busy={updatingStatus} disabled={item.status === "completed" || item.status === "cancelled"}
+                        label={`Change status for ${item.service_name}`}
+                        onChange={status => void updateServiceStatus(item.id, status)} />
 
                       {item.status !== "cancelled" && (
                           <button
@@ -601,7 +588,7 @@ const ServiceOrderView: React.FC = () => {
                   <div key={item.id} className="grid items-center gap-4 rounded-xl bg-slate-50 p-3 text-sm md:grid-cols-[1fr_300px_auto]">
                     <div><span className="font-semibold text-slate-700">{item.service_name}</span><div className="mt-2"><span className={getStatusBadge(item.status)}>{item.status.replaceAll("_", " ")}</span></div></div>
                     <ServiceItemTimeline timeline={item.timeline} />
-                    <span className="font-bold text-[#852BAF]">{formatCurrency(item.price)}</span>
+                    <span className="font-bold text-[#852BAF]">{formatCurrency(item.price)}<OfferTag offer={item.offer} /></span>
                   </div>
                 ))}
               </div>

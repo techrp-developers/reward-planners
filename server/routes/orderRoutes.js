@@ -4,6 +4,15 @@ const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 const orderController = require("../controllers/orderController");
 const ecommerceOrderController = require("../app/ecommerce/v1/controllers/orderController");
 
+const returnRequests = require("../controllers/returnRequestController");
+router.get("/return-requests", authenticateToken, authorizeRoles("vendor"), returnRequests.list);
+router.get("/return-requests/:id", authenticateToken, authorizeRoles("vendor"), returnRequests.detail);
+router.patch("/return-requests/:id", authenticateToken, authorizeRoles("vendor"), returnRequests.review);
+
+router.get("/manager/return-requests", authenticateToken, authorizeRoles("vendor_manager", "admin"), returnRequests.list);
+router.get("/manager/return-requests/:id", authenticateToken, authorizeRoles("vendor_manager", "admin"), returnRequests.detail);
+router.patch("/manager/return-requests/:id", authenticateToken, authorizeRoles("vendor_manager", "admin"), returnRequests.review);
+
 // Get all orders
 router.get(
   "/order-list",

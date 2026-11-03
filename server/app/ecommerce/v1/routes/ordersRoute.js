@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const OrderController = require("../controllers/orderController");
 const auth = require("../../../common/middlewares/auth");
+const returnEvidenceUpload = require("../../../../middleware/mediaUpload/returnEvidenceUpload");
 
 // Get all orders
 router.get("/orders-history", auth, OrderController.getOrderHistory);
@@ -30,6 +31,25 @@ router.get(
   "/items/:orderItemId/cancellation",
   auth,
   OrderController.itemCancellationDetails,
+);
+
+// =================================Return / Replacement===================================
+// All return/replacement requests of the customer
+router.get("/return-requests", auth, OrderController.getReturnRequests);
+
+// Submit return/replacement request (multipart; `video` mandatory for replacement)
+router.post(
+  "/items/:orderItemId/return-request",
+  auth,
+  returnEvidenceUpload,
+  OrderController.requestItemReturn,
+);
+
+// Return/replacement request details
+router.get(
+  "/items/:orderItemId/return-request",
+  auth,
+  OrderController.itemReturnDetails,
 );
 
 // Get cancellation Details

@@ -11,6 +11,7 @@ import {
 
 import { useNavigate, useParams } from "react-router-dom";
 import QuillEditor from "../../products/components/QuillEditor";
+import { RETURN_WINDOW_LABEL, returnWindowLabel } from "../../products/utils/returnPolicy";
 // import Swal from "../../../../utils/swalFallback";
 
 // const API_BASE = import.meta.env.VITE_API_URL;
@@ -50,6 +51,7 @@ interface ProductView {
   product_status?: string;
   isDiscountEligible?: number;
   isReturnable?: number;
+  isReplaceable?: number;
   returnWindowDays?: number | null;
 
   deliverySlaMinDays?: number;
@@ -118,6 +120,7 @@ interface BackendProductRaw {
   status?: string;
   is_discount_eligible?: number;
   is_returnable?: number;
+  is_replaceable?: number;
   return_window_days?: number | null;
   delivery_sla_min_days?: number;
   delivery_sla_max_days?: number;
@@ -238,6 +241,7 @@ export default function ReviewProductPage() {
         product_status: raw.status ?? "",
         isDiscountEligible: raw.is_discount_eligible ?? 1,
         isReturnable: raw.is_returnable ?? 1,
+        isReplaceable: raw.is_replaceable ?? 1,
         returnWindowDays: raw.return_window_days ?? null,
 
         deliverySlaMinDays: raw.delivery_sla_min_days ?? 1,
@@ -631,7 +635,7 @@ export default function ReviewProductPage() {
             description="Discount eligibility and return policy"
           />
 
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
             <FormInput
               id="isDiscountEligible"
               label="Discount Eligible"
@@ -639,13 +643,21 @@ export default function ReviewProductPage() {
             />
 
             <FormInput
-              label="Return Policy"
+              id="isReturnable"
+              label="Returnable"
+              value={product.isReturnable === 1 ? "Yes" : "No"}
+            />
+
+            <FormInput
+              id="isReplaceable"
+              label="Replaceable"
+              value={product.isReplaceable === 1 ? "Yes" : "No"}
+            />
+
+            <FormInput
+              label={RETURN_WINDOW_LABEL}
               id="returnWindowDays"
-              value={
-                product.isReturnable === 1
-                  ? `Returnable (${product.returnWindowDays ?? "-"} days)`
-                  : "Not Returnable"
-              }
+              value={returnWindowLabel(product)}
             />
           </div>
         </section>

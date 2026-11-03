@@ -1,6 +1,7 @@
 const db = require("../../../../config/database");
 const fs = require("fs");
 const path = require("path");
+const { applyActiveOffers } = require("../utils/activeOffers");
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
 
 class wishListModel {
@@ -48,6 +49,7 @@ class wishListModel {
       p.product_id,
       p.product_name,
       p.brand_name,
+      v.variant_id,
       v.mrp,
       v.sale_price,
 
@@ -93,6 +95,7 @@ class wishListModel {
     `,
       [userId],
     );
+    await applyActiveOffers(rows);
 
     return rows.map((row) => {
       let images = [];
@@ -114,8 +117,11 @@ class wishListModel {
         product_id: row.product_id,
         product_name: row.product_name,
         brand_name: row.brand_name,
+        variant_id: row.variant_id,
         mrp: row.mrp,
         sale_price: row.sale_price,
+        original_sale_price: row.original_sale_price,
+        offer_price: row.offer_price,
         images,
       };
     });

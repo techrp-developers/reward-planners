@@ -1,3 +1,5 @@
+import ListPagination from "../../../common/components/ListPagination";
+import { useListPagination } from "../../../common/hooks/useListPagination";
 import EmployeeContactActions from "../../../common/components/EmployeeContactActions";
 import { useEffect, useMemo, useState } from "react";
 import { FiBriefcase, FiDownload, FiEdit2, FiEye, FiPlus, FiSearch, FiTrash2, FiUploadCloud, FiUsers, FiX } from "react-icons/fi";
@@ -120,7 +122,7 @@ function PlatformBadge({ platform }: { platform: Customer["device_platform"] }) 
     : platform === "ios"
       ? "bg-slate-900 text-white"
       : "bg-gray-100 text-gray-500";
-  return <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-extrabold uppercase ${color}`}>{label}</span>;
+  return <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase ${color}`}>{label}</span>;
 }
 
 export default function EmployeeDirectory() {
@@ -189,6 +191,10 @@ export default function EmployeeDirectory() {
       .some((value) => text(value).includes(query))), [customers, query]);
 
   const visibleCount = tab === "companies" ? filteredCompanies.length : filteredCustomers.length;
+  const pagination = useListPagination(visibleCount, JSON.stringify([tab, query]));
+  const start = (pagination.page - 1) * pagination.pageSize;
+  const pagedCompanies = filteredCompanies.slice(start, start + pagination.pageSize);
+  const pagedCustomers = filteredCustomers.slice(start, start + pagination.pageSize);
 
   function openCreateCompany() {
     setEditingCompany(null);
@@ -435,12 +441,12 @@ export default function EmployeeDirectory() {
     <div className="mx-auto max-w-7xl space-y-6">
       <section className="flex flex-col gap-4 rounded-2xl border border-purple-100 bg-white/70 p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#852BAF] to-[#FC3F78] text-white shadow-lg shadow-purple-200">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-50 text-[#852BAF]">
             <FiUsers size={20} />
           </div>
           <div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">Employee Directory</h1>
-            <p className="mt-0.5 text-xs font-medium text-gray-500">View companies and registered customer accounts</p>
+            <h1 className="text-2xl font-semibold tracking-tight text-gray-900">Employee Directory</h1>
+            <p className="mt-0.5 text-xs font-medium text-gray-500">Manage company staff and review registered app accounts</p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -452,29 +458,30 @@ export default function EmployeeDirectory() {
               {companies.map((company) => <option key={company.company_id} value={company.company_id}>{company.company_name}</option>)}
             </select>
           </label>
-          <button type="button" onClick={() => void downloadEmployeeReport()} disabled={loading || downloadingReport} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#C64EFE] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"><FiDownload /> {downloadingReport ? "Downloading..." : "Download Report"}</button>
+          <button type="button" onClick={() => void downloadEmployeeReport()} disabled={loading || downloadingReport} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#852BAF] hover:bg-[#702393] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition  disabled:cursor-not-allowed disabled:opacity-60"><FiDownload /> {downloadingReport ? "Downloading..." : "Download Report"}</button>
         </div>
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-        <div className="flex flex-col gap-4 border-b border-gray-100 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="inline-flex w-fit rounded-xl bg-gray-100 p-1">
+        <div className="flex flex-col gap-4 border-b border-gray-100 p-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="inline-flex w-fit flex-wrap rounded-xl bg-gray-100 p-1">
             {(["companies", "employees"] as Tab[]).map((item) => (
-              <button key={item} onClick={() => { setTab(item); setSearch(""); }} className={`rounded-lg px-5 py-2 text-sm font-bold capitalize transition ${tab === item ? "bg-white text-[#852BAF] shadow-sm" : "text-gray-500 hover:text-gray-800"}`}>
-                {item === "employees" ? "Activated Employees" : "Companies"}
+              <button key={item} onClick={() => { setTab(item); setSearch(""); }} className={`rounded-lg px-5 py-2 text-sm font-bold transition ${tab === item ? "bg-white text-[#852BAF] shadow-sm" : "text-gray-500 hover:text-gray-800"}`}>
+                {item === "employees" ? "Registered app accounts" : "Employees by company"}
               </button>
             ))}
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <label className="relative block sm:w-72">
               <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${tab}...`} className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-[#852BAF] focus:bg-white focus:ring-4 focus:ring-purple-100" />
+              <input value={search} onChange={(event) => setSearch(event.target.value)} aria-label={tab === "companies" ? "Search companies" : "Search app accounts"} placeholder={tab === "companies" ? "Search companies..." : "Search name, company or email..."} className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-[#852BAF] focus:bg-white focus:ring-4 focus:ring-purple-100" />
             </label>
-            {tab === "companies" && <button onClick={openCreateCompany} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#C64EFE] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:shadow-md"><FiPlus /> Add Company</button>}
-            {tab === "employees" && <><button onClick={openImport} className="inline-flex items-center justify-center gap-2 rounded-xl border border-purple-200 bg-white px-4 py-2.5 text-sm font-bold text-[#852BAF] transition hover:bg-purple-50"><FiUploadCloud /> Import</button><button onClick={openCreateEmployee} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#C64EFE] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:shadow-md"><FiPlus /> Add Employee</button></>}
+            {tab === "companies" && <button onClick={openCreateCompany} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#852BAF] hover:bg-[#702393] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition "><FiPlus /> Add Company</button>}
+            {tab === "employees" && <><button onClick={openImport} className="inline-flex items-center justify-center gap-2 rounded-xl border border-purple-200 bg-white px-4 py-2.5 text-sm font-bold text-[#852BAF] transition hover:bg-purple-50"><FiUploadCloud /> Import</button><button onClick={openCreateEmployee} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#852BAF] hover:bg-[#702393] px-4 py-2.5 text-sm font-bold text-white shadow-sm transition "><FiPlus /> Add Employee</button></>}
           </div>
         </div>
 
+        <p className="border-b border-gray-100 px-5 py-3 text-xs text-gray-500">{tab === "companies" ? "Choose a company to view its current staff, app activation progress and former staff." : "Registered app accounts across companies, including enabled and disabled accounts. For staff awaiting activation or employment status, open Employees by company."}</p>
         {loading ? (
           <div className="flex min-h-72 items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-3 border-transparent border-r-[#FC3F78] border-t-[#852BAF]" /></div>
         ) : error ? (
@@ -484,7 +491,7 @@ export default function EmployeeDirectory() {
             <table className="w-full text-left text-sm">
               <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="px-5 py-3">Company</th><th className="px-5 py-3">Contact</th><th className="px-5 py-3">Total employees</th><th className="px-5 py-3">Active employees</th><th className="px-5 py-3">Mobile users</th><th className="px-5 py-3">Status</th><th className="px-5 py-3 text-right">Action</th></tr></thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredCompanies.map((company) => <tr key={company.company_id} className="hover:bg-purple-50/30">
+                {pagedCompanies.map((company) => <tr key={company.company_id} className="hover:bg-purple-50/30">
                   <td className="px-5 py-4"><div className="flex items-center gap-3">{company.company_logo ? <img src={company.company_logo} alt="" className="h-10 w-10 rounded-xl border border-gray-100 object-contain" /> : <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50 text-[#852BAF]"><FiBriefcase /></span>}<div><p className="font-bold text-gray-900">{company.company_name}</p><p className="text-xs text-gray-400">ID #{company.company_id}</p></div></div></td>
                   <td className="px-5 py-4"><p className="text-gray-700">{company.company_email || "—"}</p><p className="text-xs text-gray-400">{company.company_phone || "—"}</p></td>
                   <td className="px-5 py-4 font-semibold text-gray-700">{company.total_employee_count}</td><td className="px-5 py-4 font-semibold text-gray-700">{company.active_employee_count}</td><td className="px-5 py-4"><div className="flex gap-2 whitespace-nowrap"><span className="rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">Android {company.android_user_count}</span><span className="rounded-lg bg-slate-900 px-2.5 py-1 text-xs font-bold text-white">iOS {company.ios_user_count}</span></div></td>
@@ -500,8 +507,8 @@ export default function EmployeeDirectory() {
             <table className="w-full text-left text-sm">
               <thead className="bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="px-5 py-3">Employee</th><th className="px-5 py-3">Company</th><th className="px-5 py-3">Role / Department</th><th className="px-5 py-3">Platform</th><th className="px-5 py-3">Account</th><th className="px-5 py-3">Last login</th></tr></thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredCustomers.map((customer) => <tr key={customer.user_id} className="hover:bg-purple-50/30">
-                  <td className="px-5 py-4"><div className="flex items-center gap-2"><p className="font-bold text-gray-900">{customer.name}</p><EmployeeContactActions name={customer.name} email={customer.email} activated={Number(customer.status) === 1} endpoint={customer.company_id && customer.company_user_id ? `/manager/employee-directory/companies/${customer.company_id}/employees/${customer.company_user_id}/activation-email` : undefined} /></div><p className="text-xs text-gray-500">{customer.email || "No email"}</p><p className="text-xs text-gray-400">{customer.phone || "No phone"}</p></td>
+                {pagedCustomers.map((customer) => <tr key={customer.user_id} className="hover:bg-purple-50/30">
+                  <td className="px-5 py-4"><div className="flex items-center gap-2"><p className="font-bold text-gray-900">{customer.name}</p><EmployeeContactActions phone={customer.phone} messageRecipient={{ recipientType: "customer", recipientId: Number(customer.user_id) }} name={customer.name} email={customer.email} activated={Number(customer.status) === 1} endpoint={customer.company_id && customer.company_user_id ? `/manager/employee-directory/companies/${customer.company_id}/employees/${customer.company_user_id}/activation-email` : undefined} activationWhatsAppEndpoint={customer.company_id && customer.company_user_id ? `/manager/employee-directory/companies/${customer.company_id}/employees/${customer.company_user_id}/activation-whatsapp` : undefined} /></div><p className="text-xs text-gray-500">{customer.email || "No email"}</p><p className="text-xs text-gray-400">{customer.phone || "No phone"}</p></td>
                   <td className="px-5 py-4"><p className="font-semibold text-gray-700">{customer.company_name || "Unassigned"}</p><p className="text-xs text-gray-400">Customer #{customer.user_id}</p></td>
                   <td className="px-5 py-4"><p className="text-gray-700">{customer.company_role || "—"}</p><p className="text-xs text-gray-400">{customer.department || "No department"}</p></td>
                   <td className="px-5 py-4"><PlatformBadge platform={customer.device_platform} />{customer.device_name && <p className="mt-1 max-w-32 truncate text-[11px] text-gray-400" title={customer.device_name}>{customer.device_name}</p>}</td>
@@ -510,16 +517,17 @@ export default function EmployeeDirectory() {
                 </tr>)}
               </tbody>
             </table>
-            {!filteredCustomers.length && <p className="p-12 text-center text-sm text-gray-500">No employees found.</p>}
+            {!filteredCustomers.length && <p className="p-12 text-center text-sm text-gray-500">No registered app accounts found.</p>}
           </div>
         )}
+        {!loading && !error && <ListPagination {...pagination} />}
       </section>
 
       {companyModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 p-4 backdrop-blur-sm">
           <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
-              <div><h2 className="text-lg font-extrabold text-gray-900">{editingCompany ? "Update Company" : "Add Company"}</h2><p className="mt-0.5 text-xs text-gray-500">Enter the company contact and branding details.</p></div>
+              <div><h2 className="text-lg font-semibold text-gray-900">{editingCompany ? "Update Company" : "Add Company"}</h2><p className="mt-0.5 text-xs text-gray-500">Enter the company contact and branding details.</p></div>
               <button onClick={() => setCompanyModalOpen(false)} disabled={savingCompany} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"><FiX size={20} /></button>
             </div>
             <form onSubmit={saveCompany} className="space-y-4 p-6">
@@ -530,7 +538,7 @@ export default function EmployeeDirectory() {
               </div>
               <label className="block"><span className="mb-1.5 block text-xs font-bold text-gray-700">Company logo</span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => setCompanyLogo(event.target.files?.[0] ?? null)} className="w-full rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-500 file:mr-3 file:rounded-lg file:border-0 file:bg-purple-50 file:px-3 file:py-1.5 file:font-bold file:text-[#852BAF]" /><span className="mt-1 block text-[11px] text-gray-400">PNG, JPG or WebP, maximum 5 MB.</span></label>
               {companyFormError && <p className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">{companyFormError}</p>}
-              <div className="flex justify-end gap-3 border-t border-gray-100 pt-4"><button type="button" onClick={() => setCompanyModalOpen(false)} disabled={savingCompany} className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-bold text-gray-600 hover:bg-gray-50">Cancel</button><button type="submit" disabled={savingCompany} className="rounded-xl bg-gradient-to-r from-[#852BAF] to-[#C64EFE] px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">{savingCompany ? "Saving..." : editingCompany ? "Update Company" : "Create Company"}</button></div>
+              <div className="flex justify-end gap-3 border-t border-gray-100 pt-4"><button type="button" onClick={() => setCompanyModalOpen(false)} disabled={savingCompany} className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-bold text-gray-600 hover:bg-gray-50">Cancel</button><button type="submit" disabled={savingCompany} className="rounded-xl bg-[#852BAF] hover:bg-[#702393] px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">{savingCompany ? "Saving..." : editingCompany ? "Update Company" : "Create Company"}</button></div>
             </form>
           </div>
         </div>
@@ -539,7 +547,7 @@ export default function EmployeeDirectory() {
       {employeeModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-gray-950/45 p-4 backdrop-blur-sm">
           <div className="my-6 w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5"><div><h2 className="text-lg font-extrabold text-gray-900">Add Employee</h2><p className="mt-0.5 text-xs text-gray-500">The employee can activate their customer account afterward.</p></div><button onClick={() => setEmployeeModalOpen(false)} disabled={savingEmployee} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"><FiX size={20} /></button></div>
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5"><div><h2 className="text-lg font-semibold text-gray-900">Add Employee</h2><p className="mt-0.5 text-xs text-gray-500">The employee can activate their customer account afterward.</p></div><button onClick={() => setEmployeeModalOpen(false)} disabled={savingEmployee} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"><FiX size={20} /></button></div>
             <form onSubmit={saveEmployee} className="space-y-4 p-6">
               <label className="block"><span className="mb-1.5 block text-xs font-bold text-gray-700">Company *</span><select required value={employeeForm.company_id} onChange={(event) => setEmployeeForm((current) => ({ ...current, company_id: event.target.value }))} className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-[#852BAF] focus:ring-4 focus:ring-purple-100"><option value="">Select a company</option>{companies.map((company) => <option key={company.company_id} value={company.company_id}>{company.company_name}</option>)}</select></label>
               <div className="grid gap-4 sm:grid-cols-2"><label className="block"><span className="mb-1.5 block text-xs font-bold text-gray-700">Employee name *</span><input required value={employeeForm.name} onChange={(event) => setEmployeeForm((current) => ({ ...current, name: event.target.value }))} className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-[#852BAF] focus:ring-4 focus:ring-purple-100" /></label><label className="block"><span className="mb-1.5 block text-xs font-bold text-gray-700">Email *</span><input required type="email" value={employeeForm.email} onChange={(event) => setEmployeeForm((current) => ({ ...current, email: event.target.value }))} className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-[#852BAF] focus:ring-4 focus:ring-purple-100" /></label></div>
@@ -548,7 +556,7 @@ export default function EmployeeDirectory() {
               <div className="grid gap-4 sm:grid-cols-2"><label className="block"><span className="mb-1.5 block text-xs font-bold text-gray-700">Date of joining</span><input type="date" value={employeeForm.date_of_joining} onChange={(event) => setEmployeeForm((current) => ({ ...current, date_of_joining: event.target.value }))} className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-[#852BAF] focus:ring-4 focus:ring-purple-100" /></label><label className="block"><span className="mb-1.5 block text-xs font-bold text-gray-700">Reporting manager</span><input value={employeeForm.reporting_manager} onChange={(event) => setEmployeeForm((current) => ({ ...current, reporting_manager: event.target.value }))} className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-[#852BAF] focus:ring-4 focus:ring-purple-100" /></label></div>
               <label className="block"><span className="mb-1.5 block text-xs font-bold text-gray-700">CTC</span><input type="number" min="0" step="0.01" value={employeeForm.ctc} onChange={(event) => setEmployeeForm((current) => ({ ...current, ctc: event.target.value }))} className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-[#852BAF] focus:ring-4 focus:ring-purple-100" /></label>
               {employeeFormError && <p className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">{employeeFormError}</p>}
-              <div className="flex justify-end gap-3 border-t border-gray-100 pt-4"><button type="button" onClick={() => setEmployeeModalOpen(false)} disabled={savingEmployee} className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-bold text-gray-600 hover:bg-gray-50">Cancel</button><button type="submit" disabled={savingEmployee} className="rounded-xl bg-gradient-to-r from-[#852BAF] to-[#C64EFE] px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">{savingEmployee ? "Adding..." : "Add Employee"}</button></div>
+              <div className="flex justify-end gap-3 border-t border-gray-100 pt-4"><button type="button" onClick={() => setEmployeeModalOpen(false)} disabled={savingEmployee} className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-bold text-gray-600 hover:bg-gray-50">Cancel</button><button type="submit" disabled={savingEmployee} className="rounded-xl bg-[#852BAF] hover:bg-[#702393] px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">{savingEmployee ? "Adding..." : "Add Employee"}</button></div>
             </form>
           </div>
         </div>
@@ -557,7 +565,7 @@ export default function EmployeeDirectory() {
       {importModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 p-4 backdrop-blur-sm">
           <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5"><div><h2 className="text-lg font-extrabold text-gray-900">Import Employees</h2><p className="mt-0.5 text-xs text-gray-500">Upload up to 1,000 records from CSV, XLS, or XLSX.</p></div><button onClick={() => setImportModalOpen(false)} disabled={importing} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"><FiX size={20} /></button></div>
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5"><div><h2 className="text-lg font-semibold text-gray-900">Import Employees</h2><p className="mt-0.5 text-xs text-gray-500">Upload up to 1,000 records from CSV, XLS, or XLSX.</p></div><button onClick={() => setImportModalOpen(false)} disabled={importing} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"><FiX size={20} /></button></div>
             <form onSubmit={importEmployees} className="space-y-4 p-6">
               <label className="block"><span className="mb-1.5 block text-xs font-bold text-gray-700">Company *</span><select required value={importCompanyId} onChange={(event) => setImportCompanyId(event.target.value)} className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-[#852BAF] focus:ring-4 focus:ring-purple-100"><option value="">Select a company</option>{companies.map((company) => <option key={company.company_id} value={company.company_id}>{company.company_name}</option>)}</select></label>
               <label className="block rounded-2xl border-2 border-dashed border-purple-200 bg-purple-50/40 p-6 text-center"><FiUploadCloud className="mx-auto text-3xl text-[#852BAF]" /><span className="mt-2 block text-sm font-bold text-gray-800">Choose employee file</span><span className="mt-1 block text-xs text-gray-500">CSV, XLS, or XLSX · maximum 5 MB</span><input required type="file" accept=".csv,.xls,.xlsx,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { setImportFile(event.target.files?.[0] ?? null); setImportResult(null); }} className="mt-4 block w-full text-xs text-gray-500 file:mr-3 file:rounded-lg file:border-0 file:bg-white file:px-3 file:py-2 file:font-bold file:text-[#852BAF] file:shadow-sm" /></label>
@@ -565,7 +573,7 @@ export default function EmployeeDirectory() {
               <p className="text-xs leading-5 text-gray-500">Required columns: <b>name</b> and <b>email</b>. Recommended: phone, department, role, dob, date_of_joining, reporting_manager, ctc, and status.</p>
               {importError && <p className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">{importError}</p>}
               {importResult && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm"><p className="font-bold text-emerald-800">Imported {importResult.created_count} employee(s). {importResult.skipped_count} skipped.</p>{importResult.skipped.length > 0 && <ul className="mt-2 max-h-28 list-disc overflow-y-auto pl-5 text-xs text-amber-700">{importResult.skipped.map((item) => <li key={`${item.row}-${item.reason}`}>Row {item.row}: {item.reason}</li>)}</ul>}</div>}
-              <div className="flex justify-end gap-3 border-t border-gray-100 pt-4"><button type="button" onClick={() => setImportModalOpen(false)} disabled={importing} className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-bold text-gray-600 hover:bg-gray-50">Close</button><button type="submit" disabled={importing} className="rounded-xl bg-gradient-to-r from-[#852BAF] to-[#C64EFE] px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">{importing ? "Importing..." : "Import Employees"}</button></div>
+              <div className="flex justify-end gap-3 border-t border-gray-100 pt-4"><button type="button" onClick={() => setImportModalOpen(false)} disabled={importing} className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-bold text-gray-600 hover:bg-gray-50">Close</button><button type="submit" disabled={importing} className="rounded-xl bg-[#852BAF] hover:bg-[#702393] px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60">{importing ? "Importing..." : "Import Employees"}</button></div>
             </form>
           </div>
         </div>

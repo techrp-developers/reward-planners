@@ -5,6 +5,11 @@ import { listContentTargetOptions, type ContentTargetOption } from "../api/Conte
 import type { ContentTargetType } from "../types";
 
 interface Props {
+  perImage?: boolean;
+  module?: "product" | "service" | "mobile_dashboard";
+  excludeBundles?: boolean;
+  title?: string;
+  description?: string;
   targetType: ContentTargetType | "";
   targetId: number | null;
   targetIds: number[];
@@ -16,7 +21,8 @@ const fieldClass = "w-full rounded-xl border border-slate-200 bg-white px-4 py-3
 // const R2_BASE_URL = "https://cdn.rewardplanners.com";
 // const productImageUrl = (path?: string | null) => !path ? "" : /^https?:\/\//i.test(path) ? path : `${R2_BASE_URL}/${path.replace(/^\/+/, "")}`;
 
-export default function ContentTargetSelector({ targetType, targetId, targetIds, multiple = false, onChange }: Props) {
+export default function ContentTargetSelector({ perImage = false, module = "product", excludeBundles = false, title, description, targetType, targetId, targetIds, multiple = false, onChange }: Props) {
+  const destinationLabel = targetType.replaceAll("_", " ");
   const [search, setSearch] = useState("");
   const [options, setOptions] = useState<ContentTargetOption[]>([]);
   const [loading, setLoading] = useState(false);
@@ -26,7 +32,7 @@ export default function ContentTargetSelector({ targetType, targetId, targetIds,
     const timer = window.setTimeout(async () => {
       setLoading(true);
       try {
-        setOptions(await listContentTargetOptions(targetType, search, targetType === "product" && multiple ? targetIds[0] : targetId));
+        setOptions(await listContentTargetOptions(targetType, search, ["product", "service"].includes(targetType) && multiple ? targetIds[0] : targetId));
       } catch {
         setOptions([]);
         toast.error("Unable to load content destinations");
@@ -37,40 +43,49 @@ export default function ContentTargetSelector({ targetType, targetId, targetIds,
     return () => window.clearTimeout(timer);
   }, [search, targetId, targetIds.join(","), targetType, multiple]);
 
-  const isMultiProduct = multiple && targetType === "product";
-  const toggleProduct = (id: number) => {
+  const isMultiSelection = multiple && ["product", "service"].includes(targetType);
+  const toggleSelection = (id: number) => {
     const next = targetIds.includes(id) ? targetIds.filter((value) => value !== id) : [...targetIds, id];
     onChange(targetType, next[0] ?? null, next);
   };
 
   return (
     <div className="sm:col-span-2 rounded-2xl border border-purple-100 bg-purple-50/40 p-4">
-      <div className="flex items-center gap-2"><FiLink className="text-[#852BAF]" /><p className="text-xs font-black text-slate-700">Mobile click destination</p></div>
-      <p className="mt-1 text-[11px] text-slate-500">Choose what opens when the user taps this content below the navbar.</p>
+      <div className="flex items-center gap-2"><FiLink className="text-[#852BAF]" /><p className="text-xs font-black text-slate-700">{title ?? (perImage ? "This image's destination" : "Campaign destination")}</p></div>
+      <p className="mt-1 text-[11px] text-slate-500">{description ?? <>{module === "service" ? "Choose a service category, individual service, or bundle to open when this banner is tapped." : module === "mobile_dashboard" ? "Choose products, services, or a category to open when this banner is tapped." : "Choose products, a category, or a subcategory to open when this banner is tapped."} {perImage ? "This destination applies only to this image." : "Images without their own destination use this campaign destination."}</>}</p>
+      {multiple && module !== "service" && !description && <p className="mt-1 text-[11px] text-slate-500">For a brand campaign, search by brand name and select the products to feature.</p>}
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <select value={targetType} onChange={(event) => { onChange(event.target.value as ContentTargetType | "", null, []); setSearch(""); }} className={fieldClass}>
-          <option value="">No destination</option>
-          <option value="product">Product</option>
-          <option value="category">Category</option>
-          <option value="subcategory">Subcategory</option>
+          <option value="">{perImage ? "Use campaign fallback" : "No destination"}</option>
+          {module !== "service" && <>
+            <option value="product">{multiple ? "Products" : "Product"}</option>
+            <option value="category">Category</option>
+            <option value="subcategory">Subcategory</option>
+          </>}
+          {module !== "product" && <>
+            <option value="service_category">Service category</option>
+            <option value="service">Services</option>
+            {!excludeBundles && <option value="service_bundle">Service bundle</option>}
+          </>}
         </select>
         {targetType && (
           <>
-            <label className="relative"><FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${targetType}...`} className={`${fieldClass} pl-10`} /></label>
-            {isMultiProduct ? (
+            <label className="relative"><FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={targetType === "product" ? "Search product or brand..." : `Search ${destinationLabel}...`} className={`${fieldClass} pl-10`} /></label>
+            {isMultiSelection && <p className="text-xs text-slate-500 sm:col-span-2">Select one to open its detail page, or multiple to open this campaign?s offer page.</p>}
+            {isMultiSelection ? (
               <div className="max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2 sm:col-span-2">
-                <p className="px-2 pb-2 text-[11px] font-semibold text-slate-500">{targetIds.length} product{targetIds.length === 1 ? "" : "s"} selected</p>
+                <p className="px-2 pb-2 text-[11px] font-semibold text-slate-500">{targetIds.length} {targetType}{targetIds.length === 1 ? "" : "s"} selected</p>
                 {options.map((option) => (
                   <label key={option.id} className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-sm hover:bg-purple-50">
-                    <input type="checkbox" checked={targetIds.includes(option.id)} onChange={() => toggleProduct(option.id)} className="h-4 w-4 accent-[#852BAF]" />
+                    <input type="checkbox" checked={targetIds.includes(option.id)} onChange={() => toggleSelection(option.id)} className="h-4 w-4 accent-[#852BAF]" />
                     <span>{option.label}</span>
                   </label>
                 ))}
-                {!loading && !options.length && <p className="px-2 py-3 text-xs text-slate-400">No products found.</p>}
+                {!loading && !options.length && <p className="px-2 py-3 text-xs text-slate-400">No matching items found.</p>}
               </div>
             ) : (
               <select value={targetId ?? ""} onChange={(event) => onChange(targetType, event.target.value ? Number(event.target.value) : null)} className={fieldClass}>
-                <option value="">{loading ? "Loading..." : `Select ${targetType}`}</option>
+                <option value="">{loading ? "Loading..." : `Select ${destinationLabel}`}</option>
                 {options.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
               </select>
             )}

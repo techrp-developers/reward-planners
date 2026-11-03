@@ -1,4 +1,6 @@
 const db = require("../../../../config/database");
+const { applyActiveOffers } = require("../utils/activeOffers");
+const { orderOfferColumns, orderOffer } = require("../../../../utils/orderOffer");
 const fs = require("fs");
 const path = require("path");
 const {
@@ -9,6 +11,7 @@ const {
 const {
   canRequestItemCancellation,
 } = require("../utils/itemCancellationPolicy");
+const { getReturnEligibility } = require("../utils/returnRequestPolicy");
 const {
   getCancellationGraceMinutes,
   getCourierBookingEligibleAt,
@@ -312,6 +315,7 @@ class orderModel {
         `SELECT oi.order_id, oi.order_item_id, oi.product_id, oi.variant_id,
                 oi.quantity, oi.price, oi.final_price, oi.reward_coins_used,
                 oi.reward_coins_earned, oi.fulfillment_status,
+                ${orderOfferColumns("oi")},
                 p.product_name, p.brand_name,
                 os.shipping_status,
                 ic.status AS cancellation_status,
@@ -340,6 +344,7 @@ class orderModel {
           brand_name: item.brand_name,
           quantity: item.quantity,
           price: Number(item.price || 0),
+          offer: orderOffer(item, item.price, item.quantity),
           item_total: Number(item.final_price || 0),
           status:
             item.fulfillment_status === "cancelled"
@@ -528,14 +533,24 @@ class orderModel {
       oi.reward_coins_used,
       oi.reward_coins_earned,
       oi.fulfillment_status,
+      ${orderOfferColumns("oi")},
 
       p.product_name,
       p.brand_name,
+      p.open_box_delivery,
+      p.is_returnable,
+      p.is_replaceable,
+      p.return_window_days,
 
       v.variant_attributes,
       os.id AS shipment_id,
       os.shipping_status,
+      os.delivered_at,
       pr.review_id,
+      rr.request_id AS return_request_id,
+      rr.request_type AS return_request_type,
+      rr.status AS return_request_status,
+      rr.vendor_note AS return_vendor_note,
       ic.status AS item_cancellation_status,
       ic.refund_status AS item_refund_status,
       ic.refund_amount AS item_refund_amount,
@@ -570,6 +585,8 @@ class orderModel {
       AND pr.user_id = ?
     LEFT JOIN ecommerce_item_cancellations ic
       ON ic.order_item_id = oi.order_item_id
+    LEFT JOIN product_return_requests rr
+      ON rr.order_item_id = oi.order_item_id
 
     WHERE oi.order_id = ?
     `,
@@ -601,6 +618,7 @@ class orderModel {
         attributes,
         quantity: i.quantity,
         price: Number(i.price),
+        offer: orderOffer(i, i.price, i.quantity),
         item_total: Number(i.final_price),
         reward_discount: Number(i.reward_discount || 0),
         reward_coins_used: Number(i.reward_coins_used || 0),
@@ -626,6 +644,25 @@ class orderModel {
           terminal:
             i.fulfillment_status === "cancelled" ||
             ["cancelled", "delivered", "rto"].includes(i.shipping_status),
+        },
+        open_box_delivery: Number(i.open_box_delivery) === 1,
+        return_request: {
+          ...getReturnEligibility({
+            fulfillmentStatus: i.fulfillment_status,
+            shippingStatus: i.shipping_status,
+            deliveredAt: i.delivered_at,
+            isReturnable: i.is_returnable,
+            isReplaceable: i.is_replaceable,
+            returnWindowDays: i.return_window_days,
+            hasExistingRequest: Boolean(i.return_request_id),
+          }),
+          is_returnable: Number(i.is_returnable) === 1,
+          is_replaceable: Number(i.is_replaceable) === 1,
+          return_window_days: Number(i.return_window_days || 0),
+          request_id: i.return_request_id || null,
+          request_type: i.return_request_type || null,
+          status: i.return_request_status || null,
+          vendor_note: i.return_vendor_note || null,
         },
         feedback: {
           can_submit:
@@ -913,6 +950,7 @@ class orderModel {
     `,
       [...params, limit, offset],
     );
+    await applyActiveOffers(rows);
 
     const [[{ total }]] = await db.execute(
       `
@@ -949,6 +987,8 @@ class orderModel {
 
         variant_id: p.variant_id,
         sale_price: p.sale_price,
+        original_sale_price: p.original_sale_price,
+        offer_price: p.offer_price,
         mrp: p.mrp,
 
         attributes,
@@ -1115,6 +1155,16 @@ class orderModel {
       i.grand_total,
       i.invoice_date,
 
+      (SELECT GROUP_CONCAT(DISTINCT
+        CASE
+          WHEN os.courier_id LIKE 'ekart:%' THEN 'Ekart'
+          WHEN os.courier_id IS NOT NULL AND os.courier_id <> '' THEN 'Xpressbees'
+          ELSE NULLIF(os.courier_name, '')
+        END ORDER BY os.courier_id SEPARATOR ', ')
+       FROM order_shipments os
+       WHERE os.order_id = i.order_id AND os.vendor_id = i.vendor_id
+         AND os.shipping_status <> 'cancelled') AS delivery_partner,
+
       o.order_ref,
       o.created_at AS order_date,
 
@@ -1158,22 +1208,31 @@ class orderModel {
     const [items] = await db.query(
       `
     SELECT
-      product_name,
-      sku,
-      quantity,
-      unit_price,
-      tax_rate,
-      cgst_amount,
-      sgst_amount,
-      igst_amount,
-      line_total
-    FROM invoice_items
-    WHERE invoice_id = ?
+      ii.product_name,
+      ii.sku,
+      ii.quantity,
+      ii.unit_price,
+      ii.tax_rate,
+      ii.cgst_amount,
+      ii.sgst_amount,
+      ii.igst_amount,
+      ii.line_total,
+      ${orderOfferColumns("oi")}
+    FROM invoice_items ii
+    JOIN invoices i ON i.invoice_id = ii.invoice_id
+    LEFT JOIN eorder_items oi
+      ON i.source = 'ecommerce'
+      AND oi.order_id = i.order_id
+      AND oi.variant_id = ii.variant_id
+    WHERE ii.invoice_id = ?
     `,
       [invoiceId],
     );
 
-    return items;
+    return items.map((item) => ({
+      ...item,
+      offer: orderOffer(item, item.unit_price, item.quantity),
+    }));
   }
 }
 

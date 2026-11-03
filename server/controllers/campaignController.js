@@ -22,6 +22,20 @@ const ALLOWED_REDIRECT_TYPES = [
   "brand",
   "campaign",
   "external_url",
+  "service",
+  "service_category",
+  "service_bundle",
+];
+
+const ALLOWED_MODULES = ["product", "service"];
+const PRODUCT_REDIRECT_TYPES = ["category", "subcategory", "product", "brand"];
+const SERVICE_REDIRECT_TYPES = ["service", "service_category", "service_bundle"];
+const MULTI_TARGET_REDIRECT_TYPES = ["product", "service"];
+const VALIDATED_REDIRECT_TYPES = [
+  "product",
+  "category",
+  "subcategory",
+  ...SERVICE_REDIRECT_TYPES,
 ];
 
 const validateId = (id, fieldName = "id") => {
@@ -46,6 +60,62 @@ const validateRedirect = (redirect_type, redirect_id, redirect_url) => {
   }
 };
 
+const badRequest = (message) => {
+  const err = new Error(message);
+  err.statusCode = 400;
+  return err;
+};
+
+const parseRedirectIds = (value) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string" || !value.trim()) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    throw badRequest("redirect_ids must be a list of ids");
+  }
+};
+
+// One poster can open several products or services; the first also fills
+// redirect_id, so every other destination keeps a single target.
+const resolveRedirectIds = (redirectType, redirectId, redirectIds) => {
+  if (!MULTI_TARGET_REDIRECT_TYPES.includes(redirectType)) return { redirectId, redirectIds: null };
+  const ids = [...new Set(parseRedirectIds(redirectIds).map(Number))];
+  if (ids.some((id) => !Number.isInteger(id) || id <= 0)) {
+    throw badRequest("redirect_ids must contain only positive ids");
+  }
+  if (!ids.length) return { redirectId, redirectIds: redirectId ? JSON.stringify([redirectId]) : null };
+  return { redirectId: ids[0], redirectIds: JSON.stringify(ids) };
+};
+
+const validateRedirectModule = (campaignType, module, redirectType) => {
+  if (campaignType !== "poster" || !redirectType) return;
+  if (module === "service" && PRODUCT_REDIRECT_TYPES.includes(redirectType)) {
+    throw badRequest("A service poster must open a service destination");
+  }
+  if (module !== "service" && SERVICE_REDIRECT_TYPES.includes(redirectType)) {
+    throw badRequest("An ecommerce poster must open an ecommerce destination");
+  }
+};
+
+const redirectTargetsExist = async (redirectType, redirectId, redirectIds) => {
+  if (!VALIDATED_REDIRECT_TYPES.includes(redirectType)) return;
+  const ids = redirectIds ? JSON.parse(redirectIds) : [redirectId];
+  for (const id of ids) {
+    if (!(await CampaignModel.redirectTargetExists(redirectType, id))) {
+      throw badRequest(`Selected ${redirectType.replaceAll("_", " ")} no longer exists`);
+    }
+  }
+};
+
+// The main dashboard spans every module, so a dashboard poster's module simply
+// follows its destination; other campaigns keep the module they were created in.
+const campaignModule = (campaignType, module, redirectType) =>
+  campaignType === "dashboard_poster"
+    ? (SERVICE_REDIRECT_TYPES.includes(redirectType) ? "service" : "product")
+    : (module || "product");
+
 class CampaignController {
   async getRedirectTargets(req, res) {
     try {
@@ -63,10 +133,12 @@ class CampaignController {
       const {
         title,
         campaign_type,
+        module,
         start_at,
         end_at,
         redirect_type,
         redirect_id,
+        redirect_ids,
         redirect_url,
         display_order,
         status,
@@ -83,6 +155,27 @@ class CampaignController {
         return res.status(400).json({
           success: false,
           message: "Invalid campaign type",
+        });
+      }
+
+      if (module && !ALLOWED_MODULES.includes(module)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid module",
+        });
+      }
+
+      if (campaign_type === "flash_sale" && (!start_at || !end_at)) {
+        return res.status(400).json({
+          success: false,
+          message: "A flash sale needs a start and end time",
+        });
+      }
+
+      if (["poster", "dashboard_poster"].includes(campaign_type) && !req.file) {
+        return res.status(400).json({
+          success: false,
+          message: "A poster needs an image",
         });
       }
 
@@ -129,10 +222,13 @@ class CampaignController {
       const normalizedRedirectType = hasNoRedirectLabel
         ? null
         : redirect_type || null;
-      const normalizedRedirectId =
+      const { redirectId: normalizedRedirectId, redirectIds: normalizedRedirectIds } = resolveRedirectIds(
+        normalizedRedirectType,
         normalizedRedirectType && normalizedRedirectType !== "external_url" && hasNumericRedirectId
           ? redirectIdNumber
-          : null;
+          : null,
+        redirect_ids,
+      );
       const normalizedRedirectUrl =
         normalizedRedirectType === "external_url" ? redirect_url : null;
 
@@ -142,11 +238,8 @@ class CampaignController {
         normalizedRedirectUrl,
       );
 
-      if (normalizedRedirectType && normalizedRedirectType !== "external_url" && ["product", "category", "subcategory"].includes(normalizedRedirectType)) {
-        if (!(await CampaignModel.redirectTargetExists(normalizedRedirectType, normalizedRedirectId))) {
-          return res.status(400).json({ success: false, message: `Selected ${normalizedRedirectType} no longer exists` });
-        }
-      }
+      validateRedirectModule(campaign_type, module, normalizedRedirectType);
+      await redirectTargetsExist(normalizedRedirectType, normalizedRedirectId, normalizedRedirectIds);
 
       if (display_order !== undefined && Number(display_order) < 0) {
         return res.status(400).json({
@@ -158,11 +251,13 @@ class CampaignController {
       const campaignId = await CampaignModel.createCampaign({
         title,
         campaign_type,
+        module: campaignModule(campaign_type, module, normalizedRedirectType),
         banner_image: null,
         start_at,
         end_at,
         redirect_type: normalizedRedirectType,
         redirect_id: normalizedRedirectId,
+        redirect_ids: normalizedRedirectIds,
         redirect_url: normalizedRedirectUrl,
         display_order,
         status,
@@ -325,26 +420,10 @@ class CampaignController {
         });
       }
 
-      const normalizedRedirectType = req.body.redirect_type || null;
-      const normalizedRedirectId = normalizedRedirectType && normalizedRedirectType !== "external_url" ? Number(req.body.redirect_id) || null : null;
-      const normalizedRedirectUrl = normalizedRedirectType === "external_url" ? req.body.redirect_url || null : null;
-      validateRedirect(normalizedRedirectType, normalizedRedirectId, normalizedRedirectUrl);
-      if (normalizedRedirectType && ["product", "category", "subcategory"].includes(normalizedRedirectType)) {
-        if (!(await CampaignModel.redirectTargetExists(normalizedRedirectType, normalizedRedirectId))) {
-          return res.status(400).json({ success: false, message: `Selected ${normalizedRedirectType} no longer exists` });
-        }
-      }
-      req.body.redirect_type = normalizedRedirectType;
-      req.body.redirect_id = normalizedRedirectId;
-      req.body.redirect_url = normalizedRedirectUrl;
-
-      if (
-        req.body.display_order !== undefined &&
-        Number(req.body.display_order) < 0
-      ) {
+      if (req.body.module && !ALLOWED_MODULES.includes(req.body.module)) {
         return res.status(400).json({
           success: false,
-          message: "display_order must be 0 or greater",
+          message: "Invalid module",
         });
       }
 
@@ -357,7 +436,49 @@ class CampaignController {
         });
       }
 
-      let bannerImage = existing.banner_image;
+      // Items live in a module-specific table, so a flash sale cannot change kind.
+      const nextType = campaign_type || existing.campaign_type;
+      if (
+        (existing.campaign_type === "flash_sale" || nextType === "flash_sale") &&
+        nextType !== existing.campaign_type
+      ) {
+        throw badRequest("A flash sale cannot be converted to another campaign type");
+      }
+      if (existing.campaign_type === "flash_sale") delete req.body.module;
+
+      // Omitted destination fields leave the saved destination untouched.
+      if (req.body.redirect_type !== undefined) {
+        const normalizedRedirectType = req.body.redirect_type || null;
+        const { redirectId: normalizedRedirectId, redirectIds: normalizedRedirectIds } = resolveRedirectIds(
+          normalizedRedirectType,
+          normalizedRedirectType && normalizedRedirectType !== "external_url" ? Number(req.body.redirect_id) || null : null,
+          req.body.redirect_ids,
+        );
+        const normalizedRedirectUrl = normalizedRedirectType === "external_url" ? req.body.redirect_url || null : null;
+        validateRedirect(normalizedRedirectType, normalizedRedirectId, normalizedRedirectUrl);
+        validateRedirectModule(nextType, req.body.module || existing.module, normalizedRedirectType);
+        await redirectTargetsExist(normalizedRedirectType, normalizedRedirectId, normalizedRedirectIds);
+        req.body.redirect_type = normalizedRedirectType;
+        req.body.redirect_id = normalizedRedirectId;
+        req.body.redirect_ids = normalizedRedirectIds;
+        req.body.redirect_url = normalizedRedirectUrl;
+        if (nextType === "dashboard_poster") {
+          req.body.module = campaignModule(nextType, null, normalizedRedirectType);
+        }
+      }
+
+      if (
+        req.body.display_order !== undefined &&
+        Number(req.body.display_order) < 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "display_order must be 0 or greater",
+        });
+      }
+
+      // Stays null without a new upload: the model only writes a new image.
+      let bannerImage = null;
 
       if (req.file) {
         if (!req.file.mimetype.startsWith("image/")) {
@@ -379,9 +500,9 @@ class CampaignController {
 
         await uploadToR2(fileBuffer, bannerImage, req.file.mimetype);
 
-        if (existing.banner_image) {
+        if (existing.banner_image_path) {
           try {
-            await deleteFromR2(existing.banner_image);
+            await deleteFromR2(existing.banner_image_path);
           } catch (err) {
             console.error("OLD CAMPAIGN IMAGE DELETE ERROR", err);
           }
@@ -398,7 +519,7 @@ class CampaignController {
         success: true,
         message: "Campaign updated successfully",
         data: {
-          banner_image: bannerImage,
+          banner_image: bannerImage || existing.banner_image_path,
         },
       });
     } catch (err) {
@@ -532,6 +653,26 @@ class CampaignController {
       return res.json({
         success: true,
         message: "Products added successfully",
+      });
+    } catch (err) {
+      return res.status(err.statusCode || 500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  // Add a category, subcategory, or product selection at a shared discount
+  async bulkAddCampaignItems(req, res) {
+    try {
+      validateId(req.params.id, "campaign id");
+
+      const result = await CampaignModel.bulkAddCampaignItems(req.params.id, req.body);
+
+      return res.json({
+        success: true,
+        message: result.added ? `${result.added} items added` : "No new eligible items found",
+        data: result,
       });
     } catch (err) {
       return res.status(err.statusCode || 500).json({

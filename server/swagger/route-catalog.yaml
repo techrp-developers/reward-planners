@@ -1922,6 +1922,110 @@ paths:
       responses:
         '200':
           description: Successful response
+  "/v1/campaign/home":
+    get:
+      tags:
+        - "Mobile App / Ecommerce / Campaign"
+      summary: "Ecommerce home posters, flash sales and banner content"
+      description: "Source route: app/ecommerce/v1/routes/campaignRoute.js"
+      security: []
+      responses:
+        '200':
+          description: Successful response
+  "/v1/campaign/list":
+    get:
+      tags:
+        - "Mobile App / Ecommerce / Campaign"
+      summary: "Live ecommerce campaigns (optional campaign_type query)"
+      description: "Source route: app/ecommerce/v1/routes/campaignRoute.js"
+      security: []
+      responses:
+        '200':
+          description: Successful response
+  "/v1/campaign/details/{id}":
+    get:
+      tags:
+        - "Mobile App / Ecommerce / Campaign"
+      summary: "Live ecommerce campaign details"
+      description: "Source route: app/ecommerce/v1/routes/campaignRoute.js"
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+  "/v1/campaign/{id}/products":
+    get:
+      tags:
+        - "Mobile App / Ecommerce / Campaign"
+      summary: "Products of a flash sale or poster (page and limit query for posters)"
+      description: "Source route: app/ecommerce/v1/routes/campaignRoute.js"
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+  "/v1/service-campaign/home":
+    get:
+      tags:
+        - "Mobile App / Service / Campaign"
+      summary: "Service home posters, flash sales and banner content"
+      description: "Source route: app/service/v1/routes/serviceCampaignRoute.js"
+      security: []
+      responses:
+        '200':
+          description: Successful response
+  "/v1/service-campaign/list":
+    get:
+      tags:
+        - "Mobile App / Service / Campaign"
+      summary: "Live service campaigns (optional campaign_type query)"
+      description: "Source route: app/service/v1/routes/serviceCampaignRoute.js"
+      security: []
+      responses:
+        '200':
+          description: Successful response
+  "/v1/service-campaign/details/{id}":
+    get:
+      tags:
+        - "Mobile App / Service / Campaign"
+      summary: "Live service campaign details"
+      description: "Source route: app/service/v1/routes/serviceCampaignRoute.js"
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+  "/v1/service-campaign/{id}/services":
+    get:
+      tags:
+        - "Mobile App / Service / Campaign"
+      summary: "Services of a flash sale or poster (page and limit query for posters)"
+      description: "Source route: app/service/v1/routes/serviceCampaignRoute.js"
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
   "/v1/service-banner":
     get:
       tags:

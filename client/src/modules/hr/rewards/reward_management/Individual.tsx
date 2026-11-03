@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { FiSearch, FiAlertCircle, FiCheck, FiUser } from "react-icons/fi";
+import { FiSearch } from "react-icons/fi";
 import { hrApi } from "../../../../common/api/hrApi";
+import { Initials } from "../../components/ui";
+import { button, field, label } from "../../components/styles";
 import Swal from "sweetalert2";
 
 interface ActiveEmployee {
@@ -96,76 +98,17 @@ const IndividualForm: React.FC<{ onAwardComplete?: (balance: number) => void }> 
   };
 
   return (
-    <div className="space-y-8 duration-500 animate-in fade-in slide-in-from-bottom-2">
-      {/* SECTION 1: SEARCH EMPLOYEE */}
-      <div className="space-y-4">
-        <label className="flex items-center gap-2 text-sm font-bold text-gray-700">
-          Select Employee
-        </label>
-        <div className={`relative group ${selectedEmployee ? "hidden" : ""}`}>
-          <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
-            <FiSearch className="text-gray-400 transition-colors group-focus-within:text-purple-500" />
-          </div>
-          <input
-            type="text"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search by name, email or employee ID..."
-            className="w-full py-3 pr-4 font-medium text-gray-900 transition-all border border-gray-100 outline-none pl-11 bg-gray-50 rounded-2xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 placeholder:text-gray-400"
-          />
-        </div>
-        <div className={`overflow-y-auto border border-gray-100 divide-y divide-gray-50 max-h-64 rounded-2xl ${selectedEmployee ? "hidden" : ""}`}>
-          {loadingEmployees ? (
-            <div className="p-6 text-sm text-center text-gray-400">Loading active employees...</div>
-          ) : filteredEmployees.length === 0 ? (
-            <div className="p-6 text-sm text-center text-gray-400">No active employees found</div>
-          ) : (
-            filteredEmployees.map((employee) => {
-              const selected = selectedEmployee?.id === employee.id;
-              return (
-                <button
-                  type="button"
-                  key={employee.id}
-                  onClick={() => {
-                    setSelectedEmployee(employee);
-                    setSearch("");
-                  }}
-                  className={`flex w-full items-center justify-between p-4 text-left transition-colors cursor-pointer ${
-                    selected ? "bg-purple-50" : "bg-white hover:bg-gray-50"
-                  }`}
-                >
-                  <span className="flex items-center gap-3">
-                    <span className="flex items-center justify-center w-10 h-10 text-sm font-bold text-purple-600 bg-purple-100 rounded-full">
-                      {employee.name?.charAt(0).toUpperCase() || <FiUser />}
-                    </span>
-                    <span>
-                      <span className="block text-sm font-bold text-gray-800">{employee.name}</span>
-                      <span className="block mt-0.5 text-xs text-gray-400">
-                        {employee.email || "No email"} · {employee.department || "No department"}
-                      </span>
-                    </span>
-                  </span>
-                  {selected && <FiCheck className="w-5 h-5 text-purple-600" />}
-                </button>
-              );
-            })
-          )}
-        </div>
-        {selectedEmployee && (
-          <div className="flex items-center justify-between p-4 border border-emerald-200 bg-emerald-50/60 rounded-2xl">
-            <div className="flex items-center gap-3">
-              <span className="flex items-center justify-center w-11 h-11 text-sm font-bold text-white rounded-full bg-emerald-500">
-                {selectedEmployee.name?.charAt(0).toUpperCase() || <FiUser />}
-              </span>
-              <div>
-                <p className="flex items-center gap-2 text-sm font-bold text-gray-900">
-                  {selectedEmployee.name}
-                  <FiCheck className="text-emerald-600" />
-                </p>
-                <p className="mt-0.5 text-xs text-gray-500">
-                  {selectedEmployee.role || "Employee"} · {selectedEmployee.department || "No department"}
-                </p>
-              </div>
+    <div className="space-y-5">
+      <div>
+        <p className={label}>Employee</p>
+        {selectedEmployee ? (
+          <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+            <Initials name={selectedEmployee.name} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-slate-900">{selectedEmployee.name}</p>
+              <p className="truncate text-xs text-slate-500">
+                {[selectedEmployee.role, selectedEmployee.department].filter(Boolean).join(" · ") || selectedEmployee.email || "Employee"}
+              </p>
             </div>
             <button
               type="button"
@@ -173,85 +116,107 @@ const IndividualForm: React.FC<{ onAwardComplete?: (balance: number) => void }> 
                 setSelectedEmployee(null);
                 setSearch("");
               }}
-              className="px-4 py-2 text-xs font-bold text-purple-600 bg-white border border-purple-100 rounded-xl hover:bg-purple-50 cursor-pointer"
+              className={button.ghost}
             >
               Change
             </button>
           </div>
+        ) : (
+          <div className="overflow-hidden rounded-lg border border-slate-300 focus-within:border-[#852BAF] focus-within:ring-2 focus-within:ring-[#852BAF]/15">
+            <div className="relative border-b border-slate-200">
+              <FiSearch className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search by name, email or department"
+                aria-label="Search employees"
+                className="w-full bg-white py-2 pl-8 pr-3 text-sm text-slate-900 outline-none placeholder:text-slate-400"
+              />
+            </div>
+            <div className="max-h-64 divide-y divide-slate-100 overflow-y-auto">
+              {loadingEmployees ? (
+                <p className="px-4 py-6 text-center text-sm text-slate-500">Loading employees…</p>
+              ) : filteredEmployees.length === 0 ? (
+                <p className="px-4 py-6 text-center text-sm text-slate-500">
+                  {search ? "Nobody matches that search" : "No one is on the app yet. Only employees who have activated it can receive points."}
+                </p>
+              ) : (
+                filteredEmployees.map((employee) => (
+                  <button
+                    type="button"
+                    key={employee.id}
+                    onClick={() => {
+                      setSelectedEmployee(employee);
+                      setSearch("");
+                    }}
+                    className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-slate-50 cursor-pointer"
+                  >
+                    <Initials name={employee.name} size="sm" />
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm text-slate-900">{employee.name}</span>
+                      <span className="block truncate text-xs text-slate-500">
+                        {employee.email || "No email"}{employee.department ? ` · ${employee.department}` : ""}
+                      </span>
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        {/* SECTION 2: AMOUNT WITH RUPEE LOGO */}
-        <div className="space-y-2">
-          <label className="text-sm font-bold text-gray-700">
-            Reward Amount
-          </label>
-          <div className="relative group">
-            <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
-              <span className="font-semibold text-gray-400 transition-colors group-focus-within:text-purple-600">
-                ₹
-              </span>
-            </div>
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <div>
+          <label htmlFor="reward-points" className={label}>Points</label>
+          <div className="relative">
             <input
+              id="reward-points"
               type="number"
               min="1"
               step="1"
               value={points}
               onChange={(event) => setPoints(event.target.value)}
-              placeholder="Enter points"
-              className="w-full py-3 pl-10 pr-4 font-medium text-gray-900 transition-all border border-gray-100 outline-none bg-gray-50 rounded-2xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+              placeholder="500"
+              className={`${field} pr-12 tabular-nums`}
             />
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">pts</span>
           </div>
         </div>
 
-        {/* SECTION 3: REASON/CATEGORY */}
-        <div className="space-y-2">
-          <label className="text-sm font-bold text-gray-700">
-            Incentive Category
-          </label>
-          <select value={category} onChange={(event) => setCategory(event.target.value)} className="w-full px-4 py-3 font-medium text-gray-900 transition-all border border-gray-100 outline-none appearance-none cursor-pointer bg-gray-50 rounded-2xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500">
-            <option value="spot">Spot Award</option>
-            <option value="performance">Performance Bonus</option>
-            <option value="referral">Referral Bonus</option>
-            <option value="retention">Retention Incentive</option>
+        <div>
+          <label htmlFor="reward-category" className={label}>Reason</label>
+          <select id="reward-category" value={category} onChange={(event) => setCategory(event.target.value)} className={`${field} cursor-pointer`}>
+            <option value="spot">Spot award</option>
+            <option value="performance">Performance bonus</option>
+            <option value="referral">Referral bonus</option>
+            <option value="retention">Retention incentive</option>
           </select>
         </div>
       </div>
 
-      {/* SECTION 4: REMARKS */}
-      <div className="space-y-2">
-        <label className="flex items-center gap-2 text-sm font-bold text-gray-700">
-          Appreciation Note{" "}
-          <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">
-            (Optional)
-          </span>
+      <div>
+        <label htmlFor="reward-note" className={label}>
+          Note to {selectedEmployee?.name.split(" ")[0] || "the employee"} <span className="font-normal text-slate-400">(optional)</span>
         </label>
         <textarea
+          id="reward-note"
           rows={3}
           value={note}
           onChange={(event) => setNote(event.target.value)}
-          placeholder="Write a small note for the employee..."
-          className="w-full px-4 py-3 font-medium text-gray-900 transition-all border border-gray-100 outline-none resize-none bg-gray-50 rounded-2xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+          placeholder="Thanks for staying late to close the quarter."
+          className={`${field} resize-none`}
         />
+        <p className="mt-1.5 text-xs text-slate-500">They'll get this with an email and an in-app notification.</p>
       </div>
 
-      {/* NOTIFICATION TOGGLE */}
-      <div className="flex items-center gap-3 p-4 border border-purple-100 bg-purple-50/50 rounded-2xl">
-        <FiAlertCircle className="w-5 h-5 text-purple-600 shrink-0" />
-        <p className="text-xs leading-tight text-purple-800">
-          The employee will receive an automated email notification and a
-          dashboard alert once this reward is approved.
-        </p>
-      </div>
-
-      {/* ACTION BUTTONS */}
-      <div className="flex items-center justify-end gap-4 pt-6 border-t border-gray-50">
-        <button type="button" onClick={() => { setSelectedEmployee(null); setPoints(""); setNote(""); }} className="px-6 py-2.5 text-sm font-semibold text-gray-500 hover:text-gray-700 transition-colors cursor-pointer">
-          Discard
+      <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
+        <button type="button" onClick={() => { setSelectedEmployee(null); setPoints(""); setNote(""); }} className={button.ghost}>
+          Clear
         </button>
-        <button type="button" onClick={() => void assignReward()} disabled={submitting} className="px-8 py-3 bg-gray-900 text-white text-sm font-bold rounded-2xl shadow-lg shadow-gray-200 hover:bg-black hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer">
-          {submitting ? "Assigning..." : "Assign Reward"}
+        <button type="button" onClick={() => void assignReward()} disabled={submitting} className={button.primary}>
+          {submitting ? "Sending…" : points && selectedEmployee ? `Send ${Number(points).toLocaleString()} pts` : "Send reward"}
         </button>
       </div>
     </div>

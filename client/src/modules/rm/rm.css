@@ -1,0 +1,33 @@
+/* A quiet, consistent treatment for the RM data views. */
+.role-portal:has(.rm-portal) :is(button:not(:disabled), a[href], select:not(:disabled), summary, label[for]) {
+  cursor: pointer;
+}
+
+.rm-portal :is(button:disabled, select:disabled) {
+  cursor: not-allowed;
+}
+
+.rm-portal :is(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid #a760c9;
+  outline-offset: 3px;
+}
+
+.rm-portal .font-bold { font-weight: 600; }
+.rm-portal .rounded-2xl { border-radius: 0.75rem; }
+.rm-portal .shadow-sm { box-shadow: 0 1px 2px rgb(15 23 42 / 4%); }
+.rm-portal table { font-size: 0.875rem; }
+.rm-portal table thead { background: #f7f6f9; }
+.rm-portal table th { text-transform: none; letter-spacing: normal; font-weight: 600; font-size: 0.75rem; }
+.rm-portal :is(input, select, textarea) { border-radius: 0.5rem; }
+
+.hr-dark .rm-portal [class~="text-[#68258d]"] { color: #c99aeb; }
+.hr-dark .rm-portal :is([class~="bg-emerald-50"], [class~="bg-green-50"]) { background-color: #18352b; }
+.hr-dark .rm-portal :is([class~="text-emerald-600"], [class~="text-emerald-700"], [class~="text-emerald-800"], [class~="text-green-700"]) { color: #86d9b1; }
+.hr-dark .rm-portal [class~="bg-amber-50"] { background-color: #382d1b; }
+.hr-dark .rm-portal :is([class~="text-amber-600"], [class~="text-amber-700"], [class~="text-amber-800"]) { color: #e8c57e; }
+.hr-dark .rm-portal [class~="bg-red-50"] { background-color: #3c222a; }
+.hr-dark .rm-portal :is([class~="text-red-600"], [class~="text-red-700"]) { color: #f3a2ac; }
+
+@media (prefers-reduced-motion: reduce) {
+  .role-portal:has(.rm-portal) .page-enter { animation: none; }
+}

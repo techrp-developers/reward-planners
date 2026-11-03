@@ -18,6 +18,7 @@ export const routes = {
     },
     orders:{
       summary: "/vendor/orders/summary",
+      returns: "/vendor/orders/returns",
       details: "/vendor/orders/details/:orderId",
     },
     reports: {
@@ -43,6 +44,11 @@ export const routes = {
     linkDocument:"/manager/document/DocumentCategory",
     attributes: "/manager/attributes",
     bbpsLogos: "/manager/bbps-logos",
+    posters: {
+      list: "/manager/posters",
+      create: "/manager/posters/create",
+      edit: "/manager/posters/:id",
+    },
     flashSales: {
       list: "/manager/flash-sales",
       create: "/manager/flash-sales/create",
@@ -50,6 +56,7 @@ export const routes = {
     },
     orders:{
       orderList: "/manager/orders",
+      returns: "/manager/orders/returns",
       details: "/manager/order-view/:orderId",
       cancellationRequest: "/manager/cancellation-request",
       cancellationDetail: "/manager/cancellation-detail/:orderId",
@@ -67,6 +74,7 @@ export const routes = {
       orders: "/manager/reports/orders",
     },
     rewards:{
+      transactionRanges:"/manager/transaction-rewards",
       rewardRule:"/manager/rewards-rule",
       create:"/manager/reward-create",
       edit:"/manager/reward-edit/:id",
@@ -141,7 +149,7 @@ export const routes = {
     employees: "/hr/employees",
     rewards: "/hr/rewards",
     polls: "/hr/polls",
-
+    departments: "/hr/departments",
   },
   service: {
     dashboard: "/service/dashboard",
@@ -172,6 +180,7 @@ export const routes = {
     settings: "/service/settings",
   },
   rm: {
+    promotions: "/rm/promotions",
     dashboard: "/rm/dashboard",
     changePassword: "/rm/change-password",
     profile: "/rm/profile",
@@ -181,6 +190,7 @@ export const routes = {
     supportTickets: "/rm/support-tickets",
     reports: {
       usage: "/rm/reports/usage",
+      usageUsers: "/rm/reports/usage/:module",
       inactiveUsers: "/rm/reports/inactive-users",
     },
   },

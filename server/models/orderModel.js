@@ -8,6 +8,7 @@ const {
   TRACKING_STEPS,
   mapShipmentStatusToStep,
 } = require("../app/ecommerce/v1/utils/orderProgress");
+const { orderOfferColumns, orderOffer } = require("../utils/orderOffer");
 
 function formatShipmentProgress(shipment) {
   if (shipment.shipping_status === "cancelled") {
@@ -126,6 +127,7 @@ class OrderModel {
         o.created_at,
 
         COUNT(oi.order_item_id) AS item_count,
+        COUNT(oi.flash_sale_campaign_id) + COUNT(oi.promotional_content_id) AS offer_item_count,
 
         s.shipping_status,
         s.awb_number,
@@ -273,6 +275,7 @@ class OrderModel {
       oi.variant_id,
       oi.quantity,
       oi.price,
+      ${orderOfferColumns("oi")},
 
       p.product_name,
       p.brand_name,
@@ -344,11 +347,13 @@ class OrderModel {
         attributes,
         quantity: i.quantity,
         price: i.price,
+        offer: orderOffer(i, i.price, i.quantity),
         item_total: i.quantity * i.price,
       };
     });
 
     const itemTotal = processedItems.reduce((sum, i) => sum + i.item_total, 0);
+    const offerItems = processedItems.filter((i) => i.offer);
 
     return {
       order: {
@@ -397,6 +402,8 @@ class OrderModel {
       summary: {
         item_total: itemTotal,
         order_total: order.total_amount,
+        offer_item_count: offerItems.length,
+        offer_savings: offerItems.reduce((sum, i) => sum + i.offer.savings, 0),
       },
       shipments: shipments.length
         ? shipments.map(formatShipmentProgress)

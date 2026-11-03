@@ -95,8 +95,8 @@ export default function BbpsLogoUpload() {
   };
   const currentLogo = uploadedLogos.find((item) => item.operator_id === editingId)?.logo_url;
 
-  return <div className="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-6 lg:p-8">
-    <header><p className="text-xs font-bold uppercase tracking-[0.2em] text-[#852BAF]">Operator management</p><h1 className="mt-1 text-2xl font-black text-gray-900 sm:text-3xl">BBPS operator logos</h1><p className="mt-2 max-w-2xl text-sm text-gray-500">Upload and manage logos using the exact operator ID returned by EKO.</p></header>
+  return <div className="w-full max-w-5xl space-y-6 pb-8">
+    <header><h1 className="text-2xl font-semibold tracking-tight text-slate-900">BBPS operator logos</h1><p className="mt-1 text-sm text-slate-500">Upload and manage logos using the exact operator ID returned by EKO.</p></header>
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <form onSubmit={submit} className="rounded-3xl border border-purple-100 bg-white p-5 shadow-sm sm:p-7">
         {editingId && <div className="mb-5 flex items-center justify-between rounded-xl bg-purple-50 px-4 py-3 text-sm font-bold text-[#852BAF]"><span>Editing operator {editingId}</span><button type="button" onClick={resetForm} className="rounded-lg px-2 py-1 hover:bg-white">Cancel</button></div>}
@@ -110,7 +110,7 @@ export default function BbpsLogoUpload() {
           : editingId ? <button type="button" onClick={() => fileInputRef.current?.click()} className="flex w-full items-center gap-4 rounded-2xl border border-purple-100 bg-purple-50/30 p-4 text-left hover:border-[#852BAF]"><img src={currentLogo} alt="Current logo" className="h-16 w-16 rounded-xl bg-white object-contain p-2" /><span><b className="block text-sm">Keep current logo</b><span className="text-xs text-gray-500">Click to choose a replacement</span></span></button>
           : <button type="button" onClick={() => fileInputRef.current?.click()} className="flex w-full flex-col items-center rounded-2xl border-2 border-dashed border-purple-200 bg-purple-50/30 px-6 py-10 hover:border-[#852BAF]"><FiUploadCloud className="text-3xl text-[#852BAF]" /><b className="mt-3 text-sm">Choose a logo</b><span className="mt-1 text-xs text-gray-500">PNG, JPEG or WebP · maximum 3 MB</span></button>}
         </div>
-        <button type="submit" disabled={uploading} className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-purple-200 disabled:opacity-60 sm:w-auto"><FiUploadCloud />{uploading ? "Saving..." : editingId ? "Save changes" : "Upload logo"}</button>
+        <button type="submit" disabled={uploading} className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] from-60% to-[#C13A8E] px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-purple-200 disabled:opacity-60 sm:w-auto"><FiUploadCloud />{uploading ? "Saving..." : editingId ? "Save changes" : "Upload logo"}</button>
       </form>
       <aside className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm sm:p-6"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-purple-50 text-[#852BAF]"><FiImage size={22} /></div><h2 className="mt-4 font-extrabold">Before uploading</h2><ul className="mt-3 space-y-3 text-sm text-gray-500"><li>Use the exact EKO operator ID.</li><li>Prefer a transparent PNG or WebP.</li><li>Edit a row to update its details or image.</li></ul></aside>
     </div>

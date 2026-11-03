@@ -1,36 +1,8 @@
 import { useState, useEffect } from "react";
 import type { ChangeEvent } from "react";
-import type { ComponentType } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import QuillEditor from "../components/QuillEditor";
-type IconComp = ComponentType<any>;
-
-function SectionHeader({
-  icon: Icon,
-  title,
-  description,
-}: {
-  icon: IconComp;
-  title: string;
-  description?: string;
-}) {
-  return (
-    <div className="flex items-center pb-4 mb-4 space-x-3 border-b border-gray-200">
-      <div
-        className="p-3 text-white rounded-md"
-        style={{ background: "linear-gradient(to right, #852BAF, #FC3F78)" }}
-      >
-        <Icon />
-      </div>
-      <div>
-        <h3 className="text-lg font-semibold">{title}</h3>
-        {description && (
-          <p className="mt-1 text-sm text-gray-500">{description}</p>
-        )}
-      </div>
-    </div>
-  );
-}
+import { RETURN_WINDOW_LABEL, returnWindowLabel } from "../utils/returnPolicy";
 
 function FormInput(props: {
   id: string;
@@ -139,6 +111,7 @@ import Swal from "sweetalert2";
 
 // const API_BASE = import.meta.env.VITE_API_URL;
 import { api } from "../../../common/api/api";
+import SectionHeader from "./SectionHeader";
 // const API_BASEIMAGE_URL = "https://rewardplanners.com/api/crm";
 const R2_BASE_URL = "https://cdn.rewardplanners.com";
 
@@ -180,6 +153,7 @@ interface ProductView {
   isDiscountEligible?: number;
   isReturnable?: number;
   isReplaceable?: number;
+  openBoxDelivery?: number;
   returnWindowDays?: number | null;
 
   deliverySlaMinDays?: number;
@@ -275,6 +249,7 @@ export default function ReviewProductPage() {
         isDiscountEligible: raw.is_discount_eligible ?? 1,
         isReturnable: raw.is_returnable ?? 1,
         isReplaceable: raw.is_replaceable ?? 1,
+        openBoxDelivery: Number(raw.open_box_delivery) || 0,
         returnWindowDays: raw.return_window_days ?? null,
 
         deliverySlaMinDays: raw.delivery_sla_min_days ?? 1,
@@ -459,29 +434,13 @@ export default function ReviewProductPage() {
     <div>
       <div className="mx-auto max-w-7xl">
         {/* PAGE HEADER */}
-        <div
-          className="flex items-center justify-between p-5 mb-6 rounded-2xl"
-          style={{
-            background:
-              "linear-gradient(135deg, rgba(133,43,175,0.06) 0%, rgba(252,63,120,0.04) 100%)",
-            border: "1px solid rgba(133,43,175,0.1)",
-          }}
-        >
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
-            <div
-              className="flex items-center justify-center w-11 h-11 rounded-2xl"
-              style={{
-                background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
-                boxShadow: "0 6px 18px rgba(133,43,175,0.28)",
-              }}
-            >
-              <FaBox className="text-lg text-white" />
-            </div>
             <div>
-              <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">
+              <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
                 Product <span className="gradient-text-brand">Review</span>
               </h1>
-              <p className="text-xs text-gray-500 font-medium mt-0.5">
+              <p className="mt-1 text-sm text-slate-500">
                 Product ID: #{product.productId}
               </p>
             </div>
@@ -500,7 +459,7 @@ export default function ReviewProductPage() {
         {/* CONTENT CARD */}
         <div style={{ borderColor: "rgba(133,43,175,0.08)" }}>
           {/* Category Selection (readonly / disabled) */}
-          <section className="p-5 border border-gray-100 vendor-section-card bg-gray-50/50 rounded-2xl">
+          <section className="p-5 border border-gray-100 bg-gray-50/50 rounded-2xl">
             <SectionHeader
               icon={FaTag}
               title="Category Selection"
@@ -544,7 +503,7 @@ export default function ReviewProductPage() {
           </section>
 
           {/* Product Identification */}
-          <section className="p-5 mt-4 border border-gray-100 vendor-section-card bg-gray-50/50 rounded-2xl">
+          <section className="p-5 mt-4 border border-gray-100 bg-gray-50/50 rounded-2xl">
             <SectionHeader
               icon={FaTag}
               title="Product Identification"
@@ -589,7 +548,7 @@ export default function ReviewProductPage() {
 
           {/* ================= PRODUCT ATTRIBUTES ================= */}
           {(attributeSchema.length > 0 || customAttributeRows.length > 0) && (
-            <section className="p-5 mt-4 border border-gray-100 vendor-section-card bg-white rounded-2xl shadow-sm">
+            <section className="p-5 mt-4 border border-gray-100 bg-white rounded-2xl shadow-sm">
               <SectionHeader
                 icon={FaBox}
                 title="Product Attributes"
@@ -685,7 +644,7 @@ export default function ReviewProductPage() {
 
           {/* ===================== PRODUCT VARIANTS ===================== */}
           {product.variants?.length > 0 && (
-            <section className="p-5 mt-4 space-y-4 border border-gray-100 vendor-section-card bg-gray-50/50 rounded-2xl">
+            <section className="p-5 mt-4 space-y-4 border border-gray-100 bg-gray-50/50 rounded-2xl">
               <SectionHeader
                 icon={FaBox}
                 title="Product Variants"
@@ -846,7 +805,7 @@ export default function ReviewProductPage() {
           )}
 
           {/*  Descriptions */}
-          <section className="p-5 mt-4 border border-gray-100 vendor-section-card bg-gray-50/50 rounded-2xl">
+          <section className="p-5 mt-4 border border-gray-100 bg-gray-50/50 rounded-2xl">
             <SectionHeader
               icon={FaBox}
               title="Product Description"
@@ -891,18 +850,25 @@ export default function ReviewProductPage() {
           </section>
 
           {/* Pricing & Commercial Controls */}
-          <section className="p-5 mt-4 border border-gray-100 vendor-section-card bg-gray-50/50 rounded-2xl">
+          <section className="p-5 mt-4 border border-gray-100 bg-gray-50/50 rounded-2xl">
             <SectionHeader
               icon={FaTag}
               title="Pricing & Commercial Controls"
               description="Discount eligibility and return policy"
             />
 
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
               <FormInput
                 id="isDiscountEligible"
                 label="Discount Eligible"
                 value={product.isDiscountEligible === 1 ? "Yes" : "No"}
+                readOnly
+              />
+
+              <FormInput
+                id="isReturnable"
+                label="Returnable"
+                value={product.isReturnable === 1 ? "Yes" : "No"}
                 readOnly
               />
 
@@ -913,21 +879,19 @@ export default function ReviewProductPage() {
                 readOnly
               />
 
+              <FormInput id="openBoxDelivery" label="Open-box delivery" value={product.openBoxDelivery === 1 ? "Yes" : "No"} readOnly />
+              <FormInput id="replacementVideo" label="Damaged-product video for replacement" value={product.isReplaceable === 1 ? "Required" : "Not applicable"} readOnly />
               <FormInput
-                label="Return Policy"
+                label={RETURN_WINDOW_LABEL}
                 id="returnWindowDays"
-                value={
-                  product.isReturnable === 1
-                    ? `Returnable (${product.returnWindowDays ?? "-"} days)`
-                    : "Not Returnable"
-                }
+                value={returnWindowLabel(product)}
                 readOnly
               />
             </div>
           </section>
 
           {/* Logistics & Fulfilment */}
-          <section className="p-5 mt-4 border border-gray-100 vendor-section-card bg-gray-50/50 rounded-2xl">
+          <section className="p-5 mt-4 border border-gray-100 bg-gray-50/50 rounded-2xl">
             <SectionHeader
               icon={FaBox}
               title="Logistics & Fulfilment"
@@ -962,7 +926,7 @@ export default function ReviewProductPage() {
           </section>
 
           {/* Cover Image */}
-          <section className="p-5 mt-4 border border-gray-100 vendor-section-card bg-gray-50/50 rounded-2xl">
+          <section className="p-5 mt-4 border border-gray-100 bg-gray-50/50 rounded-2xl">
             <SectionHeader
               icon={FaImages}
               title="Cover Image"
@@ -998,7 +962,7 @@ export default function ReviewProductPage() {
           </section>
 
           {/* Product Video */}
-          <section className="p-5 mt-4 border border-gray-100 vendor-section-card bg-gray-50/50 rounded-2xl">
+          <section className="p-5 mt-4 border border-gray-100 bg-gray-50/50 rounded-2xl">
             <SectionHeader
               icon={FaImages}
               title="Product Video"
@@ -1022,7 +986,7 @@ export default function ReviewProductPage() {
 
           {/* Required Documents (if any) */}
           {product.requiredDocs && product.requiredDocs.length > 0 && (
-            <section className="p-5 mt-4 border border-gray-100 vendor-section-card bg-gray-50/50 rounded-2xl">
+            <section className="p-5 mt-4 border border-gray-100 bg-gray-50/50 rounded-2xl">
               <SectionHeader
                 icon={FaFileUpload}
                 title="Documents"
@@ -1069,7 +1033,7 @@ export default function ReviewProductPage() {
           )}
 
           {/* Actions */}
-          <section className="p-5 mt-4 border border-gray-100 vendor-section-card bg-gray-50/50 rounded-2xl">
+          <section className="p-5 mt-4 border border-gray-100 bg-gray-50/50 rounded-2xl">
             <SectionHeader
               icon={FaCheck}
               title="Actions"
@@ -1085,7 +1049,7 @@ export default function ReviewProductPage() {
                   className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white rounded-xl shadow-sm transition-all cursor-pointer active:scale-95"
                   style={{
                     background:
-                      "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
+                      "linear-gradient(90deg, #852BAF 60%, #C13A8E 100%)",
                   }}
                 >
                   <FaEdit className="text-xs" /> Edit

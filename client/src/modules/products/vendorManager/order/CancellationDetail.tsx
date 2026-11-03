@@ -17,21 +17,39 @@ interface DetailData {
   refunds: { refund_amount: number; refund_method: string; status: string }[];
 }
 
+const escapeHtml = (value: string) =>
+  value.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (!axios.isAxiosError<{ message?: unknown }>(error)) {
+    return error instanceof Error && error.message ? error.message : fallback;
+  }
+  if (!error.response) return "Unable to reach the server. Check your connection and try again.";
+  const message = error.response.data?.message;
+  if (typeof message === "string" && message.trim()) return message;
+  if (message) return JSON.stringify(message);
+  return `${fallback} (HTTP ${error.response.status})`;
+};
+
 export default function CancellationDetail() {
   const { orderId: orderItemId } = useParams();
   const navigate = useNavigate();
   const [data, setData] = useState<DetailData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
   const load = useCallback(async () => {
     if (!orderItemId) return;
     try {
       setLoading(true);
+      setLoadError(null);
       const response = await api.get<{ data: DetailData }>(
         `/order/item-cancellation-request/${orderItemId}`,
       );
       setData(response.data.data);
+    } catch (error: unknown) {
+      setLoadError(getErrorMessage(error, "Unable to load this cancellation request."));
     } finally {
       setLoading(false);
     }
@@ -52,16 +70,46 @@ export default function CancellationDetail() {
       confirmButtonText: approving ? "Approve cancellation" : "Reject cancellation",
     });
     if (!confirmation.isConfirmed) return;
-    try {
-      setActionLoading(true);
-      await api.post(`/order/${decision}-item-cancellation/${orderItemId}`);
+    const submit = async (body?: { courierCancelledManually: true }) => {
+      await api.post(`/order/${decision}-item-cancellation/${orderItemId}`, body);
       await Swal.fire({ icon: "success", title: `Cancellation ${approving ? "approved" : "rejected"}`, timer: 1500, showConfirmButton: false });
       await load();
+    };
+    try {
+      setActionLoading(true);
+      await submit();
     } catch (error: unknown) {
-      const message = axios.isAxiosError<{ message?: string }>(error)
-        ? error.response?.data?.message
-        : undefined;
-      await Swal.fire({ icon: "error", title: "Action failed", text: message || "Unable to process this request." });
+      console.error(`Item cancellation ${decision} failed`, error);
+      const courierFailed = approving && axios.isAxiosError<{ code?: string }>(error)
+        && error.response?.data?.code === "COURIER_CANCELLATION_FAILED";
+      if (courierFailed) {
+        // The AWB may already have been cancelled by hand in the courier
+        // panel, in which case the courier API refuses a second cancel.
+        const manual = await Swal.fire({
+          icon: "warning",
+          title: "Courier could not cancel the shipment",
+          html: `${escapeHtml(getErrorMessage(error, "Courier cancellation failed."))}<br/><br/>If this AWB was <b>already cancelled manually</b> in the courier panel, you can approve and refund now.`,
+          showCancelButton: true,
+          confirmButtonColor: "#16a34a",
+          confirmButtonText: "AWB cancelled manually – refund",
+          cancelButtonText: "Close",
+        });
+        if (!manual.isConfirmed) return;
+        try {
+          await submit({ courierCancelledManually: true });
+        } catch (retryError: unknown) {
+          console.error("Manual-courier approval failed", retryError);
+          await Swal.fire({ icon: "error", title: "Could not approve cancellation", text: getErrorMessage(retryError, "Unable to approve this cancellation.") });
+          await load();
+        }
+        return;
+      }
+      await Swal.fire({
+        icon: "error",
+        title: `Could not ${decision} cancellation`,
+        text: getErrorMessage(error, `Unable to ${decision} this cancellation.`),
+      });
+      await load();
     } finally {
       setActionLoading(false);
     }
@@ -71,7 +119,7 @@ export default function CancellationDetail() {
   const card = "mb-5 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm";
 
   if (loading) return <div className="p-8 text-gray-500">Loading request…</div>;
-  if (!data) return <div className="p-8 text-red-600">Request not found.</div>;
+  if (!data) return <div className="p-8 text-red-600">{loadError || "Request not found."}</div>;
   const request = data.request;
   const money = data.refunds.filter((r) => r.refund_method === "original").reduce((sum, r) => sum + Number(r.refund_amount), 0);
   const wallet = data.refunds.filter((r) => r.refund_method === "wallet").reduce((sum, r) => sum + Number(r.refund_amount), 0);
@@ -80,10 +128,10 @@ export default function CancellationDetail() {
   const eligibleTotal = eligibleMoney + eligibleWallet;
 
   return (
-    <div className="min-h-screen p-6 md:p-10">
+    <div className="w-full pb-8">
       <div className="mb-8 flex items-center justify-between">
-        <button onClick={() => navigate(-1)} className="cursor-pointer rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-5 py-2.5 font-semibold text-white">← Back</button>
-        <h1 className="text-3xl font-bold">Item Cancellation</h1>
+        <button onClick={() => navigate(-1)} className="inline-flex w-fit items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">← Back</button>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Item Cancellation</h1>
       </div>
       <section className={card}>
         <h2 className="mb-4 text-xs font-bold uppercase tracking-widest text-gray-400">Item summary</h2>

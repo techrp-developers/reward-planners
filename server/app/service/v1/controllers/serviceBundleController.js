@@ -7,6 +7,13 @@ const { UPLOAD_BASE } = require("../../../../config/path");
 const sharp = require("sharp");
 const { uploadToR2 } = require("../../../../utils/r2upload");
 const { deleteFromR2 } = require("../../../../utils/r2delete");
+const {
+  getBestBundleOffer,
+  splitBundleOffer,
+  serviceOfferRewards,
+} = require("../utils/serviceOffers");
+
+const roundTo2 = (value) => Math.round(Number(value) * 100) / 100;
 
 // helper function
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
@@ -122,11 +129,26 @@ class ServiceBundleController {
         0,
       );
 
-      const formattedItems = items.map((i) => ({
+      // A banner offer replaces the full-bundle price (fixed bundles, or custom
+      // bundles with every item selected); partial selections pay normal prices.
+      const offer = await getBestBundleOffer(id, bundle_total);
+      const offerTotal = offer ? offer.total : null;
+      const offerParts = offerTotal === null
+        ? []
+        : splitBundleOffer(items.map((i) => i.bundle_price), offerTotal);
+
+      const formattedItems = items.map((i, index) => ({
         ...i,
         image_url: i.image_url ? getPublicUrl(i.image_url) : null,
         individual_price: Number(i.price),
         bundle_price: Number(i.bundle_price),
+        offer_bundle_price: offerTotal === null ? null : offerParts[index],
+        can_redeem_reward: offerTotal === null ? Number(i.can_redeem_reward) : 0,
+        rewards: serviceOfferRewards(
+          offerTotal === null ? Number(i.bundle_price) : offerParts[index],
+          i,
+          offerTotal !== null,
+        ),
       }));
 
       res.json({
@@ -142,6 +164,9 @@ class ServiceBundleController {
             total_price: individual_total,
             bundle_price: bundle_total,
             savings: individual_total - bundle_total,
+            offer_price: offerTotal,
+            offer_savings: offerTotal === null ? null : roundTo2(individual_total - offerTotal),
+            content_id: offer ? offer.contentId : null,
           },
         },
       });

@@ -115,7 +115,7 @@ class ItemCancellationModel {
   async approve(
     orderItemId,
     conn,
-    { courierCancellationConfirmed = false } = {},
+    { courierCancellationConfirmed = false, approvalMeta = null } = {},
   ) {
     const [[row]] = await conn.execute(
       `SELECT ic.id AS cancellation_id, ic.status AS cancellation_status,
@@ -142,11 +142,25 @@ class ItemCancellationModel {
       SINGLE_ITEM_COURIER_CANCELLABLE_STATUSES.includes(
         row.shipping_status,
       );
+    // The shipment may already be cancelled at the courier or by ops; nothing
+    // is moving, so the item can still be refunded unless the whole order was.
+    const isShipmentAlreadyCancelled = row.shipping_status === "cancelled";
     if (
       !PRE_BOOKING_SHIPMENT_STATUSES.includes(row.shipping_status) &&
-      !isBookedCancellable
+      !isBookedCancellable &&
+      !isShipmentAlreadyCancelled
     ) {
       throw new Error("SHIPMENT_ALREADY_BOOKED");
+    }
+    if (isShipmentAlreadyCancelled) {
+      const [[orderRefund]] = await conn.execute(
+        `SELECT 1 AS found FROM order_refunds
+         WHERE order_id = ? AND order_item_id IS NULL LIMIT 1`,
+        [row.order_id],
+      );
+      if (row.order_status === "cancelled" || orderRefund) {
+        throw new Error("ORDER_ALREADY_CANCELLED");
+      }
     }
 
     const [[{ active_count: activeCount }]] = await conn.execute(
@@ -200,6 +214,14 @@ class ItemCancellationModel {
       [row.quantity, row.variant_id],
     );
     await conn.execute(
+      `UPDATE campaign_items csi
+       JOIN eorder_items oi
+         ON csi.campaign_id = oi.flash_sale_campaign_id AND csi.variant_id = oi.variant_id
+       SET csi.sold_qty = GREATEST(COALESCE(csi.sold_qty, 0) - oi.quantity, 0)
+       WHERE oi.order_item_id = ?`,
+      [row.order_item_id],
+    );
+    await conn.execute(
       `UPDATE eorder_items SET fulfillment_status = 'cancelled'
        WHERE order_item_id = ?`,
       [row.order_item_id],
@@ -217,8 +239,8 @@ class ItemCancellationModel {
     );
     await conn.execute(
       `INSERT INTO ecommerce_item_cancellation_timeline
-        (order_item_id, event) VALUES (?, 'cancellation_approved')`,
-      [row.order_item_id],
+        (order_item_id, event, meta) VALUES (?, 'cancellation_approved', ?)`,
+      [row.order_item_id, approvalMeta ? JSON.stringify(approvalMeta) : null],
     );
     await conn.execute(
       `INSERT INTO ecommerce_item_cancellation_timeline
@@ -230,16 +252,18 @@ class ItemCancellationModel {
     );
 
     if (isLastActiveShipmentItem) {
-      await conn.execute(
-        `UPDATE order_shipments
-         SET shipping_status = 'cancelled', cancelled_at = NOW(),
-             cancel_sync_status = ?
-         WHERE id = ?`,
-        [
-          courierCancellationConfirmed ? "completed" : "not_needed",
-          row.shipment_id,
-        ],
-      );
+      if (!isShipmentAlreadyCancelled) {
+        await conn.execute(
+          `UPDATE order_shipments
+           SET shipping_status = 'cancelled', cancelled_at = NOW(),
+               cancel_sync_status = ?
+           WHERE id = ?`,
+          [
+            courierCancellationConfirmed ? "completed" : "not_needed",
+            row.shipment_id,
+          ],
+        );
+      }
       await conn.execute(
         `UPDATE vendor_orders SET shipping_status = 'cancelled'
          WHERE vendor_order_id = ?`,

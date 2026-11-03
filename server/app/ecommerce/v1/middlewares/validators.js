@@ -32,6 +32,10 @@ const validateCheckoutCart = [
     .optional()
     .isBoolean()
     .withMessage("use_rewards must be boolean"),
+  body("delivery_preference")
+    .optional()
+    .isIn(["cheapest", "fastest"])
+    .withMessage("delivery_preference must be cheapest or fastest"),
   validate,
 ];
 
@@ -60,6 +64,10 @@ const validateBuyNow = [
     .optional()
     .isBoolean()
     .withMessage("use_rewards must be boolean"),
+  body("delivery_preference")
+    .optional()
+    .isIn(["cheapest", "fastest"])
+    .withMessage("delivery_preference must be cheapest or fastest"),
   validate,
 ];
 

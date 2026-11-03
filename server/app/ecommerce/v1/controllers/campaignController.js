@@ -12,6 +12,8 @@ const {
   resolveRedemption,
   calculateRedeemableCoins,
 } = require("../utils/rewardCalculate");
+const { getOfferCandidates, pickOffer } = require("../utils/activeOffers");
+const { resolveModuleContent } = require("../../../common/controller/cmsController");
 
 async function addWishlistStatus(products, userId) {
   products.forEach((product) => {
@@ -67,11 +69,14 @@ class CampaignController {
   // ========================================user==========================================
   async getHomeCampaigns(req, res) {
     try {
-      const data = await CampaignModel.getHomeCampaigns();
+      const [data, content] = await Promise.all([
+        CampaignModel.getHomeCampaigns("product"),
+        resolveModuleContent("product"),
+      ]);
 
       return res.json({
         success: true,
-        data,
+        data: { ...data, content },
       });
     } catch (err) {
       return res.status(err.statusCode || 500).json({
@@ -83,7 +88,7 @@ class CampaignController {
 
   async getUserCampaigns(req, res) {
     try {
-      const campaigns = await CampaignModel.getUserCampaigns(req.query);
+      const campaigns = await CampaignModel.getUserCampaigns({ ...req.query, module: "product" });
 
       return res.json({
         success: true,
@@ -100,7 +105,7 @@ class CampaignController {
 
   async getUserCampaignById(req, res) {
     try {
-      const campaign = await CampaignModel.getUserCampaignById(req.params.id);
+      const campaign = await CampaignModel.getUserCampaignById(req.params.id, "product");
 
       return res.json({
         success: true,
@@ -116,15 +121,20 @@ class CampaignController {
 
   async getCampaignProducts(req, res) {
     try {
-      const products = await CampaignModel.getCampaignProducts(req.params.id);
+      const products = await CampaignModel.getCampaignProducts(req.params.id, req.query);
+      const offers = await getOfferCandidates(products.map((product) => product.variant_id));
 
       const data = await Promise.all(
         products.map(async (product) => {
-          const salePrice = Number(product.final_price);
+          // Lowest live offer wins, matching what cart and checkout will charge.
+          const best = pickOffer(offers.get(Number(product.variant_id)));
+          const salePrice = best ? best.price : Number(product.final_price);
+          const rules = await RewardModel.getProductRewards(product.product_id, product.variant_id, product.category_id, product.subcategory_id, salePrice, product.is_discount_eligible);
+          const earnCoins = calculateReward(salePrice, rules);
           const mrp = Number(product.mrp) || 0;
 
           const mrpDiscountPercent =
-            mrp > 0 ? Math.round(((mrp - salePrice) / mrp) * 100) : 0;
+            mrp > 0 ? Math.max(0, Math.round(((mrp - salePrice) / mrp) * 100)) : 0;
 
           const { image_url, image_updated_at, ...rest } = product;
 
@@ -133,16 +143,18 @@ class CampaignController {
 
             image: getPublicUrl(image_url, image_updated_at),
 
+            final_price: salePrice,
             price: `₹${salePrice.toFixed(2)}`,
             originalPrice: mrp ? `₹${mrp.toFixed(2)}` : null,
 
             discount: `${mrpDiscountPercent}%`,
-            campaign_id: product.campaign_id,
+            campaign_id: best ? best.campaignId : product.campaign_id,
+            content_id: best ? best.contentId : null,
 
             reward: {
-              enabled: false,
-              coins: 0,
-              label: null,
+              enabled: earnCoins > 0,
+              coins: earnCoins,
+              label: earnCoins > 0 ? `Earn up to ${earnCoins} coins` : null,
             },
 
             redeem_coins: 0,
@@ -156,6 +168,7 @@ class CampaignController {
       return res.json({
         success: true,
         count: data.length,
+        show_section: data.length > 0,
         data,
       });
     } catch (err) {

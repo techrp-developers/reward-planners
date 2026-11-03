@@ -1,7 +1,7 @@
 const db = require("../config/database");
 
-const ICON_KEYS = ["default", "diwali", "eid", "christmas", "holi", "independence_day"];
-const ANDROID_ICON_KEYS = [...ICON_KEYS, "navratri", "dasera"];
+const ICON_KEYS = ["default", "diwali", "eid", "christmas", "holi", "independence_day", "navratri", "dasera"];
+const ANDROID_ICON_KEYS = ICON_KEYS;
 const PLATFORMS = ["ios", "android"];
 
 const fail = (message, statusCode = 400) => {

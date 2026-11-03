@@ -1,9 +1,9 @@
+import BrandLogo from "../../../../common/components/BrandLogo";
 import { memo, useCallback, useEffect, useState } from "react";
 import { FiAward, FiCheckCircle, FiDownload, FiMail, FiPhone, FiPlusCircle, FiPrinter } from "react-icons/fi";
 import type { CheckoutInvoiceSummary } from "../../api/fleaMarketCheckoutApi";
 import { downloadInvoicePdf, emailInvoice, fetchInvoice, type InvoiceDetail } from "../../api/fleaMarketInvoiceApi";
 import { maskEmail, maskPhone } from "../../utils/mask";
-import RPlogo from "../../../../common/assets/logo.svg";
 import Avatar from "../ui/Avatar";
 import Spinner from "../ui/Spinner";
 import { ErrorState } from "../ui/EmptyState";
@@ -202,8 +202,7 @@ function InvoiceViewImpl({
                   {detail && <p className="text-xs text-gray-400">{new Date(detail.issuedAt).toLocaleString()}</p>}
                 </div>
                 <div className="flex items-center gap-3 pl-4 border-l border-gray-100 shrink-0">
-                  <img src={RPlogo} alt="Reward Planners" className="object-contain w-16 h-12" />
-                  <span className="text-sm font-bold leading-tight text-purple-700">Reward Planners</span>
+                  <BrandLogo className="w-36" />
                 </div>
               </div>
             </div>

@@ -4,11 +4,7 @@ const employeeController = require("../controllers/employeeController");
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 
 const router = express.Router();
-const { sendActivationEmail } = require("../controllers/employeeActivationController");
-const { rateLimit } = require("express-rate-limit");
-router.post("/:id/activation-email", authenticateToken, authorizeRoles("hr"),
-  rateLimit({ windowMs: 60 * 1000, limit: 10, message: { success: false, message: "Please wait a minute before sending more activation emails." } }),
-  sendActivationEmail);
+// Activation email/WhatsApp reminders are RM-only (see managerRoutes.js).
 const guard = [authenticateToken, authorizeRoles("hr", "admin")];
 
 const employeeFileUpload = multer({
@@ -74,6 +70,27 @@ router.get(
   "/departments",
   ...guard,
   employeeController.departments.bind(employeeController),
+);
+
+// Add a department to the company's list
+router.post(
+  "/departments",
+  ...guard,
+  employeeController.createDepartment.bind(employeeController),
+);
+
+// Rename a department (body: current_name, name); employees move with it
+router.put(
+  "/departments",
+  ...guard,
+  employeeController.renameDepartment.bind(employeeController),
+);
+
+// Delete an unused department (query: name)
+router.delete(
+  "/departments",
+  ...guard,
+  employeeController.deleteDepartment.bind(employeeController),
 );
 
 // Bulk upload employee records

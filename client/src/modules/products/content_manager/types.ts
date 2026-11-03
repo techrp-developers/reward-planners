@@ -2,7 +2,7 @@ export type Zone = "navbar_background" | "promotional_banner" | "offers_banner" 
 export type ContentKind = "color" | "image";
 export type Status = "default" | "draft" | "scheduled" | "active" | "expired";
 export type ContentDisplayMode = "single" | "carousel" | "grid_2" | "grid_3";
-export type ContentTargetType = "product" | "category" | "subcategory";
+export type ContentTargetType = "product" | "category" | "subcategory" | "service" | "service_category" | "service_bundle";
 export type GradientDirection =
   | "left-right"
   | "right-left"
@@ -18,6 +18,9 @@ export interface GradientConfig {
 }
 
 export interface ContentZoneImage {
+  targetType?: ContentTargetType | "";
+  targetId?: number | null;
+  targetIds?: number[];
   imageId: number | null;
   isActive?: boolean;
   /** Preview-only layout ratio; never persisted to the CMS API. */

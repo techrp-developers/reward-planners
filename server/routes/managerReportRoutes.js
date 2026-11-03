@@ -2,6 +2,7 @@ const router = require("express").Router();
 const controller = require("../controllers/managerReportController");
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 router.get("/usage", authenticateToken, authorizeRoles("rm", "admin"), controller.usage);
+router.get("/usage/:module/users", authenticateToken, authorizeRoles("rm", "admin"), controller.usageUsers);
 router.get("/inactive-users", authenticateToken, authorizeRoles("rm", "admin"), controller.inactiveUsers);
 router.get("/stock", authenticateToken, authorizeRoles("vendor_manager", "admin"), controller.stock);
 router.get("/orders", authenticateToken, authorizeRoles("vendor_manager", "admin"), controller.orders);

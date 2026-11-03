@@ -29,7 +29,15 @@ class ServiceBundleModel {
       sv.variant_name,
       sv.price,
       sv.title,
-      sv.image_url
+        sv.image_url,
+        sv.can_earn_reward,
+        sv.earn_reward_type,
+        sv.earn_reward_value,
+        sv.max_earn_reward,
+        sv.can_redeem_reward,
+        sv.redemption_type,
+        sv.redemption_value,
+        sv.max_redemption_amount
 
     FROM service_bundle_items bi
     JOIN services s ON s.id = bi.service_id

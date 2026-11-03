@@ -74,7 +74,7 @@ async function processUploadedFiles(
         fs.mkdirSync(videoFolder, { recursive: true });
       }
 
-      // move temp → video folder first
+      // move temp â†’ video folder first
       await moveFile(file.path, originalPath);
 
       const compressedFilename = `compressed-${Date.now()}.mp4`;
@@ -163,8 +163,8 @@ class ProductModel {
     const [result] = await connection.execute(
       `INSERT INTO eproducts 
      (vendor_id, category_id, subcategory_id, sub_subcategory_id, brand_name, manufacturer,product_name, gst_slab,hsn_sac_code,description, short_description,brand_description,
-      custom_category, custom_subcategory, custom_sub_subcategory,is_discount_eligible,is_returnable, is_replaceable,return_window_days,delivery_sla_min_days,delivery_sla_max_days,shipping_class, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+      custom_category, custom_subcategory, custom_sub_subcategory,is_discount_eligible,is_returnable, is_replaceable,open_box_delivery,return_window_days,delivery_sla_min_days,delivery_sla_max_days,shipping_class, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
       [
         safe(vendorId),
         safe(data.category_id),
@@ -184,6 +184,7 @@ class ProductModel {
         safe(data.is_discount_eligible),
         safe(data.is_returnable),
         safe(data.is_replaceable),
+        Number(data.open_box_delivery) === 1 ? 1 : 0,
         safe(data.return_window_days),
         safe(data.delivery_sla_min_days),
         safe(data.delivery_sla_max_days),
@@ -642,7 +643,8 @@ class ProductModel {
       custom_sub_subcategory = ?,
       is_discount_eligible = ?,
       is_returnable = ?,
-      is_replaceable = ?, 
+      is_replaceable = ?,
+      open_box_delivery = ?,
       return_window_days = ?,
       delivery_sla_min_days = ?,
       delivery_sla_max_days = ?,
@@ -666,6 +668,7 @@ class ProductModel {
         safe(data.is_discount_eligible),
         safe(data.is_returnable),
         safe(data.is_replaceable),
+        Number(data.open_box_delivery) === 1 ? 1 : 0,
         safe(data.return_window_days),
         safe(data.delivery_sla_min_days),
         safe(data.delivery_sla_max_days),
@@ -687,7 +690,7 @@ class ProductModel {
       );
 
       // The product may have been created with no attributes at all (so no
-      // row exists yet in product_attributes) — fall back to inserting one.
+      // row exists yet in product_attributes) â€” fall back to inserting one.
       if (result.affectedRows === 0) {
         await connection.execute(
           `INSERT INTO product_attributes (product_id, attributes) VALUES (?, ?)`,
@@ -1079,6 +1082,10 @@ class ProductModel {
         p.brand_name,
         p.manufacturer,
         p.product_name,
+        p.open_box_delivery,
+        p.is_returnable,
+        p.is_replaceable,
+        p.return_window_days,
         p.description,
         p.short_description,
         p.custom_category,

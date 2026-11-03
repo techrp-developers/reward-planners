@@ -19,7 +19,7 @@ const optionalAuth = async (req, res, next) => {
       return next();
     }
 
-    if (Number(user.status) !== 1) {
+    if (!AuthModel.isCustomerActive(user)) {
       return next();
     }
 

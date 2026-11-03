@@ -110,13 +110,14 @@ export default function ServiceCancellationRequest() {
                 setStatus(option);
                 setPage(1);
               }}
-              className={`cursor-pointer rounded-full px-4 py-2 text-sm font-semibold capitalize transition ${
+              aria-pressed={status === option}
+              className={`cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
                 status === option
-                  ? "bg-gradient-to-r from-[#852BAF] to-[#FC3F78] text-white shadow"
+                  ? "border border-purple-200 bg-purple-50 text-[#852BAF]"
                   : "border border-gray-200 bg-white text-gray-600 hover:border-purple-200 hover:text-[#852BAF]"
               }`}
             >
-              {option}
+              {option === "requested" ? "Awaiting review" : option === "all" ? "All requests" : option === "approved" ? "Approved" : "Rejected"}
             </button>
           ))}
         </div>

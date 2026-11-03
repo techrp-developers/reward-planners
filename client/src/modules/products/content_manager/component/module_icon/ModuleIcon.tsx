@@ -24,22 +24,18 @@ export default function ModuleIcon() {
 
   return (
     <main className="space-y-6">
-      <header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#25103d] via-[#68258d] to-[#c33076] p-7 text-white shadow-[0_24px_65px_rgba(91,33,124,0.24)]">
-        <div className="absolute -right-16 -top-24 h-64 w-64 rounded-full bg-white/10 blur-2xl" />
-        <div className="relative flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-purple-200">Content management</p>
-            <h1 className="mt-1 text-3xl font-black">Module Icons</h1>
-            <p className="mt-2 text-sm text-purple-100/80">Manage the icons and labels displayed in the mobile application's top navigation.</p>
-          </div>
-          <button
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Module icons</h1>
+          <p className="mt-1 text-sm text-slate-500">Manage the icons and labels displayed in the mobile application's top navigation.</p>
+        </div>
+        <button
             type="button"
             onClick={() => setAddModalOpen(true)}
-            className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-[#852BAF] shadow hover:bg-purple-50"
+            className="inline-flex w-fit items-center gap-2 rounded-lg bg-[#852BAF] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#702393]"
           >
             <FiPlus /> Add Module
           </button>
-        </div>
       </header>
 
       {addModalOpen && (

@@ -13,6 +13,20 @@ function getCompanyId(req) {
   return Number(req.body?.company_id || req.query?.company_id);
 }
 
+const DEPARTMENT_NAME_MAX = 50;
+
+function normalizeDepartmentName(value) {
+  return String(value || "").trim().replace(/\s+/g, " ");
+}
+
+function validateDepartmentName(name) {
+  if (!name) return "Department name is required";
+  if (name.length > DEPARTMENT_NAME_MAX) {
+    return `Department name must be ${DEPARTMENT_NAME_MAX} characters or fewer`;
+  }
+  return null;
+}
+
 function normalizeEmployee(body = {}) {
   return {
     company_id: Number(body.company_id),
@@ -217,6 +231,86 @@ class EmployeeController {
     } catch (error) {
       console.error("Employee departments error:", error);
       return res.status(500).json({ success: false, message: "Unable to fetch departments" });
+    }
+  }
+
+  async createDepartment(req, res) {
+    try {
+      const companyId = getCompanyId(req);
+      const name = normalizeDepartmentName(req.body?.name);
+      if (!companyId) {
+        return res.status(400).json({ success: false, message: "A company is required" });
+      }
+      const invalid = validateDepartmentName(name);
+      if (invalid) return res.status(400).json({ success: false, message: invalid });
+
+      if (await EmployeeModel.findDepartmentByName(companyId, name)) {
+        return res.status(409).json({ success: false, message: "This department already exists" });
+      }
+      const id = await EmployeeModel.createDepartment(companyId, name, req.user?.user_id || null);
+      return res.status(201).json({
+        success: true,
+        message: "Department added successfully",
+        data: { id, name, employee_count: 0 },
+      });
+    } catch (error) {
+      if (error.code === "ER_DUP_ENTRY") {
+        return res.status(409).json({ success: false, message: "This department already exists" });
+      }
+      console.error("Create department error:", error);
+      return res.status(500).json({ success: false, message: "Unable to add department" });
+    }
+  }
+
+  async renameDepartment(req, res) {
+    try {
+      const companyId = getCompanyId(req);
+      const currentName = normalizeDepartmentName(req.body?.current_name);
+      const name = normalizeDepartmentName(req.body?.name);
+      if (!companyId || !currentName) {
+        return res.status(400).json({ success: false, message: "A company and current department are required" });
+      }
+      const invalid = validateDepartmentName(name);
+      if (invalid) return res.status(400).json({ success: false, message: invalid });
+
+      // A case-only change ("hr" -> "HR") matches itself under the case-insensitive collation.
+      const existing = await EmployeeModel.findDepartmentByName(companyId, name);
+      if (existing && existing.name.toLowerCase() !== currentName.toLowerCase()) {
+        return res.status(409).json({ success: false, message: "Another department already uses this name" });
+      }
+      const moved = await EmployeeModel.renameDepartment(companyId, currentName, name, req.user?.user_id || null);
+      return res.json({
+        success: true,
+        message: moved ? `Department renamed and ${moved} employee(s) updated` : "Department renamed successfully",
+      });
+    } catch (error) {
+      if (error.code === "ER_DUP_ENTRY") {
+        return res.status(409).json({ success: false, message: "Another department already uses this name" });
+      }
+      console.error("Rename department error:", error);
+      return res.status(500).json({ success: false, message: "Unable to rename department" });
+    }
+  }
+
+  async deleteDepartment(req, res) {
+    try {
+      const companyId = getCompanyId(req);
+      const name = normalizeDepartmentName(req.query?.name || req.body?.name);
+      if (!companyId || !name) {
+        return res.status(400).json({ success: false, message: "A company and department are required" });
+      }
+      const assigned = await EmployeeModel.countDepartmentEmployees(companyId, name);
+      if (assigned) {
+        return res.status(409).json({
+          success: false,
+          message: `${assigned} employee(s) are still in this department. Move them first or rename the department instead.`,
+        });
+      }
+      await EmployeeModel.deleteDepartment(companyId, name);
+      return res.json({ success: true, message: "Department deleted successfully" });
+    } catch (error) {
+      console.error("Delete department error:", error);
+      return res.status(500).json({ success: false, message: "Unable to delete department" });
     }
   }
 
@@ -463,7 +557,7 @@ class EmployeeController {
         });
       }
 
-      await EmployeeModel.setStatus(req.params.id, companyId, isActive);
+      await EmployeeModel.setEmploymentStatus(req.params.id, companyId, isActive);
       const updated = await EmployeeModel.findById(req.params.id, companyId);
       return res.json({
         success: true,

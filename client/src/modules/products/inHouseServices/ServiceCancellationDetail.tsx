@@ -91,7 +91,7 @@ export default function ServiceCancellationDetail() {
   return (
     <div className="min-h-screen p-6 md:p-10" style={{ background: "linear-gradient(160deg, #fdf8ff 0%, #fff5f8 50%, #f8f9ff 100%)" }}>
       <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
-        <button type="button" onClick={() => navigate(-1)} className="cursor-pointer rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-5 py-2.5 text-sm font-semibold text-white shadow-lg">← Back</button>
+        <button type="button" onClick={() => navigate(-1)} className="service-back-button cursor-pointer rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-5 py-2.5 text-sm font-semibold text-white shadow-lg">← Back</button>
         <h1 className="text-2xl font-bold text-gray-900 md:text-3xl">Service Cancellation Request</h1>
       </div>
 
@@ -145,10 +145,10 @@ export default function ServiceCancellationDetail() {
       </section>
 
       {data.cancellation?.status === "requested" && (
-        <div className="flex flex-wrap gap-4">
-          <button type="button" disabled={actionLoading} onClick={() => decide("approve")} className="cursor-pointer rounded-xl bg-green-600 px-6 py-3 font-bold text-white shadow hover:bg-green-700 disabled:opacity-50">Approve cancellation</button>
-          <button type="button" disabled={actionLoading} onClick={() => decide("reject")} className="cursor-pointer rounded-xl bg-red-600 px-6 py-3 font-bold text-white shadow hover:bg-red-700 disabled:opacity-50">Reject cancellation</button>
-        </div>
+        <section aria-label="Cancellation decision" className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-5"><div><h2 className="text-sm font-semibold text-slate-900">Review cancellation</h2><p className="mt-1 text-sm text-slate-500" role="status">{actionLoading ? "Saving your decision..." : "Approve or reject this request after reviewing the details."}</p></div><div className="flex flex-wrap gap-3">
+          <button type="button" disabled={actionLoading} onClick={() => decide("approve")} className="cursor-pointer rounded-lg bg-[#852BAF] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#6E2391] disabled:opacity-50">Approve cancellation</button>
+          <button type="button" disabled={actionLoading} onClick={() => decide("reject")} className="cursor-pointer rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50">Reject cancellation</button>
+        </div></section>
       )}
     </div>
   );

@@ -192,7 +192,7 @@ export default function VendorDashboard() {
           <div className="flex items-center gap-4">
             <div
               className="flex items-center justify-center text-white w-11 h-11 rounded-2xl shrink-0"
-              style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)", boxShadow: "0 6px 16px rgba(133,43,175,0.3)" }}
+              style={{ background: "linear-gradient(90deg, #852BAF 60%, #C13A8E 100%)", boxShadow: "0 6px 16px rgba(133,43,175,0.3)" }}
             >
               <FiAlertCircle size={20} />
             </div>
@@ -207,7 +207,7 @@ export default function VendorDashboard() {
           <button
             onClick={() => navigate("/vendor/onboarding")}
             className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white rounded-xl shrink-0 cursor-pointer transition-all hover:opacity-90 active:scale-95"
-            style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)", boxShadow: "0 4px 16px rgba(133,43,175,0.3)" }}
+            style={{ background: "linear-gradient(90deg, #852BAF 60%, #C13A8E 100%)", boxShadow: "0 4px 16px rgba(133,43,175,0.3)" }}
           >
             Complete Now <FaArrowRight size={11} />
           </button>
@@ -220,7 +220,7 @@ export default function VendorDashboard() {
           <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-0.5">
             {getGreeting()}
           </p>
-          <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
             Vendor <span className="gradient-text-brand">Dashboard</span>
           </h1>
           <p className="mt-1 text-sm font-medium text-gray-500">
@@ -241,7 +241,7 @@ export default function VendorDashboard() {
             <button
               onClick={() => navigate("/vendor/products/add")}
               className="flex items-center gap-2 px-5 py-2.5 text-white font-semibold text-sm rounded-xl cursor-pointer transition-all duration-200 hover:opacity-90 active:scale-95"
-              style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)", boxShadow: "0 6px 20px rgba(133,43,175,0.3)" }}
+              style={{ background: "linear-gradient(90deg, #852BAF 60%, #C13A8E 100%)", boxShadow: "0 6px 20px rgba(133,43,175,0.3)" }}
             >
               <FaPlus size={12} /> Add Product
             </button>
@@ -336,7 +336,7 @@ export default function VendorDashboard() {
                           <button
                             onClick={() => navigate("/vendor/products/add")}
                             className="mt-1 flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl text-white cursor-pointer hover:opacity-90"
-                            style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }}
+                            style={{ background: "linear-gradient(90deg, #852BAF 60%, #C13A8E 100%)" }}
                           >
                             <FaPlus size={9} /> Add Your First Product
                           </button>

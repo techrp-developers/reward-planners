@@ -2,6 +2,7 @@ const PDFDocument = require("pdfkit");
 const fs = require("fs");
 const path = require("path");
 const db = require("../../config/database");
+const { orderOfferColumns, orderOffer } = require("../../utils/orderOffer");
 
 async function generateInvoice(parentOrderId) {
   const [[existingInvoice]] = await db.execute(
@@ -19,6 +20,7 @@ async function generateInvoice(parentOrderId) {
   const [orders] = await db.execute(
     `SELECT 
         so.*, 
+        ${orderOfferColumns("so")},
         s.name AS service_name
      FROM service_orders so
      JOIN services s 
@@ -66,6 +68,7 @@ async function generateInvoice(parentOrderId) {
   // reward-discount row. Reuse the cache only for invoices without rewards.
   if (
     existingInvoice &&
+    String(existingInvoice.invoice_url || "").endsWith("-branded.pdf") &&
     rewardDiscount === 0 &&
     Number(existingInvoice.total_amount) === total
   ) {
@@ -83,8 +86,8 @@ async function generateInvoice(parentOrderId) {
   // GENERATE FILE DETAILS
   // --------------------------------------------------
 
-  const invoiceNumber = `INV-${Date.now()}`;
-  const fileName = `${invoiceNumber}.pdf`;
+  const invoiceNumber = existingInvoice?.invoice_number || `INV-${Date.now()}`;
+  const fileName = `${invoiceNumber}-branded.pdf`;
 
   const invoiceDir = path.join(
     __dirname,
@@ -123,12 +126,17 @@ async function generateInvoice(parentOrderId) {
   // HEADER
   // --------------------------------------------------
 
+  doc.image(path.join(__dirname, "../../templates/assets/invoice-logo.png"), 50, 32, {
+    fit: [135, 62],
+  });
+
   doc
     .fillColor(primaryColor)
     .font("Helvetica-Bold")
-    .fontSize(26)
-    .text("SERVICE INVOICE", {
-      align: "center",
+    .fontSize(23)
+    .text("SERVICE INVOICE", 210, 50, {
+      width: 335,
+      align: "right",
     });
 
   doc.moveDown(1);
@@ -216,6 +224,7 @@ async function generateInvoice(parentOrderId) {
   orders.forEach((order, index) => {
     const rowBg =
       index % 2 === 0 ? "#FFFFFF" : "#F8FAFC";
+    const offer = orderOffer(order, order.price);
 
     // Row Background
     doc
@@ -228,12 +237,24 @@ async function generateInvoice(parentOrderId) {
       .font("Helvetica")
       .fontSize(11)
       .text(index + 1, 70, position + 13)
-      .text(order.service_name, 120, position + 13)
+      .text(order.service_name, 120, position + (offer ? 7 : 13))
       .text(
         `Rs. ${Number(order.price).toFixed(2)}`,
         450,
         position + 13
       );
+
+    if (offer) {
+      doc
+        .fillColor(successColor)
+        .fontSize(8)
+        .text(
+          `Offer: ${offer.title}${offer.original_price === null ? "" : ` (normal price Rs. ${offer.original_price.toFixed(2)})`}`,
+          120,
+          position + 23,
+          { width: 320, lineBreak: false }
+        );
+    }
 
     position += 38;
   });
