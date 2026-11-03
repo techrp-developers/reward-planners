@@ -3744,7 +3744,21 @@ await connection
 */
 
 const bookBusTicket = async (req, res) => {
-  const orderRef = String(req.body?.order_ref || "").trim();
+  let orderRef = String(req.body?.order_ref || req.body?.orderRef || "").trim();
+
+  if (!orderRef && req.body?.traceId && req.body?.resultIndex && req.user?.user_id) {
+    try {
+      const [[latestOrder]] = await db.execute(
+        'SELECT order_ref FROM busbooking_orders WHERE user_id = ? AND trace_id = ? AND result_index = ? ORDER BY id DESC LIMIT 1',
+        [req.user.user_id, String(req.body.traceId).trim(), String(req.body.resultIndex).trim()]
+      );
+      if (latestOrder?.order_ref) {
+        orderRef = latestOrder.order_ref;
+      }
+    } catch (lookupErr) {
+      console.warn('[BusBooking][Book] OrderRef lookup error:', lookupErr.message);
+    }
+  }
 
   if (!orderRef) {
     return res.status(400).json({
