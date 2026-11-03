@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { campaignPreviewNotes } from "../notificationUtils";
 
-const input = { title: "Something Special Just Arrived!", message: "Explore our latest collection.", contentType: "image", hasImage: true, destinationLabel: "Product details", category: "engagement" };
+const input = { title: "Something Special Just Arrived!", message: "Explore our latest collection.", contentType: "image", hasImage: true, destinationLabel: "Product details", category: "announcement" };
 
 describe("campaignPreviewNotes", () => {
   it("has no warnings for a complete campaign and shows its destination", () => {
@@ -15,6 +15,17 @@ describe("campaignPreviewNotes", () => {
   it("warns about a long title, empty message, missing image and quiet marketing", () => {
     const { warnings } = campaignPreviewNotes({ ...input, title: "x".repeat(56), message: " ", hasImage: false, category: "marketing" });
     expect(warnings).toHaveLength(4);
+  });
+  it("warns that an empty title is empty", () => {
+    expect(campaignPreviewNotes({ ...input, title: "" }).warnings).toEqual(["The title is empty."]);
+  });
+  it("names a destination the app cannot open yet and its fallback", () => {
+    const notes = campaignPreviewNotes({ ...input, destinationLabel: "Events", destinationInApp: false });
+    expect(notes.tapDestination).toMatch(/Events \(not in the app yet/);
+    expect(notes.warnings[0]).toMatch(/no Events screen yet/);
+  });
+  it("tells the sender that engagement needs consent and respects quiet hours", () => {
+    expect(campaignPreviewNotes({ ...input, category: "engagement" }).warnings.join(" ")).toMatch(/allowed engagement.*quiet hours/);
   });
   it("does not ask for an image on a text notification", () => {
     expect(campaignPreviewNotes({ ...input, contentType: "standard", hasImage: false }).warnings).toEqual([]);

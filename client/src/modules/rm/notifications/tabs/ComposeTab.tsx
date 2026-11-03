@@ -99,6 +99,15 @@ function toInput(form: FormState): CampaignInput {
   };
 }
 
+// Starting points for authors; nothing is applied unless they click one.
+const COPY_IDEAS = [
+  { label: "Product launch", title: "Just Landed on Reward Planners! ✨", body: "Explore fresh arrivals and find something you'll love." },
+  { label: "Special offer", title: "A Special Offer Just for You! 🎁", body: "Discover selected deals and explore your rewards." },
+  { label: "Rewards", title: "Your Rewards Are Waiting!", body: "Open Reward Planners to see what's new for you." },
+  { label: "Services", title: "Your Next Service Is a Tap Away!", body: "Explore convenient services available on Reward Planners." },
+  { label: "Festive", title: "Festive Surprises Are Here! ✨", body: "Discover handpicked products and thoughtful gifts." },
+];
+
 export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta: ManagerMeta; nav: TabNavigation; campaignId: number | null; templateId: number | null }) {
   const tablesReady = meta.infrastructure.campaignTables;
   const [form, setForm] = useState<FormState>(EMPTY);
@@ -398,10 +407,12 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
     catalog_product_ids: form.catalog_product_ids, media: form.media,
   };
 
+  const previewDestination = meta.destinations.find((item) => item.key === form.destination_type) || null;
   const previewNotes = campaignPreviewNotes({
     title: shown?.title || form.title_en, message: shown?.message || form.body_en,
     contentType: form.content_type, hasImage: Boolean(previewImage), category: form.category,
-    destinationLabel: meta.destinations.find((item) => item.key === form.destination_type)?.label || null,
+    destinationLabel: previewDestination?.label || (form.content_type === "catalog" ? "Selected products" : null),
+    destinationInApp: form.content_type === "catalog" ? false : previewDestination ? previewDestination.mobileRoute === "verified" : undefined,
   });
 
   return (
@@ -494,6 +505,22 @@ export default function ComposeTab({ meta, nav, campaignId, templateId }: { meta
         <Card title="3. Message" subtitle="Employees receive the language chosen in their app. Unapproved or missing translations fall back to English.">
           <div className="space-y-3 p-5">
             <LanguageTabs value={lang} onChange={setLang} approved={form.approved_languages} available={{ hi: Boolean(form.title_hi && form.body_hi), mr: Boolean(form.title_mr && form.body_mr) }} />
+            {editable && lang === "en" && (
+              <details className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                <summary className="cursor-pointer font-bold text-gray-700">Copy ideas</summary>
+                <p className="mt-2 text-[11px] text-gray-500">Short title (about 30–55 characters), one clear benefit in the message, no claims the offer cannot back up. Using an idea replaces the English title and message.</p>
+                <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+                  {COPY_IDEAS.map((idea) => (
+                    <button key={idea.label} type="button" className="rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-left hover:border-[#852BAF]"
+                      onClick={() => setForm((current) => ({ ...current, title_en: idea.title, body_en: idea.body }))}>
+                      <span className="block text-[10px] font-bold uppercase text-gray-400">{idea.label}</span>
+                      <span className="block font-semibold text-gray-800">{idea.title}</span>
+                      <span className="block text-gray-500">{idea.body}</span>
+                    </button>
+                  ))}
+                </div>
+              </details>
+            )}
             <label className="block"><span className={labelCls}>{LANGUAGE_LABELS[lang]} title {lang === "en" && "*"}</span>
               <input className={inputCls} disabled={!editable} maxLength={255} value={form[titleField]}
                 onChange={(event) => { setMessageError(""); setForm((current) => ({ ...current, [titleField]: event.target.value, approved_languages: current.approved_languages.filter((item) => item !== lang) })); }}

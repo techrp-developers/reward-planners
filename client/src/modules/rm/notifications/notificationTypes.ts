@@ -19,7 +19,7 @@ export interface Destination {
   label: string;
   screen: string;
   entity: "product" | "category" | "product_list" | "service" | "service_category" | "published_quiz" | null;
-  mobileRoute: "existing_payload" | "proposed";
+  mobileRoute: "verified" | "not_in_app";
   campaignAllowed: boolean;
 }
 

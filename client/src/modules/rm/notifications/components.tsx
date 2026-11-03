@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { FiBell, FiChevronLeft, FiChevronRight, FiInbox, FiX } from "react-icons/fi";
 import { LANGUAGE_LABELS, STATUS_META } from "./notificationUtils";
 import type { Language } from "./notificationTypes";
@@ -153,53 +153,87 @@ function AppBadge({ size = "h-5 w-5" }: { size?: string }) {
   return <span className={`flex ${size} shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-[#852BAF] to-[#FC3F78] text-[10px] text-white`}><FiBell /></span>;
 }
 
+type PreviewMode = "ios_compact" | "ios_expanded" | "android" | "inbox";
+const PREVIEW_MODES: [PreviewMode, string][] = [["ios_compact", "iOS compact"], ["ios_expanded", "iOS expanded"], ["android", "Android expanded"], ["inbox", "In-app inbox"]];
+
 /**
- * Approximate Android collapsed / expanded (BigPicture) and iOS renderings.
- * Real presentation depends on OS version, device and notification settings.
+ * Approximate iOS (compact, long-press expanded), Android BigPicture and the
+ * app's inbox card. Only the inbox card is drawn by Reward Planners; the
+ * system notifications are laid out by the phone.
  */
 export function NotificationPreviews({ title, message, imageUrl, note }: { title?: string; message?: string; imageUrl?: string | null; note?: string }) {
+  const [mode, setMode] = useState<PreviewMode>("ios_compact");
   const heading = title || "Notification title";
   const body = message || "Notification message";
+  const image = imageUrl ? <img src={imageUrl} alt="" className="aspect-[2/1] w-full object-cover" /> : null;
   return (
     <div className="space-y-3">
-      <div className="space-y-3 rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 p-4">
-        <div>
-          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Android · collapsed</p>
-          <div className="flex items-start gap-2.5 rounded-2xl bg-white/95 p-3 shadow-lg">
-            <AppBadge />
+      <div role="tablist" aria-label="Preview" className="grid grid-cols-2 gap-1 rounded-xl bg-gray-100 p-1 sm:grid-cols-4">
+        {PREVIEW_MODES.map(([key, label]) => (
+          <button key={key} type="button" role="tab" aria-selected={mode === key} onClick={() => setMode(key)}
+            className={`rounded-lg px-2 py-1.5 text-[11px] font-bold transition ${mode === key ? "bg-white text-[#852BAF] shadow-sm" : "text-gray-500 hover:text-gray-800"}`}>{label}</button>
+        ))}
+      </div>
+
+      {mode === "ios_compact" && (
+        <div className="rounded-2xl bg-gradient-to-br from-indigo-900 via-indigo-700 to-purple-700 p-4">
+          <div className="flex items-start gap-2.5 rounded-[18px] bg-white/85 p-3 backdrop-blur">
+            <AppBadge size="h-9 w-9 rounded-lg" />
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] text-gray-500">Reward Planners · now</p>
-              <p className="truncate text-sm font-bold text-gray-900">{heading}</p>
-              <p className="truncate text-xs text-gray-600">{body}</p>
+              <div className="flex justify-between gap-2 text-[13px]"><p className="truncate font-semibold text-gray-900">{heading}</p><span className="shrink-0 text-[11px] text-gray-500">now</span></div>
+              <p className="line-clamp-2 text-[13px] text-gray-800">{body}</p>
             </div>
-            {imageUrl && <img src={imageUrl} alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover" />}
+            {imageUrl && <img src={imageUrl} alt="" className="h-10 w-10 shrink-0 rounded-md object-cover" />}
           </div>
+          <p className="mt-2 text-[10px] text-white/80">{imageUrl ? "iOS shows a small thumbnail here; the person long-presses to see the full image." : "Text only: iOS shows no thumbnail."}</p>
         </div>
-        <div>
-          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Android · expanded{imageUrl ? " (big picture)" : ""}</p>
-          <div className="rounded-2xl bg-white/95 p-3 shadow-lg">
+      )}
+
+      {mode === "ios_expanded" && (
+        <div className="rounded-2xl bg-gradient-to-br from-indigo-900 via-indigo-700 to-purple-700 p-4">
+          <div className="overflow-hidden rounded-[18px] bg-white/90 backdrop-blur">
+            {image}
+            <div className="flex items-start gap-2.5 p-3">
+              <AppBadge size="h-9 w-9 rounded-lg" />
+              <div className="min-w-0 flex-1">
+                <div className="flex justify-between gap-2 text-[13px]"><p className="font-semibold text-gray-900">{heading}</p><span className="shrink-0 text-[11px] text-gray-500">now</span></div>
+                <p className="whitespace-pre-line text-[13px] text-gray-800">{body}</p>
+              </div>
+            </div>
+          </div>
+          <p className="mt-2 text-[10px] text-white/80">After a long press. The image is attached on the phone by the Notification Service Extension; if it cannot download, the text still arrives.</p>
+        </div>
+      )}
+
+      {mode === "android" && (
+        <div className="rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 p-4">
+          <div className="rounded-2xl bg-white/95 p-3">
             <div className="flex items-center gap-2 text-[11px] text-gray-500"><AppBadge /> Reward Planners · now</div>
             <p className="mt-2 text-sm font-bold text-gray-900">{heading}</p>
             <p className="mt-0.5 whitespace-pre-line text-xs text-gray-600">{body}</p>
-            {imageUrl && <img src={imageUrl} alt="" className="mt-2 aspect-[2/1] w-full rounded-lg object-cover" />}
+            {imageUrl && <div className="mt-2 overflow-hidden rounded-lg">{image}</div>}
           </div>
+          <p className="mt-2 text-[10px] text-slate-300">{imageUrl ? "Expanded (big picture). Collapsed, Android shows the image as a small thumbnail." : "Text only."}</p>
         </div>
-      </div>
-      <div className="rounded-2xl bg-gradient-to-br from-sky-200 via-indigo-200 to-purple-200 p-4">
-        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-600">iOS · lock screen</p>
-        <div className="rounded-[18px] bg-white/80 p-3 shadow-md backdrop-blur">
-          <div className="flex items-start gap-2.5">
-            <AppBadge size="h-8 w-8 rounded-lg" />
-            <div className="min-w-0 flex-1">
-              <div className="flex justify-between text-[11px] text-gray-500"><span className="font-semibold uppercase">Reward Planners</span><span>now</span></div>
-              <p className="text-sm font-semibold text-gray-900">{heading}</p>
-              <p className="line-clamp-2 text-xs text-gray-700">{body}</p>
+      )}
+
+      {mode === "inbox" && (
+        <div className="rounded-2xl bg-[#F5F3FA] p-4">
+          <div data-testid="inbox-card-preview" className="overflow-hidden rounded-2xl border border-[#ECE8F4] bg-white">
+            {imageUrl && <div className="bg-gray-200">{image}</div>}
+            <div className="p-4">
+              <div className="flex items-start gap-2">
+                <p className="line-clamp-2 flex-1 text-base font-semibold text-[#1F1738]">{heading}</p>
+                <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#6D5AE6]" aria-label="Unread" />
+              </div>
+              <p className="mt-1 line-clamp-2 text-[13px] text-[#6F667D]">{body}</p>
+              <p className="mt-2 text-xs text-[#9B92A9]">Just now</p>
             </div>
-            {imageUrl && <img src={imageUrl} alt="" className="h-9 w-9 shrink-0 rounded-md object-cover" />}
           </div>
+          <p className="mt-2 text-[10px] text-gray-500">The Reward Planners Notifications screen. The whole card opens the destination.</p>
         </div>
-        {imageUrl && <p className="mt-1.5 text-[10px] text-slate-600">Long-press on iOS shows the full image (needs the Notification Service Extension).</p>}
-      </div>
+      )}
+
       <p className="text-[11px] text-gray-500">Approximate previews. Actual appearance depends on the phone, OS version and notification settings.{note ? ` ${note}` : ""}</p>
     </div>
   );

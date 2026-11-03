@@ -228,13 +228,18 @@ const TITLE_ADVISED_LENGTH = 55;
 /** What the Live preview tells the sender before a test: tap target and content warnings. */
 export function campaignPreviewNotes(input: {
   title: string; message: string; contentType: string; hasImage: boolean;
-  destinationLabel: string | null; category: string;
+  destinationLabel: string | null; destinationInApp?: boolean; category: string;
 }): { tapDestination: string; warnings: string[] } {
   const warnings: string[] = [];
+  if (!input.title.trim()) warnings.push("The title is empty.");
   if (!input.message.trim()) warnings.push("The message is empty.");
   if (input.title.trim().length > TITLE_ADVISED_LENGTH) warnings.push(`The title is over ${TITLE_ADVISED_LENGTH} characters and may be cut off on phones.`);
   if (input.contentType !== "standard" && !input.hasImage) warnings.push("No image is selected, so this is sent as text only.");
   if (!input.destinationLabel) warnings.push("No destination is selected, so tapping opens the notification inbox.");
-  if (input.category === "marketing") warnings.push("Marketing arrives quietly on iPhone: no banner or sound, only Notification Centre.");
-  return { tapDestination: input.destinationLabel || "Notification inbox", warnings };
+  else if (input.destinationInApp === false) warnings.push(`The app has no ${input.destinationLabel} screen yet, so tapping opens the module home or the inbox.`);
+  if (input.category === "marketing") warnings.push("Marketing arrives quietly on iPhone: no banner or sound, only Notification Centre. Only employees who allowed marketing notifications get it, and quiet hours delay it.");
+  if (input.category === "engagement") warnings.push("Only employees who allowed engagement notifications get it, and quiet hours delay it.");
+  const tapDestination = !input.destinationLabel ? "Notification inbox"
+    : input.destinationInApp === false ? `${input.destinationLabel} (not in the app yet; opens a fallback)` : input.destinationLabel;
+  return { tapDestination, warnings };
 }

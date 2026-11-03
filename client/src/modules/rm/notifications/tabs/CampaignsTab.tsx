@@ -271,7 +271,7 @@ function CampaignDetail({ meta, nav, campaignId, onClose, onChanged }: { meta: M
                 <div><dt className="font-bold text-gray-500">Content</dt><dd className="capitalize text-gray-800">{campaign.content_type || "standard"}</dd></div>
                 <div><dt className="font-bold text-gray-500">Opens on tap</dt><dd className="text-gray-800">
                   {campaign.destination ? `${campaign.destination.label}${campaign.destination_id ? ` #${campaign.destination_id}` : ""}` : campaign.target_screen || "Module default"}
-                  {campaign.destination?.mobileRoute === "proposed" && <span className="block text-[11px] text-amber-700">App route pending; falls back to module home</span>}
+                  {campaign.destination?.mobileRoute === "not_in_app" && <span className="block text-[11px] text-amber-700">App route pending; falls back to module home</span>}
                 </dd></div>
               </dl>
               {(campaign.catalog_products || []).length > 0 && (

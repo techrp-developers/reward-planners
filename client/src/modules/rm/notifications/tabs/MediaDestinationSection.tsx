@@ -109,6 +109,7 @@ export default function MediaDestinationSection({ meta, editable, module, value,
               <span className={labelCls}>Images</span>
               <span className="text-[11px] text-gray-400">JPG/PNG/WebP, re-encoded to 1200×600 JPEG. Optional per-language images for banners with text.</span>
             </div>
+            <p className="text-[11px] text-gray-500">For a sharp result, upload a real product or campaign photo in landscape 2:1, at least 1200×600. Keep the product in the centre and text away from the edges: phones first show it as a small square thumbnail. Don't repeat the title inside the image.</p>
             <div className="grid gap-3 sm:grid-cols-2">
               {slots.map((slot) => {
                 const asset = value.media[slot] ? assets[value.media[slot] as number] : null;
@@ -149,7 +150,7 @@ export default function MediaDestinationSection({ meta, editable, module, value,
                 ? <option value={value.catalog_product_ids.length === 1 ? "product" : "product_collection"}>{value.catalog_product_ids.length === 1 ? "Product details" : "Selected products (collection)"}</option>
                 : <>
                   <option value="">Module default screen</option>
-                  {destinations.filter((item) => item.entity !== "product_list").map((item) => <option key={item.key} value={item.key}>{item.label}{item.mobileRoute === "proposed" ? " (app route pending)" : ""}</option>)}
+                  {destinations.filter((item) => item.entity !== "product_list").map((item) => <option key={item.key} value={item.key}>{item.label}{item.mobileRoute === "not_in_app" ? " (app route pending)" : ""}</option>)}
                 </>}
             </select>
           </label>
@@ -159,7 +160,7 @@ export default function MediaDestinationSection({ meta, editable, module, value,
         </div>
         {(destination || value.content_type === "catalog") && (
           <p className="text-xs text-gray-500">
-            {(destination?.mobileRoute === "proposed" || value.content_type === "catalog")
+            {(destination?.mobileRoute === "not_in_app" || value.content_type === "catalog")
               ? "This screen still has to be registered in the mobile app. Until then the app opens the module's home screen or the inbox."
               : "Opens this screen in Reward Planners. If the item is no longer available, the app falls back to the inbox."}
             {destination?.entity === "published_quiz" && " Only offered while a quiz is published."}
