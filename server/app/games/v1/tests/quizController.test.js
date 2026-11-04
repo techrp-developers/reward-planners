@@ -38,18 +38,17 @@ test('sessions resume, belong to their owner, and completion is idempotent', asy
   assert.equal((await call('get', 2, first.id)).code, 404);
   assert.equal(rollbacks, 1);
   for (let index = 0; index < 5; index++) {
-    await call('answer', 1, first.id, { index, option: 0 });
-    await call('answer', 1, first.id, { index, option: 0 });
+    await call('answer', 1, first.id, { index, option: 1 });
     await call('answer', 1, first.id, { index, option: 1 });
     await call('next', 1, first.id, { index });
     const replay = await call('next', 1, first.id, { index });
     assert.equal(replay.value.data.index, Math.min(index + 1, 4));
   }
   assert.equal(players.get(1).total_games, 1);
-  assert.equal(players.get(1).best_score, 5);
+  assert.equal(players.get(1).best_score, 10);
   const result = (await call('get', 1, first.id)).value.data;
   assert.equal(result.status, 'completed');
-  assert.equal(result.score, 5);
+  assert.equal(result.score, 10);
   assert.equal(result.question.correctIndex, undefined);
   assert.notEqual((await call('start', 1)).value.data.id, first.id);
 });

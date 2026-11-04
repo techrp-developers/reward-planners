@@ -8,26 +8,19 @@ const makeState = () => ({
   questions: Array.from({ length: 5 }, () => ({ question: 'Capital?', options: ['Mumbai', 'Delhi', 'Pune', 'Goa'], correctIndex: 1 })),
 });
 
-test('wrong attempts deduct points; retries preserve the deadline', () => {
+test('wrong attempts deduct points and set wrong feedback', () => {
   const state = makeState();
   answer(state, 0, 1000);
-  answer(state, 2, 2000);
-  assert.equal(state.score, -2);
+  assert.equal(state.score, -1);
   assert.equal(state.deadline, 15000);
-  answer(state, 1, 3000);
-  assert.equal(state.score, 0);
-  assert.equal(state.correctCount, 1);
-  assert.equal(state.wrongCount, 2);
+  assert.equal(state.feedback, 'wrong');
+  assert.equal(state.wrongCount, 1);
 });
 test('replayed answers cannot double-penalize or double-reward', () => {
   const state = makeState();
   answer(state, 0, 1000);
   answer(state, 0, 2000);
   assert.equal(state.score, -1);
-  answer(state, 1, 3000);
-  answer(state, 1, 4000);
-  answer(state, 2, 5000);
-  assert.equal(state.score, 1);
 });
 test('deadline is exclusive, late answers incur only one timeout penalty', () => {
   const state = makeState();

@@ -20,6 +20,7 @@ function answer(state, option, now) {
   } else {
     state.score -= RULES.wrongPenalty;
     state.wrongCount += 1;
+    state.feedback = 'wrong';
   }
   return state;
 }
@@ -45,7 +46,7 @@ function publicState(state, now) {
     score: state.score, correctCount: state.correctCount, wrongCount: state.wrongCount,
     deadline: state.deadline, serverNow: now, attempts: state.attempts, selected: state.selected,
     feedback: state.feedback, rules: RULES,
-    question: { question: question.question, options: question.options },
+    question: question ? { question: question.question, options: question.options } : undefined,
   };
 }
 
