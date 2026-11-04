@@ -4,8 +4,7 @@ const poolStockController = require("../controllers/poolStockController");
 const labelController = require("../controllers/labelController");
 const { validateTopUp, validateDamageOrAdjust, validateReturn, validateUpdatePrice } = require("../middlewares/validators");
 
-// Manager-facing — no auth middleware yet, matching schedule/location/company
-// routes elsewhere in this module (no operator auth exists today).
+// Manager authentication is enforced by the parent Flea Market router.
 //
 // Replaces the old /allocations routes now that stock lives in a persistent
 // per-vendor-variant pool rather than a row per event — "list" is unscoped

@@ -34,9 +34,7 @@ class PoolStockController {
         qty: allocatedQty,
         allocationPrice,
         scheduleId,
-        // No operator auth exists on this module yet — see requireFleaMarketSession
-        // comment elsewhere; left null until one is wired up.
-        allocatedBy: null,
+        allocatedBy: req.user.user_id,
       });
 
       return res.status(201).json({ success: true, data });
@@ -50,7 +48,7 @@ class PoolStockController {
       const poolId = Number(req.params.poolId);
       const { quantity, remarks, scheduleId } = req.body;
 
-      const data = await poolStockService.recordDamage(poolId, quantity, remarks, null, scheduleId);
+      const data = await poolStockService.recordDamage(poolId, quantity, remarks, req.user.user_id, scheduleId);
       return res.json({ success: true, data });
     } catch (error) {
       return sendServiceError(res, error, "Failed to record damage");
@@ -62,7 +60,7 @@ class PoolStockController {
       const poolId = Number(req.params.poolId);
       const { quantity, remarks } = req.body;
 
-      const data = await poolStockService.adjust(poolId, quantity, remarks, null);
+      const data = await poolStockService.adjust(poolId, quantity, remarks, req.user.user_id);
       return res.json({ success: true, data });
     } catch (error) {
       return sendServiceError(res, error, "Failed to apply adjustment");

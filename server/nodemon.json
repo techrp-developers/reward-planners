@@ -35,5 +35,5 @@
   ],
   "ext": "js,mjs,cjs,json,html,yaml,yml",
   "delay": 500,
-  "signal": "SIGTERM"
+  "signal": "SIGUSR2"
 }

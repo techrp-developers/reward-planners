@@ -116,7 +116,7 @@ class PoolStockModel {
   // only one event ever runs at a time and pooled stock isn't tied to it.
   async findActivePools(query, limit) {
     const like = `%${query}%`;
-    const [rows] = await db.execute(
+    const [rows] = await db.query(
       `SELECT
          fvs.pool_id, fvs.variant_id, fvs.product_id, fvs.vendor_id,
          fvs.allocation_price, fvs.available_qty,

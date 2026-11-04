@@ -36,6 +36,8 @@ const InactiveUsersReportPage = lazy(() => import("./modules/rm/reports/Inactive
 const ModuleUsersReportPage = lazy(() => import("./modules/rm/reports/ModuleUsersReportPage.tsx"));
 const RmSupportTickets = lazy(() => import("./modules/rm/support/SupportTickets.tsx"));
 const RmClientApprovals = lazy(() => import("./modules/rm/clients/ClientApprovals.tsx"));
+const NotificationManager = lazy(() => import("./modules/rm/notifications/NotificationManager.tsx"));
+const NotificationAccessDenied = lazy(() => import("./modules/rm/notifications/NotificationAccessDenied.tsx"));
 const HrDashboard = lazy(() => import("./modules/hr/dashboard/HrDashboard.tsx"));
 const WarehouseDashboard = lazy(() => import("./modules/warehouse_manager/dashboard/WarehouseDashboard.tsx"));
 const FleaMarketDashboard = lazy(() => import("./modules/flea_market/dashboard/FleaMarketDashboard.tsx"));
@@ -64,6 +66,7 @@ const SubSubCategoryManagement = lazy(() => import("./modules/products/vendorMan
 const ContentManagement = lazy(() => import("./modules/products/content_manager/component/ContentManagement.tsx"));
 const ModuleIcon = lazy(() => import("./modules/products/content_manager/component/module_icon/ModuleIcon.tsx"));
 const AppIcons = lazy(() => import("./modules/products/content_manager/component/app_icon/AppIcons.tsx"));
+const SplashScreens = lazy(() => import("./modules/products/content_manager/component/splash/SplashScreens.tsx"));
 const ProductViewPage = lazy(() => import("./modules/products/vendorManager/ProductViewPage.tsx"));
 const Onboarding = lazy(() => import("./modules/products/vendor/Onboarding.tsx"));
 const ChangePasswordPage = lazy(() => import("./common/auth/changePassword.tsx"));
@@ -370,6 +373,8 @@ export default function App() {
         <Route path={routes.manager.content.mobileDashboard} element={<ContentManagement module="mobile_dashboard" />} />
         <Route path={routes.manager.content.moduleIcons} element={<ModuleIcon />} />
         <Route path={routes.manager.content.appIcons} element={<AppIcons />} />
+        {/* Inside ManagerLayout, which admits only vendor_manager. */}
+        <Route path={routes.manager.content.splashscreens} element={<SplashScreens />} />
 
         <Route path={routes.manager.posters.list} element={<PosterList />} />
         <Route path={routes.manager.posters.create} element={<PosterEditor />} />
@@ -423,6 +428,8 @@ export default function App() {
       {/* ========== ADMIN ========== */}
       <Route element={<AdminLayout />}>
         <Route path={routes.admin.dashboard} element={<AdminDashboard />} />
+        {/* Push notifications are RM-only; an old admin link shows Access denied. */}
+        <Route path={routes.admin.notifications} element={<NotificationAccessDenied />} />
         <Route
           path={routes.admin.vendors}
           element={<AdminVendorApprovalList />}
@@ -630,6 +637,7 @@ export default function App() {
         <Route path={routes.rm.reports.inactiveUsers} element={<InactiveUsersReportPage />} />
         <Route path={routes.rm.supportTickets} element={<RmSupportTickets />} />
         <Route path={routes.rm.clientApprovals} element={<RmClientApprovals />} />
+        <Route path={routes.rm.notifications} element={<NotificationManager />} />
         <Route path={routes.rm.changePassword} element={<ChangePasswordPage />} />
         <Route path={routes.rm.profile} element={<EditProfilePage />} />
       </Route>

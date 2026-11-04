@@ -18,6 +18,7 @@ function loadConfig(file, env, dependencies = {}, timers = {}) {
       throw new Error(`Unexpected dependency: ${name}`);
     },
     console: { log() {}, warn: (...args) => warnings.push(args.join(" ")), error: (...args) => errors.push(args.join(" ")) },
+    setImmediate: (callback) => callback(),
     ...timers,
   });
   return { exports: module.exports, warnings, errors };
@@ -79,9 +80,165 @@ test("missing Gmail credentials warn once and skip SMTP verification", () => {
 test("missing Firebase credentials warn once without failing module load", () => {
   const result = loadConfig("config/firebase.js", {}, {
     fs: { existsSync() { return false; } },
+    "./firebaseAdcReset": { resetApplicationDefaultClient() { assert.fail("Nothing to reset without credentials"); } },
     "firebase-admin/app": { getApps() { return []; }, cert() { assert.fail("No credentials to certify"); }, initializeApp() { assert.fail("No credentials to initialize"); } },
   });
   assert.equal(result.warnings.length, 1);
   assert.match(result.warnings[0], /Firebase push notifications are disabled/);
   assert.equal(result.errors.length, 0);
+});
+
+// ADC mode with an injectable ADC file and access-token behaviour. Nothing
+// contacts Google: firebase-admin/app and fs are replaced.
+function loadAdcFirebase({ adcFile = null, tokens, env = {}, fetch, cert }) {
+  const state = { adcFile, initialized: 0, tokenCalls: 0, resets: 0, timers: [], apps: [] };
+  const credential = { async getAccessToken() { return tokens[state.tokenCalls++](); } };
+  const result = loadConfig("config/firebase.js", {
+    FIREBASE_CREDENTIAL_MODE: "application_default", FIREBASE_PROJECT_ID: "reward-planners-2324d", HOME: "/home/test", ...env,
+  }, {
+    "./firebaseAdcReset": { resetApplicationDefaultClient() { state.resets += 1; return true; } },
+    fs: { existsSync: (file) => Boolean(state.adcFile) && /application_default_credentials\.json$/.test(file), readFileSync: () => JSON.stringify(state.adcFile) },
+    "firebase-admin/app": {
+      getApps: () => state.apps.map((name) => ({ name })),
+      initializeApp(options, name = "[DEFAULT]") { state.initialized += 1; state.apps.push(name); state[name] = options; },
+      applicationDefault: () => credential,
+      cert: cert || (() => assert.fail("ADC mode must not load a key")),
+      getApp: () => ({ options: { credential } }),
+    },
+  }, {
+    fetch,
+    // Timers still pending (re-checks). The per-request timeout guard is cleared
+    // as soon as Google answers, so it drops out of this list.
+    setTimeout(callback, ms) { const timer = { callback, ms, unref() {} }; state.timers.push(timer); return timer; },
+    clearTimeout(timer) { state.timers = state.timers.filter((entry) => entry !== timer); },
+  });
+  return { ...result, state };
+}
+
+const impersonating = (email) => ({
+  type: "impersonated_service_account",
+  service_account_impersonation_url: `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${email}:generateAccessToken`,
+});
+const PRIMARY_SA = "firebase-adminsdk-fbsvc@reward-planners-2324d.iam.gserviceaccount.com";
+
+test("ADC push is enabled only after a token is obtained, and the token is never kept", async () => {
+  const { exports, state } = loadAdcFirebase({ adcFile: impersonating(PRIMARY_SA), tokens: [async () => ({ access_token: "ya29.secret-token" })] });
+  assert.equal(exports.firebaseStatus.enabled, false);
+  await exports.firebaseReady;
+  assert.equal(exports.firebaseStatus.enabled, true);
+  assert.equal(exports.firebaseStatus.credentialCheck, "verified");
+  assert.equal(exports.firebaseStatus.serviceAccountEmail, PRIMARY_SA);
+  assert.doesNotMatch(JSON.stringify(exports.firebaseStatus), /secret-token/);
+  assert.equal(state.initialized, 1);
+});
+
+test("failed ADC stays disabled, is re-checked, and recovers without a second app", async () => {
+  const { exports, state } = loadAdcFirebase({
+    adcFile: impersonating(PRIMARY_SA),
+    tokens: [async () => { throw new Error("Could not load the default credentials.\nmore"); }, async () => ({ access_token: "t" })],
+  });
+  await exports.firebaseReady;
+  assert.equal(exports.firebaseStatus.enabled, false);
+  assert.equal(exports.firebaseStatus.credentialCheck, "failed");
+  assert.match(exports.firebaseStatus.reason, /\(Could not load the default credentials\.\)\. For local development run: gcloud/);
+  assert.equal(state.timers.length, 1);
+  assert.equal(state.timers[0].ms, 5 * 60 * 1000);
+  // The rejected client is dropped, so the re-check reads a re-login's new token.
+  assert.equal(state.resets, 1);
+
+  state.timers[0].callback();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(exports.firebaseStatus.enabled, true);
+  assert.equal(exports.firebaseStatus.reason, null);
+  assert.equal(state.initialized, 1);
+  assert.equal(state.resets, 1);
+});
+
+test("a token request that never answers ends 'Verifying...' with a network diagnostic and a quick re-check", async () => {
+  const { exports, state } = loadAdcFirebase({
+    adcFile: impersonating(PRIMARY_SA),
+    tokens: [() => new Promise(() => {}), async () => ({ access_token: "t" })],
+  });
+  assert.equal(exports.firebaseStatus.credentialCheck, "pending");
+  const [guard] = state.timers;
+  assert.equal(guard.ms, 60 * 1000);
+  guard.callback(); // Google never answered
+  await exports.firebaseReady;
+  assert.equal(exports.firebaseStatus.enabled, false); // never claimed ready
+  assert.equal(exports.firebaseStatus.credentialCheck, "unverified");
+  assert.ok(exports.firebaseStatus.reason.startsWith("Could not reach Google to verify Application Default Credentials (ETIMEDOUT"));
+  assert.doesNotMatch(exports.firebaseStatus.reason, /gcloud auth/); // not a credentials problem
+  assert.equal(state.resets, 0); // the cached client is still good
+  const recheck = state.timers.find((timer) => timer !== guard);
+  assert.equal(recheck.ms, 60 * 1000);
+  recheck.callback();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(exports.firebaseStatus.credentialCheck, "verified");
+  assert.equal(exports.firebaseStatus.enabled, true);
+});
+
+test("a re-check refuses ADC that now impersonates another project's service account", async () => {
+  const { exports, state } = loadAdcFirebase({
+    adcFile: null,
+    tokens: [async () => { throw new Error("Could not load the default credentials."); }, async () => assert.fail("must not request a token")],
+  });
+  await exports.firebaseReady;
+  state.adcFile = impersonating("firebase-adminsdk-x@rewardplanners-ebbe4.iam.gserviceaccount.com");
+  await exports.verifyPrimaryCredentials();
+  assert.equal(exports.firebaseStatus.enabled, false);
+  assert.match(exports.firebaseStatus.reason, /project mismatch.*rewardplanners-ebbe4/);
+  assert.equal(state.tokenCalls, 1);
+});
+
+const LEGACY_ADC = { FIREBASE_LEGACY_CREDENTIAL_MODE: "application_default", FIREBASE_LEGACY_PROJECT_ID: "rewardplanners-ebbe4" };
+const iamResponse = (permissions) => async (url, init) => {
+  assert.match(url, /\/v1\/projects\/rewardplanners-ebbe4:testIamPermissions$/);
+  assert.deepEqual(JSON.parse(init.body), { permissions: ["cloudmessaging.messages.create"] });
+  return { status: 200, async json() { return { permissions }; } };
+};
+
+test("keyless legacy app targets the legacy project and is enabled only when IAM grants FCM send", async () => {
+  const { exports, state } = loadAdcFirebase({
+    adcFile: impersonating(PRIMARY_SA), env: LEGACY_ADC, tokens: [async () => ({ access_token: "t" }), async () => ({ access_token: "t" })],
+    fetch: iamResponse(["cloudmessaging.messages.create"]),
+  });
+  assert.equal(exports.legacyFirebaseStatus.enabled, false);
+  await Promise.all([exports.firebaseReady, exports.legacyFirebaseReady]);
+  assert.equal(state.legacy.projectId, "rewardplanners-ebbe4");
+  assert.equal(exports.legacyFirebaseStatus.enabled, true);
+  assert.equal(exports.legacyFirebaseStatus.credentialCheck, "verified");
+  assert.deepEqual(state.apps, ["[DEFAULT]", "legacy"]);
+  assert.ok(exports.knownProjectIds().has("rewardplanners-ebbe4"));
+});
+
+test("keyless legacy app stays disabled with an actionable reason when the permission is missing", async () => {
+  const { exports, state } = loadAdcFirebase({
+    adcFile: impersonating(PRIMARY_SA), env: LEGACY_ADC, tokens: [async () => ({ access_token: "t" }), async () => ({ access_token: "t" })],
+    fetch: iamResponse([]),
+  });
+  await Promise.all([exports.firebaseReady, exports.legacyFirebaseReady]);
+  assert.equal(exports.firebaseStatus.enabled, true);
+  assert.equal(exports.legacyFirebaseStatus.enabled, false);
+  assert.equal(exports.legacyFirebaseStatus.credentialCheck, "failed");
+  assert.match(exports.legacyFirebaseStatus.reason, /lacks cloudmessaging\.messages\.create on legacy project "rewardplanners-ebbe4".*roles\/firebasecloudmessaging\.admin/);
+  assert.ok(state.timers.some((timer) => timer.ms === 5 * 60 * 1000));
+});
+
+test("keyless legacy mode rejects a missing or primary legacy project id", () => {
+  const missing = loadAdcFirebase({ adcFile: impersonating(PRIMARY_SA), env: { FIREBASE_LEGACY_CREDENTIAL_MODE: "application_default" }, tokens: [async () => ({ access_token: "t" })] });
+  assert.match(missing.exports.legacyFirebaseStatus.reason, /requires FIREBASE_LEGACY_PROJECT_ID/);
+  const primary = loadAdcFirebase({ adcFile: impersonating(PRIMARY_SA), env: { FIREBASE_LEGACY_CREDENTIAL_MODE: "application_default", FIREBASE_LEGACY_PROJECT_ID: "reward-planners-2324d" }, tokens: [async () => ({ access_token: "t" })] });
+  assert.match(primary.exports.legacyFirebaseStatus.reason, /is the primary project/);
+  assert.deepEqual(primary.state.apps, ["[DEFAULT]"]);
+});
+
+test("a legacy key for a different project than FIREBASE_LEGACY_PROJECT_ID is rejected", () => {
+  const key = JSON.stringify({ type: "service_account", project_id: "some-other-project", client_email: "x@some-other-project.iam.gserviceaccount.com", private_key: "-----BEGIN PRIVATE KEY-----\nx\n-----END PRIVATE KEY-----\n" });
+  const { exports, state } = loadAdcFirebase({
+    adcFile: impersonating(PRIMARY_SA), env: { FIREBASE_LEGACY_PROJECT_ID: "rewardplanners-ebbe4", FIREBASE_LEGACY_SERVICE_ACCOUNT: key },
+    tokens: [async () => ({ access_token: "t" })], cert: () => ({}),
+  });
+  assert.equal(exports.legacyFirebaseStatus.enabled, false);
+  assert.match(exports.legacyFirebaseStatus.reason, /Legacy Firebase project mismatch/);
+  assert.deepEqual(state.apps, ["[DEFAULT]"]);
 });

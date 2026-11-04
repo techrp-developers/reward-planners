@@ -114,6 +114,7 @@ export default function ManagerNavbar() {
             { label: "Mobile dashboard", to: routes.manager.content.mobileDashboard },
             { label: "Module icons", to: routes.manager.content.moduleIcons },
             { label: "App icons", to: routes.manager.content.appIcons },
+            { label: "Dynamic splash screens", to: routes.manager.content.splashscreens },
           ],
         },
         { label: "Posters", to: routes.manager.posters.list, Icon: FiImage, matches: ["/manager/posters/"] },

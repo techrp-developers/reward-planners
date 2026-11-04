@@ -96,7 +96,7 @@ export default function InvoiceDetailPage() {
           <span className="font-bold text-amber-700">{currency.format(invoice.pointsRedeemed)} pts</span>
         </div>
         <div className="flex items-center justify-between pt-2 text-sm border-t border-gray-100">
-          <span className="font-black text-gray-900">Amount Paid</span>
+          <span className="font-black text-gray-900">Net Invoiced</span>
           <span className="text-lg font-black text-gray-900">Rs {currency.format(invoice.amountPaid)}</span>
         </div>
       </section>

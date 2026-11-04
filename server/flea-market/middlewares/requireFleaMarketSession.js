@@ -16,6 +16,9 @@ const requireFleaMarketSession = async (req, res, next) => {
       return res.status(401).json({ error: "SESSION_EXPIRED", reauthRequired: true });
     }
 
+    const [[owner]] = await require("../../config/database").execute("SELECT manager_user_id FROM flea_market_session_managers WHERE session_id=?", [sessionId]);
+    if (!owner || owner.manager_user_id !== req.user?.user_id) return res.status(403).json({success:false,message:"Customer session belongs to another manager; select the customer again"});
+
     req.fleaMarketSession = {
       sessionId: session.session_id,
       userId: session.user_id,

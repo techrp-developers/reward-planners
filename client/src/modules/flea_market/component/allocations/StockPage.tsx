@@ -78,7 +78,7 @@ function StockPage() {
   // — all three must go stale together, or one of them shows pre-top-up
   // numbers until its own staleTime happens to lapse.
   const invalidatePools = () => {
-    void queryClient.invalidateQueries({ queryKey: ["flea-market", "vendor-stock"] });
+    void queryClient.invalidateQueries({ queryKey: ["flea-market"] });
     void queryClient.invalidateQueries({ queryKey: ["flea-market", "products", "search"] });
     void queryClient.invalidateQueries({ queryKey: ["flea-market", "all-products"] });
   };

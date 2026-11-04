@@ -448,12 +448,46 @@ class authModel {
     );
   }
 
-  async clearFcmToken(userId) {
-    await db.execute(
-      `UPDATE user_push_tokens SET is_active = 0, updated_at = NOW() WHERE user_id = ?`,
+  // Logout without a usable session: stop pushes to this one device only.
+  async deactivateFcmTokenByValue(fcmToken) {
+    const [result] = await db.execute(
+      "UPDATE user_push_tokens SET is_active = 0, updated_at = NOW() WHERE fcm_token = ?",
+      [fcmToken],
+    ).catch((error) => {
+      if (error.code !== "ER_NO_SUCH_TABLE") throw error;
+      return [{ affectedRows: 0 }];
+    });
+    await db.execute("UPDATE customer SET fcm_token = NULL WHERE fcm_token = ?", [fcmToken]);
+    return result.affectedRows;
+  }
+
+  // With fcmToken, only that device is signed out of pushes; other phones of
+  // the same employee keep receiving. Without it (older app builds that do not
+  // send their token on logout, and all_devices logout) every device is
+  // deactivated. Returns how many active device rows were deactivated.
+  async clearFcmToken(userId, fcmToken = null) {
+    if (fcmToken) {
+      const [result] = await db.execute(
+        `UPDATE user_push_tokens SET is_active = 0, updated_at = NOW()
+         WHERE user_id = ? AND fcm_token = ? AND is_active = 1`,
+        [userId, fcmToken],
+      ).catch((error) => {
+        if (error.code !== "ER_NO_SUCH_TABLE") throw error;
+        return [{ affectedRows: 0 }];
+      });
+      await db.execute(
+        `UPDATE customer SET fcm_token = NULL WHERE user_id = ? AND fcm_token = ?`,
+        [userId, fcmToken],
+      );
+      return result.affectedRows;
+    }
+
+    const [result] = await db.execute(
+      `UPDATE user_push_tokens SET is_active = 0, updated_at = NOW() WHERE user_id = ? AND is_active = 1`,
       [userId],
     ).catch((error) => {
       if (error.code !== "ER_NO_SUCH_TABLE") throw error;
+      return [{ affectedRows: 0 }];
     });
     await db.execute(
       `UPDATE customer
@@ -461,6 +495,7 @@ class authModel {
      WHERE user_id = ?`,
       [userId],
     );
+    return result.affectedRows;
   }
 
   // async incrementTokenVersion(userId) {
@@ -472,21 +507,39 @@ class authModel {
   //   );
   // }
 
-  async updateFcmToken(userId, fcmToken, devicePlatform = null) {
-    await db.execute(
+  /**
+   * firebaseProjectId comes from the app's own Firebase config and has been
+   * checked against the known project ids. Without it (older app builds) the
+   * project stays unknown: never assumed to be the new project.
+   */
+  async updateFcmToken(userId, fcmToken, devicePlatform = null, firebaseProjectId = null) {
+    const upsert = (withProject) => db.execute(
       `INSERT INTO user_push_tokens
-       (user_id, fcm_token, platform, is_active, last_seen_at)
-       VALUES (?, ?, ?, 1, NOW())
+       (user_id, fcm_token, platform, is_active, last_seen_at${withProject ? ", firebase_project_id" : ""})
+       VALUES (?, ?, ?, 1, NOW()${withProject ? ", ?" : ""})
        ON DUPLICATE KEY UPDATE
          user_id = VALUES(user_id),
          platform = COALESCE(VALUES(platform), platform),
+         ${withProject ? "firebase_project_id = COALESCE(VALUES(firebase_project_id), firebase_project_id)," : ""}
          is_active = 1,
          last_seen_at = NOW(),
          updated_at = NOW()`,
-      [userId, fcmToken, devicePlatform],
-    ).catch((error) => {
+      withProject ? [userId, fcmToken, devicePlatform, firebaseProjectId] : [userId, fcmToken, devicePlatform],
+    );
+    await upsert(true).catch(async (error) => {
+      if (error.code === "ER_BAD_FIELD_ERROR") return upsert(false); // column not migrated yet
+      if (error.code !== "ER_NO_SUCH_TABLE") throw error;
+      return null;
+    }).catch((error) => {
       if (error.code !== "ER_NO_SUCH_TABLE") throw error;
     });
+
+    // A phone that changes hands keeps its FCM token. Drop it from any other
+    // employee's legacy column so their notifications stop reaching this device.
+    await db.execute(
+      `UPDATE customer SET fcm_token = NULL WHERE fcm_token = ? AND user_id <> ?`,
+      [fcmToken, userId],
+    );
 
     await db.execute(
       `UPDATE customer

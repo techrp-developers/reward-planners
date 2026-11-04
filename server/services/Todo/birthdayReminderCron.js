@@ -1,14 +1,19 @@
 const cron = require("node-cron");
 const db = require("../../config/database");
 const { notifyUserAndWait } = require("../../app/common/utils/notification");
+const { localJobsEnabled } = require("../../config/scheduledJobs");
 const SCHEDULE_TIMEZONE = process.env.SCHEDULE_TIMEZONE || "Asia/Kolkata";
 
-// Run every day at 9:00 AM: "0 9 * * *"
-// For testing purposes, you can change this to "* * * * *" to run every minute
-cron.schedule("0 9 * * *", async () => {
-  console.log("[Cron] Checking for employee birthdays today...");
-  await sendBirthdayWishes();
-}, { timezone: SCHEDULE_TIMEZONE, noOverlap: true, name: "company-birthday-wishes" });
+// routes/waTestRoute.js also imports this file for sendBirthdayWishes, so
+// importing it must not schedule real wishes on a local server with jobs off.
+if (localJobsEnabled(process.env)) {
+  // Run every day at 9:00 AM: "0 9 * * *"
+  // For testing purposes, you can change this to "* * * * *" to run every minute
+  cron.schedule("0 9 * * *", async () => {
+    console.log("[Cron] Checking for employee birthdays today...");
+    await sendBirthdayWishes();
+  }, { timezone: SCHEDULE_TIMEZONE, noOverlap: true, name: "company-birthday-wishes" });
+}
 
 async function sendBirthdayWishes() {
   try {

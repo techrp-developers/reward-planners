@@ -3,7 +3,7 @@ const db = require("../../config/database");
 class VendorModel {
   async search(query, limit) {
     const like = `%${query}%`;
-    const [rows] = await db.execute(
+    const [rows] = await db.query(
       `SELECT vendor_id, company_name, full_name, status
        FROM vendors
        WHERE status = 'approved' AND (company_name LIKE ? OR full_name LIKE ?)

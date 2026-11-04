@@ -8,6 +8,9 @@ const optionalAuth = require("../../../common/middlewares/optionalAuth");
 router.get("/all-products", optionalAuth, ProductController.getAllProducts);
 router.get("/by-brand", optionalAuth, ProductController.getProductsByBrand);
 
+// Products of a notification collection (?ids=12,34, max 50, requested order)
+router.get("/by-ids", optionalAuth, require("../controllers/campaignController").getProductsByIds);
+
 // get Products by Category
 router.get(
   "/by-category/:categoryId",

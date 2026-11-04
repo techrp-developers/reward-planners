@@ -27,7 +27,7 @@ import Spinner from "../ui/Spinner";
 // three surfaces (this table, billing product search, All Products), all of
 // which must go stale together rather than one lagging behind the others.
 function invalidateStockSurfaces(queryClient: QueryClient) {
-  void queryClient.invalidateQueries({ queryKey: ["flea-market", "vendor-stock"] });
+  void queryClient.invalidateQueries({ queryKey: ["flea-market"] });
   void queryClient.invalidateQueries({ queryKey: ["flea-market", "products", "search"] });
   void queryClient.invalidateQueries({ queryKey: ["flea-market", "all-products"] });
 }

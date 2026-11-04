@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   getProductionConfigurationErrors,
+  warnIfBusConfigurationIncomplete,
 } = require("../config/productionSafety");
 const {
   maskForLog,
@@ -81,4 +82,22 @@ test("SRDV exchange logs mask secrets and passenger data case-insensitively", ()
       Age: "***MASKED***",
     }],
   });
+});
+
+test("non-production startup warns with the names of missing bus settings, never values", () => {
+  const logs = [];
+  const missing = warnIfBusConfigurationIncomplete(
+    { ...productionEnv, NODE_ENV: "development", SRDV_SEARCH_URL: "", SRDV_API_TOKEN: " " },
+    (line) => logs.push(line),
+  );
+  assert.deepEqual(missing, ["SRDV_SEARCH_URL", "SRDV_API_TOKEN"]);
+  assert.equal(logs.length, 1);
+  assert.ok(logs[0].includes("SRDV_SEARCH_URL") && !logs[0].includes("access-secret"));
+});
+
+test("complete or production configuration produces no startup warning", () => {
+  const logs = [];
+  assert.deepEqual(warnIfBusConfigurationIncomplete({ ...productionEnv, NODE_ENV: "development" }, (l) => logs.push(l)), []);
+  assert.deepEqual(warnIfBusConfigurationIncomplete({ NODE_ENV: "production" }, (l) => logs.push(l)), []);
+  assert.equal(logs.length, 0);
 });

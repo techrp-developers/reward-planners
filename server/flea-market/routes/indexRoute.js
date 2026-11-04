@@ -1,5 +1,7 @@
 const express = require("express");
 const router = express.Router();
+const { authenticateToken, authorizeRoles } = require("../../middleware/auth");
+const manager = [authenticateToken, authorizeRoles("flea_market_manager")];
 
 const locationRoute = require("./locationRoute");
 const customerRoute = require("./customerRoute");
@@ -18,18 +20,19 @@ router.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-router.use("/locations", locationRoute);
+router.use("/locations", ...manager, locationRoute);
 // customerRoute defines its own full /customers/... and /customer/... paths.
 router.use("/", customerRoute);
-router.use("/products", productRoute);
-router.use("/checkout", checkoutRoute);
-router.use("/invoices", invoiceRoute);
-router.use("/schedules", scheduleRoute);
-router.use("/companies", companyRoute);
-router.use("/vendors", vendorRoute);
-router.use("/vendor-stock", poolStockRoute);
-router.use("/reports", reportRoute);
-router.use("/scan", scanRoute);
-router.use("/reward-rules", rewardRuleRoute);
+router.use("/products", ...manager, productRoute);
+router.use("/checkout", ...manager, checkoutRoute);
+router.use("/invoices", ...manager, invoiceRoute);
+router.use("/dashboard", ...manager, require("./dashboardRoute"));
+router.use("/schedules", ...manager, scheduleRoute);
+router.use("/companies", ...manager, companyRoute);
+router.use("/vendors", ...manager, vendorRoute);
+router.use("/vendor-stock", ...manager, poolStockRoute);
+router.use("/reports", ...manager, reportRoute);
+router.use("/scan", ...manager, scanRoute);
+router.use("/reward-rules", ...manager, rewardRuleRoute);
 
 module.exports = router;

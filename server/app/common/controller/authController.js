@@ -30,6 +30,7 @@
     enqueueWhatsApp,
   } = require("../../../services/whatsapp/waEnqueueService");
 const { notifyUser } = require("../utils/notification");
+const { LOGOUT_PUSH_SCOPES, auditUnscopedLogout, logoutAllDevices, logoutDevice } = require("../utils/logoutScope");
 const { uploadToR2 } = require("../../../utils/r2upload");
 const { deleteFromR2 } = require("../../../utils/r2delete");
 const { getPublicUrl } = require("../../../utils/publicUrl");
@@ -1027,10 +1028,18 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
         const userId = req.user?.user_id;
         const { fcm_token, device_platform } = req.body;
 
-        if (!fcm_token) {
+        if (!fcm_token || typeof fcm_token !== "string") {
           return res.status(400).json({
             success: false,
             message: "FCM token required",
+          });
+        }
+
+        // user_push_tokens.fcm_token is VARCHAR(512).
+        if (fcm_token.length > 512) {
+          return res.status(400).json({
+            success: false,
+            message: "FCM token is too long",
           });
         }
 
@@ -1042,13 +1051,22 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
           });
         }
 
-        await AuthModel.updateFcmToken(userId, fcm_token, normalizedPlatform || null);
+        // Updated app builds report which Firebase project issued the token
+        // (from their own Firebase config). Only known project ids are
+        // stored; older builds send nothing and the project stays unknown.
+        const { knownProjectIds } = require("../../../config/firebase");
+        const reportedProject = typeof req.body.firebase_project_id === "string" ? req.body.firebase_project_id.trim() : "";
+        const firebaseProjectId = reportedProject && knownProjectIds().has(reportedProject) ? reportedProject : null;
+
+        await AuthModel.updateFcmToken(userId, fcm_token, normalizedPlatform || null, firebaseProjectId);
 
         return res.json({
           success: true,
           message: "FCM token updated",
+          firebase_project_id: firebaseProjectId,
         });
       } catch (err) {
+        console.error("Update FCM Token Error:", err.message);
         return res.status(500).json({
           success: false,
         });
@@ -1150,9 +1168,29 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
     ====================================================== */
     async logoutUser(req, res) {
       try {
-        const userId = req.user?.user_id;
-        await revokeCustomerSession(req, res);
-        if (userId) await AuthModel.clearFcmToken(userId);
+        const pushScope = req.body?.push_scope ?? null;
+        if (pushScope !== null && !LOGOUT_PUSH_SCOPES.includes(pushScope)) {
+          return res.status(400).json({
+            success: false,
+            code: "INVALID_PUSH_SCOPE",
+            message: `push_scope must be one of: ${LOGOUT_PUSH_SCOPES.join(", ")}.`,
+          });
+        }
+        if (pushScope === "device") return await logoutDevice(req, res);
+        if (pushScope === "all_devices") return await logoutAllDevices(req, res);
+
+        // No push_scope: the unchanged contract of every released app build
+        // (docs/logout-push-scope.md).
+        // The access token is often expired by the time someone logs out, so
+        // the refresh session also identifies the employee.
+        const sessionUserId = await revokeCustomerSession(req, res);
+        const userId = req.user?.user_id ?? sessionUserId;
+        const fcmToken = typeof req.body?.fcm_token === "string" && req.body.fcm_token.length <= 512 ? req.body.fcm_token : null;
+        if (userId) await AuthModel.clearFcmToken(userId, fcmToken);
+        // Neither token identified anyone: the device still proves it holds
+        // this (unguessable) FCM token, so it may at least stop its own pushes.
+        else if (fcmToken) await AuthModel.deactivateFcmTokenByValue(fcmToken);
+        await auditUnscopedLogout(req, userId, fcmToken);
 
         return res.json({
           success: true,

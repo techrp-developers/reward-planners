@@ -17,6 +17,9 @@ class ScanController {
         return res.status(404).json({ error: "BARCODE_NOT_FOUND" });
       }
 
+      const assignment=(await require("../services/eventAssignmentService").products(req.fleaMarketScheduleId)).find(row=>row.pool_id===poolId);
+      if (!assignment) return res.status(404).json({success:false,message:"Product is not assigned to this event"});
+
       if (pool.status !== "active") {
         return res.status(409).json({
           error: "POOL_NOT_ACTIVE",
@@ -24,7 +27,7 @@ class ScanController {
         });
       }
 
-      if (pool.available_qty <= 0) {
+      if (assignment.available_qty <= 0) {
         return res.status(409).json({ error: "OUT_OF_STOCK" });
       }
 
@@ -38,8 +41,8 @@ class ScanController {
           brand: pool.brand_name,
           sku: pool.sku,
           mrp: Number(pool.mrp),
-          salePrice: pool.allocation_price != null ? Number(pool.allocation_price) : Number(pool.sale_price),
-          stock: pool.available_qty,
+          salePrice: Number(assignment.sale_price),
+          stock: assignment.available_qty,
           heroImage: pool.hero_image,
         },
       });
