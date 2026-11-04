@@ -1,6 +1,7 @@
 const db = require("../../config/database");
 
 const ACTIVE_STATUSES = ["scheduled", "in_progress"];
+const eventOffset=()=>process.env.FLEA_MARKET_TIMEZONE_OFFSET||"+05:30";
 
 class ScheduleModel {
   async list(date, status) {
@@ -35,8 +36,9 @@ class ScheduleModel {
        FROM flea_market_schedules fs
        JOIN companies c ON c.company_id = fs.company_id
        JOIN flea_market_locations fl ON fl.location_id = fs.location_id
-       WHERE fs.scheduled_date = CURDATE() AND fs.status IN ('scheduled', 'in_progress')
+       WHERE fs.scheduled_date = DATE(CONVERT_TZ(UTC_TIMESTAMP(),'+00:00',?)) AND fs.status IN ('scheduled', 'in_progress')
        ORDER BY fs.start_time ASC`,
+      [eventOffset()],
     );
     return rows;
   }
@@ -61,8 +63,8 @@ class ScheduleModel {
   }
 
   // "One flea market per location per day" — any non-cancelled entry blocks a new one.
-  async findActiveForLocationAndDate(locationId, scheduledDate) {
-    const [rows] = await db.execute(
+  async findActiveForLocationAndDate(locationId, scheduledDate, connection = db) {
+    const [rows] = await connection.execute(
       `SELECT * FROM flea_market_schedules
        WHERE location_id = ? AND scheduled_date = ? AND status != 'cancelled'`,
       [locationId, scheduledDate],
@@ -76,18 +78,18 @@ class ScheduleModel {
     const [rows] = await db.execute(
       `SELECT * FROM flea_market_schedules
        WHERE location_id = ?
-         AND scheduled_date = CURDATE()
+         AND scheduled_date = DATE(CONVERT_TZ(UTC_TIMESTAMP(),'+00:00',?))
          AND status IN (${ACTIVE_STATUSES.map(() => "?").join(",")})
-         AND (start_time IS NULL OR CURTIME() >= start_time)
-         AND (end_time IS NULL OR CURTIME() <= end_time)
+         AND (start_time IS NULL OR TIME(CONVERT_TZ(UTC_TIMESTAMP(),'+00:00',?)) >= start_time)
+         AND (end_time IS NULL OR TIME(CONVERT_TZ(UTC_TIMESTAMP(),'+00:00',?)) <= end_time)
        LIMIT 1`,
-      [locationId, ...ACTIVE_STATUSES],
+      [locationId,eventOffset(),...ACTIVE_STATUSES,eventOffset(),eventOffset()],
     );
     return rows[0];
   }
 
-  async create({ companyId, locationId, scheduledDate, startTime, endTime, notes, createdBy }) {
-    const [result] = await db.execute(
+  async create({ companyId, locationId, scheduledDate, startTime, endTime, notes, createdBy }, connection = db) {
+    const [result] = await connection.execute(
       `INSERT INTO flea_market_schedules
         (company_id, location_id, scheduled_date, start_time, end_time, notes, created_by, status)
        VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled')`,
@@ -96,7 +98,7 @@ class ScheduleModel {
     return result.insertId;
   }
 
-  async update(scheduleId, fields) {
+  async update(scheduleId, fields, connection = db) {
     const columns = [];
     const params = [];
 
@@ -120,7 +122,7 @@ class ScheduleModel {
     if (columns.length === 0) return;
 
     params.push(scheduleId);
-    await db.execute(`UPDATE flea_market_schedules SET ${columns.join(", ")} WHERE schedule_id = ?`, params);
+    await connection.execute(`UPDATE flea_market_schedules SET ${columns.join(", ")} WHERE schedule_id = ?`, params);
   }
 
   // Best-effort auto-transition — only fires the scheduled -> in_progress edge.
@@ -128,8 +130,8 @@ class ScheduleModel {
     await db.execute(
       `UPDATE flea_market_schedules
        SET status = 'in_progress'
-       WHERE location_id = ? AND scheduled_date = CURDATE() AND status = 'scheduled'`,
-      [locationId],
+       WHERE location_id = ? AND scheduled_date = DATE(CONVERT_TZ(UTC_TIMESTAMP(),'+00:00',?)) AND status = 'scheduled'`,
+      [locationId,eventOffset()],
     );
   }
 

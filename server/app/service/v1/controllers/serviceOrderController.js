@@ -1609,7 +1609,7 @@ class ServiceOrderController {
 
       FROM order_support_requests osr
 
-      LEFT JOIN service_order_issue_types soit
+      LEFT JOIN service_order_issue_type soit
         ON soit.issue_id = osr.issue_id
 
       WHERE osr.service_order_id = ?

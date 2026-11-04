@@ -98,6 +98,8 @@ export const routes = {
       mobileDashboard: "/manager/content/mobile-dashboard",
       moduleIcons: "/manager/content/module-icons",
       appIcons: "/manager/content/app-icons",
+      // Vendor Managers only; deliberately absent from admin.content.
+      splashscreens: "/manager/content/splashscreens",
     },
   },
   admin: {
@@ -116,7 +118,8 @@ export const routes = {
       mobileDashboard: "/admin/content/mobile-dashboard",
       appIcons: "/admin/content/app-icons",
     },
-  
+    notifications: "/admin/notifications",
+
   },
   warehouse: {
     dashboard: "/warehouse/dashboard",
@@ -188,6 +191,7 @@ export const routes = {
     clientApprovals: "/rm/client-approvals",
     companyEmployees: "/rm/companies/:companyId/employees",
     supportTickets: "/rm/support-tickets",
+    notifications: "/rm/notifications",
     reports: {
       usage: "/rm/reports/usage",
       usageUsers: "/rm/reports/usage/:module",

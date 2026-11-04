@@ -281,16 +281,7 @@ class ProductModel {
           COALESCE(rev.avg_rating, 0) AS avg_rating,
           COALESCE(rev.total_reviews, 0) AS total_reviews,
 
-          GROUP_CONCAT(
-            DISTINCT CONCAT(
-              pi.image_id, '::',
-              pi.image_url, '::',
-              pi.type, '::',
-              pi.sort_order, '::',
-              pi.updated_at
-            )
-            ORDER BY pi.sort_order ASC
-          ) AS images
+          img.images
 
         FROM eproducts p
 
@@ -318,9 +309,20 @@ class ProductModel {
         ) rev
         ON p.product_id = rev.product_id
 
-        /* ---- Images ---- */
-        LEFT JOIN product_images pi 
-          ON p.product_id = pi.product_id
+        /* ---- Images, one row per product ----
+           Every join here matches at most one row per product (primary
+           keys, a single chosen variant, grouped reviews and images), so
+           there is no outer GROUP BY and ONLY_FULL_GROUP_BY holds. */
+        LEFT JOIN (
+          SELECT
+            product_id,
+            GROUP_CONCAT(
+              DISTINCT CONCAT(image_id, '::', image_url, '::', type, '::', sort_order, '::', updated_at)
+              ORDER BY sort_order ASC, image_id ASC
+            ) AS images
+          FROM product_images
+          GROUP BY product_id
+        ) img ON img.product_id = p.product_id
 
         /* ---- Categories ---- */
         LEFT JOIN categories c ON p.category_id = c.category_id
@@ -329,12 +331,12 @@ class ProductModel {
 
         ${whereClause}
 
-        GROUP BY p.product_id
         ORDER BY p.${sortBy} ${sortOrder}, p.product_id ${sortOrder}
         LIMIT ? OFFSET ?
       `;
 
-      const dataParams = [...params, limit, offset];
+      // MySQL 8 rejects numeric LIMIT/OFFSET bindings from execute(); strings work.
+      const dataParams = [...params, String(limit), String(offset)];
       const [rows] = await db.execute(query, dataParams);
 
       /* ===============================
@@ -1085,17 +1087,7 @@ class ProductModel {
         v.mrp,
         v.variant_id,
         v.sale_price,
-
-        GROUP_CONCAT(
-          DISTINCT CONCAT(
-            pi.image_id, '::',
-            pi.image_url, '::',
-            pi.type, '::',
-            pi.sort_order, '::',
-            pi.updated_at
-          )
-          ORDER BY pi.sort_order ASC
-        ) AS images
+        img.images
 
       FROM eproducts p
 
@@ -1128,17 +1120,35 @@ class ProductModel {
       LEFT JOIN sub_categories sc ON sc.subcategory_id = p.subcategory_id 
       LEFT JOIN sub_sub_categories ssc ON ssc.sub_subcategory_id = p.sub_subcategory_id 
 
-      /* ---- Images ---- */
-      LEFT JOIN product_images pi ON p.product_id = pi.product_id
+      /* ---- Images, one row per product ----
+         Every join above matches at most one row per product (primary keys,
+         a single chosen variant, grouped reviews), so no outer GROUP BY is
+         needed and ONLY_FULL_GROUP_BY holds. */
+      LEFT JOIN (
+        SELECT
+          product_id,
+          GROUP_CONCAT(
+            DISTINCT CONCAT(
+              image_id, '::',
+              image_url, '::',
+              type, '::',
+              sort_order, '::',
+              updated_at
+            )
+            ORDER BY sort_order ASC, image_id ASC
+          ) AS images
+        FROM product_images
+        GROUP BY product_id
+      ) img ON img.product_id = p.product_id
 
       ${whereClause}
 
-      GROUP BY p.product_id
-      ORDER BY p.${sortBy} ${sortOrder}
+      ORDER BY p.${sortBy} ${sortOrder}, p.product_id ${sortOrder}
       LIMIT ? OFFSET ?
     `;
 
-      const dataParams = [...params, limit, offset];
+      // MySQL 8 rejects numeric LIMIT/OFFSET bindings from execute(); strings work.
+      const dataParams = [...params, String(limit), String(offset)];
       const [rows] = await db.execute(query, dataParams);
 
       /* ===============================
@@ -1200,6 +1210,14 @@ class ProductModel {
           LIMIT 1
         )
 
+      /* The rating filter reads rev, so the count joins it too. */
+      LEFT JOIN (
+        SELECT product_id, ROUND(AVG(rating), 1) AS avg_rating
+        FROM product_reviews
+        WHERE status = 'approved'
+        GROUP BY product_id
+      ) rev ON p.product_id = rev.product_id
+
       ${whereClause}
       `,
         params,
@@ -1214,6 +1232,58 @@ class ProductModel {
       console.error("Error fetching products:", error);
       throw error;
     }
+  }
+
+  /**
+   * Listed products by id, for a notification's product collection: the same
+   * listing rules and cheapest visible variant as getProductsByCategory, in the
+   * requested order. Unknown or unlisted ids are omitted.
+   */
+  async getListedProductsByIds(ids) {
+    if (!ids.length) return [];
+    const placeholders = ids.map(() => "?").join(",");
+    const [rows] = await db.query(
+      `
+      SELECT
+        p.product_id,
+        p.product_name,
+        p.brand_name,
+        p.category_id,
+        p.subcategory_id,
+        p.is_discount_eligible,
+        v.variant_id,
+        v.mrp,
+        v.sale_price AS original_price,
+        v.sale_price AS final_price,
+        NULL AS campaign_id,
+        pi.image_url,
+        pi.updated_at AS image_updated_at
+      FROM eproducts p
+      JOIN product_variants v
+        ON v.variant_id = (
+          SELECT pv2.variant_id
+          FROM product_variants pv2
+          WHERE pv2.product_id = p.product_id
+            AND pv2.is_visible = 1
+            AND pv2.sale_price IS NOT NULL
+          ORDER BY pv2.sale_price ASC, pv2.variant_id ASC
+          LIMIT 1
+        )
+      LEFT JOIN product_images pi
+        ON pi.image_id = (
+          SELECT MIN(pi2.image_id) FROM product_images pi2
+          WHERE pi2.product_id = p.product_id AND pi2.type = 'gallery'
+        )
+      WHERE p.product_id IN (${placeholders})
+        AND p.status = 'approved'
+        AND p.is_visible = 1
+        AND p.is_deleted = 0
+        AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
+      ORDER BY FIELD(p.product_id, ${placeholders})
+      `,
+      [...ids, ...ids],
+    );
+    return rows;
   }
 
   async getProductsBySubcategory({
@@ -2105,15 +2175,7 @@ class ProductModel {
         COALESCE(rev.avg_rating, 0) AS avg_rating,
         COALESCE(rev.total_reviews, 0) AS total_reviews,
 
-        GROUP_CONCAT(
-          DISTINCT CONCAT(
-            pi.image_id,'::',
-            pi.image_url,'::',
-            pi.sort_order,'::',
-            pi.updated_at
-          )
-          ORDER BY pi.sort_order ASC
-        ) AS images
+        img.images
 
       FROM eproducts p
 
@@ -2152,8 +2214,18 @@ class ProductModel {
         ) rev
         ON rev.product_id = p.product_id
 
-      LEFT JOIN product_images pi
-        ON pi.product_id = p.product_id
+      /* Images, one row per product; every other join is one row per
+         product too, so there is no outer GROUP BY. */
+      LEFT JOIN (
+          SELECT
+            product_id,
+            GROUP_CONCAT(
+              DISTINCT CONCAT(image_id,'::',image_url,'::',sort_order,'::',updated_at)
+              ORDER BY sort_order ASC, image_id ASC
+            ) AS images
+          FROM product_images
+          GROUP BY product_id
+        ) img ON img.product_id = p.product_id
 
       WHERE p.status = 'approved'
         AND p.is_deleted = 0
@@ -2163,12 +2235,12 @@ class ProductModel {
         AND (ssc.sub_subcategory_id IS NULL OR ssc.status = 1)
         AND (? = '' OR p.product_name LIKE CONCAT('%', ?, '%'))
 
-      GROUP BY p.product_id
-      ORDER BY p.created_at DESC
+      ORDER BY p.created_at DESC, p.product_id DESC
       LIMIT ? OFFSET ?
     `;
 
-      const [rows] = await db.execute(query, [search, search, limit, offset]);
+      // MySQL 8 rejects numeric LIMIT/OFFSET bindings from execute(); strings work.
+      const [rows] = await db.execute(query, [search, search, String(limit), String(offset)]);
       await applyActiveOffers(rows);
 
       /* ===============================
@@ -2646,25 +2718,23 @@ class ProductModel {
         COALESCE(rev.avg_rating, 0) AS avg_rating,
         COALESCE(rev.total_reviews, 0) AS total_reviews,
 
-        SUM(oi.quantity) AS total_sold,
+        sales.total_sold,
 
-        GROUP_CONCAT(
-          DISTINCT CONCAT(
-            pi.image_id,'::',
-            pi.image_url,'::',
-            pi.sort_order,'::',
-            pi.updated_at
-          )
-          ORDER BY pi.sort_order ASC
-        ) AS images
+        img.images
 
-      FROM eorder_items oi
-
-      INNER JOIN eorders o
-        ON o.order_id = oi.order_id
+      /* Quantities are summed per product first, over eligible orders only,
+         so image rows can never multiply them. */
+      FROM (
+        SELECT oi.product_id, SUM(oi.quantity) AS total_sold
+        FROM eorder_items oi
+        INNER JOIN eorders o ON o.order_id = oi.order_id
+        WHERE o.status IN ('paid','delivered')
+          AND o.created_at >= NOW() - INTERVAL ? DAY
+        GROUP BY oi.product_id
+      ) sales
 
       INNER JOIN eproducts p
-        ON p.product_id = oi.product_id
+        ON p.product_id = sales.product_id
 
       /* Lowest visible variant */
       INNER JOIN product_variants v
@@ -2689,23 +2759,31 @@ class ProductModel {
       ) rev
       ON rev.product_id = p.product_id
 
-      LEFT JOIN product_images pi
-        ON pi.product_id = p.product_id
+      /* Images, one row per product; every join here is one row per
+         product, so there is no outer GROUP BY. */
+      LEFT JOIN (
+        SELECT
+          product_id,
+          GROUP_CONCAT(
+            DISTINCT CONCAT(image_id,'::',image_url,'::',sort_order,'::',updated_at)
+            ORDER BY sort_order ASC, image_id ASC
+          ) AS images
+        FROM product_images
+        GROUP BY product_id
+      ) img ON img.product_id = p.product_id
 
-      WHERE o.status IN ('paid','delivered')
-        AND o.created_at >= NOW() - INTERVAL ? DAY
-        AND p.status = 'approved'
+      WHERE p.status = 'approved'
         AND p.is_deleted = 0
         AND p.is_visible = 1
         AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
         AND (? = '' OR p.product_name LIKE CONCAT('%', ?, '%'))
 
-      GROUP BY p.product_id
-      ORDER BY total_sold DESC
+      ORDER BY sales.total_sold DESC, p.product_id ASC
       LIMIT ? OFFSET ?
     `;
 
-      const [rows] = await db.execute(query, [days, search, search, limit, offset]);
+      // MySQL 8 rejects numeric LIMIT/OFFSET bindings from execute(); strings work.
+      const [rows] = await db.execute(query, [days, search, search, String(limit), String(offset)]);
       await applyActiveOffers(rows);
 
       /* ===============================
@@ -2822,22 +2900,21 @@ class ProductModel {
         COALESCE(rev.avg_rating, 0) AS avg_rating,
         COALESCE(rev.total_reviews, 0) AS total_reviews,
 
-        COUNT(rv.product_id) AS view_count,
+        views.view_count,
 
-        GROUP_CONCAT(
-          DISTINCT CONCAT(
-            pi.image_id,'::',
-            pi.image_url,'::',
-            pi.sort_order,'::',
-            pi.updated_at
-          )
-          ORDER BY pi.sort_order ASC
-        ) AS images
+        img.images
 
-      FROM recently_viewed rv
+      /* Views are counted per product first, so image rows can never
+         multiply them. */
+      FROM (
+        SELECT product_id, COUNT(*) AS view_count
+        FROM recently_viewed
+        WHERE viewed_at >= NOW() - INTERVAL ? DAY
+        GROUP BY product_id
+      ) views
 
       INNER JOIN eproducts p
-        ON p.product_id = rv.product_id
+        ON p.product_id = views.product_id
 
       /* lowest visible variant */
       INNER JOIN product_variants v
@@ -2862,22 +2939,29 @@ class ProductModel {
       ) rev
       ON rev.product_id = p.product_id
 
-      LEFT JOIN product_images pi
-        ON pi.product_id = p.product_id
+      LEFT JOIN (
+          SELECT
+            product_id,
+            GROUP_CONCAT(
+              DISTINCT CONCAT(image_id,'::',image_url,'::',sort_order,'::',updated_at)
+              ORDER BY sort_order ASC, image_id ASC
+            ) AS images
+          FROM product_images
+          GROUP BY product_id
+        ) img ON img.product_id = p.product_id
 
-      WHERE rv.viewed_at >= NOW() - INTERVAL ? DAY
-        AND p.status = 'approved'
+      WHERE p.status = 'approved'
         AND p.is_deleted = 0
         AND p.is_visible = 1
         AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
         AND (? = '' OR p.product_name LIKE CONCAT('%', ?, '%'))
 
-      GROUP BY p.product_id
-      ORDER BY view_count DESC
+      ORDER BY views.view_count DESC, p.product_id ASC
       LIMIT ? OFFSET ?
     `;
 
-      const [rows] = await db.execute(query, [days, search, search, limit, offset]);
+      // MySQL 8 rejects numeric LIMIT/OFFSET bindings from execute(); strings work.
+      const [rows] = await db.execute(query, [days, search, search, String(limit), String(offset)]);
       await applyActiveOffers(rows);
 
       /* ===============================
@@ -2991,23 +3075,23 @@ class ProductModel {
         v.sale_price,
         v.mrp,
 
-        AVG(pr.rating) AS avg_rating,
-        COUNT(pr.review_id) AS total_reviews,
+        rev.avg_rating,
+        rev.total_reviews,
 
-        GROUP_CONCAT(
-          DISTINCT CONCAT(
-            pi.image_id,'::',
-            pi.image_url,'::',
-            pi.sort_order,'::',
-            pi.updated_at
-          )
-          ORDER BY pi.sort_order ASC
-        ) AS images
+        img.images
 
-      FROM product_reviews pr
+      /* Approved reviews per product, counted before any other join (image
+         rows used to multiply the count), at least three to qualify. */
+      FROM (
+        SELECT product_id, AVG(rating) AS avg_rating, COUNT(*) AS total_reviews
+        FROM product_reviews
+        WHERE status = 'approved'
+        GROUP BY product_id
+        HAVING COUNT(*) >= 3
+      ) rev
 
       INNER JOIN eproducts p
-        ON p.product_id = pr.product_id
+        ON p.product_id = rev.product_id
 
       INNER JOIN product_variants v
         ON v.variant_id = (
@@ -3016,27 +3100,33 @@ class ProductModel {
           WHERE pv2.product_id = p.product_id
             AND pv2.is_visible = 1
             AND pv2.sale_price IS NOT NULL
-          ORDER BY pv2.sale_price ASC
+          ORDER BY pv2.sale_price ASC, pv2.variant_id ASC
           LIMIT 1
         )
 
-      LEFT JOIN product_images pi
-        ON pi.product_id = p.product_id
+      LEFT JOIN (
+        SELECT
+          product_id,
+          GROUP_CONCAT(
+            DISTINCT CONCAT(image_id,'::',image_url,'::',sort_order,'::',updated_at)
+            ORDER BY sort_order ASC, image_id ASC
+          ) AS images
+        FROM product_images
+        GROUP BY product_id
+      ) img ON img.product_id = p.product_id
 
-      WHERE pr.status = 'approved'
-        AND p.status = 'approved'
+      WHERE p.status = 'approved'
         AND p.is_deleted = 0
         AND p.is_visible = 1
         AND COALESCE(p.created_via, '') != 'flea_market_quick_create'
         AND (? = '' OR p.product_name LIKE CONCAT('%', ?, '%'))
 
-      GROUP BY p.product_id
-      HAVING total_reviews >= 3
-      ORDER BY avg_rating DESC, total_reviews DESC
+      ORDER BY rev.avg_rating DESC, rev.total_reviews DESC, p.product_id ASC
       LIMIT ? OFFSET ?
     `;
 
-      const [rows] = await db.execute(query, [search, search, limit, offset]);
+      // MySQL 8 rejects numeric LIMIT/OFFSET bindings from execute(); strings work.
+      const [rows] = await db.execute(query, [search, search, String(limit), String(offset)]);
       await applyActiveOffers(rows);
 
       /* ===============================

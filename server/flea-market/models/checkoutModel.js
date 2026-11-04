@@ -35,6 +35,8 @@ class CheckoutModel {
         return { state: "new" };
       }
 
+      require("../utils/checkoutPolicy").assertBinding(existing,sessionId);
+
       if (existing.status === "completed") {
         await conn.commit();
         return { state: "completed", invoiceIds: parseInvoiceIds(existing.invoice_ids) };
@@ -67,7 +69,7 @@ class CheckoutModel {
 
   // Committed independently of the business transaction so 'failed' survives its rollback.
   async markFailed(key) {
-    await db.execute(`UPDATE flea_market_checkout_idempotency SET status = 'failed' WHERE idempotency_key = ?`, [
+    await db.execute(`UPDATE flea_market_checkout_idempotency SET status = 'failed' WHERE idempotency_key = ? AND status = 'processing'`, [
       key,
     ]);
   }

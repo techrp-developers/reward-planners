@@ -158,19 +158,55 @@ async function rotateCustomerSession(req, res) {
   }
 }
 
+/** Revoke the refresh session; returns its user_id (or null) for logout cleanup. */
 async function revokeCustomerSession(req, res) {
   const rawToken = getRefreshToken(req);
+  let userId = null;
   if (rawToken) {
+    const tokenHash = hashToken(rawToken);
+    const [[session]] = await db.execute(
+      "SELECT user_id FROM customer_auth_sessions WHERE token_hash = ? LIMIT 1",
+      [tokenHash],
+    );
+    userId = session?.user_id ?? null;
     await db.execute(
       "UPDATE customer_auth_sessions SET revoked_at = COALESCE(revoked_at, NOW()) WHERE token_hash = ?",
-      [hashToken(rawToken)],
+      [tokenHash],
     );
   }
   clearRefreshCookie(res);
+  return userId;
+}
+
+/** The request's refresh session without changing it; `active` means still usable. */
+async function findCustomerSession(req) {
+  const rawToken = getRefreshToken(req);
+  if (!rawToken) return null;
+  const [[session]] = await db.execute(
+    "SELECT user_id, revoked_at, expires_at FROM customer_auth_sessions WHERE token_hash = ? LIMIT 1",
+    [hashToken(rawToken)],
+  );
+  if (!session) return null;
+  return {
+    userId: Number(session.user_id),
+    active: !session.revoked_at && new Date(session.expires_at) > new Date(),
+  };
+}
+
+/** Revoke every refresh session of one user; returns how many were still live. */
+async function revokeAllCustomerSessions(userId, res) {
+  const [result] = await db.execute(
+    "UPDATE customer_auth_sessions SET revoked_at = NOW() WHERE user_id = ? AND revoked_at IS NULL",
+    [userId],
+  );
+  clearRefreshCookie(res);
+  return result.affectedRows;
 }
 
 module.exports = {
+  findCustomerSession,
   issueCustomerSession,
   rotateCustomerSession,
+  revokeAllCustomerSessions,
   revokeCustomerSession,
 };

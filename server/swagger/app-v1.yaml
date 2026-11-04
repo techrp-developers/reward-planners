@@ -46,6 +46,13 @@ components:
       properties:
         refreshToken:
           type: string
+        fcm_token:
+          type: string
+          nullable: true
+        push_scope:
+          type: string
+          enum: [device, all_devices]
+          description: See docs/logout-push-scope.md. all_devices needs a verified access token and a live session.
     AuthChangePasswordRequest:
       type: object
       required:

@@ -50,6 +50,8 @@ class WalletController {
         data: transactions,
       });
     } catch (err) {
+      // Logged so a failure is diagnosable; the client still gets the same response.
+      console.error("Wallet transactions error:", err);
       return res.status(500).json({ success: false });
     }
   }

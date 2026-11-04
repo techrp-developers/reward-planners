@@ -343,6 +343,151 @@ class SupportController {
       });
     }
   }
+  async getRecentOrders(req, res) {
+    try {
+      const loggedInUserId = Number(req.user?.user_id);
+      const requestedUserId = req.query.user_id
+        ? Number(req.query.user_id)
+        : loggedInUserId;
+
+      if (!loggedInUserId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized user",
+        });
+      }
+
+      if (!requestedUserId) {
+        return res.status(400).json({
+          success: false,
+          message: "user_id is required",
+        });
+      }
+
+      if (requestedUserId !== loggedInUserId) {
+        return res.status(403).json({
+          success: false,
+          message: "You can only access your own orders",
+        });
+      }
+
+      const [ecommerceOrders] = await db.execute(
+        `SELECT
+          o.order_id,
+          o.order_ref,
+          o.total_amount,
+          o.product_total,
+          o.reward_discount,
+          o.reward_coins_used,
+          o.reward_earned,
+          o.reward_coins_earned,
+          o.shipping_total,
+          o.status,
+          o.cancellation_status,
+          o.expires_at,
+          o.created_at,
+          o.paid_at
+        FROM eorders o
+        WHERE o.user_id = ?
+        ORDER BY o.created_at DESC, o.order_id DESC
+        LIMIT 5`,
+        [requestedUserId],
+      );
+
+      const ecommerceOrderIds = ecommerceOrders.map((order) => order.order_id);
+      let ecommerceItems = [];
+
+      if (ecommerceOrderIds.length > 0) {
+        const placeholders = ecommerceOrderIds.map(() => "?").join(", ");
+        const [rows] = await db.execute(
+          `SELECT
+            oi.order_item_id,
+            oi.order_id,
+            oi.vendor_order_id,
+            oi.product_id,
+            oi.variant_id,
+            oi.quantity,
+            oi.price,
+            oi.reward_discount,
+            oi.reward_coins_used,
+            oi.reward_earned,
+            oi.reward_coins_earned,
+            oi.final_price,
+            oi.created_at,
+            p.product_name,
+            p.brand_name
+          FROM eorder_items oi
+          LEFT JOIN eproducts p ON p.product_id = oi.product_id
+          WHERE oi.order_id IN (${placeholders})
+          ORDER BY oi.created_at DESC, oi.order_item_id DESC`,
+          ecommerceOrderIds,
+        );
+        ecommerceItems = rows;
+      }
+
+      const ecommerceItemsByOrderId = ecommerceItems.reduce((acc, item) => {
+        if (!acc[item.order_id]) {
+          acc[item.order_id] = [];
+        }
+        acc[item.order_id].push(item);
+        return acc;
+      }, {});
+
+      const latestEcommerceOrders = ecommerceOrders.map((order) => ({
+        ...order,
+        items: ecommerceItemsByOrderId[order.order_id] || [],
+      }));
+
+      const [serviceOrders] = await db.execute(
+        `SELECT
+          so.id,
+          so.order_ref,
+          so.parent_order_id,
+          so.service_id,
+          so.variant_id,
+          so.bundle_id,
+          so.address_id,
+          so.enquiry_id,
+          so.price,
+          so.payment_id,
+          so.payment_method,
+          so.reward_coins_used,
+          so.payment_status,
+          so.status,
+          so.cancelled_at,
+          so.refund_amount,
+          so.completed_at,
+          so.reward_coins_earned,
+          so.created_at,
+          s.name AS service_name,
+          sv.variant_name,
+          sv.image_url
+        FROM service_orders so
+        LEFT JOIN services s ON s.id = so.service_id
+        LEFT JOIN service_variants sv ON sv.id = so.variant_id
+        WHERE so.user_id = ?
+        ORDER BY so.created_at DESC, so.id DESC
+        LIMIT 5`,
+        [requestedUserId],
+      );
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          user_id: requestedUserId,
+          ecommerce_orders: latestEcommerceOrders,
+          service_orders: serviceOrders,
+        },
+      });
+    } catch (error) {
+      console.error("Get recent orders error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  }
+
 
   /* ======================================================
     STAFF (RM/ADMIN) — SUPPORT ENQUIRIES

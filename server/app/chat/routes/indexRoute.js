@@ -8,37 +8,61 @@ router.use(auth);
 router.post("/birthday-wishes", controller.sendBirthdayWish);
 router.get("/users", controller.users);
 router.get("/presence", controller.presence);
-router.post("/uploads/images", (req, res, next) => {
-  imageUpload.single("image")(req, res, (error) => {
-    if (!error) return next();
-    const message = error.code === "LIMIT_FILE_SIZE" ? "Chat images cannot exceed 10 MB" : error.message;
-    return res.status(422).json({ success: false, message });
-  });
-}, controller.uploadImage);
-router.post("/uploads/documents", (req, res, next) => {
-  documentUpload.single("document")(req, res, (error) => {
-    if (!error) return next();
-    const message = error.code === "LIMIT_FILE_SIZE" ? "Chat documents cannot exceed 25 MB" : error.message;
-    return res.status(422).json({ success: false, message });
-  });
-}, controller.uploadDocument);
+router.post(
+  "/uploads/images",
+  (req, res, next) => {
+    imageUpload.single("image")(req, res, (error) => {
+      if (!error) return next();
+      const message =
+        error.code === "LIMIT_FILE_SIZE"
+          ? "Chat images cannot exceed 10 MB"
+          : error.message;
+      return res.status(422).json({ success: false, message });
+    });
+  },
+  controller.uploadImage,
+);
+router.post(
+  "/uploads/documents",
+  (req, res, next) => {
+    documentUpload.single("document")(req, res, (error) => {
+      if (!error) return next();
+      const message =
+        error.code === "LIMIT_FILE_SIZE"
+          ? "Chat documents cannot exceed 25 MB"
+          : error.message;
+      return res.status(422).json({ success: false, message });
+    });
+  },
+  controller.uploadDocument,
+);
 router.get("/conversations", controller.list);
 router.post("/conversations", controller.create);
 router.get("/conversations/:id/messages", controller.messages);
 router.post("/conversations/:id/messages", controller.send);
-router.delete("/conversations/:id/messages/:messageId", controller.deleteMessage);
+router.delete(
+  "/conversations/:id/messages/:messageId",
+  controller.deleteMessage,
+);
 router.post("/conversations/:id/polls", controller.createPoll);
 router.post("/polls/:pollId/votes", controller.votePoll);
 router.post("/conversations/:id/read", controller.read);
 router.patch("/conversations/:id", controller.updateGroup);
 router.patch("/conversations/:id/theme", controller.updateTheme);
-router.post("/conversations/:id/image", (req, res, next) => {
-  imageUpload.single("image")(req, res, (error) => {
-    if (!error) return next();
-    const message = error.code === "LIMIT_FILE_SIZE" ? "Group photos cannot exceed 10 MB" : error.message;
-    return res.status(422).json({ success: false, message });
-  });
-}, controller.uploadGroupImage);
+router.post(
+  "/conversations/:id/image",
+  (req, res, next) => {
+    imageUpload.single("image")(req, res, (error) => {
+      if (!error) return next();
+      const message =
+        error.code === "LIMIT_FILE_SIZE"
+          ? "Group photos cannot exceed 10 MB"
+          : error.message;
+      return res.status(422).json({ success: false, message });
+    });
+  },
+  controller.uploadGroupImage,
+);
 router.delete("/conversations/:id/image", controller.removeGroupImage);
 router.post("/conversations/:id/members", controller.addMembers);
 router.delete("/conversations/:id/members/:userId", controller.removeMember);

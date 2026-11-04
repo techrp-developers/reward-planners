@@ -26,7 +26,7 @@ const config = {
   password: process.env.DB_PASSWORD || "",
   database: process.env.DB_NAME || "rewardplanners_db",
   waitForConnections: true,
-  connectionLimit: 10,
+  connectionLimit: 30,
   queueLimit: 0,
   charset: "utf8mb4",
   dateStrings: true,
@@ -58,6 +58,9 @@ function checkConnection(retried = false) {
     connection.release();
   });
 }
-checkConnection();
+// Deferred until synchronous startup (route and dependency loading, ~18 s cold
+// on Windows) has finished; otherwise connectTimeout can expire while the
+// event loop is blocked and report a false ETIMEDOUT.
+setImmediate(() => checkConnection());
 
 module.exports = pool.promise();

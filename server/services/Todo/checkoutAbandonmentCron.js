@@ -24,8 +24,13 @@ async function checkAbandonedPayments() {
         AND r.created_at >= DATE_SUB(NOW(), INTERVAL 30 MINUTE)
         AND r.created_at < DATE_SUB(NOW(), INTERVAL 5 MINUTE)
         AND n.notification_id IS NULL
-        AND c.fcm_token IS NOT NULL
-        AND c.fcm_token != ''
+        AND (
+          (c.fcm_token IS NOT NULL AND c.fcm_token != '')
+          OR EXISTS (
+            SELECT 1 FROM user_push_tokens upt
+            WHERE upt.user_id = c.user_id AND upt.is_active = 1
+          )
+        )
       `
     );
 
@@ -64,6 +69,8 @@ async function checkAbandonedPayments() {
           icon: "credit-card",
           reference_type: "razorpay_order",
           reference_id: order.razorpay_order_id,
+          // Permanent key: overlapping 5-minute runs must not send twice.
+          idempotency_key: `payment-abandoned:${order.razorpay_order_id}`,
           action_url: actionUrl,
         },
         "checkout payment abandonment"

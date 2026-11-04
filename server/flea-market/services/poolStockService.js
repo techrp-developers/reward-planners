@@ -33,6 +33,11 @@ async function resolveLogScheduleId(scheduleId) {
   return schedule && schedule.status === "in_progress" ? scheduleId : null;
 }
 
+async function assertUnreserved(conn,pool,quantity) {
+  const [[row]] = await conn.execute("SELECT COALESCE(SUM(assigned_qty-sold_qty-released_qty),0) qty FROM flea_market_event_products WHERE pool_id=? AND status='active'",[pool.pool_id]);
+  if (quantity > Number(pool.available_qty)-Number(row.qty)) throw createError(409,"Release event reservations before reducing this stock");
+}
+
 class PoolStockService {
   async listAll() {
     const rows = await poolStockModel.findAll();
@@ -74,6 +79,7 @@ class PoolStockService {
       // checkoutService's "never trust client price/points" rule.
       const resolvedVendorId = vendorId || variant.vendor_id;
       const resolvedProductId = productId || variant.product_id;
+      if (Number(resolvedVendorId) !== variant.vendor_id || Number(resolvedProductId) !== variant.product_id) throw createError(400,"Product must belong to the selected vendor");
 
       if (variant.stock < qty) {
         throw createError(409, `Insufficient master stock for variant ${variantId}`, { available: variant.stock });
@@ -121,6 +127,7 @@ class PoolStockService {
       if (!pool) {
         throw createError(404, "Pool not found");
       }
+      await assertUnreserved(conn,pool,quantity);
       if (quantity > pool.available_qty) {
         throw createError(409, "Damage quantity exceeds currently available stock for this pool", {
           available: pool.available_qty,
@@ -164,6 +171,7 @@ class PoolStockService {
         throw createError(404, "Pool not found");
       }
 
+      if (quantity < 0) await assertUnreserved(conn,pool,-quantity);
       const committedQty = pool.sold_qty + pool.damaged_qty + pool.returned_qty;
       if (pool.allocated_qty + quantity < committedQty) {
         throw createError(409, "Adjustment would reduce allocated quantity below what's already sold/damaged/returned", {
@@ -203,6 +211,7 @@ class PoolStockService {
       if (!pool) {
         throw createError(404, "Pool not found");
       }
+      await assertUnreserved(conn,pool,returnQty);
       if (returnQty > pool.available_qty) {
         throw createError(409, "Return quantity exceeds currently available stock for this pool", {
           available: pool.available_qty,
@@ -268,6 +277,8 @@ class PoolStockService {
       if (!pool) {
         throw createError(404, "Pool not found");
       }
+      const [[assignment]]=await conn.execute("SELECT id FROM flea_market_event_products WHERE pool_id=? LIMIT 1",[poolId]);
+      if (assignment) throw createError(409,"Pool has event assignment history; return unreserved stock instead");
       if (pool.sold_qty > 0 || pool.damaged_qty > 0 || pool.returned_qty > 0) {
         throw createError(409, "Cannot delete a pool with sale, damage, or return history — use Return to Vendor instead");
       }

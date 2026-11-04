@@ -448,12 +448,46 @@ class authModel {
     );
   }
 
-  async clearFcmToken(userId) {
-    await db.execute(
-      `UPDATE user_push_tokens SET is_active = 0, updated_at = NOW() WHERE user_id = ?`,
+  // Logout without a usable session: stop pushes to this one device only.
+  async deactivateFcmTokenByValue(fcmToken) {
+    const [result] = await db.execute(
+      "UPDATE user_push_tokens SET is_active = 0, updated_at = NOW() WHERE fcm_token = ?",
+      [fcmToken],
+    ).catch((error) => {
+      if (error.code !== "ER_NO_SUCH_TABLE") throw error;
+      return [{ affectedRows: 0 }];
+    });
+    await db.execute("UPDATE customer SET fcm_token = NULL WHERE fcm_token = ?", [fcmToken]);
+    return result.affectedRows;
+  }
+
+  // With fcmToken, only that device is signed out of pushes; other phones of
+  // the same employee keep receiving. Without it (older app builds that do not
+  // send their token on logout, and all_devices logout) every device is
+  // deactivated. Returns how many active device rows were deactivated.
+  async clearFcmToken(userId, fcmToken = null) {
+    if (fcmToken) {
+      const [result] = await db.execute(
+        `UPDATE user_push_tokens SET is_active = 0, updated_at = NOW()
+         WHERE user_id = ? AND fcm_token = ? AND is_active = 1`,
+        [userId, fcmToken],
+      ).catch((error) => {
+        if (error.code !== "ER_NO_SUCH_TABLE") throw error;
+        return [{ affectedRows: 0 }];
+      });
+      await db.execute(
+        `UPDATE customer SET fcm_token = NULL WHERE user_id = ? AND fcm_token = ?`,
+        [userId, fcmToken],
+      );
+      return result.affectedRows;
+    }
+
+    const [result] = await db.execute(
+      `UPDATE user_push_tokens SET is_active = 0, updated_at = NOW() WHERE user_id = ? AND is_active = 1`,
       [userId],
     ).catch((error) => {
       if (error.code !== "ER_NO_SUCH_TABLE") throw error;
+      return [{ affectedRows: 0 }];
     });
     await db.execute(
       `UPDATE customer
@@ -461,6 +495,7 @@ class authModel {
      WHERE user_id = ?`,
       [userId],
     );
+    return result.affectedRows;
   }
 
   // async incrementTokenVersion(userId) {
@@ -472,21 +507,39 @@ class authModel {
   //   );
   // }
 
-  async updateFcmToken(userId, fcmToken, devicePlatform = null) {
-    await db.execute(
+  /**
+   * firebaseProjectId comes from the app's own Firebase config and has been
+   * checked against the known project ids. Without it (older app builds) the
+   * project stays unknown: never assumed to be the new project.
+   */
+  async updateFcmToken(userId, fcmToken, devicePlatform = null, firebaseProjectId = null) {
+    const upsert = (withProject) => db.execute(
       `INSERT INTO user_push_tokens
-       (user_id, fcm_token, platform, is_active, last_seen_at)
-       VALUES (?, ?, ?, 1, NOW())
+       (user_id, fcm_token, platform, is_active, last_seen_at${withProject ? ", firebase_project_id" : ""})
+       VALUES (?, ?, ?, 1, NOW()${withProject ? ", ?" : ""})
        ON DUPLICATE KEY UPDATE
          user_id = VALUES(user_id),
          platform = COALESCE(VALUES(platform), platform),
+         ${withProject ? "firebase_project_id = COALESCE(VALUES(firebase_project_id), firebase_project_id)," : ""}
          is_active = 1,
          last_seen_at = NOW(),
          updated_at = NOW()`,
-      [userId, fcmToken, devicePlatform],
-    ).catch((error) => {
+      withProject ? [userId, fcmToken, devicePlatform, firebaseProjectId] : [userId, fcmToken, devicePlatform],
+    );
+    await upsert(true).catch(async (error) => {
+      if (error.code === "ER_BAD_FIELD_ERROR") return upsert(false); // column not migrated yet
+      if (error.code !== "ER_NO_SUCH_TABLE") throw error;
+      return null;
+    }).catch((error) => {
       if (error.code !== "ER_NO_SUCH_TABLE") throw error;
     });
+
+    // A phone that changes hands keeps its FCM token. Drop it from any other
+    // employee's legacy column so their notifications stop reaching this device.
+    await db.execute(
+      `UPDATE customer SET fcm_token = NULL WHERE fcm_token = ? AND user_id <> ?`,
+      [fcmToken, userId],
+    );
 
     await db.execute(
       `UPDATE customer
@@ -606,57 +659,175 @@ class authModel {
     };
   }
 
-  // Get employee birthday
-  async getTodayBirthdayEmployees(userId) {
-    const [rows] = await db.execute(
+  // Get all company birthdays (both today and upcoming) - Strictly scoped to user's company only
+  async getCompanyBirthdays(userId) {
+    // 1. Identify logged-in customer's exact company_id
+    const [[loggedUser]] = await db.execute(
       `
-    SELECT
-      cu_emp.id,
-      cu_emp.name,
-      cu_emp.email,
-      cu_emp.contact,
-      cu_emp.department,
-      cu_emp.role,
-      cu_emp.dob,
-      c.user_image,
-      c.updated_at AS user_image_updated_at,
-      cu_emp.id = cu_logged.id AS is_self,
-      EXISTS (
-        SELECT 1 FROM chat_messages m
-        WHERE m.sender_id = c_logged.user_id
-          AND m.client_message_id = CONCAT('birthday-wish:', c.user_id, ':', DATE_FORMAT(CURDATE(), '%Y-%m-%d'))
-      ) AS wished
-    FROM customer c_logged
 
-    INNER JOIN company_users cu_logged
-      ON c_logged.company_user_id = cu_logged.id
-
-    INNER JOIN company_users cu_emp
-      ON cu_logged.company_id = cu_emp.company_id
-
-    LEFT JOIN customer c
-      ON c.company_user_id = cu_emp.id
-
-    WHERE c_logged.user_id = ?
-      AND MONTH(cu_emp.dob) = MONTH(CURDATE())
-      AND DAY(cu_emp.dob) = DAY(CURDATE())
-      AND cu_emp.status = 1
-    `,
+      SELECT 
+        c.user_id,
+        c.company_user_id,
+        COALESCE(cu.company_id, (
+          SELECT cu2.company_id 
+          FROM company_users cu2 
+          WHERE LOWER(TRIM(cu2.email)) = LOWER(TRIM(c.email)) 
+          LIMIT 1
+        )) AS company_id,
+        comp.company_name
+      FROM customer c
+      LEFT JOIN company_users cu ON cu.id = c.company_user_id
+      LEFT JOIN companies comp ON comp.company_id = cu.company_id
+      WHERE c.user_id = ?
+      LIMIT 1
+      `,
       [userId],
     );
 
-    return rows.map((emp) => ({
-      employeeId: emp.id,
-      name: emp.name,
-      email: emp.email,
-      phone: emp.contact,
-      department: emp.department,
-      role: emp.role,
-      dob: emp.dob,
-      image: getPublicUrl(emp.user_image, emp.user_image_updated_at),
-      isSelf: Boolean(emp.is_self),
-      wished: Boolean(emp.wished),
-    }));
+    const companyId = loggedUser?.company_id;
+    if (!companyId) {
+      return {
+        companyId: null,
+        companyName: null,
+        today: [],
+        upcoming: [],
+        all: [],
+        todayCount: 0,
+        upcomingCount: 0,
+      };
+    }
+
+    // 2. Fetch ALL active employees strictly belonging to this user's company ONLY
+    const [rows] = await db.execute(
+      `
+      SELECT
+        cu.id AS employee_id,
+        cu.company_id,
+        comp.company_name,
+        cu.name,
+        cu.email,
+        cu.contact AS phone,
+        cu.department,
+        cu.role,
+        cu.dob,
+        c.user_id AS recipient_user_id,
+        c.user_image,
+        c.updated_at AS user_image_updated_at
+      FROM company_users cu
+      INNER JOIN companies comp 
+        ON comp.company_id = cu.company_id 
+       AND comp.status = 1
+      LEFT JOIN customer c 
+        ON c.company_user_id = cu.id
+      WHERE cu.company_id = ?
+        AND cu.status = 1
+      ORDER BY cu.name ASC
+      `,
+      [companyId],
+    );
+
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1; // 1-12
+    const currentDay = now.getDate(); // 1-31
+    const currentYear = now.getFullYear();
+
+    const monthNames = [
+      "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    ];
+
+    const parsedList = [];
+    const seen = new Set();
+
+    for (const emp of rows) {
+      if (seen.has(emp.employee_id)) continue;
+      seen.add(emp.employee_id);
+
+      let isToday = false;
+      let daysUntil = 999;
+      let dateStr = "Upcoming";
+
+      if (emp.dob) {
+        const str = String(emp.dob).trim();
+        const match = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+        let m = 0;
+        let d = 0;
+        if (match) {
+          m = parseInt(match[2], 10);
+          d = parseInt(match[3], 10);
+        } else {
+          const parsed = new Date(str);
+          if (!isNaN(parsed.getTime())) {
+            m = parsed.getMonth() + 1;
+            d = parsed.getDate();
+          }
+        }
+
+        if (m && d) {
+          isToday = (m === currentMonth && d === currentDay);
+          if (isToday) {
+            daysUntil = 0;
+            dateStr = "Birthday today";
+          } else {
+            let nextBday = new Date(currentYear, m - 1, d);
+            if (nextBday < now && (nextBday.toDateString() !== now.toDateString())) {
+              nextBday = new Date(currentYear + 1, m - 1, d);
+            }
+            daysUntil = Math.max(1, Math.ceil((nextBday.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+            dateStr = `${monthNames[m - 1]} ${d}`;
+          }
+        }
+      }
+
+      parsedList.push({
+        id: String(emp.employee_id),
+        employeeId: emp.employee_id,
+        userId: emp.recipient_user_id || null,
+        companyId: emp.company_id,
+        companyName: emp.company_name,
+        name: emp.name,
+        email: emp.email,
+        phone: emp.phone,
+        department: emp.department || "Team Member",
+        role: emp.role || emp.department || "Colleague",
+        dob: emp.dob,
+        isToday,
+        daysUntil,
+        dateStr,
+        avatar: emp.user_image ? getPublicUrl(emp.user_image, emp.user_image_updated_at) : null,
+        image: emp.user_image ? getPublicUrl(emp.user_image, emp.user_image_updated_at) : null,
+      });
+    }
+
+    parsedList.sort((a, b) => {
+      if (a.isToday && !b.isToday) return -1;
+      if (!a.isToday && b.isToday) return 1;
+      return a.daysUntil - b.daysUntil;
+    });
+
+    const today = parsedList.filter((x) => x.isToday);
+    const upcoming = parsedList.filter((x) => !x.isToday);
+
+    return {
+      companyId,
+      companyName: loggedUser?.company_name || null,
+      today,
+      upcoming,
+      all: parsedList,
+      todayCount: today.length,
+      upcomingCount: upcoming.length,
+    };
+  }
+
+  // Get employee birthday (today only - backward compatible)
+  async getTodayBirthdayEmployees(userId) {
+    try {
+      const bdays = await this.getCompanyBirthdays(userId);
+      return bdays.today;
+    } catch {
+      return [];
+    }
+
   }
 
   // Delete Customer — soft delete only. The account and its cart/wishlist/

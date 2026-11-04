@@ -13,9 +13,10 @@ import {
 } from "../../api/fleaMarketScheduleApi";
 import ScheduleCard from "./ScheduleCard";
 import ScheduleForm from "./ScheduleForm";
+import EventAssignmentsPanel from "./EventAssignmentsPanel";
 
 function todayDateString() {
-  return new Date().toISOString().slice(0, 10);
+  return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Kolkata",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
 }
 
 interface BillingNavState {
@@ -33,6 +34,7 @@ function SchedulePage() {
   const redirectMessage = (location.state as { message?: string } | null)?.message;
 
   // No date means "all events", so existing records are visible when the page opens.
+  const [manageId,setManageId]=useState("");
   const [date, setDate] = useState("");
   const [showForm, setShowForm] = useState(false);
 
@@ -45,7 +47,7 @@ function SchedulePage() {
   });
 
   const invalidateSchedules = () => {
-    void queryClient.invalidateQueries({ queryKey: ["flea-market", "schedules"] });
+    void queryClient.invalidateQueries({ queryKey: ["flea-market"] });
   };
 
   const handleCreated = () => {
@@ -131,6 +133,9 @@ function SchedulePage() {
           </button>
         </div>
       </div>
+
+      <label className="block text-sm font-semibold">Manage Vendors & Event Products<select className="ml-3 max-w-full rounded-lg border p-2" value={manageId} onChange={e=>setManageId(e.target.value)}><option value="">Select event</option>{schedules.map(e=><option key={e.scheduleId} value={e.scheduleId}>{e.companyName} · {e.scheduledDate} · #{e.scheduleId}</option>)}</select></label>
+      {schedules.find(e=>e.scheduleId===Number(manageId))&&<EventAssignmentsPanel key={manageId} event={schedules.find(e=>e.scheduleId===Number(manageId))!}/>}
 
       {showForm && (
         <ScheduleForm defaultDate={date || todayDateString()} onCreated={handleCreated} onClose={() => setShowForm(false)} />

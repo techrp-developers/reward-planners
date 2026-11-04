@@ -311,12 +311,14 @@ async function processDueReminders(limit = 100) {
       // The notification inbox is the durable delivery channel. A user may not
       // have registered an FCM token yet, so persisting the reminder must not
       // depend on push delivery succeeding.
-      await createInAppNotification(payload);
+      const persisted = await createInAppNotification(payload);
 
       // The phone already rings a local alarm for this reminder.
       const pushResult = Number(reminder.device_alarm) === 1
         ? { success: false, skipped: true, reason: "device_alarm" }
-        : await sendPushNotification(payload);
+        : await sendPushNotification(payload, {
+          notificationId: persisted?.notificationId,
+        });
 
       if (!pushResult.success && !pushResult.skipped) {
         console.warn(

@@ -1,7 +1,7 @@
 import BrandLogo from "../../common/components/BrandLogo";
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { FiGrid, FiUsers, FiBriefcase, FiHelpCircle, FiBarChart2, FiUser, FiKey, FiLogOut, FiChevronUp } from "react-icons/fi";
+import { FiGrid, FiUsers, FiBriefcase, FiHelpCircle, FiBarChart2, FiUser, FiKey, FiLogOut, FiChevronUp, FiBell } from "react-icons/fi";
 import { useAuth } from "../../common/auth/useAuth";
 import { routes } from "../../routes";
 
@@ -12,6 +12,7 @@ const groups = [
     { label: "Promotions", to: routes.rm.promotions, Icon: FiBriefcase },
     { label: "Client approvals", to: routes.rm.clientApprovals, Icon: FiBriefcase },
     { label: "Support enquiries", to: routes.rm.supportTickets, Icon: FiHelpCircle },
+    { label: "Push notifications", to: routes.rm.notifications, Icon: FiBell },
   ] },
   { title: "Reports", links: [
     { label: "Module usage", to: routes.rm.reports.usage, Icon: FiBarChart2 },

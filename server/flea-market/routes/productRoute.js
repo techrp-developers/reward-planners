@@ -17,8 +17,7 @@ router.get("/search", requireFleaMarketLocation, productController.search);
 router.get("/:variantId/reward-eligibility", requireFleaMarketLocation, productController.rewardEligibility);
 
 // Manager-facing (allocation page) — master-catalog search/create, not scoped
-// to a customer session. No auth middleware yet, matching schedule/location/
-// company routes elsewhere in this module (no operator auth exists today).
+// to a customer session. Manager authentication is enforced by the parent router.
 router.get("/catalog-search", productController.catalogSearch);
 router.post("/", require("../middlewares/validators").validateQuickCreateProduct, productController.quickCreate);
 

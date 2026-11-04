@@ -18,7 +18,9 @@ export interface CheckoutInvoiceSummary {
   amountPaid: number;
 }
 
+export interface CheckoutPayment {method:"cash"|"card"|"upi";amount:string;reference:string;confirmed:boolean}
 export interface CheckoutResult {
+  checkoutId?: string;
   invoices: CheckoutInvoiceSummary[];
   totalPointsRedeemed: number;
   totalAmountPaid: number;
@@ -49,10 +51,10 @@ export function getCheckoutErrorBody(error: unknown): FleaMarketCheckoutErrorBod
 // Cart is split server-side into one invoice per vendor — the same
 // idempotencyKey must be reused on retry so the backend's dedupe actually works.
 
-export async function checkout(items: CheckoutItemInput[], idempotencyKey: string): Promise<CheckoutResult> {
+export async function checkout(items: CheckoutItemInput[], idempotencyKey: string, scheduleId:number, payment:CheckoutPayment): Promise<CheckoutResult> {
   const { data } = await fleaMarketClient.post<CheckoutApiResponse>(
     "/checkout",
-    { items },
+    { items, scheduleId, payment },
     { headers: { "Idempotency-Key": idempotencyKey } },
   );
   return data.data;
@@ -60,4 +62,9 @@ export async function checkout(items: CheckoutItemInput[], idempotencyKey: strin
 
 export function generateIdempotencyKey(): string {
   return crypto.randomUUID();
+}
+
+export async function canStartNewAttempt(key:string):Promise<boolean> {
+  const {data}=await fleaMarketClient.get<{data:{status:string}}>(`/checkout/${encodeURIComponent(key)}/status`);
+  return ['failed','not_started','not_found'].includes(data.data.status);
 }

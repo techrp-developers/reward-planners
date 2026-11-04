@@ -15,13 +15,14 @@ import {
   FiUser,
 } from "react-icons/fi";
 import { routes } from "../../../../routes";
-import { SessionExpiredError, setFleaMarketLocationId, setFleaMarketSessionToken } from "../../api/fleaMarketClient";
+import { SessionExpiredError, setFleaMarketScheduleId, setFleaMarketLocationId, setFleaMarketSessionToken } from "../../api/fleaMarketClient";
 import type { FleaMarketCustomer } from "../../api/fleaMarketOtpApi";
 import type { FleaMarketProduct } from "../../api/fleaMarketProductsApi";
 import { fetchRewardEligibility } from "../../api/fleaMarketRewardApi";
 import { describeScanError, resolveScannedBarcode } from "../../api/fleaMarketScanApi";
 import {
   checkout,
+  canStartNewAttempt,
   generateIdempotencyKey,
   getCheckoutErrorBody,
   type CheckoutResult,
@@ -117,6 +118,9 @@ function BillingPage() {
 
   const [stage, setStage] = useState<BillingStage>("billing");
   const [awaitingPayment, setAwaitingPayment] = useState(false);
+  const [paymentReference,setPaymentReference]=useState("");
+  const [paymentAmount,setPaymentAmount]=useState("");
+  const [paymentConfirmed,setPaymentConfirmed]=useState(false);
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("cash");
   const [checkoutError, setCheckoutError] = useState("");
   const [checkoutResult, setCheckoutResult] = useState<CheckoutResult | null>(null);
@@ -133,9 +137,11 @@ function BillingPage() {
     }
 
     setFleaMarketLocationId(billingState.locationId);
+    setFleaMarketScheduleId(billingState.scheduleId);
 
     return () => {
       setFleaMarketLocationId(null);
+      setFleaMarketScheduleId(null);
     };
   }, [billingState, navigate]);
 
@@ -418,13 +424,13 @@ function BillingPage() {
 
   const checkoutMutation = useMutation({
     mutationFn: (payload: { items: { variantId: number; qty: number; pointsApplied: number }[]; key: string }) =>
-      checkout(payload.items, payload.key),
+      checkout(payload.items, payload.key, billingState!.scheduleId, {method:paymentMode,amount:paymentAmount,reference:paymentReference,confirmed:paymentConfirmed}),
     onSuccess: () => {
       // A sale just moved stock — StockPage's pool table, billing's own
       // product search, and the All Products overview all show figures
       // derived from it, and should reflect this checkout on next view
       // rather than whatever they last cached.
-      void queryClient.invalidateQueries({ queryKey: ["flea-market", "vendor-stock"] });
+      void queryClient.invalidateQueries({ queryKey: ["flea-market"] });
       void queryClient.invalidateQueries({ queryKey: ["flea-market", "products", "search"] });
       void queryClient.invalidateQueries({ queryKey: ["flea-market", "all-products"] });
     },
@@ -438,6 +444,7 @@ function BillingPage() {
       return;
     }
 
+    if (!paymentConfirmed || !paymentAmount) { setCheckoutError("Enter the actual collected amount and explicitly confirm collection."); return; }
     setCheckoutError("");
 
     checkoutMutation.mutate(
@@ -478,7 +485,7 @@ function BillingPage() {
         },
       },
     );
-  }, [customer, sessionToken, isSessionValid, handleSessionExpired, cartLines, idempotencyKey, checkoutMutation]);
+  }, [customer, sessionToken, isSessionValid, handleSessionExpired, cartLines, idempotencyKey, checkoutMutation, paymentConfirmed, paymentAmount]);
 
   const proceedToPayment = useCallback(() => {
     if (!customer || !sessionToken) return;
@@ -606,6 +613,7 @@ function BillingPage() {
   if (stage === "invoice" && checkoutResult && customer) {
     return (
       <InvoiceView
+        checkoutId={checkoutResult.checkoutId}
         invoices={checkoutResult.invoices}
         totalPointsRedeemed={checkoutResult.totalPointsRedeemed}
         totalAmountPaid={checkoutResult.totalAmountPaid}
@@ -705,7 +713,7 @@ function BillingPage() {
               <button
                 key={option.value}
                 type="button"
-                onClick={() => setPaymentMode(option.value)}
+                onClick={() => {setPaymentMode(option.value);setPaymentConfirmed(false);}}
                 className={`flex flex-col items-center gap-2 p-4 border rounded-xl transition-colors ${
                   paymentMode === option.value
                     ? "border-purple-300 bg-gradient-to-r from-[#852BAF]/10 to-[#FC3F78]/10"
@@ -718,7 +726,17 @@ function BillingPage() {
             ))}
           </div>
 
-          {checkoutError && <ErrorState className="mt-4" message={checkoutError} />}
+          <div className="mt-4 space-y-3">
+            <label className="block text-sm">Actual amount collected (₹)<input type="number" min="0" step="0.01" className="mt-1 w-full rounded-lg border p-2" value={paymentAmount} onChange={e=>{setPaymentAmount(e.target.value);setPaymentConfirmed(false);}} /></label>
+            {paymentMode!=="cash"&&<label className="block text-sm">Transaction reference<input className="mt-1 w-full rounded-lg border p-2" maxLength={190} value={paymentReference} onChange={e=>{setPaymentReference(e.target.value);setPaymentConfirmed(false);}}/><span className="text-xs text-gray-500">Manual external confirmation requires server configuration. This does not verify a provider payment.</span></label>}
+            <label className="flex gap-2 text-sm"><input type="checkbox" checked={paymentConfirmed} onChange={e=>setPaymentConfirmed(e.target.checked)}/>I confirm the stated amount was actually collected for this bill.</label>
+          </div>
+          {checkoutError && <><ErrorState className="mt-4" message={checkoutError} /><button type="button" className="mt-2 text-sm text-[#852BAF] underline" disabled={checkoutMutation.isPending} onClick={async()=>{
+            try {
+              if (await canStartNewAttempt(idempotencyKey)) {setIdempotencyKey(generateIdempotencyKey());setPaymentConfirmed(false);setCheckoutError('');setAwaitingPayment(false);}
+              else setCheckoutError('This checkout is processing or completed. Keep the current key and reconcile its receipt before creating another bill.');
+            } catch {setCheckoutError('Could not verify the previous attempt. Retry the status check before starting a new bill.');}
+          }}>Check failed attempt and return to cart</button></>}
 
           <div className="flex gap-3 mt-5">
             <button

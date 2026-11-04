@@ -16,34 +16,11 @@ const swaggerSpec = require("./config/swagger");
 // setupTodoReminderDB();
 
 require("dotenv").config();
-require("./app/busboooking/config/productionSafety")
-  .assertProductionConfiguration();
-if (String(process.env.RUN_SCHEDULED_JOBS ?? "true").toLowerCase() === "true") {
-  require("./services/ExpressBees/cron/shipmentCron");
-  require("./services/Status/statusCleanupCron");
-  require("./services/rewards/transactionRewardCron");
-  require("./services/promotions/worker");
-} else {
-  console.warn(
-    "[COURIER_BOOKING] Cron OFF: RUN_SCHEDULED_JOBS is not true, so this process will not book or track shipments",
-  );
-}
-require("./services/Bbps/retryCron");
-require("./services/Bbps/refundCron");
-require("./services/Razorpay/retryCron");
-require("./services/Maintenance/maintenanceCron");
-require("./services/Razorpay/orderExpiryCron");
-require("./services/BusBooking/reconcileCron");
-require("./services/Todo/todoReminderCron");
-require("./services/Todo/birthdayReminderCron");
-require("./services/Ecommerce/cartRecoveryCron");
-require("./services/Todo/fitnessGoalHookCron");
-require("./services/Todo/accountPurgeCron");
-// require("./services/Todo/checkoutAbandonmentCron");
-// require("./services/Todo/serviceCartRecoveryCron");
-// require("./services/Bbps/billDueReminderCron");
-
-
+const busProductionSafety = require("./app/busboooking/config/productionSafety");
+busProductionSafety.assertProductionConfiguration();
+busProductionSafety.warnIfBusConfigurationIncomplete();
+require("./config/scheduledJobs").startScheduledJobs();
+const stopSchedulerDiagnostics = require("./services/schedulerDiagnostics").startSchedulerDiagnostics();
 
 // dashboard Route
 const dashboardRoute = require("./routes/indexRoute");
@@ -139,6 +116,7 @@ app.use(
       "Content-Type",
       "Authorization",
       "X-Location-Id",
+      "X-Schedule-Id",
       "X-Session-Token",
       "Idempotency-Key",
       "X-CSRF-Token",
@@ -201,6 +179,13 @@ if (process.env.NODE_ENV !== "production") {
 // Serve uploads folder
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
+// /public/* assets live only in R2 behind the CDN. The mobile app's local mode
+// points image URLs at this server, so in development send them on to the CDN.
+if (process.env.NODE_ENV !== "production") {
+  const { getPublicUrl } = require("./utils/publicUrl");
+  app.get("/public/*", (req, res) => res.redirect(302, getPublicUrl(req.originalUrl)));
+}
+
 // Base route
 app.get("/", (req, res) => {
   res.json({
@@ -210,9 +195,14 @@ app.get("/", (req, res) => {
   });
 });
 
-// Dashboard Routes
-app.use("/api/crm", dashboardRoute);
-app.use("/", dashboardRoute);
+// Both CRM modules share /api/crm; retain their legacy root aliases.
+require("./routes/mountCrmRoutes")(app, dashboardRoute, fleaMarketRoute);
+// The RM/admin Push Notification Manager is a dashboard feature: the CRM client
+// calls it through the /api/crm proxy. (It is also reachable at /v1/rm/... via
+// commonRoute; both paths use the dashboard session auth.)
+app.use("/api/crm/v1/rm/notifications", require("./app/common/routes/rmNotificationRoute"));
+// Admin-only RM -> company assignments that scope RM notification audiences.
+app.use("/api/crm/v1/rm/assignments", require("./app/common/routes/rmAssignmentRoute"));
 
 // App Routes 
 app.use("/v1", ecommerceRoute);
@@ -228,23 +218,6 @@ app.use("/api/busbooking", busBookingRoute);
 // External App Routes
 app.use("/mps", mpsRoute);
 
-// Flea Market Routes
-app.use(
-  "/",
-  (req, res, next) => {
-    // API responses (especially deployment-time 404s) must never be cached by
-    // Cloudflare, otherwise a newly deployed route can keep appearing missing.
-    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-    res.setHeader("Pragma", "no-cache");
-    res.setHeader("Expires", "0");
-    res.setHeader("CDN-Cache-Control", "no-store");
-    res.setHeader("Cloudflare-CDN-Cache-Control", "no-store");
-    res.setHeader("Surrogate-Control", "no-store");
-    next();
-  },
-  fleaMarketRoute,
-);
-
 // 404 Handler
 app.use((req, res) => {
   res.status(404).json({
@@ -253,16 +226,8 @@ app.use((req, res) => {
   });
 });
 
-// Global Error Handler
-app.use((error, req, res, next) => {
-  console.error("Unhandled Error:", error);
-
-  res.status(500).json({
-    success: false,
-    message: "Internal server error",
-    error: process.env.NODE_ENV === "development" ? error.message : undefined,
-  });
-});
+// Global Error Handler (database outages answer 503 DATABASE_UNAVAILABLE)
+app.use(require("./middleware/errorHandler"));
 
 // Start Server
 const PORT = process.env.PORT || 5000;
@@ -274,7 +239,7 @@ server.listen(PORT, () => {
   console.log("Reward Planners Backend Started!");
   console.log(`🔗 Server URL: http://localhost:${PORT}`);
   console.log(`Swagger docs at http://localhost:${PORT}/api-docs`);
-  console.log(`Flea Market API ready at http://localhost:${PORT}`);
+  console.log(`Flea Market API ready at http://localhost:${PORT}/api/crm`);
   console.log("CORS allowed origins (parsed):", allowedOrigins);
   console.log("=================================\n");
 
@@ -285,11 +250,15 @@ server.listen(PORT, () => {
   }
 });
 
-// Nodemon uses SIGTERM so each child releases its resources before replacement.
+// Nodemon restarts with SIGUSR2 (nodemon.json). On Linux/macOS that runs the
+// graceful shutdown below. On Windows nodemon force-stops the child instead:
+// its SIGTERM/SIGINT path relies on windows-kill.exe, which can hang and leave
+// the previous process serving stale code indefinitely.
 let shuttingDown = false;
 async function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
+  stopSchedulerDiagnostics();
   console.log(`Shutting down backend (${signal})...`);
   const deadline = setTimeout(() => {
     console.error("Backend shutdown timed out");
@@ -319,3 +288,4 @@ async function shutdown(signal) {
 }
 process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("SIGTERM", () => shutdown("SIGTERM"));
+if (process.platform !== "win32") process.once("SIGUSR2", () => shutdown("SIGUSR2"));
