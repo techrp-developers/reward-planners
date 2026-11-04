@@ -119,7 +119,17 @@ function removeLegacyCredentials(data) {
 
 srdvClient.interceptors.request.use((config) => {
   config.srdvStartedAt = Date.now();
-  removeLegacyCredentials(config.data);
+  if (config.data && typeof config.data === 'object' && !Array.isArray(config.data)) {
+    if (process.env.SRDV_CLIENT_ID && !config.data.ClientId) {
+      config.data.ClientId = process.env.SRDV_CLIENT_ID;
+    }
+    if (process.env.SRDV_USERNAME && !config.data.UserName) {
+      config.data.UserName = process.env.SRDV_USERNAME;
+    }
+    if (process.env.SRDV_PASSWORD && !config.data.Password) {
+      config.data.Password = process.env.SRDV_PASSWORD;
+    }
+  }
   return config;
 });
 
