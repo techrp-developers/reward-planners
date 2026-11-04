@@ -26,6 +26,13 @@ const {
 const { processRefund } = require("../services/refundService");
 const { validateBlockRequest } = require("../utils/blockRequest");
 const { sendOpsAlert } = require("../../../services/alertService");
+
+// In-memory cache & in-flight promise de-duplication to prevent SRDV ErrorCode 7014
+const boardingPointsCache = new Map();
+const inFlightBoardingPoints = new Map();
+const seatLayoutCache = new Map();
+const inFlightSeatLayouts = new Map();
+const CACHE_TTL_MS = 5 * 60 * 1000;
 /*
 |--------------------------------------------------------------------------
 | GET CITIES
@@ -642,6 +649,8 @@ const getSeatLayout = async (req, res) => {
         const traceId = req.body?.traceId;
         const srdvIndex = req.body?.srdvIndex || req.body?.resultIndex;
         const resultIndex = req.body?.resultIndex || req.body?.srdvIndex;
+        const boardingPointId = req.body?.boardingPointId;
+        const droppingPointId = req.body?.droppingPointId;
 
         const normalizedTraceId = parsePositiveInteger(traceId);
         const normalizedResultIndex = String(resultIndex ?? "").trim();
@@ -778,7 +787,10 @@ const getSeatLayout = async (req, res) => {
                 normalizedTraceId,
 
             ResultIndex:
-                normalizedResultIndex
+                normalizedResultIndex,
+
+            SrdvIndex:
+                Number(srdvIndex) || normalizedResultIndex
         };
 
         if (normalizedBoardingPointId && normalizedDroppingPointId) {
@@ -831,38 +843,54 @@ const getSeatLayout = async (req, res) => {
         |--------------------------------------------------------------------------
         */
 
-        const providerResponse =
-            await srdvClient.post(
+        const cacheKey = `${normalizedTraceId}:${normalizedResultIndex}`;
+        const cached = seatLayoutCache.get(cacheKey);
+        if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+            return res.status(200).json(cached.data);
+        }
 
-                process.env
-                    .SRDV_SEAT_LAYOUT_URL,
-
-                requestBody,
-
-                {
-                    headers: {
-
-                        "Content-Type":
-                            "application/json",
-
-                        "Api-Token":
-                            process.env
-                                .SRDV_API_TOKEN
-                    },
-
-                    timeout: 30000
+        let apiData;
+        const inFlight = inFlightSeatLayouts.get(cacheKey);
+        if (inFlight) {
+            apiData = await inFlight;
+        } else {
+            const fetchPromise = (async () => {
+                let providerResponse = await srdvClient.post(
+                    process.env.SRDV_SEAT_LAYOUT_URL,
+                    requestBody,
+                    {
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Api-Token": process.env.SRDV_API_TOKEN
+                        },
+                        timeout: 30000
+                    }
+                );
+                let data = providerResponse.data;
+                if (Number(data?.Error?.ErrorCode) === 7014) {
+                    await new Promise((r) => setTimeout(r, 1200));
+                    providerResponse = await srdvClient.post(
+                        process.env.SRDV_SEAT_LAYOUT_URL,
+                        requestBody,
+                        {
+                            headers: {
+                                "Content-Type": "application/json",
+                                "Api-Token": process.env.SRDV_API_TOKEN
+                            },
+                            timeout: 30000
+                        }
+                    );
+                    data = providerResponse.data;
                 }
-            );
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | Provider Response
-        |--------------------------------------------------------------------------
-        */
-
-        const apiData =
-            providerResponse.data;
+                return data;
+            })();
+            inFlightSeatLayouts.set(cacheKey, fetchPromise);
+            try {
+                apiData = await fetchPromise;
+            } finally {
+                inFlightSeatLayouts.delete(cacheKey);
+            }
+        }
 
 
         console.log(
@@ -1007,60 +1035,22 @@ const getSeatLayout = async (req, res) => {
         |--------------------------------------------------------------------------
         */
 
-        return res
-            .status(200)
-            .json({
-
+        const layoutResponsePayload = {
                 success: true,
-
-                message:
-                    "Seat layout fetched successfully",
-
-
-                traceId:
-                    apiData.TraceId ??
-                    normalizedTraceId,
-
-
-                srdvIndex:
-                    apiData.SrdvIndex ??
-                    null,
-
-
-                resultIndex:
-                    apiData.ResultIndex ??
-                    normalizedResultIndex,
-
-
-                providerAvailableSeats:
-                    apiData.AvailableSeats ??
-                    null,
-
-
-                paxIdRequired:
-                    apiData.PaxIdRequired ||
-                    null,
-
-
-                totalSeats:
-                    seats.length,
-
-
-                availableSeats:
-                    availableSeats.length,
-
-
-                seats:
-                    seats,
-
-
-                layout:
-                    seatLayout,
-
-
-                upperLayout:
-                    upperSeatLayout
-            });
+                message: "Seat layout fetched successfully",
+                traceId: apiData.TraceId ?? normalizedTraceId,
+                srdvIndex: apiData.SrdvIndex ?? null,
+                resultIndex: apiData.ResultIndex ?? normalizedResultIndex,
+                providerAvailableSeats: apiData.AvailableSeats ?? null,
+                paxIdRequired: apiData.PaxIdRequired || null,
+                totalSeats: seats.length,
+                availableSeats: availableSeats.length,
+                seats: seats,
+                layout: seatLayout,
+                upperLayout: upperSeatLayout
+            };
+        seatLayoutCache.set(cacheKey, { timestamp: Date.now(), data: layoutResponsePayload });
+        return res.status(200).json(layoutResponsePayload);
 
 
     } catch (error) {
@@ -1318,6 +1308,9 @@ const getBoardingDroppingPoints = async (
 
       ResultIndex:
         normalizedResultIndex,
+
+      SrdvIndex:
+        Number(srdvIndex) || normalizedResultIndex,
     };
 
 
@@ -1349,39 +1342,54 @@ const getBoardingDroppingPoints = async (
     |--------------------------------------------------------------------------
     */
 
-    const providerResponse =
-      await srdvClient.post(
+    const cacheKey = `${normalizedTraceId}:${normalizedResultIndex}`;
+    const cached = boardingPointsCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+      return res.status(200).json(cached.data);
+    }
 
-        process.env
-          .SRDV_BOARDING_DROPPING_URL,
-
-        requestBody,
-
-        {
-          headers: {
-
-            "Content-Type":
-              "application/json",
-
-            "Api-Token":
-              process.env
-                .SRDV_API_TOKEN,
-          },
-
-          timeout:
-            30000,
+    let apiData;
+    const inFlight = inFlightBoardingPoints.get(cacheKey);
+    if (inFlight) {
+      apiData = await inFlight;
+    } else {
+      const fetchPromise = (async () => {
+        let providerResponse = await srdvClient.post(
+          process.env.SRDV_BOARDING_DROPPING_URL,
+          requestBody,
+          {
+            headers: {
+              "Content-Type": "application/json",
+              "Api-Token": process.env.SRDV_API_TOKEN,
+            },
+            timeout: 30000,
+          }
+        );
+        let data = providerResponse.data;
+        if (Number(data?.Error?.ErrorCode) === 7014) {
+          await new Promise((r) => setTimeout(r, 1200));
+          providerResponse = await srdvClient.post(
+            process.env.SRDV_BOARDING_DROPPING_URL,
+            requestBody,
+            {
+              headers: {
+                "Content-Type": "application/json",
+                "Api-Token": process.env.SRDV_API_TOKEN,
+              },
+              timeout: 30000,
+            }
+          );
+          data = providerResponse.data;
         }
-      );
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Provider Data
-    |--------------------------------------------------------------------------
-    */
-
-    const apiData =
-      providerResponse.data;
+        return data;
+      })();
+      inFlightBoardingPoints.set(cacheKey, fetchPromise);
+      try {
+        apiData = await fetchPromise;
+      } finally {
+        inFlightBoardingPoints.delete(cacheKey);
+      }
+    }
 
 
     /*
@@ -1452,44 +1460,19 @@ const getBoardingDroppingPoints = async (
     |--------------------------------------------------------------------------
     */
 
-    return res
-      .status(200)
-      .json({
-
+    const pointsResponsePayload = {
         success: true,
-
-        message:
-          "Boarding and dropping points fetched successfully",
-
-
-        traceId:
-          apiData.TraceId ??
-          normalizedTraceId,
-
-
-        srdvIndex:
-          apiData.SrdvIndex ??
-          null,
-
-
-        resultIndex:
-          apiData.ResultIndex ??
-          normalizedResultIndex,
-
-
-        boardingPointCount:
-          boardingPoints.length,
-
-
-        droppingPointCount:
-          droppingPoints.length,
-
-
+        message: "Boarding and dropping points fetched successfully",
+        traceId: apiData.TraceId ?? normalizedTraceId,
+        srdvIndex: apiData.SrdvIndex ?? null,
+        resultIndex: apiData.ResultIndex ?? normalizedResultIndex,
+        boardingPointCount: boardingPoints.length,
+        droppingPointCount: droppingPoints.length,
         boardingPoints,
-
-
         droppingPoints,
-      });
+      };
+    boardingPointsCache.set(cacheKey, { timestamp: Date.now(), data: pointsResponsePayload });
+    return res.status(200).json(pointsResponsePayload);
 
 
   } catch (error) {
@@ -1662,7 +1645,7 @@ const blockSeat =
           message: validatedBlock.error,
         });
       }
-      const normalizedPassengers = validatedBlock.value.Passengers;
+      const validatedPassengers = validatedBlock.value.Passengers;
 
 
       /*
