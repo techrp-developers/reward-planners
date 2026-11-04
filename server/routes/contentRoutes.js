@@ -1,6 +1,5 @@
 const express = require("express");
 const router = express.Router();
-const cmsModuleCompatibility = require('../middleware/cmsModuleCompatibility');
 const contentController = require("../controllers/contentController");
 const moduleIconController = require("../controllers/moduleIconController");
 const appIconController = require("../controllers/appIconController");
@@ -179,11 +178,11 @@ router.delete("/app-icons/:id", ...appIconAdmin, appIconController.delete);
 
 // ================================= PUBLIC (storefront/app) =================================
 
-router.get("/resolved/navbar", cmsModuleCompatibility, contentController.getResolvedNavbar);
+router.get("/resolved/navbar", contentController.getResolvedNavbar);
 // Must be registered before the "/resolved/:module" wildcard below, or a request for
 // "modules" would be captured as module="modules" and hit getResolvedZones instead.
-router.get("/resolved/modules", cmsModuleCompatibility, moduleIconController.getResolvedModules);
+router.get("/resolved/modules", moduleIconController.getResolvedModules);
 router.get("/resolved/app-icon", appIconController.resolve);
-router.get("/resolved/:module", cmsModuleCompatibility, contentController.getResolvedZones);
+router.get("/resolved/:module", contentController.getResolvedZones);
 
 module.exports = router;

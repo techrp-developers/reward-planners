@@ -11,7 +11,6 @@ const MODULES = [
   "product",
   "service",
   "payment",
-  "busbooking",
   "dineout",
   "mobile_dashboard",
 ];
