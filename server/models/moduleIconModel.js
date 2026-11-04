@@ -12,7 +12,7 @@ const DEFAULT_MODULES = [
   { module_key: "product", label: "Product", route_key: "ProductModule", sort_order: 0 },
   { module_key: "service", label: "Services", route_key: "ServicesModule", sort_order: 1 },
   { module_key: "payment", label: "Payments", route_key: "PaymentsModule", sort_order: 2 },
-  { module_key: "dineout", label: "Bus Booking", route_key: "DineOutModule", sort_order: 3 },
+  { module_key: "busbooking", label: "Bus Booking", route_key: "BusBookingModule", sort_order: 3 },
 ];
 
 class ModuleIconModel {

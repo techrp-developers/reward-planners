@@ -142,6 +142,7 @@ app.use(
       "X-Session-Token",
       "Idempotency-Key",
       "X-CSRF-Token",
+      "X-CMS-Module-Version",
     ],
   }),
 );

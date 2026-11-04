@@ -26,7 +26,7 @@ const parseConfig = (value) => {
   return value;
 };
 
-const MOBILE_CONTENT_MODULES = ['mobile_dashboard', 'product', 'service', 'payment', 'dineout'];
+const MOBILE_CONTENT_MODULES = ['mobile_dashboard', 'product', 'service', 'payment', 'busbooking', 'dineout'];
 const IMAGE_GALLERY_ZONES = ['offers_banner', 'promotional_banner', 'brand_promotional_banner'];
 const contentAssetUrl = (path) => /^\/?uploads\//i.test(path || '') ? getContentImageUrl(path) : getPublicUrl(path);
 
@@ -221,7 +221,10 @@ class CmsController {
 
   async getMobileContent(req, res) {
     try {
-      const requestedModules = getRequestedModules(req.query.modules || req.query.module);
+      const compatibility = req.cmsModuleCompatibility;
+      const requestedModules = [...new Set(getRequestedModules(req.query.modules || req.query.module)
+        .filter(key => !compatibility?.unavailable(key))
+        .map(key => compatibility ? compatibility.resolveKey(key) : key))];
       const [moduleRows, moduleContent] = await Promise.all([
         ModuleIconModel.getActiveModules(),
         Promise.all(requestedModules.map(async (moduleKey) => [

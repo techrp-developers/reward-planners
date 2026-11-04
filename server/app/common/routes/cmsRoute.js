@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
+const cmsModuleCompatibility = require('../../../middleware/cmsModuleCompatibility');
 const CmsController = require('../controller/cmsController');
 const { authenticateToken, authorizeRoles } = require('../../../middleware/auth');
 
-router.get('/mobile-content', CmsController.getMobileContent.bind(CmsController));
+router.get('/mobile-content', cmsModuleCompatibility, CmsController.getMobileContent.bind(CmsController));
 router.get('/content/:id/products', CmsController.getContentProducts.bind(CmsController));
 router.get('/content/:id/services', CmsController.getContentServices.bind(CmsController));
 
