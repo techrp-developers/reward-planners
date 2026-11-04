@@ -150,6 +150,7 @@ class CampaignModel {
         banner_image,
         start_at,
         end_at,
+        redirect_screen,
         redirect_type,
         redirect_id,
         redirect_ids,
@@ -157,7 +158,7 @@ class CampaignModel {
         display_order,
         status
       )
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
       `,
       [
         data.title,
@@ -166,6 +167,7 @@ class CampaignModel {
         data.banner_image,
         data.start_at || null,
         data.end_at || null,
+        data.redirect_screen || null,
         data.redirect_type || null,
         Number.isInteger(Number(data.redirect_id)) && Number(data.redirect_id) > 0
           ? Number(data.redirect_id)
@@ -272,6 +274,11 @@ class CampaignModel {
     if (data.end_at !== undefined) {
       fields.push("end_at = ?");
       values.push(data.end_at || null);
+    }
+
+    if (data.redirect_screen !== undefined) {
+      fields.push("redirect_screen = ?");
+      values.push(data.redirect_screen || null);
     }
 
     if (data.redirect_type !== undefined) {
@@ -766,6 +773,7 @@ class CampaignModel {
       updated_at,
       start_at,
       end_at,
+      redirect_screen,
       redirect_type,
       redirect_id,
       redirect_ids,
@@ -861,6 +869,7 @@ class CampaignModel {
       updated_at,
       start_at,
       end_at,
+      redirect_screen,
       redirect_type,
       redirect_id,
       redirect_ids,
@@ -902,6 +911,7 @@ class CampaignModel {
       updated_at,
       start_at,
       end_at,
+      redirect_screen,
       redirect_type,
       redirect_id,
       redirect_ids,

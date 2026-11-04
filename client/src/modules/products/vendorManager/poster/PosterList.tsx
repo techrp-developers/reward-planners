@@ -18,6 +18,7 @@ interface Poster {
   status: Status;
   display_order: number;
   redirect_type: string | null;
+  redirect_screen: string | null;
 }
 
 const date = (value: string | null) => value ? new Date(value).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : null;
@@ -97,7 +98,7 @@ export default function PosterList() {
                       </div>
                     </td>
                     <td className="px-5 py-4 text-xs font-semibold text-gray-700">{placementDetails(placementOf(poster.campaign_type, poster.module)).label}</td>
-                    <td className="px-5 py-4 text-xs capitalize text-gray-600">{poster.redirect_type ? poster.redirect_type.replaceAll("_", " ") : "Nothing"}</td>
+                    <td className="px-5 py-4 text-xs capitalize text-gray-600">{poster.redirect_screen || (poster.redirect_type ? poster.redirect_type.replaceAll("_", " ") : "Nothing")}</td>
                     <td className="px-5 py-4">
                       <p className="text-xs font-semibold text-gray-700">{date(poster.start_at) || "No start date"}</p>
                       <p className="mt-1 text-xs text-gray-400">to {date(poster.end_at) || "no end date"}</p>

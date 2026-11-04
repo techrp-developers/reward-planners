@@ -1,4 +1,5 @@
 const CampaignModel = require("../models/campaignModel");
+const { validatePosterScreen } = require("../utils/posterRedirect");
 const fs = require("fs");
 const path = require("path");
 const { uploadToR2 } = require("../utils/r2upload");
@@ -214,12 +215,13 @@ class CampaignController {
         });
       }
 
+      const redirectScreen = validatePosterScreen(req.body.redirect_screen, campaign_type);
       const redirectIdNumber = Number(redirect_id);
       const hasNumericRedirectId =
         Number.isInteger(redirectIdNumber) && redirectIdNumber > 0;
       const hasNoRedirectLabel =
         String(redirect_id || "").trim().toLowerCase() === "no redirect";
-      const normalizedRedirectType = hasNoRedirectLabel
+      const normalizedRedirectType = redirectScreen || hasNoRedirectLabel
         ? null
         : redirect_type || null;
       const { redirectId: normalizedRedirectId, redirectIds: normalizedRedirectIds } = resolveRedirectIds(
@@ -256,6 +258,7 @@ class CampaignController {
         start_at,
         end_at,
         redirect_type: normalizedRedirectType,
+        redirect_screen: redirectScreen,
         redirect_id: normalizedRedirectId,
         redirect_ids: normalizedRedirectIds,
         redirect_url: normalizedRedirectUrl,
@@ -447,6 +450,14 @@ class CampaignController {
       if (existing.campaign_type === "flash_sale") delete req.body.module;
 
       // Omitted destination fields leave the saved destination untouched.
+      if (req.body.redirect_screen !== undefined) {
+        req.body.redirect_screen = validatePosterScreen(req.body.redirect_screen, nextType);
+        if (req.body.redirect_screen) req.body.redirect_type = "";
+      } else if (req.body.redirect_type !== undefined) {
+        req.body.redirect_screen = null;
+      } else {
+        validatePosterScreen(existing.redirect_screen, nextType);
+      }
       if (req.body.redirect_type !== undefined) {
         const normalizedRedirectType = req.body.redirect_type || null;
         const { redirectId: normalizedRedirectId, redirectIds: normalizedRedirectIds } = resolveRedirectIds(

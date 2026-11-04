@@ -10,8 +10,10 @@ import type { ContentTargetType } from "../../content_manager/types";
 import { POSTER_PLACEMENTS, placementDetails, placementOf, type PosterPlacement } from "./posterPlacement";
 
 type Status = "draft" | "active" | "archived";
-type LinkKind = "none" | "catalogue" | "flash_sale" | "external_url" | "brand";
+type LinkKind = "module" | "none" | "catalogue" | "flash_sale" | "external_url" | "brand";
 interface FlashSale { campaign_id: number; title: string; }
+
+const moduleScreens = [{ label: "Ecommerce / Products", screen: "ProductModule" }, { label: "Services", screen: "ServicesModule" }, { label: "Payments", screen: "PaymentsModule" }, { label: "Dine Out", screen: "DineOutModule" }];
 
 const fieldClass = "w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100";
 const toLocalInput = (value?: string | null) => {
@@ -40,6 +42,7 @@ export default function PosterEditor() {
   const [endAt, setEndAt] = useState("");
   const [banner, setBanner] = useState<File | null>(null);
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
+  const [redirectScreen, setRedirectScreen] = useState("ProductModule");
   const [linkKind, setLinkKind] = useState<LinkKind>("none");
   const [targetType, setTargetType] = useState<ContentTargetType | "">("");
   const [targetId, setTargetId] = useState<number | null>(null);
@@ -69,7 +72,8 @@ export default function PosterEditor() {
       setStartAt(toLocalInput(poster.start_at));
       setEndAt(toLocalInput(poster.end_at));
       setBannerUrl(poster.banner_image || null);
-      const kind = linkKindOf(poster.redirect_type);
+      const kind = poster.redirect_screen ? "module" : linkKindOf(poster.redirect_type);
+      setRedirectScreen(poster.redirect_screen || "ProductModule");
       setLinkKind(kind);
       if (kind === "catalogue") {
         setTargetType(poster.redirect_type);
@@ -118,6 +122,7 @@ export default function PosterEditor() {
     data.set("display_order", displayOrder);
     data.set("start_at", startAt);
     data.set("end_at", endAt);
+    data.set("redirect_screen", linkKind === "module" ? redirectScreen : "");
     Object.entries(redirectFields()).forEach(([key, value]) => data.set(key, value));
     if (banner) data.append("banner_image", banner);
 
@@ -173,12 +178,21 @@ export default function PosterEditor() {
             <span className="mb-2 block text-xs font-bold text-gray-500">When tapped, open</span>
             <select value={linkKind} onChange={(event) => { setLinkKind(event.target.value as LinkKind); clearCatalogueTarget(); }} className={fieldClass}>
               <option value="none">Nothing</option>
+              <option value="module">A module</option>
               <option value="catalogue">{placement === "service" ? "Services, a category, or a bundle" : placement === "ecommerce" ? "Products, a category, or a subcategory" : "Products, services, or a category"}</option>
               <option value="flash_sale">A flash sale</option>
               <option value="external_url">An external link</option>
               {linkKind === "brand" && <option value="brand">Brand #{brandId} (existing)</option>}
             </select>
           </label>
+          {linkKind === "module" && (
+            <label className="md:col-span-2">
+              <span className="mb-2 block text-xs font-bold text-gray-500">Module to open *</span>
+              <select required value={redirectScreen} onChange={(event) => setRedirectScreen(event.target.value)} className={fieldClass}>
+                {moduleScreens.map((item) => <option key={item.screen} value={item.screen}>{item.label}</option>)}
+              </select>
+            </label>
+          )}
           {linkKind === "catalogue" && (
             <ContentTargetSelector
               module={details.selectorModule}

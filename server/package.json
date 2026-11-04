@@ -4,6 +4,8 @@
   "description": "Reward Planners Backend API",
   "main": "app.js",
   "scripts": {
+    "migrate:poster-redirect-screen": "node scripts/migrate-poster-redirect-screen.js",
+    "test:poster-redirect": "node --test tests/posterRedirect.test.js tests/campaignModules.test.js tests/contentNavigation.test.js",
     "start": "node app.js",
     "dev": "nodemon app.js",
     "test:promotions": "node --test tests/rmPromotions.test.js",

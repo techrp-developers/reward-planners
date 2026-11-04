@@ -24,6 +24,7 @@ function contentNavigation(entry) {
 }
 
 function campaignNavigation(campaign) {
+  if (campaign.redirect_screen) return { destination: campaign.redirect_screen, campaignId: Number(campaign.campaign_id) };
   const type = campaign.redirect_type;
   const campaignId = Number(campaign.campaign_id);
   if (!type) return null;
