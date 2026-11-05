@@ -430,12 +430,18 @@ const searchBuses = async (req, res) => {
         ) {
             const errCode = Number(apiData.Error.ErrorCode);
             const errMsg = String(apiData.Error.ErrorMessage || "");
-            if (errCode === 100 || /no (data|bus) found/i.test(errMsg)) {
+            const isNoBusError =
+                errCode === 100 ||
+                /no (data|bus|buses|route|service|schedule|record) found/i.test(errMsg) ||
+                /not (available|found|operated)/i.test(errMsg) ||
+                /route (unavailable|not found|not available)/i.test(errMsg);
+
+            if (isNoBusError) {
                 return res.status(200).json({
                     success: true,
                     count: 0,
                     buses: [],
-                    message: "No buses found for this route and date",
+                    message: "Buses not available for this route",
                     search: {
                         sourceCity: sourceCity?.city_name || String(sourceCityCode),
                         destinationCity: destinationCity?.city_name || String(destinationCityCode),
@@ -510,7 +516,7 @@ const searchBuses = async (req, res) => {
                 message:
                     allBuses.length > 0
                         ? "Buses found successfully"
-                        : "No buses found",
+                        : "Buses not available for this route",
 
 
                 search: {
