@@ -178,7 +178,8 @@ function buildEkartShipmentPayload(context, serviceType) {
     invoice_number: invoice.invoice_number,
     invoice_date: String(invoice.invoice_date).slice(0, 10),
     consignee_name: order.contact_name,
-    consignee_alternate_phone: String(consigneePhone),
+    // No separate alternate contact is collected; do not duplicate the
+    // primary phone here because Ekart rejects identical phone numbers.
     payment_mode: "Prepaid",
     category_of_goods: CATEGORY_OF_GOODS,
     products_desc: items

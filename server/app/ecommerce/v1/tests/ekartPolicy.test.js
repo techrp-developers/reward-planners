@@ -141,7 +141,7 @@ test("shipment payload includes every field Ekart requires", () => {
   for (const field of [
     "tax_value", "seller_name", "seller_address", "seller_gst_tin",
     "consignee_gst_amount", "order_number", "invoice_number", "invoice_date",
-    "consignee_name", "consignee_alternate_phone", "payment_mode",
+    "consignee_name", "payment_mode",
     "category_of_goods", "products_desc", "total_amount", "cod_amount",
     "taxable_amount", "commodity_value", "return_reason", "quantity", "weight",
     "drop_location", "pickup_location", "return_location", "service", "length",
@@ -158,6 +158,17 @@ test("shipment payload includes every field Ekart requires", () => {
   assert.equal(payload.drop_location.phone, 9876543210);
   assert.equal(payload.drop_location.pin, 411048);
   assert.equal(payload.pickup_location.name, buildEkartPickupAlias(context));
+});
+
+test("shipment does not duplicate the primary phone as an alternate contact", () => {
+  for (const phone of ["+91 98765 43210", "9876543210"]) {
+    const payload = buildEkartShipmentPayload({
+      ...context, order: { ...context.order, contact_phone: phone },
+    }, "SURFACE");
+    assert.equal(payload.drop_location.phone, 9876543210);
+    assert.equal(Object.hasOwn(payload, "consignee_alternate_phone"), false);
+    assert.equal(Object.hasOwn(JSON.parse(JSON.stringify(payload)), "consignee_alternate_phone"), false);
+  }
 });
 
 test("tracking is normalized newest first at whole seconds", () => {
