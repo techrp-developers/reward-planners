@@ -289,13 +289,12 @@ const searchBuses = async (req, res) => {
 
         /*
         |--------------------------------------------------------------------------
-        | Journey Time Validation
+        | Past Journey Date Validation
         |--------------------------------------------------------------------------
         */
 
 
-        const effectiveJourneyTime = journeyTime && isValidTime(journeyTime) ? journeyTime : "00:00";
-        if (journeyTime && !isValidTime(journeyTime)) {
+        if (journeyDate < getTodayDate()) {
 
 
             return res
@@ -446,7 +445,6 @@ const searchBuses = async (req, res) => {
                         sourceCity: sourceCity?.city_name || String(sourceCityCode),
                         destinationCity: destinationCity?.city_name || String(destinationCityCode),
                         journeyDate,
-                        journeyTime: effectiveJourneyTime,
                     }
                 });
             }
@@ -655,6 +653,8 @@ const getSeatLayout = async (req, res) => {
         const traceId = req.body?.traceId;
         const srdvIndex = req.body?.srdvIndex || req.body?.resultIndex;
         const resultIndex = req.body?.resultIndex || req.body?.srdvIndex;
+        const boardingPointId = req.body?.boardingPointId;
+        const droppingPointId = req.body?.droppingPointId;
 
         const normalizedTraceId = parsePositiveInteger(traceId);
         const normalizedResultIndex = String(resultIndex ?? "").trim();
@@ -1788,64 +1788,6 @@ const blockSeat =
               "Passengers are required",
           });
       }
-
-
-      /*
-      |--------------------------------------------------------------------------
-      | Normalize Passenger Contact Data
-      |--------------------------------------------------------------------------
-      |
-      | Passenger Email is optional.
-      |
-      | If frontend sends a top-level email, reuse it for passengers that do not
-      | include their own Email field.
-      |
-      |--------------------------------------------------------------------------
-      */
-
-      const fallbackEmail =
-        typeof email === "string" &&
-        email.trim()
-          ? email.trim()
-          : null;
-
-
-      const normalizedPassengers =
-        passengers.map(
-          (passenger) => {
-            const phoneDigits =
-              String(
-                passenger?.PhoneNo ||
-                ""
-              )
-                .replace(/\D/g, "")
-                .trim();
-
-            const generatedPassengerEmail =
-              phoneDigits
-                ? `busbooking+${phoneDigits}@rewardplanners.com`
-                : "busbooking@rewardplanners.com";
-
-            const passengerEmail =
-              typeof passenger?.Email === "string" &&
-              passenger.Email.trim()
-                ? passenger.Email.trim()
-                : (
-                    fallbackEmail ||
-                    generatedPassengerEmail
-                  );
-
-            return {
-              ...passenger,
-              Email:
-                passengerEmail,
-              IdType:
-                passenger?.IdType || "PanCard",
-              IdNumber:
-                passenger?.IdNumber || "ABCDE1234F",
-            };
-          }
-        );
 
 
       /*
