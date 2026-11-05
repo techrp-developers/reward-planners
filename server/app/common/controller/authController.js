@@ -1869,7 +1869,7 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
               progress_percent: todaySummary?.progress_percent || 0,
             },
             thought: randomThought,
-            birthday_employees: birthdayData?.all || [],
+            birthday_employees: birthdayData?.today || [],
             today_birthdays: birthdayData?.today || [],
             upcoming_birthdays: birthdayData?.upcoming || [],
             today_birthday_count: birthdayData?.todayCount || 0,
