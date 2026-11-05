@@ -2,7 +2,17 @@ const db = require("../../../config/database");
 const CampaignModel = require("../models/notificationCampaignModel");
 const AudienceModel = require("../models/notificationAudienceModel");
 const NotificationTemplateModel = require("../models/notificationTemplateModel");
-const { firebaseStatus, legacyFirebaseStatus } = require("../../../config/firebase");
+// Older deployments may not export both status objects. Keep metadata readable
+// and sending disabled when a status is unavailable.
+const unavailableFirebaseStatus = () => ({
+  enabled: false, projectId: null, expectedProjectId: null,
+  reason: "Firebase status unavailable. Deploy the matching Firebase config and restart the server.",
+  credentialMode: null, serviceAccountEmail: null, adcSource: null,
+  credentialCheck: null, checkedAt: null,
+});
+const firebaseConfig = require("../../../config/firebase");
+const firebaseStatus = firebaseConfig.firebaseStatus ?? unavailableFirebaseStatus();
+const legacyFirebaseStatus = firebaseConfig.legacyFirebaseStatus ?? unavailableFirebaseStatus();
 const {
   AUDIENCE_TYPES,
   CATEGORIES,

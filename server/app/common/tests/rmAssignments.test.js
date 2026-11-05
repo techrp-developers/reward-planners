@@ -31,6 +31,40 @@ const rmNotificationController = require("../controller/rmNotificationController
 const ADMIN = { user_id: 7, role: "admin" };
 const RM = { user_id: 18, role: "rm" };
 
+test("notification metadata stays available when Firebase status exports are missing", async () => {
+  const configPath = require.resolve("../../../config/firebase");
+  const controllerPath = require.resolve("../controller/rmNotificationController");
+  const originalConfig = require.cache[configPath];
+  const originalController = require.cache[controllerPath];
+  const originalScope = AudienceModel.getScope;
+  const originalTestUsers = AudienceModel.getTestUsers;
+  const originalRespond = respond;
+  try {
+    AudienceModel.getScope = async () => ({ global: false, companyIds: [], assignmentsAvailable: true });
+    AudienceModel.getTestUsers = async () => [];
+    respond = () => [[]];
+    for (const config of [{}, { firebaseStatus: { enabled: true, projectId: "test" } }]) {
+      stub("../../../config/firebase", config);
+      delete require.cache[controllerPath];
+      const controller = require("../controller/rmNotificationController");
+      const res = response();
+      await controller.meta({ user: RM }, res);
+      assert.equal(res.statusCode, 200);
+      assert.equal(res.body.success, true);
+      assert.equal(res.body.data.firebase.enabled, Boolean(config.firebaseStatus?.enabled));
+      assert.equal(res.body.data.firebase.legacyEnabled, false);
+      assert.equal(res.body.data.firebase.legacyProjectId, null);
+      assert.match(res.body.data.firebase.legacyReason, /status unavailable/);
+    }
+  } finally {
+    require.cache[configPath] = originalConfig;
+    require.cache[controllerPath] = originalController;
+    AudienceModel.getScope = originalScope;
+    AudienceModel.getTestUsers = originalTestUsers;
+    respond = originalRespond;
+  }
+});
+
 function response() {
   return {
     statusCode: 200, body: null,
