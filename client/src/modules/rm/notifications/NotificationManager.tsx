@@ -91,24 +91,23 @@ export default function NotificationManager() {
   if (denied) return <NotificationAccessDenied />;
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-5 pb-8">
-      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#5f2080] via-[#852BAF] to-[#FC3F78] p-6 text-white shadow-xl shadow-purple-200/60">
-        <span className="absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/10" />
-        <div className="relative">
-          <p className="text-xs font-semibold text-purple-100">RM workspace / Push Notification Manager</p>
-          <h1 className="mt-2 flex items-center gap-3 text-2xl font-black tracking-tight sm:text-3xl"><FiBell /> Push Notification Manager</h1>
-          <p className="mt-1 max-w-2xl text-sm text-purple-100">Compose, approve and schedule push notifications. Each employee receives the approved text in the language chosen in their app.</p>
+    <div className="rm-notifications mx-auto w-full max-w-7xl space-y-6 pb-8">
+      <section className="flex items-start gap-4 rounded-2xl border border-purple-100 bg-white/70 p-5 shadow-sm sm:items-center">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-purple-50 text-[#852BAF]"><FiBell aria-hidden="true" size={20} /></span>
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold tracking-tight text-gray-900">Push Notification Manager</h1>
+          <p className="mt-0.5 text-xs font-medium text-gray-500">Create, schedule and track notifications in each employee’s preferred language.</p>
         </div>
       </section>
 
-      <nav className="flex gap-1 overflow-x-auto rounded-2xl border border-gray-100 bg-white p-1.5 shadow-sm" aria-label="Notification Manager sections">
+      <nav className="flex gap-1 overflow-x-auto rounded-xl bg-gray-100 p-1" aria-label="Notification Manager sections">
         {tabs.map(({ key, label, Icon }) => (
           <button
             key={key}
             type="button"
             onClick={() => nav.go(key)}
             aria-current={tab === key ? "page" : undefined}
-            className={`flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-bold transition ${tab === key ? "bg-gradient-to-r from-[#852BAF] to-[#C64EFE] text-white shadow-sm" : "text-gray-500 hover:bg-purple-50 hover:text-[#852BAF]"}`}
+            className={`flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition ${tab === key ? "bg-white text-[#852BAF] shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
           >
             <Icon /> {label}
           </button>

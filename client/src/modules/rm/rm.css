@@ -20,6 +20,10 @@
 .rm-portal table th { text-transform: none; letter-spacing: normal; font-weight: 600; font-size: 0.75rem; }
 .rm-portal :is(input, select, textarea) { border-radius: 0.5rem; }
 
+/* Notification tabs follow the same typography as the other RM data views. */
+.rm-notifications :is(.font-extrabold, .font-black) { font-weight: 600; }
+.rm-notifications h2 { text-transform: none; letter-spacing: normal; }
+
 .hr-dark .rm-portal [class~="text-[#68258d]"] { color: #c99aeb; }
 .hr-dark .rm-portal :is([class~="bg-emerald-50"], [class~="bg-green-50"]) { background-color: #18352b; }
 .hr-dark .rm-portal :is([class~="text-emerald-600"], [class~="text-emerald-700"], [class~="text-emerald-800"], [class~="text-green-700"]) { color: #86d9b1; }
