@@ -25,7 +25,7 @@ const parseConfig = (value) => {
   return value;
 };
 
-const MOBILE_CONTENT_MODULES = ['mobile_dashboard', 'product', 'service', 'payment', 'dineout'];
+const MOBILE_CONTENT_MODULES = ['mobile_dashboard', 'product', 'service', 'payment', 'dineout', 'bus_booking'];
 const IMAGE_GALLERY_ZONES = ['offers_banner', 'promotional_banner', 'brand_promotional_banner'];
 const contentAssetUrl = (path) => /^\/?uploads\//i.test(path || '') ? getContentImageUrl(path) : getPublicUrl(path);
 

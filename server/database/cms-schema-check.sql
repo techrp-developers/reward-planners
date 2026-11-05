@@ -6,7 +6,7 @@ SELECT e.t AS table_name, e.c AS column_name, e.ty AS expected_type, c.column_ty
        ELSE 'DIFFERENT NULLABILITY' END AS problem
 FROM (
   SELECT 'content_zone_entries' AS t, 'content_id' AS c, 'bigint unsigned' AS ty, 'NO' AS nl UNION ALL
-  SELECT 'content_zone_entries' AS t, 'module' AS c, 'enum(''product'',''service'',''payment'',''dineout'',''mobile_dashboard'')' AS ty, 'NO' AS nl UNION ALL
+  SELECT 'content_zone_entries' AS t, 'module' AS c, 'enum(''product'',''service'',''payment'',''dineout'',''mobile_dashboard'',''bus_booking'')' AS ty, 'NO' AS nl UNION ALL
   SELECT 'content_zone_entries' AS t, 'zone' AS c, 'enum(''navbar_background'',''promotional_banner'',''offers_banner'',''brand_promotional_banner'')' AS ty, 'NO' AS nl UNION ALL
   SELECT 'content_zone_entries' AS t, 'content_type' AS c, 'enum(''color'',''image'')' AS ty, 'NO' AS nl UNION ALL
   SELECT 'content_zone_entries' AS t, 'display_mode' AS c, 'enum(''single'',''carousel'',''grid_2'',''grid_3'')' AS ty, 'NO' AS nl UNION ALL

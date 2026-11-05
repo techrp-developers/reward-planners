@@ -38,6 +38,7 @@ const label = "mb-1.5 block text-xs font-semibold text-slate-600";
 const CONTENT_MODULES: { value: ContentModule; label: string }[] = [
   { value: "mobile_dashboard", label: "Mobile Dashboard" }, { value: "product", label: "Product" },
   { value: "service", label: "Service" }, { value: "payment", label: "Payment" },
+  { value: "bus_booking", label: "Bus Booking" },
 ];
 
 const entryImage = (entry: ApiContentEntry | null) => entry?.images?.find((image) => image.is_active)?.image_url || entry?.image_url || null;

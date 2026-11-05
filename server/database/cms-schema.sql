@@ -14,7 +14,7 @@ SET NAMES utf8mb4;
 -- ===================================================================
 CREATE TABLE IF NOT EXISTS `content_zone_entries` (
   `content_id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `module` enum('product','service','payment','dineout','mobile_dashboard') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `module` enum('product','service','payment','dineout','mobile_dashboard','bus_booking') COLLATE utf8mb4_unicode_ci NOT NULL,
   `zone` enum('navbar_background','promotional_banner','offers_banner','brand_promotional_banner') COLLATE utf8mb4_unicode_ci NOT NULL,
   `content_type` enum('color','image') COLLATE utf8mb4_unicode_ci NOT NULL,
   `display_mode` enum('single','carousel','grid_2','grid_3') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'carousel',
@@ -54,7 +54,7 @@ SET @sql = IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schem
   'ALTER TABLE `content_zone_entries` ADD COLUMN `content_id` bigint unsigned NOT NULL AUTO_INCREMENT FIRST', 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 SET @sql = IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'content_zone_entries' AND column_name = 'module') = 0,
-  'ALTER TABLE `content_zone_entries` ADD COLUMN `module` enum(''product'',''service'',''payment'',''dineout'',''mobile_dashboard'') COLLATE utf8mb4_unicode_ci NOT NULL AFTER `content_id`', 'SELECT 1');
+  'ALTER TABLE `content_zone_entries` ADD COLUMN `module` enum(''product'',''service'',''payment'',''dineout'',''mobile_dashboard'',''bus_booking'') COLLATE utf8mb4_unicode_ci NOT NULL AFTER `content_id`', 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 SET @sql = IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'content_zone_entries' AND column_name = 'zone') = 0,
   'ALTER TABLE `content_zone_entries` ADD COLUMN `zone` enum(''navbar_background'',''promotional_banner'',''offers_banner'',''brand_promotional_banner'') COLLATE utf8mb4_unicode_ci NOT NULL AFTER `module`', 'SELECT 1');

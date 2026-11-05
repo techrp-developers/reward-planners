@@ -362,6 +362,7 @@ export default function App() {
         <Route path={routes.manager.content.product} element={<ContentManagement module="product" />} />
         <Route path={routes.manager.content.service} element={<ContentManagement module="service" />} />
         <Route path={routes.manager.content.payment} element={<ContentManagement module="payment" />} />
+        <Route path={routes.manager.content.busBooking} element={<ContentManagement module="bus_booking" />} />
         <Route path={routes.manager.content.mobileDashboard} element={<ContentManagement module="mobile_dashboard" />} />
         <Route path={routes.manager.content.moduleIcons} element={<ModuleIcon />} />
         <Route path={routes.manager.content.appIcons} element={<AppIcons />} />
@@ -442,6 +443,7 @@ export default function App() {
         <Route path={routes.admin.content.product} element={<ContentManagement module="product" />} />
         <Route path={routes.admin.content.service} element={<ContentManagement module="service" />} />
         <Route path={routes.admin.content.payment} element={<ContentManagement module="payment" />} />
+        <Route path={routes.admin.content.busBooking} element={<ContentManagement module="bus_booking" />} />
         <Route path={routes.admin.content.mobileDashboard} element={<ContentManagement module="mobile_dashboard" />} />
         <Route path={routes.admin.content.appIcons} element={<AppIcons />} />
       </Route>

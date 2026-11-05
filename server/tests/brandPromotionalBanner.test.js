@@ -7,7 +7,7 @@ const controller = require('../controllers/contentController');
 const base = { zone: 'brand_promotional_banner', content_type: 'image', title: 'Brand campaign' };
 
 test('brand zone accepts all modules and display modes; existing zone validation remains intact', () => {
-  for (const module of ['product', 'service', 'payment', 'dineout', 'mobile_dashboard']) {
+  for (const module of ['product', 'service', 'payment', 'dineout', 'mobile_dashboard', 'bus_booking']) {
     for (const display_mode of ['single', 'carousel', 'grid_2', 'grid_3']) {
       assert.doesNotThrow(() => model.validateEntry({ ...base, module, display_mode }));
     }
@@ -44,4 +44,27 @@ test('admin can manage inactive brand images while resolved API hides them and p
     assert.deepEqual(publicResponse.payload.data.brand_promotional_banner.images, []);
     assert.equal(publicResponse.payload.data.brand_promotional_banner.image_url, null);
   } finally { Object.assign(model, original); }
+});
+
+
+test('bus booking accepts image placements and resolves them independently with navbar fallback', async () => {
+  for (const zone of ['navbar_background', 'offers_banner', 'promotional_banner']) {
+    assert.doesNotThrow(() => model.validateEntry({ ...base, module: 'bus_booking', zone, image_url: 'bus.png' }));
+  }
+  const original = model.resolveActiveEntry;
+  const calls = [];
+  model.resolveActiveEntry = async (module, zone, options) => {
+    calls.push({ module, zone, options });
+    return { module, zone, image_url: 'bus.png' };
+  };
+  try {
+    const result = await model.resolveAllZones('bus_booking');
+    assert.equal(result.offers_banner.module, 'bus_booking');
+    assert.equal(result.promotional_banner.image_url, 'bus.png');
+    assert.ok(calls.every(call => call.module === 'bus_booking'));
+    assert.equal(calls.find(call => call.zone === 'navbar_background').options.allowDefaultFallback, true);
+    assert.equal(calls.find(call => call.zone === 'offers_banner').options.allowDefaultFallback, false);
+    const navbars = await model.resolveNavbarModules();
+    assert.equal(navbars.bus_booking.zone, 'navbar_background');
+  } finally { model.resolveActiveEntry = original; }
 });

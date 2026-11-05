@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { ReactNode } from "react";
 
@@ -38,6 +38,7 @@ describe("Dynamic Splash Screens is for Vendor Managers only", () => {
     const link = screen.getByRole("link", { name: "Dynamic Splash Screens" });
     expect(link.getAttribute("href")).toBe(SPLASH);
     expect(screen.getByRole("link", { name: "Mobile Dashboard" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Bus Booking" }).getAttribute("href")).toBe(routes.manager.content.busBooking);
   });
 
   it("the admin sidebar has no splash entry and keeps its content pages", () => {
@@ -46,6 +47,8 @@ describe("Dynamic Splash Screens is for Vendor Managers only", () => {
     expect(screen.queryByText(/Splash/i)).toBeNull();
     expect(document.querySelector('a[href*="splash"]')).toBeNull();
     expect("splashscreens" in routes.admin.content).toBe(false);
+    fireEvent.click(screen.getByText("Content"));
+    expect(screen.getByRole("link", { name: "Bus Booking" }).getAttribute("href")).toBe(routes.admin.content.busBooking);
   });
 
   it("a vendor manager can open the route; an admin, another role or nobody cannot, even by typing the URL", () => {

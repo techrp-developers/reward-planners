@@ -32,6 +32,7 @@ const MODULE_LABELS: Record<ContentModule, string> = {
   product: "Product",
   service: "Service",
   payment: "Payment",
+  bus_booking: "Bus Booking",
   dineout: "DineOut",
   mobile_dashboard: "Mobile Dashboard",
 };

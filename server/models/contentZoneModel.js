@@ -33,6 +33,7 @@ const MODULES = [
   "payment",
   "dineout",
   "mobile_dashboard",
+  "bus_booking",
 ];
 const ZONES = [
   "navbar_background",

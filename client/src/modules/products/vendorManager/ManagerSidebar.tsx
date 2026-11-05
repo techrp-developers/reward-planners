@@ -102,6 +102,7 @@ export default function ManagerNavbar() {
         { label: "Product", to: routes.manager.content.product },
         { label: "Service", to: routes.manager.content.service },
         { label: "Payment", to: routes.manager.content.payment },
+        { label: "Bus Booking", to: routes.manager.content.busBooking },
         { label: "Mobile Dashboard", to: routes.manager.content.mobileDashboard },
         { label: "Module Icons", to: routes.manager.content.moduleIcons },
         { label: "App Icons", to: routes.manager.content.appIcons },
