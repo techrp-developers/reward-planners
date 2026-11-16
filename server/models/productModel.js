@@ -1156,7 +1156,9 @@ class ProductModel {
         params,
       );
 
-      const stats = statsRows[0];
+      const stats = Object.fromEntries(
+        Object.entries(statsRows[0]).map(([key, value]) => [key, Number(value) || 0]),
+      );
 
       const [[{ total }]] = await db.execute(
         `SELECT COUNT(DISTINCT p.product_id) AS total FROM eproducts p ${whereClause}`,

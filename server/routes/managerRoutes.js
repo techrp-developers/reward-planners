@@ -3,6 +3,7 @@ const multer = require("multer");
 const router = express.Router();
 router.use('/promotions', require('./promotionRoutes'));
 const db = require("../config/database");
+const { numericStats, monthlyStats } = require("../utils/managerStats");
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 const managerController = require("../controllers/managerController");
 const CategoryAttributeController = require("../controllers/categoryAttributeController");
@@ -128,8 +129,8 @@ router.get(
           AND status != 'pending'`),
         db.execute(`SELECT COUNT(*) AS totalOrders,
           COALESCE(SUM(status = 'cancelled'), 0) AS cancelledOrders,
-          COALESCE(SUM(cancellation_status = 'requested'), 0) AS cancellationRequests,
-          COALESCE(SUM(CASE WHEN status != 'cancelled' THEN total_amount ELSE 0 END), 0) AS grossOrderValue
+          (SELECT COUNT(*) FROM ecommerce_item_cancellations WHERE status = 'requested') AS cancellationRequests,
+          COALESCE(SUM(CASE WHEN status NOT IN ('cancelled', 'pending_payment', 'failed', 'expired') THEN total_amount ELSE 0 END), 0) AS grossOrderValue
         FROM eorders`),
         db.execute(`SELECT
           (SELECT COUNT(*) FROM categories) AS categories,
@@ -138,16 +139,16 @@ router.get(
           (SELECT COUNT(*) FROM documents) AS documents`),
         db.execute(`SELECT COUNT(*) AS totalCampaigns,
           COALESCE(SUM(status = 'active' AND (start_at IS NULL OR start_at <= NOW()) AND (end_at IS NULL OR end_at >= NOW())), 0) AS activeCampaigns
-        FROM campaigns`),
+        FROM campaigns WHERE campaign_type = 'flash_sale'`),
         db.execute(`SELECT COUNT(*) AS rewardRules, COALESCE(SUM(is_active = 1), 0) AS activeRewardRules FROM reward_rules`),
         db.execute(`SELECT month_key, month_label,
           SUM(vendors) AS vendors, SUM(products) AS products, SUM(orders) AS orders, SUM(order_value) AS orderValue
         FROM (
-          SELECT DATE_FORMAT(created_at, '%Y-%m') month_key, DATE_FORMAT(created_at, '%b') month_label, COUNT(*) vendors, 0 products, 0 orders, 0 order_value FROM vendors WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 5 MONTH) GROUP BY month_key, month_label
+          SELECT DATE_FORMAT(created_at, '%Y-%m') month_key, DATE_FORMAT(created_at, '%b') month_label, COUNT(*) vendors, 0 products, 0 orders, 0 order_value FROM vendors WHERE created_at >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 5 MONTH), '%Y-%m-01') GROUP BY month_key, month_label
           UNION ALL
-          SELECT DATE_FORMAT(created_at, '%Y-%m'), DATE_FORMAT(created_at, '%b'), 0, COUNT(*), 0, 0 FROM eproducts WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 5 MONTH) AND is_deleted = 0 AND COALESCE(created_via, '') != 'flea_market_quick_create' AND status != 'pending' GROUP BY DATE_FORMAT(created_at, '%Y-%m'), DATE_FORMAT(created_at, '%b')
+          SELECT DATE_FORMAT(created_at, '%Y-%m'), DATE_FORMAT(created_at, '%b'), 0, COUNT(*), 0, 0 FROM eproducts WHERE created_at >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 5 MONTH), '%Y-%m-01') AND is_deleted = 0 AND COALESCE(created_via, '') != 'flea_market_quick_create' AND status != 'pending' GROUP BY DATE_FORMAT(created_at, '%Y-%m'), DATE_FORMAT(created_at, '%b')
           UNION ALL
-          SELECT DATE_FORMAT(created_at, '%Y-%m'), DATE_FORMAT(created_at, '%b'), 0, 0, COUNT(*), SUM(CASE WHEN status != 'cancelled' THEN total_amount ELSE 0 END) FROM eorders WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 5 MONTH) GROUP BY DATE_FORMAT(created_at, '%Y-%m'), DATE_FORMAT(created_at, '%b')
+          SELECT DATE_FORMAT(created_at, '%Y-%m'), DATE_FORMAT(created_at, '%b'), 0, 0, COUNT(*), SUM(CASE WHEN status NOT IN ('cancelled', 'pending_payment', 'failed', 'expired') THEN total_amount ELSE 0 END) FROM eorders WHERE created_at >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 5 MONTH), '%Y-%m-01') GROUP BY DATE_FORMAT(created_at, '%Y-%m'), DATE_FORMAT(created_at, '%b')
         ) monthly GROUP BY month_key, month_label ORDER BY month_key`),
       ]);
       const vendorStats = vendorResult[0][0];
@@ -160,13 +161,8 @@ router.get(
       res.json({
         success: true,
         data: {
-          ...vendorStats,
-          ...productStats,
-          ...orderStats,
-          ...catalogStats,
-          ...campaignStats,
-          ...rewardStats,
-          charts: monthly.map((row) => ({ month: row.month_label, vendors: Number(row.vendors), products: Number(row.products), orders: Number(row.orders), orderValue: Number(row.orderValue) })),
+          ...numericStats(vendorStats, productStats, orderStats, catalogStats, campaignStats, rewardStats),
+          charts: monthlyStats(monthly),
         },
       });
     } catch (err) {

@@ -693,6 +693,7 @@ export default function ProductManagerList() {
           </button>
         </div>
 
+        <p className="mb-3 text-xs text-gray-500">Counts reflect the selected product tab and all current filters, across all pages. Vendor drafts are excluded.</p>
         <div className="grid grid-cols-1 gap-4 mb-8 sm:grid-cols-2 lg:grid-cols-5">
           <StatCard
             title="Total Products"
