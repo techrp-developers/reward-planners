@@ -2,7 +2,21 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
-const { vendorOrderReport } = require("../utils/vendorReportData");
+const { vendorOrderReport, vendorOrderSummary } = require("../utils/vendorReportData");
+
+test("All Orders cards cover every page and active excludes unpaid and terminal orders", async () => {
+  const base = { order_status: "paid", shipping_status: "processing", item_count: 1, active_items: 1, active_item_value: "10.25", active_units: 1 };
+  const rows = Array.from({ length: 12 }, (_, id) => ({ ...base, vendor_order_id: id + 1 }));
+  rows.push({ ...base, shipping_status: "delivered" }, { ...base, order_status: "pending_payment" }, { ...base, shipping_status: "cancelled" }, { ...base, shipping_status: "rto" });
+  const db = { execute: async () => [rows] };
+  const first = await vendorOrderSummary(db, 42, 10, 0);
+  const second = await vendorOrderSummary(db, 42, 10, 10);
+  assert.equal(first.orders.length, 10);
+  assert.equal(second.orders.length, 6);
+  assert.equal(first.total, 16);
+  assert.deepEqual(first.summary, second.summary);
+  assert.deepEqual(first.summary, { revenue: 143.5, delivered: 1, active: 12 });
+});
 
 test("vendor revenue and sold units exclude unpaid and cancelled lines", async () => {
   const base = { order_status: "paid", shipping_status: "delivered", item_count: 2, active_items: 1, active_item_value: "120.25", active_units: "3" };

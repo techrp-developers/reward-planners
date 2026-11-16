@@ -1,5 +1,5 @@
 /** Change only this value to switch every frontend API between environments. */
-export const ACTIVE_SERVER: "local" | "live" = "local";
+export const ACTIVE_SERVER: "local" | "live" = "live";
 
 const servers = {
   local: {

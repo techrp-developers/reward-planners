@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../../../common/api/api";
 import { FiCheckCircle, FiClock, FiTrendingUp } from "react-icons/fi";
@@ -20,6 +20,7 @@ interface OrderListResponse {
   success: boolean;
   orders: Order[];
   total: number;
+  summary: { revenue: number; delivered: number; active: number };
 }
 
 const statusStyles: Record<string, string> = {
@@ -40,12 +41,15 @@ const OrderSummary: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [page, setPage] = useState<number>(1);
   const [totalPages, setTotalPages] = useState<number>(1);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   const limit = 10;
+  const [summary, setSummary] = useState({ revenue: 0, delivered: 0, active: 0 });
+  const requestId = useRef(0);
 
   const fetchOrders = useCallback(async () => {
+    const id = ++requestId.current;
     try {
       setLoading(true);
       setError(null);
@@ -58,18 +62,22 @@ const OrderSummary: React.FC = () => {
         throw new Error("Failed to load orders");
       }
 
+      if (id !== requestId.current) return;
+      setSummary(res.data.summary);
       setOrders(res.data.orders);
       setTotalPages(Math.max(1, Math.ceil(res.data.total / limit)));
     } catch (err) {
+      if (id !== requestId.current) return;
       console.error("Failed to fetch orders", err);
       setError("Unable to load orders.");
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
   }, [page]);
 
   useEffect(() => {
     void fetchOrders();
+    return () => { requestId.current += 1; };
   }, [fetchOrders]);
 
   const formatCurrency = (amount: number) =>
@@ -77,10 +85,6 @@ const OrderSummary: React.FC = () => {
       style: "currency",
       currency: "INR",
     }).format(amount);
-
-  const visibleVendorTotal = orders.reduce((sum, order) => sum + Number(order.vendor_total || 0), 0);
-  const deliveredOrders = orders.filter((order) => order.shipping_status.toLowerCase() === "delivered").length;
-  const activeOrders = orders.filter((order) => !["delivered", "cancelled"].includes(order.shipping_status.toLowerCase())).length;
 
   return (
     <div className="space-y-5 pb-8">
@@ -114,15 +118,16 @@ const OrderSummary: React.FC = () => {
         <VendorFleaMarketPurchasesPage embedded />
       ) : (
       <div className="space-y-5">
+        <p className="text-xs text-slate-500">Totals cover all online orders. Revenue excludes unpaid orders, cancelled items, shipping and wallet coins; before return refunds. Active counts paid orders awaiting delivery and excludes returns to origin.</p>
         <section className="grid gap-4 sm:grid-cols-3">
           {[
-            { label: "Total on this page", value: formatCurrency(visibleVendorTotal), Icon: FiTrendingUp, tint: "bg-purple-50 text-[#852BAF]" },
-            { label: "Active", value: activeOrders.toLocaleString(), Icon: FiClock, tint: "bg-amber-50 text-amber-700" },
-            { label: "Delivered", value: deliveredOrders.toLocaleString(), Icon: FiCheckCircle, tint: "bg-emerald-50 text-emerald-700" },
+            { label: "Product revenue", value: formatCurrency(summary.revenue), Icon: FiTrendingUp, tint: "bg-purple-50 text-[#852BAF]" },
+            { label: "Active", value: summary.active.toLocaleString(), Icon: FiClock, tint: "bg-amber-50 text-amber-700" },
+            { label: "Delivered", value: summary.delivered.toLocaleString(), Icon: FiCheckCircle, tint: "bg-emerald-50 text-emerald-700" },
           ].map(({ label, value, Icon, tint }) => (
             <article key={label} className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
               <div className="flex items-start justify-between gap-4">
-                <div><p className="text-sm font-medium text-slate-500">{label}</p><p className="mt-2 text-2xl font-semibold tracking-tight text-gray-900">{value}</p></div>
+                <div><p className="text-sm font-medium text-slate-500">{label}</p><p className="mt-2 text-2xl font-semibold tracking-tight text-gray-900">{loading || error ? "--" : value}</p></div>
                 <span className={`flex h-10 w-10 items-center justify-center rounded-lg ${tint}`}><Icon size={18} /></span>
               </div>
             </article>
@@ -137,10 +142,10 @@ const OrderSummary: React.FC = () => {
               <thead className="border-b border-gray-200 bg-gray-50 text-xs text-gray-500">
                 <tr>
                   <th className="px-5 py-3">Order</th>
-                  <th className="px-5 py-3">Vendor total</th>
+                  <th className="px-5 py-3">Product revenue</th>
                   <th className="px-5 py-3">Status</th>
                   <th className="px-5 py-3">Date</th>
-                  <th className="px-5 py-3">Items</th>
+                  <th className="px-5 py-3">Item lines</th>
                   <th className="px-5 py-3 text-right">Action</th>
                 </tr>
               </thead>
