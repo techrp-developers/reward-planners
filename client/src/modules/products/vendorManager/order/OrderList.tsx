@@ -21,40 +21,56 @@ interface OrderListResponse {
   totalPages: number;
 }
 
+const statusTabs = [
+  { value: "", label: "All Orders" },
+  { value: "pending_payment", label: "Pending Payment" },
+  { value: "paid", label: "Paid" },
+  { value: "processing", label: "Processing" },
+  { value: "shipped", label: "Shipped" },
+  { value: "delivered", label: "Delivered" },
+  { value: "cancelled", label: "Cancelled" },
+];
+
 const OrderList: React.FC = () => {
   const navigate = useNavigate();
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [page, setPage] = useState<number>(1);
+  const [status, setStatus] = useState("");
   const [totalPages, setTotalPages] = useState<number>(1);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const limit = 10;
 
-  const fetchOrders = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const res = await api.get<OrderListResponse>("/order/order-list", {
-        params: { page, limit },
-      });
-
-      if (!res.data.success) throw new Error();
-
-      setOrders(res.data.orders);
-      setTotalPages(res.data.totalPages);
-    } catch {
-      setError("Unable to load orders.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    let active = true;
+    const fetchOrders = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const res = await api.get<OrderListResponse>("/order/order-list", {
+          params: { page, limit, status: status || undefined },
+        });
+
+        if (!res.data.success) throw new Error();
+
+        if (!active) return;
+        setOrders(res.data.orders);
+        setTotalPages(Math.max(1, res.data.totalPages));
+      } catch {
+        if (active) setError("Unable to load orders.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
     fetchOrders();
-  }, [page]);
+    return () => {
+      active = false;
+    };
+  }, [page, status]);
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat("en-IN", {
@@ -65,6 +81,8 @@ const OrderList: React.FC = () => {
   const getStatusBadge = (status: string) => {
     const map: Record<string, string> = {
       pending:    "bg-yellow-100 text-yellow-800 border-yellow-200",
+      pending_payment: "bg-yellow-100 text-yellow-800 border-yellow-200",
+      paid: "bg-emerald-100 text-emerald-800 border-emerald-200",
       completed:  "bg-green-100  text-green-800  border-green-200",
       delivered:  "bg-green-100  text-green-800  border-green-200",
       cancelled:  "bg-red-100    text-red-800    border-red-200",
@@ -85,6 +103,27 @@ const OrderList: React.FC = () => {
             <h2 className="text-2xl font-semibold tracking-tight text-slate-900">Order List</h2>
             <p className="mt-1 text-sm text-gray-500">Manage and monitor all customer orders</p>
           </div>
+        </div>
+
+        <div className="flex gap-2 mb-6 overflow-x-auto border-b border-gray-200" aria-label="Filter orders by status">
+          {statusTabs.map((tab) => (
+            <button
+              key={tab.value}
+              type="button"
+              aria-pressed={status === tab.value}
+              onClick={() => {
+                setStatus(tab.value);
+                setPage(1);
+              }}
+              className={`shrink-0 border-b-2 px-4 py-3 text-sm font-semibold transition-colors cursor-pointer ${
+                status === tab.value
+                  ? "border-[#852BAF] text-[#852BAF]"
+                  : "border-transparent text-gray-500 hover:text-[#852BAF] hover:border-purple-200"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
         {/* States */}
@@ -116,7 +155,7 @@ const OrderList: React.FC = () => {
                   {orders.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="py-16 text-sm text-center text-gray-400">
-                        No orders found
+                        {status ? `No ${status.replace(/_/g, " ")} orders found` : "No orders found"}
                       </td>
                     </tr>
                   ) : (
@@ -185,7 +224,7 @@ const OrderList: React.FC = () => {
               </span>
 
               <button
-                disabled={page === totalPages}
+                disabled={page >= totalPages}
                 onClick={() => setPage((p) => p + 1)}
                 className="px-4 py-2 text-sm font-medium bg-white border rounded-lg cursor-pointer disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed hover:bg-gray-50"
               >
