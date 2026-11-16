@@ -877,7 +877,7 @@ export default function ProductManagerList() {
                   <td className="px-4 py-4">
                     {product.rejection_reason ? (
                       <span
-                        className="block text-xs text-red-600 font-medium max-w-[140px] truncate"
+                        className="block min-w-[200px] max-w-[320px] whitespace-pre-wrap break-words text-xs font-medium leading-relaxed text-red-600"
                         title={product.rejection_reason}
                       >
                         {product.rejection_reason}
