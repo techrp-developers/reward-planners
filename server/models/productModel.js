@@ -1482,7 +1482,8 @@ class ProductModel {
         SUM(status = 'rejected') AS rejected,
         SUM(status = 'resubmission') AS resubmission
       FROM eproducts
-      WHERE vendor_id = ?
+      WHERE vendor_id = ? AND is_deleted = 0
+        AND COALESCE(created_via, '') <> 'flea_market_quick_create'
     `;
 
       const [[stats]] = await db.execute(query, [vendorId]);

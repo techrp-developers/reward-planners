@@ -18,6 +18,7 @@ function orderReport(rows) {
       ...row,
       shipping_status: cancelled ? "cancelled" : unpaid ? row.order_status : row.shipping_status,
       vendor_total: cancelled || unpaid ? 0 : Number(row.active_item_value) || 0,
+      units: cancelled || unpaid ? 0 : Number(row.active_units) || 0,
     };
   });
   const summary = {

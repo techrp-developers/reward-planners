@@ -50,6 +50,7 @@ interface RecentOrder {
 export default function VendorDashboard() {
   const [vendorStatus, setVendorStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [statsError, setStatsError] = useState("");
   const [productStats, setProductStats] = useState({ totalProducts: 0 });
   const [orderStats, setOrderStats] = useState({ totalOrders: 0, totalRevenue: 0 });
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
@@ -59,14 +60,12 @@ export default function VendorDashboard() {
 
   const dashboardStats = [
     {
-      title: "Total Revenue",
+      title: "Product Revenue",
       value: formatCurrency(orderStats.totalRevenue),
       icon: FaWallet,
       color: "text-emerald-600",
       bg: "bg-emerald-50",
       border: "rgba(16,185,129,0.15)",
-      trend: "—",
-      trendColor: "bg-gray-50 text-gray-500",
     },
     {
       title: "Total Orders",
@@ -75,18 +74,14 @@ export default function VendorDashboard() {
       color: "text-blue-600",
       bg: "bg-blue-50",
       border: "rgba(59,130,246,0.15)",
-      trend: "—",
-      trendColor: "bg-gray-50 text-gray-500",
     },
     {
-      title: "Active Products",
+      title: "Approved Products",
       value: productStats.totalProducts.toString(),
       icon: FaBox,
       color: "text-purple-600",
       bg: "bg-purple-50",
       border: "rgba(133,43,175,0.15)",
-      trend: productStats.totalProducts > 0 ? `+${productStats.totalProducts}` : "—",
-      trendColor: productStats.totalProducts > 0 ? "bg-purple-50 text-purple-700" : "bg-gray-50 text-gray-500",
     },
     {
       title: "Customer Rating",
@@ -95,32 +90,30 @@ export default function VendorDashboard() {
       color: "text-amber-600",
       bg: "bg-amber-50",
       border: "rgba(245,158,11,0.15)",
-      trend: "—",
-      trendColor: "bg-gray-50 text-gray-500",
     },
   ];
 
   useEffect(() => {
-    fetchVendorStats();
-    fetchVendorStatus();
-    fetchOrderStats();
-    fetchRecentOrders();
+    Promise.all([fetchVendorStats(), fetchVendorStatus(), fetchOrderStats(), fetchRecentOrders()]).finally(() => setLoading(false));
   }, []);
 
   const fetchVendorStats = async () => {
     try {
       const res = await api.get("/vendor/stats");
+      if (!res.data?.success) throw new Error("Stats unavailable");
       if (res.data?.success) {
         setProductStats({ totalProducts: res.data.stats?.approved || 0 });
       }
     } catch (error) {
       console.error("Error fetching stats:", error);
+      setStatsError("Unable to load dashboard statistics. Please refresh to try again.");
     }
   };
 
   const fetchOrderStats = async () => {
     try {
       const res = await api.get("/order/order-stats");
+      if (!res.data?.success) throw new Error("Stats unavailable");
       if (res.data?.success) {
         setOrderStats({
           totalOrders: res.data.stats?.total_orders || 0,
@@ -129,16 +122,15 @@ export default function VendorDashboard() {
       }
     } catch (error) {
       console.error("Error fetching order stats:", error);
+      setStatsError("Unable to load dashboard statistics. Please refresh to try again.");
     }
   };
 
   const fetchRecentOrders = async () => {
     try {
-      const res = await api.get("/order/order-summary", {
-        params: { page: 1, limit: 5 },
-      });
+      const res = await api.get("/vendor-reports/orders");
       if (res.data?.success) {
-        setRecentOrders(res.data.orders || []);
+        setRecentOrders((res.data.rows || []).slice(0, 5));
       }
     } catch (error) {
       console.error("Error fetching recent orders:", error);
@@ -156,8 +148,6 @@ export default function VendorDashboard() {
     } catch (error) {
       console.error("Error fetching vendor status:", error);
       setVendorStatus(null);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -199,7 +189,7 @@ export default function VendorDashboard() {
             <div>
               <p className="text-sm font-bold text-gray-800">Complete your vendor onboarding</p>
               <p className="text-xs text-gray-500 mt-0.5">
-               Your account is pending approval. Submit your business details to get verified and start selling on our platform.
+               Your account is pending approval. Submit your business details to request approval and start selling.
               </p>
             </div>
           </div>
@@ -250,6 +240,8 @@ export default function VendorDashboard() {
       </div>
 
       {/* ── STATS GRID ── */}
+      {statsError && <p role="alert" className="mb-4 text-sm text-red-600">{statsError}</p>}
+      <p className="mb-4 text-xs text-slate-500">Ecommerce totals. Product revenue excludes unpaid orders, cancelled items, shipping and wallet coins; before return refunds.</p>
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {dashboardStats.map((item, idx) => (
           <div
@@ -265,9 +257,7 @@ export default function VendorDashboard() {
               <div className={`p-3 rounded-2xl ${item.bg} ${item.color} group-hover:scale-110 transition-transform duration-200`}>
                 <item.icon size={22} />
               </div>
-              <span className={`text-xs font-bold px-2 py-1 rounded-lg ${item.trendColor}`}>
-                {item.trend}
-              </span>
+
             </div>
             <div className="mt-4">
               <p className="text-xs font-bold tracking-widest text-gray-400 uppercase">
@@ -277,7 +267,7 @@ export default function VendorDashboard() {
                 className="mt-1 text-2xl font-extrabold text-gray-800 stat-value-pop"
                 style={{ animationDelay: `${idx * 80 + 120}ms` }}
               >
-                {item.value}
+                {statsError ? "--" : item.value}
               </h3>
             </div>
           </div>
@@ -401,28 +391,17 @@ export default function VendorDashboard() {
             </div>
 
             <div className="flex items-end gap-2">
-              <h2 className="text-5xl font-extrabold tracking-tighter">0</h2>
+              <h2 className="text-5xl font-extrabold tracking-tighter">--</h2>
               <div className="mb-2 flex gap-0.5">
                 {[1, 2, 3, 4, 5].map((s) => (
                   <FaStar key={s} size={10} className="opacity-25" />
                 ))}
               </div>
             </div>
-            <p className="mt-1 text-xs opacity-60">No ratings received yet</p>
+            <p className="mt-1 text-xs opacity-60">Rating data is not available</p>
           </div>
 
           <div className="relative mt-8 space-y-4">
-            {/* Profile Strength */}
-            <div className="p-4 border bg-white/10 backdrop-blur-md rounded-xl border-white/20">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold tracking-widest uppercase opacity-80">Profile Strength</span>
-                <span className="text-xs font-bold opacity-90">0%</span>
-              </div>
-              <div className="w-full bg-white/20 h-1.5 rounded-full overflow-hidden">
-                <div className="bg-white h-full w-[0%] rounded-full transition-all duration-1000" />
-              </div>
-            </div>
-
             {/* Quick links */}
             {isApproved && (
               <div className="flex gap-2">
@@ -445,7 +424,7 @@ export default function VendorDashboard() {
             {isApproved && (
               <div className="flex items-center gap-2 px-3 py-2 border rounded-xl bg-white/10 border-white/15">
                 <FiCheckCircle size={13} className="text-emerald-300 shrink-0" />
-                <span className="text-xs font-medium opacity-80">Account verified & active</span>
+                <span className="text-xs font-medium opacity-80">Account approved</span>
               </div>
             )}
           </div>

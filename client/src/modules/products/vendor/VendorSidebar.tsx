@@ -105,7 +105,7 @@ export default function VendorNavbar() {
     <div className="px-3 pt-4">
       <p className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium ${isApproved ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
         {isApproved ? <FiShield className="shrink-0" /> : <FiClock className="shrink-0" />}
-        {isApproved ? "Verified partner" : "Pending approval"}
+        {isApproved ? "Approved vendor" : "Pending approval"}
       </p>
     </div>
     <div className="flex-1 space-y-6 overflow-y-auto px-3 py-5">

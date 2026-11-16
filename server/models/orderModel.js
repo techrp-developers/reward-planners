@@ -1,4 +1,5 @@
 const db = require("../config/database");
+const { vendorOrderReport } = require("../utils/vendorReportData");
 const Razorpay = require("razorpay");
 const xpressService = require("../services/ExpressBees/xpressbees_service");
 const {
@@ -475,29 +476,10 @@ class OrderModel {
     };
   }
 
-  // Get vendor order stats (excludes cancelled orders from count/revenue)
+  // Use the same order scope and revenue calculation as the vendor report.
   async getVendorOrderStats(vendorId) {
-    const [[stats]] = await db.execute(
-      `
-    SELECT
-      COUNT(*) AS total_orders,
-      COALESCE(SUM(vo.vendor_total), 0) AS total_revenue
-
-    FROM vendor_orders vo
-
-    JOIN eorders o
-      ON vo.order_id = o.order_id
-
-    WHERE vo.vendor_id = ?
-      AND o.status != 'cancelled'
-    `,
-      [vendorId],
-    );
-
-    return {
-      total_orders: Number(stats.total_orders) || 0,
-      total_revenue: Number(stats.total_revenue) || 0,
-    };
+    const { summary } = await vendorOrderReport(db, vendorId);
+    return { total_orders: summary.totalOrders, total_revenue: summary.revenue };
   }
 
   // view vendor details
