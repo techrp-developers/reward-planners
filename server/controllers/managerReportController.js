@@ -1,5 +1,6 @@
 const db = require("../config/database");
 const { notifyUser } = require("../app/common/utils/notification");
+const { stockSummary, orderReport } = require("../utils/managerReportStats");
 
 const dateRange = (req, column, params) => {
   const from = String(req.query.fromDate || "").trim();
@@ -76,9 +77,9 @@ class ManagerReportController {
     try {
       const search = String(req.query.search || "").trim(); const params = [];
       let filter = ""; if (search) { filter = " AND (p.product_name LIKE ? OR p.brand_name LIKE ? OR v.company_name LIKE ? OR pv.sku LIKE ?)"; params.push(...Array(4).fill(`%${search}%`)); }
-      const range = dateRange(req, "p.created_at", params);
-      const [rows] = await db.execute(`SELECT pv.variant_id, p.product_id, p.product_name, p.brand_name, pv.sku, pv.stock, pv.variant_attributes, v.vendor_id, v.company_name, v.full_name AS vendor_name FROM product_variants pv JOIN eproducts p ON p.product_id=pv.product_id JOIN vendors v ON v.vendor_id=p.vendor_id WHERE p.is_deleted=0${filter}${range} ORDER BY pv.stock ASC, p.product_name`, params);
-      const summary = { variants: rows.length, units: rows.reduce((s, r) => s + Number(r.stock || 0), 0), lowStock: rows.filter((r) => Number(r.stock) < 10).length, outOfStock: rows.filter((r) => Number(r.stock) === 0).length };
+      const range = dateRange(req, "pv.created_at", params);
+      const [rows] = await db.execute(`SELECT pv.variant_id, p.product_id, p.product_name, p.brand_name, pv.sku, pv.stock, pv.variant_attributes, v.vendor_id, v.company_name, v.full_name AS vendor_name FROM product_variants pv JOIN eproducts p ON p.product_id=pv.product_id LEFT JOIN vendors v ON v.vendor_id=p.vendor_id WHERE p.is_deleted=0 AND COALESCE(p.created_via, '') <> 'flea_market_quick_create'${filter}${range} ORDER BY pv.stock ASC, p.product_name`, params);
+      const summary = stockSummary(rows);
       return res.json({ success: true, rows, summary });
     } catch (error) { return res.status(error.status || 500).json({ success: false, message: error.status ? error.message : "Unable to load stock report" }); }
   }
@@ -86,9 +87,22 @@ class ManagerReportController {
   async orders(req, res) {
     try {
       const params = []; const range = dateRange(req, "vo.created_at", params);
-      const [rows] = await db.execute(`SELECT vo.vendor_order_id, o.order_ref, v.company_name, v.full_name AS vendor_name, vo.vendor_total, vo.shipping_status, COUNT(oi.order_item_id) AS item_count, vo.created_at FROM vendor_orders vo JOIN eorders o ON o.order_id=vo.order_id JOIN vendors v ON v.vendor_id=vo.vendor_id LEFT JOIN eorder_items oi ON oi.vendor_order_id=vo.vendor_order_id WHERE 1=1${range} GROUP BY vo.vendor_order_id ORDER BY vo.created_at DESC`, params);
-      const summary = { orders: rows.length, revenue: rows.reduce((s, r) => s + Number(r.vendor_total || 0), 0), delivered: rows.filter((r) => r.shipping_status === "delivered").length, cancelled: rows.filter((r) => r.shipping_status === "cancelled").length };
-      return res.json({ success: true, rows, summary });
+      const [rows] = await db.execute(`
+        SELECT vo.vendor_order_id, o.order_ref, o.status AS order_status,
+          v.company_name, v.full_name AS vendor_name, vo.shipping_status,
+          COALESCE(items.item_count, 0) AS item_count,
+          COALESCE(items.active_items, 0) AS active_items,
+          COALESCE(items.active_item_value, 0) AS active_item_value, vo.created_at
+        FROM vendor_orders vo JOIN eorders o ON o.order_id = vo.order_id
+        LEFT JOIN vendors v ON v.vendor_id = vo.vendor_id
+        LEFT JOIN (
+          SELECT vendor_order_id, COUNT(*) AS item_count,
+            SUM(CASE WHEN COALESCE(fulfillment_status, '') <> 'cancelled' THEN 1 ELSE 0 END) AS active_items,
+            SUM(CASE WHEN COALESCE(fulfillment_status, '') <> 'cancelled' THEN final_price ELSE 0 END) AS active_item_value
+          FROM eorder_items GROUP BY vendor_order_id
+        ) items ON items.vendor_order_id = vo.vendor_order_id
+        WHERE 1=1${range} ORDER BY vo.created_at DESC`, params);
+      return res.json({ success: true, ...orderReport(rows) });
     } catch (error) { return res.status(error.status || 500).json({ success: false, message: error.status ? error.message : "Unable to load order report" }); }
   }
 
