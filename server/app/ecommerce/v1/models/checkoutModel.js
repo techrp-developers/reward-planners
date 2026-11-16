@@ -1532,6 +1532,7 @@ class CheckoutModel {
         return_window: row.return_window_days,
         is_replaceable: row.is_replaceable,
 
+        mrp: Number(row.mrp),
         price: salePrice,
         original_price: row.base_sale_price,
         offer_price: row.offer_price,

@@ -379,6 +379,7 @@ class orderModel {
         image: o.image ? getPublicUrl(o.image) : null,
 
         item_count: Number(o.item_count),
+        offer_item_count: (itemsByOrder[o.order_id] || []).filter((item) => item.offer).length,
 
         price: Number(o.total_amount),
         original_price: Number(o.total_amount),
