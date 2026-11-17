@@ -26,6 +26,18 @@ test('production jobs are not disabled by the local-development toggle',()=>{
   assert.ok(loaded.includes('../services/Bbps/refundCron'));
   assert.ok(!loaded.includes('../services/Status/statusCleanupCron'));
 });
+
+test('local promotion emails can run independently of unrelated scheduled jobs', () => {
+  const loaded = [];
+  const jobs = startScheduledJobs({ NODE_ENV: 'development', ENABLE_LOCAL_SCHEDULED_JOBS: 'false', RUN_SCHEDULED_JOBS: 'false', ENABLE_LOCAL_PROMOTION_WORKER: 'true' }, job => loaded.push(job), { info() {} });
+  assert.deepEqual(jobs, ['../services/promotions/worker']);
+  assert.deepEqual(loaded, jobs);
+});
+
+test('local notification and promotion workers can be enabled together', () => {
+  const jobs = startScheduledJobs({ NODE_ENV: 'development', ENABLE_LOCAL_CAMPAIGN_WORKER: 'true', ENABLE_LOCAL_PROMOTION_WORKER: 'true' }, () => {}, { info() {} });
+  assert.deepEqual(jobs, ['../services/Notifications/campaignWorkerCron', '../services/promotions/worker']);
+});
 test('reconciliation skips overlap, releases guard, and only heartbeats successful runs',async()=>{
   let release;
   const waiting=new Promise(resolve=>{release=resolve;});
