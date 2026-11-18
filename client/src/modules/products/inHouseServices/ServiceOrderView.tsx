@@ -5,6 +5,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../../../common/api/api";
 import { FiCheck, FiFileText, FiX } from "react-icons/fi";
 import Swal from "sweetalert2";
+import { useAuth } from '../../../common/auth/useAuth';
 
 interface Customer {
   name: string;
@@ -115,6 +116,7 @@ const getParentStatus = (items: ServiceItem[], bundles: Bundle[]) => {
 };
 
 const ServiceOrderView: React.FC = () => {
+  const { user } = useAuth();
   const { parentOrderId } = useParams();
   const navigate = useNavigate();
 
@@ -546,7 +548,7 @@ const ServiceOrderView: React.FC = () => {
                       <span className={getStatusBadge(item.status)}>
                         {item.status.replaceAll("_", " ")}
                       </span>
-                      <ServiceStatusSelect value={item.status} options={STATUS_OPTIONS}
+                      <ServiceStatusSelect value={item.status} options={user?.role === 'service_manager' ? item.status === 'documents_uploaded' ? ['in_progress'] : item.status === 'in_progress' ? ['completed'] : [] : STATUS_OPTIONS}
                         busy={updatingStatus} disabled={item.status === "completed" || item.status === "cancelled"}
                         label={`Change status for ${item.service_name}`}
                         onChange={status => void updateServiceStatus(item.id, status)} />

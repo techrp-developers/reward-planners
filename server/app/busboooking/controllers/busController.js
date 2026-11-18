@@ -1628,6 +1628,8 @@ const blockSeat =
 
         refId,
 
+        email,
+
         passengers,
 
         sourceCity,
@@ -1675,7 +1677,6 @@ const blockSeat =
           message: validatedBlock.error,
         });
       }
-      const normalizedPassengers = validatedBlock.value.Passengers;
 
 
       /*
@@ -1811,7 +1812,7 @@ const blockSeat =
 
 
       const normalizedPassengers =
-        passengers.map(
+        validatedBlock.value.Passengers.map(
           (passenger) => {
             const phoneDigits =
               String(

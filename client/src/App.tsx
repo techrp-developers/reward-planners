@@ -139,17 +139,12 @@ const PollManagement = lazy(() => import("./modules/hr/polls/PollManagement.tsx"
 const DepartmentManagement = lazy(() => import("./modules/hr/departments/DepartmentManagement.tsx"));
 
 // Service Partners (Services vertical)
-const ServicePartnerList = lazy(() => import("./modules/service/serviceManager/servicePartners/pages/ServicePartnerList.tsx"));
-const ServicePartnerOnboard = lazy(() => import("./modules/service/serviceManager/servicePartners/pages/ServicePartnerOnboard.tsx"));
-const ServicePartnerProfile = lazy(() => import("./modules/service/serviceManager/servicePartners/pages/ServicePartnerProfile.tsx"));
-const PartnerManagerList = lazy(() => import("./modules/service/serviceManager/partnerManagers/pages/PartnerManagerList.tsx"));
-const PartnerManagerOnboard = lazy(() => import("./modules/service/serviceManager/partnerManagers/pages/PartnerManagerOnboard.tsx"));
 const ServiceDashboard = lazy(() => import("./modules/service/serviceManager/dashboard/pages/ServiceDashboard.tsx"));
-const ServiceListingsPage = lazy(() => import("./modules/service/serviceManager/serviceListings/pages/ServiceListingsPage.tsx"));
+const CommercialPage = lazy(() => import('./modules/service/serviceManager/CommercialPage'));
+const ServiceActivityPage = lazy(() => import('./modules/service/serviceManager/CommercialPage').then(module => ({ default: module.ActivityPage })));
+const WorkspaceFoundationPage = lazy(() => import('./modules/service/serviceManager/WorkspaceFoundationPage'));
+const ServiceDocumentsPage = lazy(() => import('./modules/service/serviceManager/ServiceDocumentsPage'));
 const ServiceCatalogPage = lazy(() => import("./modules/service/serviceManager/serviceListings/pages/ServiceCatalogPage.tsx"));
-const BookingsPage = lazy(() => import("./modules/service/serviceManager/bookings/pages/BookingsPage.tsx"));
-const ServiceReportsPage = lazy(() => import("./modules/service/serviceManager/reports/pages/ServiceReportsPage.tsx"));
-const ServiceSettingsPage = lazy(() => import("./modules/service/serviceManager/settings/pages/ServiceSettingsPage.tsx"));
 
 // Service Partner self-service portal
 const ServicePartnerDashboard = lazy(() => import("./modules/service/servicePartner/dashboard/pages/ServicePartnerDashboard.tsx"));
@@ -462,6 +457,13 @@ export default function App() {
       {/* ========== SERVICES ========== */}
       <Route element={<ServiceLayout />}>
         <Route path={routes.service.dashboard} element={<ServiceDashboard />} />
+        <Route path="/service/in-house" element={<ServiceDashboard inHouse />} />
+        <Route path="/service/pricing" element={<CommercialPage />} />
+        <Route path="/service/rewards" element={<CommercialPage rewards />} />
+        <Route path="/service/activity" element={<ServiceActivityPage />} />
+        <Route path="/service/classification" element={<ServiceCatalogPage classification />} />
+        <Route path="/service/documents/:serviceId" element={<ServiceDocumentsPage />} />
+        <Route path="/service/partners/:section" element={<WorkspaceFoundationPage />} />
         <Route path={routes.service.profile} element={<EditProfilePage />} />
         <Route path={routes.service.changePassword} element={<ChangePasswordPage />} />
         <Route path={routes.service.catalog} element={<ServiceCatalogPage />} />
@@ -475,39 +477,39 @@ export default function App() {
         {/* Service Partners */}
         <Route
           path={routes.service.servicePartners.list}
-          element={<ServicePartnerList />}
+          element={<Navigate to="/service/partners/catalogue" replace />}
         />
         <Route
           path={routes.service.servicePartners.onboard}
-          element={<ServicePartnerOnboard />}
+          element={<Navigate to="/service/partners/catalogue" replace />}
         />
         <Route
           path={routes.service.servicePartners.edit}
-          element={<ServicePartnerOnboard />}
+          element={<Navigate to="/service/partners/catalogue" replace />}
         />
         <Route
           path={routes.service.servicePartners.profile}
-          element={<ServicePartnerProfile />}
+          element={<Navigate to="/service/partners/catalogue" replace />}
         />
 
         {/* Partner Managers */}
         <Route
           path={routes.service.partnerManagers.list}
-          element={<PartnerManagerList />}
+          element={<Navigate to="/service/partners/assignments" replace />}
         />
         <Route
           path={routes.service.partnerManagers.onboard}
-          element={<PartnerManagerOnboard />}
+          element={<Navigate to="/service/partners/assignments" replace />}
         />
         <Route
           path={routes.service.partnerManagers.edit}
-          element={<PartnerManagerOnboard />}
+          element={<Navigate to="/service/partners/assignments" replace />}
         />
 
-        <Route path={routes.service.serviceListings} element={<ServiceListingsPage />} />
-        <Route path={routes.service.bookings} element={<BookingsPage />} />
-        <Route path={routes.service.reports} element={<ServiceReportsPage />} />
-        <Route path={routes.service.settings} element={<ServiceSettingsPage />} />
+        <Route path={routes.service.serviceListings} element={<Navigate to="/service/catalog/services" replace />} />
+        <Route path={routes.service.bookings} element={<Navigate to="/service/orders" replace />} />
+        <Route path={routes.service.reports} element={<ServiceDashboard reports />} />
+        <Route path={routes.service.settings} element={<WorkspaceFoundationPage settings />} />
       </Route>
 
       {/* ========== SERVICE PARTNER (self-service portal) ========== */}

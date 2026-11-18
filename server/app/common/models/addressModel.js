@@ -198,7 +198,7 @@ class AddressModel {
   //   Delete address
   async deleteAddress(addressId, userId) {
     const [result] = await db.execute(
-      `DELETE FROM customer_addresses
+      `UPDATE customer_addresses SET status=0,is_default=0
        WHERE address_id = ? AND user_id = ?`,
       [addressId, userId],
     );

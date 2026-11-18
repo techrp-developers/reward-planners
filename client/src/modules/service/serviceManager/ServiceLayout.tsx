@@ -6,9 +6,9 @@ import PremiumPortalShell from "../../../common/layouts/PremiumPortalShell";
 import "./serviceManager.css";
 
 export default function ServiceLayout() {
-  const { user, loading } = useAuth();
+  const { user, loading, initializing } = useAuth();
 
-  if (loading) return null;
+  if (loading || initializing) return null;
   if (!user || user.role !== "service_manager") return <Navigate to="/login" replace />;
 
   return (

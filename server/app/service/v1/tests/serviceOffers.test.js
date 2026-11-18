@@ -8,6 +8,7 @@ vm.runInNewContext(fs.readFileSync(require.resolve("../utils/serviceOffers"), "u
   module: moduleStub,
   require: (name) => {
     if (name === "./serviceRewards") return rewards;
+    if (name === './serviceMoney') return require('../utils/serviceMoney');
     if (name === "../../../../config/database") return {};
     throw new Error(`Unexpected dependency ${name}`);
   },

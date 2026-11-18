@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const {managedCatalogueOnly,managerScope}=require('../middlewares/managerScope');
 const ServiceVariantController = require("../controllers/serviceVariantController");
 const {
   authenticateToken,
@@ -12,6 +13,7 @@ router.post(
   "/create-variant",
   authenticateToken,
   authorizeRoles("vendor_manager", "service_manager", "admin"),
+  managedCatalogueOnly,
   upload.single("service_variant_image"),
   ServiceVariantController.addVariant,
 );
@@ -21,6 +23,7 @@ router.put(
   "/update-variant/:id",
   authenticateToken,
   authorizeRoles("vendor_manager", "service_manager", "admin"),
+  managedCatalogueOnly,
   upload.single("service_variant_image"),
   ServiceVariantController.updateVariant,
 );
@@ -33,6 +36,7 @@ router.delete(
   "/remove/:id",
   authenticateToken,
   authorizeRoles("vendor_manager", "service_manager", "admin"),
+  managedCatalogueOnly,
   ServiceVariantController.deleteVariant,
 );
 
@@ -47,14 +51,16 @@ router.post(
   "/variant-section",
   authenticateToken,
   authorizeRoles("vendor_manager", "service_manager", "admin"),
+  managerScope('variant'),
   ServiceVariantController.addVariantSection,
 );
 
 // Admin delete variant section details
 router.delete(
-  "/variant-section/:variantId",
+  "/variant-section/:id",
   authenticateToken,
   authorizeRoles("vendor_manager", "service_manager", "admin"),
+  managerScope('variantSection'),
   ServiceVariantController.deleteVariantSection,
 );
 

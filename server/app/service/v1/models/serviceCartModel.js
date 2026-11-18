@@ -1,3 +1,4 @@
+const ServiceMoney=require("../utils/serviceMoney");
 const db = require("../../../../config/database");
 const {
   getBestServiceOffers,
@@ -123,6 +124,7 @@ class ServiceCartModel {
       LEFT JOIN service_documents sd ON sd.service_id = s.id
 
       WHERE ci.cart_id = ?
+      ${conn!==db?'FOR UPDATE':''}
       `,
       [cartId],
     );
@@ -245,7 +247,7 @@ class ServiceCartModel {
       const bundleOffer = shouldApplyBundlePrice
         ? await getBestBundleOffer(
           bundle.bundle_id,
-          prices.reduce((sum, price) => sum + price, 0),
+          Number(ServiceMoney.sum(prices)),
           conn,
         )
         : null;
@@ -253,7 +255,7 @@ class ServiceCartModel {
       const offerParts = offerTotal === null ? [] : splitBundleOffer(prices, offerTotal);
       bundle.is_offer = offerTotal !== null;
       bundle.content_id = bundleOffer ? bundleOffer.contentId : null;
-      bundle.regular_bundle_total = prices.reduce((sum, price) => sum + price, 0);
+      bundle.regular_bundle_total = Number(ServiceMoney.sum(prices));
 
       bundle.items.forEach((item, index) => {
         const price = offerTotal !== null
@@ -266,7 +268,7 @@ class ServiceCartModel {
         item.promotional_content_id = bundle.content_id;
         item.rewards = serviceOfferRewards(item.price, item, offerTotal !== null);
         if (offerTotal !== null) item.can_redeem_reward = 0;
-        bundle.bundle_total += item.price * (item.quantity || 1);
+        bundle.bundle_total = Number(ServiceMoney.sum([bundle.bundle_total,ServiceMoney.line(item.price,item.quantity||1)]));
       });
     }
 

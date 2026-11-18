@@ -1,4 +1,7 @@
 const db = require("../../../../config/database");
+const ServiceMoney=require("../utils/serviceMoney");
+const {creditServiceCoins}=require("../../../../services/rewards/serviceLedger");
+const {assertRefundReady,createServiceRefundRunner}=require("../../../../services/rewards/serviceRefundClaims");
 const razorpay = require("../middlewares/razorpay");
 const axios = require("axios");
 const { notifyUser } = require("../../../common/utils/notification");
@@ -564,7 +567,7 @@ class ServiceOrderModel {
   }
 
   // Approve cancellation
-  async approveCancellation(serviceOrderId, conn) {
+  async approveCancellation(serviceOrderId, conn, actorId = null) {
     // =====================================
     // 1 Get cancellation request
     // =====================================
@@ -641,8 +644,8 @@ class ServiceOrderModel {
     // check wallet transactions for duplicate
     const [[existingWalletRefund]] = await conn.execute(
       `SELECT 1 AS refund_exists FROM wallet_transactions
-       WHERE reference_id = ? AND reason_code = 'ADMIN_ADJUSTMENT' LIMIT 1`,
-      [serviceOrderId],
+       WHERE user_id=? AND reference_id=? AND transaction_type='credit' AND category='order' AND (reason_code='SERVICE_REFUND' OR (reason_code='ADMIN_ADJUSTMENT' AND title='Service Cancellation Refund')) LIMIT 1`,
+      [cancellation.user_id, serviceOrderId],
     );
 
     if (existingRefund || existingWalletRefund) {
@@ -653,13 +656,10 @@ class ServiceOrderModel {
     // 3 Refund calculations
     // =====================================
 
-    const refundAmount = Number(cancellation.price);
-
-    const coinsUsed = Number(cancellation.reward_coins_used || 0);
-
-    const refundToWallet = coinsUsed;
-
-    const refundToCard = Math.max(0, refundAmount - coinsUsed);
+    const refundAmount = ServiceMoney.decimal(cancellation.price);
+    const refundToWallet = ServiceMoney.coins(cancellation.reward_coins_used||0);
+    const refundToCard = ServiceMoney.payable(cancellation.price,refundToWallet);
+    if(ServiceMoney.paise(refundToCard)>0n)await assertRefundReady(conn);
 
     if (refundToCard > 0 && !cancellation.payment_id) {
       throw new Error("PAYMENT_ID_MISSING");
@@ -670,86 +670,8 @@ class ServiceOrderModel {
     // =====================================
 
     if (refundToWallet > 0) {
-      // ensure wallet exists
-      await conn.execute(
-        `
-      INSERT INTO customer_wallet
-      (user_id, balance)
-
-      VALUES (?, 0)
-
-      ON DUPLICATE KEY UPDATE
-      user_id = user_id
-      `,
-        [cancellation.user_id],
-      );
-
-      // update wallet
-      await conn.execute(
-        `
-      UPDATE customer_wallet
-
-      SET balance = balance + ?
-
-      WHERE user_id = ?
-      `,
-        [refundToWallet, cancellation.user_id],
-      );
-
-      // get updated balance
-      const [[wallet]] = await conn.execute(
-        `
-        SELECT balance
-
-        FROM customer_wallet
-
-        WHERE user_id = ?
-        `,
-        [cancellation.user_id],
-      );
-
-      // transaction entry
-      await conn.execute(
-        `
-      INSERT INTO wallet_transactions
-      (
-        user_id,
-        title,
-        description,
-        transaction_type,
-        coins,
-        balance_after,
-        category,
-        reference_id,
-        reason_code
-      )
-      VALUES
-      (
-        ?,
-        ?,
-        ?,
-        'credit',
-        ?,
-        ?,
-        'order',
-        ?,
-        'ADMIN_ADJUSTMENT'
-      )
-      `,
-        [
-          cancellation.user_id,
-
-          "Service Cancellation Refund",
-
-          `Coins refunded for service order ${serviceOrderId}`,
-
-          refundToWallet,
-
-          wallet.balance,
-
-          serviceOrderId,
-        ],
-      );
+      await creditServiceCoins(conn,{userId:cancellation.user_id,referenceId:serviceOrderId,
+        amount:refundToWallet,reasonCode:'SERVICE_REFUND',title:'Service Cancellation Refund'});
     }
 
     // =====================================
@@ -765,11 +687,12 @@ class ServiceOrderModel {
         user_id,
         refund_amount,
         refund_method,
-        status
+        status,
+        submission_state
       )
       VALUES
       (
-        ?, ?, ?, 'original', 'pending'
+        ?, ?, ?, 'original', 'pending', 'ready'
       )
       `,
         [serviceOrderId, cancellation.user_id, refundToCard],
@@ -871,6 +794,10 @@ class ServiceOrderModel {
       [refundAmount, serviceOrderId],
     );
 
+    if(actorId) await conn.execute(`INSERT INTO service_manager_audit_logs
+      (actor_id,service_scope,entity_type,entity_id,action,reason,before_json,after_json)
+      VALUES (?,'in_house','cancellations',?,'approved','Manager approved cancellation',?,?)`,
+      [actorId,serviceOrderId,JSON.stringify({status:'requested'}),JSON.stringify({status:'approved',refund_amount:refundAmount})]);
     return {
       payment_id: cancellation.payment_id,
       amount: refundToCard,
@@ -887,7 +814,7 @@ class ServiceOrderModel {
     try {
       await conn.beginTransaction();
       const [[row]] = await conn.execute(
-        `SELECT r.id, r.status, so.user_id
+        `SELECT r.id, r.status, r.razorpay_refund_id, r.refund_amount, so.user_id, so.payment_id
          FROM service_order_refunds r
          JOIN service_orders so ON so.id = r.service_order_id
          WHERE r.service_order_id = ? AND r.refund_method = 'original'
@@ -899,6 +826,9 @@ class ServiceOrderModel {
         return false;
       }
 
+      if ((row.razorpay_refund_id && row.razorpay_refund_id !== gatewayRefund.id) || gatewayRefund.payment_id !== row.payment_id || !Number.isSafeInteger(gatewayRefund.amount) || BigInt(gatewayRefund.amount) !== ServiceMoney.paise(row.refund_amount)) {
+        throw ServiceMoney.failure('Provider refund conflicts with the saved refund reference or amount.','SERVICE_REFUND_MISMATCH');
+      }
       if (row.status === "completed") {
         await conn.rollback();
         return true;
@@ -961,7 +891,7 @@ class ServiceOrderModel {
     try {
       await conn.beginTransaction();
       const [[row]] = await conn.execute(
-        `SELECT r.id, r.status, so.user_id
+        `SELECT r.id, r.status, r.razorpay_refund_id, so.user_id
          FROM service_order_refunds r
          JOIN service_orders so ON so.id = r.service_order_id
          WHERE r.service_order_id = ? AND r.refund_method = 'original'
@@ -973,6 +903,7 @@ class ServiceOrderModel {
         return false;
       }
 
+      if (row.razorpay_refund_id && row.razorpay_refund_id !== gatewayRefundId) throw ServiceMoney.failure('Provider refund reference conflicts with the saved refund.','SERVICE_REFUND_MISMATCH');
       if (row.status === "completed") {
         await conn.rollback();
         return true;
@@ -1033,13 +964,16 @@ class ServiceOrderModel {
     if (!gatewayRefund?.id) return false;
     const serviceOrderIdFromNotes = Number(gatewayRefund.notes?.service_order_id);
     const [[row]] = await db.execute(
-      `SELECT service_order_id FROM service_order_refunds
-       WHERE razorpay_refund_id = ?
-          OR (? > 0 AND service_order_id = ? AND refund_method = 'original')
+      `SELECT r.service_order_id,r.refund_amount,r.razorpay_refund_id,o.payment_id FROM service_order_refunds r
+       JOIN service_orders o ON o.id=r.service_order_id
+       WHERE r.refund_method='original' AND (r.razorpay_refund_id = ?
+          OR (? > 0 AND r.service_order_id = ?))
        LIMIT 1`,
       [gatewayRefund.id, serviceOrderIdFromNotes, serviceOrderIdFromNotes],
     );
     if (!row) return false;
+    if(row.razorpay_refund_id && row.razorpay_refund_id!==gatewayRefund.id)throw ServiceMoney.failure('Provider refund reference conflicts with the saved refund.','SERVICE_REFUND_MISMATCH');
+    if(gatewayRefund.payment_id!==row.payment_id||!Number.isSafeInteger(gatewayRefund.amount)||BigInt(gatewayRefund.amount)!==ServiceMoney.paise(row.refund_amount))throw ServiceMoney.failure('Provider refund does not match the saved payment and refund amount.','SERVICE_REFUND_MISMATCH');
 
     const status = String(gatewayRefund.status || "").toLowerCase();
     if (eventName === "refund.processed" || status === "processed") {
@@ -1057,84 +991,24 @@ class ServiceOrderModel {
       `UPDATE service_order_refunds
        SET status = 'pending', razorpay_refund_id = ?
        WHERE service_order_id = ? AND refund_method = 'original'
-         AND status <> 'completed'`,
-      [gatewayRefund.id, row.service_order_id],
+         AND status <> 'completed' AND (razorpay_refund_id IS NULL OR razorpay_refund_id=?)`,
+      [gatewayRefund.id, row.service_order_id,gatewayRefund.id],
     );
     return true;
   }
 
   async processRefund(data) {
-    const { payment_id, amount, service_order_id } = data;
-    const refundAmount = Number(amount);
-    if (!payment_id || !Number.isFinite(refundAmount) || refundAmount <= 0) {
-      throw new Error("INVALID_SERVICE_REFUND");
-    }
-
-    const [[existing]] = await db.execute(
-      `SELECT id, status, razorpay_refund_id
-       FROM service_order_refunds
-       WHERE service_order_id = ? AND refund_method = 'original'
-       LIMIT 1`,
-      [service_order_id],
-    );
-    if (!existing) throw new Error("SERVICE_REFUND_NOT_FOUND");
-    if (existing.status === "completed") return { status: "completed" };
-
-    if (existing.razorpay_refund_id) {
-      const gatewayRefund = await razorpay.refunds.fetch(existing.razorpay_refund_id);
-      await this.reconcileRefundEntity(gatewayRefund);
-      return { status: gatewayRefund.status, gatewayRefund };
-    }
-
-    const refundKey = `service_cancel_${service_order_id}`;
-    let gatewayRefund;
-    try {
-      const response = await axios.post(
-        `https://api.razorpay.com/v1/payments/${payment_id}/refund`,
-        {
-          amount: Math.round(refundAmount * 100),
-          receipt: refundKey,
-          notes: {
-            module: "service",
-            service_order_id: String(service_order_id),
-            refund_key: refundKey,
-          },
-        },
-        {
-          auth: {
-            username: process.env.RAZOR_API_KEY,
-            password: process.env.RAZOR_SECRET_KEY,
-          },
-          headers: {
-            "Content-Type": "application/json",
-            "X-Refund-Idempotency": refundKey,
-          },
-          timeout: 15000,
-        },
-      );
-      gatewayRefund = response.data;
-      await db.execute(
-        `UPDATE service_order_refunds
-         SET razorpay_refund_id = ?, status = 'pending'
-         WHERE id = ? AND status <> 'completed'`,
-        [gatewayRefund.id, existing.id],
-      );
-      await this.reconcileRefundEntity(gatewayRefund);
-      return { status: gatewayRefund.status, gatewayRefund };
-    } catch (error) {
-      if (!gatewayRefund?.id) {
-        await this.failRefund(
-          service_order_id,
-          null,
-          "The refund request could not be sent and will be retried.",
-        );
-      }
-      throw error;
-    }
+    const run=createServiceRefundRunner({db,
+      gateway:{fetch:id=>razorpay.refunds.fetch(id),create:async(paymentId,payload)=>{
+        const response=await axios.post('https://api.razorpay.com/v1/payments/'+paymentId+'/refund',payload,
+          {auth:{username:process.env.RAZOR_API_KEY,password:process.env.RAZOR_SECRET_KEY},timeout:15000});
+        return response.data;
+      }},reconcile:refund=>this.reconcileRefundEntity(refund)});
+    return run(data.service_order_id);
   }
 
   // Reject cancellation
-  async rejectCancellation(serviceOrderId, conn) {
+  async rejectCancellation(serviceOrderId, conn, actorId = null) {
     // =====================================
     // Validate cancellation exists
     // =====================================
@@ -1200,10 +1074,14 @@ class ServiceOrderModel {
       [serviceOrderId],
     );
 
+    if(actorId) await conn.execute(`INSERT INTO service_manager_audit_logs
+      (actor_id,service_scope,entity_type,entity_id,action,reason,before_json,after_json)
+      VALUES (?,'in_house','cancellations',?,'rejected','Manager rejected cancellation',?,?)`,
+      [actorId,serviceOrderId,JSON.stringify({status:'requested'}),JSON.stringify({status:'rejected'})]);
     return { user_id: cancellation.user_id };
   }
 
-  async getServiceCancellationRequests({ status = null, page = 1, limit = 20 }) {
+  async getServiceCancellationRequests({ status = null, page = 1, limit = 20, inHouseOnly = false }) {
     const offset = (page - 1) * limit;
     const params = [];
     let where = "";
@@ -1212,6 +1090,7 @@ class ServiceOrderModel {
       params.push(status);
     }
 
+    if (inHouseOnly) where += `${where ? ' AND' : 'WHERE'} EXISTS (SELECT 1 FROM service_orders sm_o JOIN services sm_s ON sm_s.id=sm_o.service_id WHERE sm_o.id=soc.service_order_id AND sm_s.service_scope='in_house')`;
     const [[countRow]] = await db.execute(
       `SELECT COUNT(*) AS total FROM service_order_cancellations soc ${where}`,
       params,
@@ -1834,7 +1713,7 @@ class ServiceOrderModel {
   }
 
   // Admin order list
-  async getAllOrders({ page = 1, limit = 10, status = null, search = null }) {
+  async getAllOrders({ page = 1, limit = 10, status = null, search = null, inHouseOnly = false }) {
     let sql = `
     SELECT
       so.id,
@@ -1865,6 +1744,7 @@ class ServiceOrderModel {
   `;
 
     const params = [];
+    if (inHouseOnly) sql += ` AND s.service_scope='in_house' AND NOT EXISTS (SELECT 1 FROM service_orders sm_o LEFT JOIN services sm_s ON sm_s.id=sm_o.service_id WHERE sm_o.parent_order_id=so.parent_order_id AND (sm_s.service_scope IS NULL OR sm_s.service_scope<>'in_house'))`;
 
     if (search) {
       sql += `

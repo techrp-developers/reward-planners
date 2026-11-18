@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const {managedCatalogueOnly}=require('../middlewares/managerScope');
 const ServiceController = require("../controllers/serviceController");
 const upload = require("../../../../middleware/mediaUpload/serviceCategoryUpload");
 const {
@@ -38,6 +39,7 @@ router.post(
   "/create-service",
   authenticateToken,
   authorizeRoles("vendor_manager", "service_manager", "admin"),
+  managedCatalogueOnly,
   upload.single("service_image"),
   ServiceController.createService,
 );
@@ -47,6 +49,7 @@ router.put(
   "/update/:id",
   authenticateToken,
   authorizeRoles("vendor_manager", "service_manager", "admin"),
+  managedCatalogueOnly,
   upload.single("service_image"),
   ServiceController.updateService,
 );
@@ -56,6 +59,7 @@ router.delete(
   "/remove/:id",
   authenticateToken,
   authorizeRoles("vendor_manager", "service_manager", "admin"),
+  managedCatalogueOnly,
   ServiceController.deleteService,
 );
 

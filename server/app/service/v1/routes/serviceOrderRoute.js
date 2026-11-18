@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const {managerScope}=require('../middlewares/managerScope');
 const ServiceOrderController = require("../controllers/serviceOrderController");
 const auth = require("../../../common/middlewares/auth");
 const upload = require("../../../../middleware/mediaUpload/serviceDocumentUpload");
@@ -66,6 +67,7 @@ router.get(
   "/admin-orders",
   authenticateToken,
   authorizeRoles("admin", "vendor_manager", "service_manager"),
+  managerScope(),
   ServiceOrderController.adminOrderList,
 );
 
@@ -74,6 +76,7 @@ router.get(
   "/admin-order-details/:parentOrderId",
   authenticateToken,
   authorizeRoles("admin", "vendor_manager", "service_manager"),
+  managerScope('parent'),
   ServiceOrderController.adminOrderDetails,
 );
 
@@ -82,6 +85,7 @@ router.put(
   "/status/:id",
   authenticateToken,
   authorizeRoles("admin", "vendor_manager", "service_manager"),
+  managerScope('order'),
   ServiceOrderController.updateOrderStatus,
 );
 

@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+router.use('/service-manager', require('./serviceManagerRoute'));
 
 const serviceCategoryRoute = require("./serviceCategoryRoute");
 const serviceRoute = require("./serviceRoute");
