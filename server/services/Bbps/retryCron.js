@@ -75,7 +75,16 @@ cron.schedule("*/5 * * * *", async () => {
         await conn.commit();
       }
     } finally {
-      conn.release();
+      // The recovery transaction in catch can fail too. Never return an open
+      // transaction to the shared pool, where unrelated jobs would inherit it.
+      // ROLLBACK is also safe after a successful COMMIT.
+      try {
+        await conn.rollback();
+        conn.release();
+      } catch (cleanupError) {
+        conn.destroy();
+        console.error("[BBPS retry] Discarded connection after rollback failure:", cleanupError.code || cleanupError.message);
+      }
     }
   }
 
