@@ -26,6 +26,34 @@ const RESOLVED_DEVICE_PLATFORM_SQL = `CASE
 END`;
 
 class ManagerController {
+  async employeeDirectoryPlatformCounts(req, res) {
+    try {
+      // Match the directory's active-company/account and platform rules.
+      // Aggregate customer IDs directly to avoid multiplying counts by employee rows.
+      const [[counts]] = await db.execute(`
+        SELECT
+          COUNT(DISTINCT CASE WHEN ${ANDROID_DEVICE_SQL} AND NOT ${IOS_DEVICE_SQL} THEN c.user_id END) AS android_user_count,
+          COUNT(DISTINCT CASE WHEN ${IOS_DEVICE_SQL} THEN c.user_id END) AS ios_user_count
+        FROM customer c
+        INNER JOIN companies co ON co.company_id = c.company_id
+        WHERE co.status = 1 AND c.status = 1 AND ${REGISTERED_DEVICE_SQL}
+      `);
+      const android = Number(counts.android_user_count || 0);
+      const ios = Number(counts.ios_user_count || 0);
+      return res.json({
+        success: true,
+        data: {
+          android_user_count: android,
+          ios_user_count: ios,
+          total_mobile_user_count: android + ios,
+        },
+      });
+    } catch (error) {
+      console.error("Employee directory platform counts error:", error);
+      return res.status(500).json({ success: false, message: "Failed to fetch platform counts" });
+    }
+  }
+
   async createCompanyEmployee(req, res) {
     try {
       const employee = {

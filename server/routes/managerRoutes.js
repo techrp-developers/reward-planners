@@ -43,6 +43,13 @@ const employeeFileUpload = multer({
 });
 
 router.get(
+  "/employee-directory/platform-counts",
+  authenticateToken,
+  authorizeRoles("admin", "rm"),
+  managerController.employeeDirectoryPlatformCounts.bind(managerController),
+);
+
+router.get(
   "/employee-directory/companies",
   authenticateToken,
   authorizeRoles("admin", "rm"),
