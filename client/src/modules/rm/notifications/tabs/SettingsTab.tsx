@@ -1,7 +1,6 @@
 import { FiRefreshCw } from "react-icons/fi";
 import type { ManagerMeta } from "../notificationTypes";
 import { Card, Notice, Tag, secondaryBtn } from "../components";
-import { LANGUAGE_LABELS } from "../notificationUtils";
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -45,23 +44,11 @@ export default function SettingsTab({ meta, onRefresh }: { meta: ManagerMeta; on
         <p className="px-5 pb-4 text-xs text-gray-500">Devices still registered with the old Firebase project are kept. Pushes to them use the legacy fallback when FIREBASE_LEGACY_SERVICE_ACCOUNT is configured.</p>
       </Card>
 
-      <Card title="Test recipients" subtitle="Send Test and test-only campaigns go only to these accounts (NOTIFICATION_TEST_USER_IDS).">
-        {meta.testUsers.length ? (
-          <dl className="divide-y divide-gray-100">
-            {meta.testUsers.map((user) => (
-              <Row key={user.user_id} label={`${user.name} (#${user.user_id})`}>
-                <span className="flex gap-1"><Tag>{LANGUAGE_LABELS[user.language] || user.language}</Tag>{user.has_device ? <Tag tone="green">Device registered</Tag> : <Tag tone="amber">No active device</Tag>}</span>
-              </Row>
-            ))}
-          </dl>
-        ) : <div className="p-4"><Notice>No test users are configured. The server configuration (NOTIFICATION_TEST_USER_IDS) must list approved development accounts only.</Notice></div>}
-      </Card>
-
       <Card title="Your scope">
         <dl className="divide-y divide-gray-100">
           <Row label="Role"><span className="uppercase">{meta.role}</span></Row>
           <Row label="Company access">
-            {scope.global ? "All companies" : scope.assignmentsAvailable ? `${scope.companyCount} assigned compan${scope.companyCount === 1 ? "y" : "ies"}` : "Assignments not configured (test sends only)"}
+            {scope.global ? "All companies" : scope.assignmentsAvailable ? `${scope.companyCount} assigned compan${scope.companyCount === 1 ? "y" : "ies"}` : "Assignments not configured (live audience unavailable)"}
           </Row>
           <Row label="Sending authority">{meta.permissions.send ? "You send and schedule directly (no admin approval)" : "Not allowed to send campaigns"}</Row>
           <Row label="Large-send confirmation">More than {limits.largeSendThreshold} recipients requires confirming the exact count</Row>

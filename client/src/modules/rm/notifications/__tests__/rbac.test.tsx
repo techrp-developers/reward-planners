@@ -67,7 +67,7 @@ describe("RM has the full Push Notification Manager", () => {
   it("the RM sidebar links to the Push Notification Manager", () => {
     auth.user = { user_id: 18, role: "rm", name: "Riya", email: "rm@test.invalid" };
     render(<MemoryRouter initialEntries={[routes.rm.dashboard]}><RmSidebar /></MemoryRouter>);
-    expect(screen.getByText("Push Notification Manager")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Push notifications" }).getAttribute("href")).toBe(routes.rm.notifications);
   });
 
   it("an RM can open every notification-management tab", async () => {

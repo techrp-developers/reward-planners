@@ -37,7 +37,7 @@ function normalizeMeta(data: Partial<ManagerMeta>): ManagerMeta {
     ...meta,
     modules: meta.modules ?? [],
     categories: meta.categories ?? ["marketing", "engagement", "announcement"],
-    audienceTypes: meta.audienceTypes ?? ["test"],
+    audienceTypes: meta.audienceTypes ?? ["company"],
     targetScreens: meta.targetScreens ?? [],
     contentTypes: meta.contentTypes ?? ["standard"],
     announcementTypes: meta.announcementTypes ?? [],
@@ -122,7 +122,7 @@ export default function NotificationManager() {
             <Notice tone="red">The backend is running an older version than this dashboard, so some features are hidden. Restart the server (npm run dev) and reload.</Notice>
           )}
           {!meta.permissions.send && !meta.serverOutdated && (
-            <Notice tone="blue">Your account can prepare notifications and send tests, but not send campaigns.</Notice>
+            <Notice tone="blue">Your account can prepare notifications, but not send campaigns.</Notice>
           )}
           {!meta.infrastructure.campaignTables && (
             <Notice>Campaign tables are not installed yet, so drafts, scheduling and reports are unavailable. The server team must apply <code>migrations/20261027_01_create_notification_campaigns.sql</code>. Templates, history and overview still work.</Notice>
@@ -135,14 +135,14 @@ export default function NotificationManager() {
                   <p className="font-extrabold text-gray-900">No companies assigned yet</p>
                   <p className="text-sm text-gray-500">
                     {canManageCompanies
-                      ? "Assign companies to start selecting employees and creating notifications. Until then you can prepare campaigns and send tests."
-                      : "You can prepare campaigns and send tests, but employee audiences stay locked until companies are assigned to you."}
+                      ? "Assign companies to start selecting employees and creating notifications. Until then you can prepare campaign drafts."
+                      : "You can prepare campaign drafts, but employee audiences stay locked until companies are assigned to you."}
                   </p>
                 </div>
                 {canManageCompanies && <button type="button" className={primaryBtn} onClick={() => nav.go("companies")}><FiBriefcase /> Manage Companies</button>}
               </div>
             ) : (
-              <Notice tone="blue">RM company assignments are not configured yet. You can prepare campaigns and send tests to authorised test users only.</Notice>
+              <Notice tone="blue">RM company assignments are not configured yet. You can prepare drafts, but cannot send to employees until assignments are configured.</Notice>
             )
           )}
           {tab === "overview" && <OverviewTab meta={meta} nav={nav} />}
