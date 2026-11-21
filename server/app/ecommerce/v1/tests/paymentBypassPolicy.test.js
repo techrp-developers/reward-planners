@@ -4,6 +4,7 @@ const {
   buildBypassCaptureEvent,
   bypassOrderId,
   isBypassPayment,
+  rupeesToPaise,
   shouldBypassPayment,
 } = require("../utils/paymentBypassPolicy");
 
@@ -51,6 +52,11 @@ test("the bypass event matches what the paid webhook path reads", () => {
   assert.equal(payment.amount, 39910);
   assert.equal(payment.currency, "INR");
   assert.equal(isBypassPayment(payment.id), true);
+});
+
+test("rupees are converted to an integer number of paise", () => {
+  assert.equal(rupeesToPaise(1.15), 115);
+  assert.equal(rupeesToPaise(399.10), 39910);
 });
 
 test("real Razorpay payments are never treated as bypassed", () => {

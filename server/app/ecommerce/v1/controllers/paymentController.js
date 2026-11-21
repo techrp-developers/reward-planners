@@ -13,6 +13,7 @@ const {
 const {
   buildBypassCaptureEvent,
   bypassOrderId,
+  rupeesToPaise,
   shouldBypassPayment,
 } = require("../utils/paymentBypassPolicy");
 
@@ -111,6 +112,7 @@ class PaymentController {
       }
 
       const amount = Number(order.total_amount);
+      const amountInPaise = rupeesToPaise(amount);
 
       // ==========================
       // TEST ACCOUNT PAYMENT BYPASS
@@ -146,7 +148,7 @@ class PaymentController {
           paymentStatus: "paid",
           key: process.env.RAZOR_API_KEY,
           orderId: bypassOrderId(orderId),
-          amount: Math.round(amount * 100),
+          amount: amountInPaise,
           currency: "INR",
         });
       }
@@ -187,7 +189,7 @@ class PaymentController {
         return res.status(200).json({
           key: process.env.RAZOR_API_KEY,
           orderId: existing.razorpay_order_id,
-          amount: amount * 100,
+          amount: amountInPaise,
           currency: "INR",
         });
       }
@@ -208,7 +210,7 @@ class PaymentController {
 
       try {
         razorpayOrder = await razorpay.orders.create({
-          amount: amount * 100,
+          amount: amountInPaise,
           currency: "INR",
           receipt: orderId.toString(),
           payment_capture: 1,
@@ -282,7 +284,7 @@ class PaymentController {
           return res.status(200).json({
             key: process.env.RAZOR_API_KEY,
             orderId: race?.razorpay_order_id,
-            amount: amount * 100,
+            amount: amountInPaise,
             currency: "INR",
           });
         }

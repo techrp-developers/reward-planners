@@ -4,6 +4,10 @@ const BYPASS_ORDER_PREFIX = "bypass_order_";
 const BYPASS_PAYMENT_PREFIX = "bypass_pay_";
 const BYPASS_REFUND_PREFIX = "bypass_rfnd_";
 
+function rupeesToPaise(amount) {
+  return Math.round(Number(amount) * 100);
+}
+
 function shouldBypassPayment({
   userId,
   enabled = process.env.ECOMMERCE_PAYMENT_BYPASS ?? "false",
@@ -36,7 +40,7 @@ function buildBypassCaptureEvent({ orderId, amount }) {
         entity: {
           id: `${BYPASS_PAYMENT_PREFIX}${orderId}`,
           order_id: bypassOrderId(orderId),
-          amount: Math.round(Number(amount) * 100),
+          amount: rupeesToPaise(amount),
           currency: "INR",
           method: "test_bypass",
         },
@@ -50,5 +54,6 @@ module.exports = {
   bypassOrderId,
   bypassRefundId,
   isBypassPayment,
+  rupeesToPaise,
   shouldBypassPayment,
 };
