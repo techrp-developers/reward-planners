@@ -141,6 +141,11 @@ class CampaignModel {
   }
 
   async createCampaign(data) {
+    if (data.campaign_type === "featured" && data.status === "active") {
+      const error = new Error("Create the featured campaign as a draft, add products, then activate it");
+      error.statusCode = 400;
+      throw error;
+    }
     const [result] = await db.query(
       `
       INSERT INTO campaigns (
@@ -155,9 +160,14 @@ class CampaignModel {
         redirect_ids,
         redirect_url,
         display_order,
-        status
+        status,
+        background_type,
+        background_color,
+        gradient_end_color,
+        text_color,
+        cta_text
       )
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `,
       [
         data.title,
@@ -174,6 +184,11 @@ class CampaignModel {
         data.redirect_url || null,
         data.display_order || 0,
         data.status || "draft",
+        data.background_type || "gradient",
+        data.background_color || "#4B0082",
+        data.gradient_end_color || "#6A00FF",
+        data.text_color || "#FFFFFF",
+        data.cta_text || "Explore More",
       ],
     );
 
@@ -182,7 +197,9 @@ class CampaignModel {
 
   async getCampaigns(filters = {}) {
     let sql = `
-      SELECT *
+      SELECT campaigns.*,
+        (SELECT COUNT(*) FROM campaign_featured_products cfp
+         WHERE cfp.campaign_id = campaigns.campaign_id) AS featured_product_count
       FROM campaigns
       WHERE 1=1
     `;
@@ -304,8 +321,27 @@ class CampaignModel {
     }
 
     if (data.status !== undefined) {
+      if (data.status === "active") {
+        await this.assertFeaturedCampaignCanActivate(id, {
+          ...data,
+          banner_image: banner_image || data.banner_image,
+        });
+      }
       fields.push("status = ?");
       values.push(data.status);
+    }
+
+    for (const field of [
+      "background_type",
+      "background_color",
+      "gradient_end_color",
+      "text_color",
+      "cta_text",
+    ]) {
+      if (data[field] !== undefined) {
+        fields.push(`${field} = ?`);
+        values.push(data[field]);
+      }
     }
 
     if (!fields.length) {
@@ -327,6 +363,9 @@ class CampaignModel {
   }
 
   async updateStatus(id, status) {
+    if (status === "active") {
+      await this.assertFeaturedCampaignCanActivate(id);
+    }
     await db.query(
       `
       UPDATE campaigns
@@ -337,11 +376,89 @@ class CampaignModel {
     );
   }
 
+  async assertFeaturedCampaignCanActivate(campaignId, pending = {}) {
+    const [[campaign]] = await db.query(
+      `SELECT campaign_type, module, title, background_type, background_color,
+         gradient_end_color, text_color, banner_image, start_at, end_at
+       FROM campaigns WHERE campaign_id = ? LIMIT 1`,
+      [campaignId],
+    );
+    if ((pending.campaign_type || campaign?.campaign_type) !== "featured") return;
+    const configuration = {
+      module: pending.module ?? campaign?.module,
+      title: pending.title ?? campaign?.title,
+      background_type: pending.background_type ?? campaign?.background_type ?? "gradient",
+      background_color: pending.background_color ?? campaign?.background_color ?? "#4B0082",
+      gradient_end_color: pending.gradient_end_color ?? campaign?.gradient_end_color ?? "#6A00FF",
+      text_color: pending.text_color ?? campaign?.text_color ?? "#FFFFFF",
+      banner_image: pending.banner_image ?? campaign?.banner_image,
+      start_at: pending.start_at ?? campaign?.start_at,
+      end_at: pending.end_at ?? campaign?.end_at,
+    };
+    if (configuration.module !== "product" || !String(configuration.title || "").trim()) {
+      const error = new Error("Featured campaigns require a product module and a title");
+      error.statusCode = 400;
+      throw error;
+    }
+    if (!["solid", "gradient", "image"].includes(configuration.background_type)) {
+      const error = new Error("Featured campaign background type is invalid");
+      error.statusCode = 400;
+      throw error;
+    }
+    if (
+      !/^#[0-9A-Fa-f]{6}$/.test(String(configuration.background_color)) ||
+      !/^#[0-9A-Fa-f]{6}$/.test(String(configuration.gradient_end_color)) ||
+      !/^#[0-9A-Fa-f]{6}$/.test(String(configuration.text_color)) ||
+      (configuration.background_type === "image" && !configuration.banner_image)
+    ) {
+      const error = new Error("Featured campaign background configuration is invalid");
+      error.statusCode = 400;
+      throw error;
+    }
+    if (
+      configuration.start_at &&
+      configuration.end_at &&
+      new Date(configuration.start_at) >= new Date(configuration.end_at)
+    ) {
+      const error = new Error("End date must be after start date");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const [[{ total }]] = await db.query(
+      `SELECT COUNT(DISTINCT fp.product_id) AS total
+       FROM campaign_featured_products fp
+       JOIN eproducts p ON p.product_id = fp.product_id
+       WHERE fp.campaign_id = ?
+         AND p.status = 'approved'
+         AND p.is_visible = 1
+         AND p.is_deleted = 0
+         AND EXISTS (
+           SELECT 1 FROM product_variants v
+           WHERE v.product_id = p.product_id
+             AND v.is_visible = 1
+             AND v.sale_price > 0
+             AND v.stock > 0
+         )`,
+      [campaignId],
+    );
+    if (!Number(total)) {
+      const error = new Error("Add at least one available product before activating this featured campaign");
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
   async deleteCampaign(id) {
     const conn = await db.getConnection();
 
     try {
       await conn.beginTransaction();
+
+      await conn.query(
+        `DELETE FROM campaign_featured_products WHERE campaign_id = ?`,
+        [id],
+      );
 
       await conn.query(
         `
@@ -1125,6 +1242,373 @@ class CampaignModel {
     );
 
     return rows;
+  }
+
+  async getFeaturedProductOptions(search = "") {
+    const term = `%${String(search).trim()}%`;
+    const numericSearch = /^[1-9]\d*$/.test(String(search).trim())
+      ? Number(search)
+      : null;
+    const [rows] = await db.query(
+      `SELECT
+         p.product_id,
+         p.product_name,
+         p.brand_name,
+         p.category_id,
+         c.category_name,
+         pv.variant_id,
+         pv.sale_price,
+         pv.mrp,
+         pi.image_url,
+         pi.updated_at AS image_updated_at
+       FROM eproducts p
+       LEFT JOIN categories c ON c.category_id = p.category_id
+       JOIN product_variants pv ON pv.variant_id = (
+         SELECT v.variant_id
+         FROM product_variants v
+         WHERE v.product_id = p.product_id
+           AND v.is_visible = 1
+           AND v.sale_price > 0
+           AND v.stock > 0
+         ORDER BY v.sale_price, v.variant_id
+         LIMIT 1
+       )
+       LEFT JOIN product_images pi ON pi.image_id = (
+         SELECT i.image_id
+         FROM product_images i
+         WHERE i.product_id = p.product_id
+         ORDER BY (i.type = 'gallery') DESC, i.sort_order, i.image_id
+         LIMIT 1
+       )
+       WHERE p.status = 'approved'
+         AND p.is_visible = 1
+         AND p.is_deleted = 0
+         AND pv.stock > 0
+         AND (
+           p.product_name LIKE ?
+           OR p.brand_name LIKE ?
+           OR c.category_name LIKE ?
+           OR (? IS NOT NULL AND p.product_id = ?)
+         )
+       ORDER BY p.product_name, p.product_id
+       LIMIT 50`,
+      [term, term, term, numericSearch, numericSearch],
+    );
+    return rows.map((row) => ({
+      ...row,
+      image_url: getPublicUrl(row.image_url, row.image_updated_at),
+    }));
+  }
+
+  async getFeaturedProducts(campaignId) {
+    const [rows] = await db.query(
+      `SELECT
+         fp.product_id,
+         fp.display_order,
+         p.product_name,
+         p.brand_name,
+         p.category_id,
+         c.category_name,
+         v.variant_id,
+         v.sale_price,
+         v.mrp,
+         v.stock,
+         p.status AS product_status,
+         p.is_visible AS product_is_visible,
+         p.is_deleted AS product_is_deleted,
+         i.image_url,
+         i.updated_at AS image_updated_at
+       FROM campaign_featured_products fp
+       LEFT JOIN eproducts p ON p.product_id = fp.product_id
+       LEFT JOIN categories c ON c.category_id = p.category_id
+       LEFT JOIN product_variants v ON v.variant_id = (
+         SELECT pv.variant_id
+         FROM product_variants pv
+         WHERE pv.product_id = fp.product_id
+           AND pv.is_visible = 1
+           AND pv.sale_price > 0
+           AND pv.stock > 0
+         ORDER BY pv.sale_price, pv.variant_id
+         LIMIT 1
+       )
+       LEFT JOIN product_images i ON i.image_id = (
+         SELECT pi.image_id
+         FROM product_images pi
+         WHERE pi.product_id = fp.product_id
+         ORDER BY (pi.type = 'gallery') DESC, pi.sort_order, pi.image_id
+         LIMIT 1
+       )
+       WHERE fp.campaign_id = ?
+       ORDER BY fp.display_order, fp.product_id`,
+      [campaignId],
+    );
+    return rows.map((row) => ({
+      ...row,
+      image_url: getPublicUrl(row.image_url, row.image_updated_at),
+      is_eligible: Boolean(
+        row.product_status === "approved" &&
+        Number(row.product_is_visible) === 1 &&
+        Number(row.product_is_deleted) === 0 &&
+        row.variant_id &&
+        Number(row.stock) > 0,
+      ),
+    }));
+  }
+
+  async saveFeaturedProducts(campaignId, productIds) {
+    if (!Array.isArray(productIds)) {
+      const error = new Error("product_ids must be an array of positive product IDs");
+      error.statusCode = 400;
+      throw error;
+    }
+    const normalizedIds = [];
+    const seenIds = new Set();
+    for (const value of productIds) {
+      const id = Number(value);
+      if (!Number.isSafeInteger(id) || id <= 0) {
+        const error = new Error("product_ids must contain only positive integer IDs");
+        error.statusCode = 400;
+        throw error;
+      }
+      if (!seenIds.has(id)) {
+        normalizedIds.push(id);
+        seenIds.add(id);
+      }
+    }
+
+    const conn = await db.getConnection();
+    try {
+      await conn.beginTransaction();
+      const [[campaign]] = await conn.query(
+        `SELECT campaign_type, module, status
+         FROM campaigns WHERE campaign_id = ? FOR UPDATE`,
+        [campaignId],
+      );
+      if (!campaign || campaign.campaign_type !== "featured" || campaign.module !== "product") {
+        const error = new Error("Featured product selections require a product featured campaign");
+        error.statusCode = campaign ? 400 : 404;
+        throw error;
+      }
+      if (campaign.status === "active" && !normalizedIds.length) {
+        const error = new Error("Set the campaign to draft before removing all featured products");
+        error.statusCode = 400;
+        throw error;
+      }
+
+      if (normalizedIds.length) {
+        const [eligibleRows] = await conn.query(
+          `SELECT p.product_id
+           FROM eproducts p
+           WHERE p.product_id IN (?)
+             AND p.status = 'approved'
+             AND p.is_visible = 1
+             AND p.is_deleted = 0
+             AND EXISTS (
+               SELECT 1 FROM product_variants v
+               WHERE v.product_id = p.product_id
+                 AND v.is_visible = 1
+                 AND v.sale_price > 0
+                 AND v.stock > 0
+             )`,
+          [normalizedIds],
+        );
+        const eligibleIds = new Set(eligibleRows.map((row) => Number(row.product_id)));
+        const invalidIds = normalizedIds.filter((id) => !eligibleIds.has(id));
+        if (invalidIds.length) {
+          const error = new Error(`Selected products are unavailable or not approved: ${invalidIds.join(", ")}`);
+          error.statusCode = 400;
+          throw error;
+        }
+      }
+
+      await conn.query(
+        `DELETE FROM campaign_featured_products WHERE campaign_id = ?`,
+        [campaignId],
+      );
+      if (normalizedIds.length) {
+        await conn.query(
+          `INSERT INTO campaign_featured_products (campaign_id, product_id, display_order)
+           VALUES ?`,
+          [normalizedIds.map((productId, index) => [campaignId, productId, index + 1])],
+        );
+      }
+      await conn.commit();
+    } catch (error) {
+      await conn.rollback();
+      throw error;
+    } finally {
+      conn.release();
+    }
+    return this.getFeaturedProducts(campaignId);
+  }
+
+  async getActiveFeaturedCampaign() {
+    const [rows] = await db.query(
+      `SELECT c.campaign_id, c.title, c.banner_image, c.updated_at,
+         c.background_type, c.background_color, c.gradient_end_color,
+         c.text_color, c.cta_text, c.display_order,
+         (SELECT COUNT(DISTINCT fp.product_id)
+          FROM campaign_featured_products fp
+          JOIN eproducts p ON p.product_id = fp.product_id
+          WHERE fp.campaign_id = c.campaign_id
+            AND p.status = 'approved' AND p.is_visible = 1 AND p.is_deleted = 0
+            AND EXISTS (
+              SELECT 1 FROM product_variants v
+              WHERE v.product_id = p.product_id
+                AND v.is_visible = 1 AND v.sale_price > 0 AND v.stock > 0
+            )) AS total_products
+       FROM campaigns c
+       WHERE c.campaign_type = 'featured'
+         AND c.module = 'product'
+         AND c.status = 'active'
+         AND (c.start_at IS NULL OR c.start_at <= NOW())
+         AND (c.end_at IS NULL OR c.end_at >= NOW())
+         AND EXISTS (
+           SELECT 1 FROM campaign_featured_products fp
+           JOIN eproducts p ON p.product_id = fp.product_id
+           WHERE fp.campaign_id = c.campaign_id
+             AND p.status = 'approved' AND p.is_visible = 1 AND p.is_deleted = 0
+             AND EXISTS (
+               SELECT 1 FROM product_variants v
+               WHERE v.product_id = p.product_id
+                 AND v.is_visible = 1 AND v.sale_price > 0 AND v.stock > 0
+             )
+         )
+       ORDER BY c.display_order, c.campaign_id DESC
+       LIMIT 1`,
+    );
+    if (!rows.length) return null;
+    return {
+      ...rows[0],
+      background: {
+        type: rows[0].background_type,
+        colors: rows[0].background_type === "gradient"
+          ? [rows[0].background_color, rows[0].gradient_end_color]
+          : [rows[0].background_color],
+        image_url: rows[0].background_type === "image"
+          ? getPublicUrl(rows[0].banner_image, rows[0].updated_at)
+          : null,
+        text_color: rows[0].text_color,
+      },
+      cta_text: rows[0].cta_text,
+      total_products: Number(rows[0].total_products),
+      banner_image: undefined,
+      background_type: undefined,
+      background_color: undefined,
+      gradient_end_color: undefined,
+      text_color: undefined,
+      updated_at: undefined,
+    };
+  }
+
+  async getPublicFeaturedProducts(campaignId, page = 1, limit = 20) {
+    const currentPage = Math.max(1, Number.parseInt(page, 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number.parseInt(limit, 10) || 20));
+    const offset = (currentPage - 1) * pageSize;
+    const [[campaign]] = await db.query(
+      `SELECT campaign_id, title
+       FROM campaigns
+       WHERE campaign_id = ?
+         AND campaign_type = 'featured'
+         AND module = 'product'
+         AND status = 'active'
+         AND (start_at IS NULL OR start_at <= NOW())
+         AND (end_at IS NULL OR end_at >= NOW())
+       LIMIT 1`,
+      [campaignId],
+    );
+    if (!campaign) throw notFound();
+
+    const eligibility = `fp.campaign_id = ?
+      AND p.status = 'approved'
+      AND p.is_visible = 1
+      AND p.is_deleted = 0
+      AND EXISTS (
+        SELECT 1 FROM product_variants ev
+        WHERE ev.product_id = p.product_id
+          AND ev.is_visible = 1
+          AND ev.sale_price > 0
+          AND ev.stock > 0
+      )`;
+    const [[{ total }]] = await db.query(
+      `SELECT COUNT(DISTINCT fp.product_id) AS total
+       FROM campaign_featured_products fp
+       JOIN eproducts p ON p.product_id = fp.product_id
+       WHERE ${eligibility}`,
+      [campaignId],
+    );
+    if (offset >= Number(total)) {
+      return {
+        campaign_id: campaign.campaign_id,
+        title: campaign.title,
+        products: [],
+        pagination: {
+          page: currentPage,
+          limit: pageSize,
+          total: Number(total),
+          totalPages: Math.ceil(Number(total) / pageSize),
+        },
+      };
+    }
+    const [products] = await db.query(
+      `SELECT
+         fp.product_id,
+         p.product_name,
+         p.brand_name,
+         p.category_id,
+         p.subcategory_id,
+         p.is_discount_eligible,
+         pv.variant_id,
+         pv.mrp,
+         pv.sale_price AS original_price,
+         pv.sale_price AS final_price,
+         pv.stock,
+         fp.campaign_id,
+         pi.image_url,
+         pi.updated_at AS image_updated_at,
+         COALESCE(reviews.avg_rating, 0) AS avg_rating,
+         COALESCE(reviews.total_reviews, 0) AS total_reviews
+       FROM campaign_featured_products fp
+       JOIN eproducts p ON p.product_id = fp.product_id
+       JOIN product_variants pv ON pv.variant_id = (
+         SELECT v.variant_id
+         FROM product_variants v
+         WHERE v.product_id = p.product_id
+           AND v.is_visible = 1
+           AND v.sale_price > 0
+           AND v.stock > 0
+         ORDER BY v.sale_price, v.variant_id
+         LIMIT 1
+       )
+       LEFT JOIN product_images pi ON pi.image_id = (
+         SELECT i.image_id
+         FROM product_images i
+         WHERE i.product_id = p.product_id
+         ORDER BY (i.type = 'gallery') DESC, i.sort_order, i.image_id
+         LIMIT 1
+       )
+       LEFT JOIN (
+         SELECT product_id, ROUND(AVG(rating), 1) AS avg_rating, COUNT(*) AS total_reviews
+         FROM product_reviews
+         WHERE status = 'approved'
+         GROUP BY product_id
+       ) reviews ON reviews.product_id = p.product_id
+       WHERE ${eligibility}
+       ORDER BY fp.display_order, fp.product_id
+       LIMIT ? OFFSET ?`,
+      [campaignId, pageSize, offset],
+    );
+    return {
+      campaign_id: campaign.campaign_id,
+      title: campaign.title,
+      products,
+      pagination: {
+        page: currentPage,
+        limit: pageSize,
+        total: Number(total),
+        totalPages: Math.ceil(Number(total) / pageSize),
+      },
+    };
   }
 }
 

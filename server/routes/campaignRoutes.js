@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const campaignController = require("../controllers/campaignController");
-const { uploadFlashBanner } = require("../middleware/mediaUpload/flashUpload");
+const { uploadCampaignImage } = require("../middleware/mediaUpload/flashUpload");
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 
 // ================================= ADMIN ROUTES =================================
@@ -18,7 +18,7 @@ router.post(
   "/campaigns",
   authenticateToken,
   authorizeRoles("vendor_manager", "admin"),
-  uploadFlashBanner.single("banner_image"),
+  uploadCampaignImage,
   campaignController.createCampaign,
 );
 
@@ -43,7 +43,7 @@ router.put(
   "/campaigns/:id",
   authenticateToken,
   authorizeRoles("vendor_manager", "admin"),
-  uploadFlashBanner.single("banner_image"),
+  uploadCampaignImage,
   campaignController.updateCampaign,
 );
 
@@ -69,6 +69,27 @@ router.get(
   authenticateToken,
   authorizeRoles("vendor_manager", "admin"),
   campaignController.getCampaignItems,
+);
+
+router.get(
+  "/featured-products/search",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  campaignController.searchFeaturedProductOptions,
+);
+
+router.get(
+  "/campaigns/:id/featured-products",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  campaignController.getFeaturedProducts,
+);
+
+router.put(
+  "/campaigns/:id/featured-products",
+  authenticateToken,
+  authorizeRoles("vendor_manager", "admin"),
+  campaignController.saveFeaturedProducts,
 );
 
 // Available variants

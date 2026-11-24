@@ -124,6 +124,8 @@ const FlashSaleList = lazy(() => import("./modules/products/vendorManager/flashS
 const FlashSaleEditor = lazy(() => import("./modules/products/vendorManager/flashSale/FlashSaleEditor.tsx"));
 const PosterList = lazy(() => import("./modules/products/vendorManager/poster/PosterList.tsx"));
 const PosterEditor = lazy(() => import("./modules/products/vendorManager/poster/PosterEditor.tsx"));
+const FeaturedCampaignList = lazy(() => import("./modules/products/vendorManager/featuredProducts/FeaturedCampaignList.tsx"));
+const FeaturedCampaignEditor = lazy(() => import("./modules/products/vendorManager/featuredProducts/FeaturedCampaignEditor.tsx"));
 const BbpsLogoUpload = lazy(() => import("./modules/products/vendorManager/bbps/BbpsLogoUpload.tsx"));
 
 /* Sales */
@@ -377,6 +379,9 @@ export default function App() {
         <Route path={routes.manager.flashSales.list} element={<FlashSaleList />} />
         <Route path={routes.manager.flashSales.create} element={<FlashSaleEditor />} />
         <Route path={routes.manager.flashSales.edit} element={<FlashSaleEditor />} />
+        <Route path={routes.manager.featuredProducts.list} element={<FeaturedCampaignList />} />
+        <Route path={routes.manager.featuredProducts.create} element={<FeaturedCampaignEditor />} />
+        <Route path={routes.manager.featuredProducts.edit} element={<FeaturedCampaignEditor />} />
         <Route path={routes.manager.bbpsLogos} element={<BbpsLogoUpload />} />
 
         {/* Orders */}

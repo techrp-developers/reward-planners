@@ -54,6 +54,11 @@ export const routes = {
       create: "/manager/flash-sales/create",
       edit: "/manager/flash-sales/:id",
     },
+    featuredProducts: {
+      list: "/manager/featured-products",
+      create: "/manager/featured-products/create",
+      edit: "/manager/featured-products/:id",
+    },
     orders:{
       orderList: "/manager/orders",
       returns: "/manager/orders/returns",
