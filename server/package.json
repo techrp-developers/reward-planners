@@ -8,6 +8,8 @@
     "test:poster-redirect": "node --test tests/posterRedirect.test.js tests/campaignModules.test.js tests/contentNavigation.test.js",
     "start": "node app.js",
     "dev": "nodemon app.js",
+    "test:service-p0": "node --test app/service/v1/tests/p0Safety.db.test.js",
+    "test:service-manager": "node --test tests/serviceRouteMount.test.js app/service/v1/tests/managerWorkspace.test.js app/service/v1/tests/managerRoute.test.js app/service/v1/tests/managerCancellationAudit.test.js app/service/v1/tests/managerWorkspace.db.test.js app/service/v1/tests/serviceRewards.test.js app/service/v1/tests/serviceOffers.test.js app/service/v1/tests/paymentState.test.js",
     "test:promotions": "node --test tests/rmPromotions.test.js",
     "migrate:rm-promotions": "node scripts/migrate-rm-promotions.js",
     "migrate:flea-market-invoices": "node scripts/migrate-invoices-add-flea-market-schedule.js",

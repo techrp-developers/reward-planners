@@ -15,22 +15,17 @@ async function retryFailedRefunds() {
        JOIN service_orders so ON so.id = r.service_order_id
        WHERE r.status IN ('failed', 'pending')
        AND r.refund_method = 'original'
+       AND ? = 1
        AND r.retry_count < 5
        AND r.created_at < NOW() - INTERVAL 5 MINUTE
        AND (r.last_retried_at IS NULL OR r.last_retried_at < NOW() - INTERVAL 10 MINUTE)
        LIMIT 10`,
+      [process.env.SERVICE_REFUND_EXECUTION_ENABLED==='true'?1:0],
     );
 
     for (const row of rows) {
       try {
-        await db.execute(
-          `UPDATE service_order_refunds
-           SET retry_count = retry_count + 1,
-               last_retried_at = NOW()
-           WHERE id = ?`,
-          [row.id],
-        );
-
+        // The refund runner atomically owns retries through its durable lease.
         await ServiceOrderModel.processRefund({
           payment_id: row.payment_id,
           amount: row.refund_amount,

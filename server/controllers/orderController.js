@@ -36,6 +36,9 @@ function getCourierErrorMessage(result) {
 }
 
 function getServiceCancellationError(error) {
+  if (/^(SERVICE_|INVALID_SERVICE_)/.test(error.code || '') && [400,409,503].includes(error.status)) {
+    return {status:error.status,message:error.message};
+  }
   const errors = {
     CANCELLATION_REQUEST_NOT_FOUND: [404, "Cancellation request not found"],
     INVALID_CANCELLATION_STATE: [409, "Cancellation request has already been decided"],
@@ -693,6 +696,7 @@ class OrderController {
       const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
       const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 20));
       const data = await ServiceOrderModel.getServiceCancellationRequests({
+        inHouseOnly: req.inHouseOnly === true,
         status: req.query.status || null,
         page,
         limit,
@@ -745,6 +749,7 @@ class OrderController {
       const refundData = await ServiceOrderModel.approveCancellation(
         serviceOrderId,
         conn,
+        req.inHouseOnly ? req.user.user_id : null,
       );
 
       await conn.commit();
@@ -859,7 +864,7 @@ class OrderController {
         throw new Error("INVALID_CANCELLATION_STATE");
       }
 
-      refundData = await ServiceOrderModel.approveCancellation(serviceOrderId, conn);
+      refundData = await ServiceOrderModel.approveCancellation(serviceOrderId, conn, req.inHouseOnly ? req.user.user_id : null);
       await conn.commit();
 
       notifyUser({
@@ -906,7 +911,7 @@ class OrderController {
         return res.status(400).json({ success: false, message: "Invalid service order id" });
       }
 
-      const rejection = await ServiceOrderModel.rejectCancellation(serviceOrderId, conn);
+      const rejection = await ServiceOrderModel.rejectCancellation(serviceOrderId, conn, req.inHouseOnly ? req.user.user_id : null);
 
       await conn.commit();
 

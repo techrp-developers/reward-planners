@@ -1,5 +1,6 @@
 const db = require("../../../../config/database");
 const { calculateServiceRewards } = require("./serviceRewards");
+const M=require('./serviceMoney');
 
 // A service banner offer is live only while its CMS entry is published and
 // inside its schedule; the view resolves which variants it prices.
@@ -42,6 +43,21 @@ function toContentId(value) {
 }
 
 const positiveIds = (ids) => [...new Set(ids.map(Number).filter((id) => Number.isInteger(id) && id > 0))];
+let warnedMissingFlash=false;
+async function servicePriceSql(conn){
+  const [columns]=await conn.execute(`SELECT TABLE_NAME,COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE()
+    AND (TABLE_NAME='campaign_service_items' OR (TABLE_NAME='campaigns' AND COLUMN_NAME='module'))`);
+  const names=new Set(columns.map(row=>`${row.TABLE_NAME}.${row.COLUMN_NAME}`));
+  const ready=['campaigns.module','campaign_service_items.campaign_id','campaign_service_items.service_id','campaign_service_items.variant_id','campaign_service_items.offer_price'].every(name=>names.has(name));
+  if(ready)return LIVE_SERVICE_PRICE_SQL;
+  if(columns.some(row=>row.TABLE_NAME==='campaign_service_items'))throw M.failure('Service flash-sale schema is partially installed. Pricing requires administrator review.','SERVICE_PRICING_SCHEMA_REQUIRED',503);
+  // There are no persisted service flash-sale item bindings in a database without
+  // this table. Keep real CMS offers/base prices working; never invent flash rows.
+  if(!warnedMissingFlash){console.warn('[service pricing] Flash sales unavailable: campaign_service_items migration awaits approval. Existing CMS/base pricing remains active.');warnedMissingFlash=true;}
+  return `SELECT banner.content_id,NULL AS campaign_id,banner.service_id,banner.variant_id,banner.offer_price
+    FROM (${LIVE_SERVICE_OFFER_SQL}) banner JOIN service_variants bv ON bv.id=banner.variant_id
+    WHERE banner.offer_price<=bv.price`;
+}
 
 // Offers apply wherever the service is shown, not only when the app arrives
 // from the banner: the lowest live offer wins, matching ecommerce (flash sale wins ties).
@@ -51,8 +67,9 @@ async function getBestServiceOffers(variantIds, conn = db) {
   const ids = positiveIds(variantIds);
   const best = new Map();
   if (!ids.length) return best;
+  const liveSql=await servicePriceSql(conn);
   const [rows] = await conn.query(
-    `SELECT live.* FROM (${LIVE_SERVICE_PRICE_SQL}) live
+    `SELECT live.* FROM (${liveSql}) live
      WHERE live.variant_id IN (?) AND live.offer_price > 0
      ORDER BY live.offer_price ASC, live.campaign_id IS NULL ASC, live.content_id ASC`,
     [ids],
@@ -81,9 +98,10 @@ async function attachServiceOffers(services, idKey = "id", conn = db) {
   const list = (services || []).filter(Boolean);
   const ids = positiveIds(list.map((service) => service[idKey]));
   if (!ids.length) return services;
+  const liveSql=await servicePriceSql(conn);
   const [rows] = await conn.query(
     `SELECT live.service_id, live.content_id, live.campaign_id, live.offer_price, v.price AS regular_price
-     FROM (${LIVE_SERVICE_PRICE_SQL}) live
+     FROM (${liveSql}) live
      JOIN service_variants v ON v.id = live.variant_id
      WHERE live.service_id IN (?) AND live.offer_price > 0
      ORDER BY live.offer_price ASC, live.campaign_id IS NULL ASC, live.content_id ASC`,
@@ -113,8 +131,6 @@ function serviceOfferRewards(price, variant, isOffer) {
   );
 }
 
-const roundMoney = (value) => Math.round(Number(value) * 100) / 100;
-
 /**
  * Cheapest live banner offer for a whole bundle: { total, contentId } or null.
  * Per banner, an individual bundle price wins; otherwise the banner's shared
@@ -140,11 +156,11 @@ async function getBestBundleOffer(bundleId, bundleTotal, conn = db) {
   const total = Number(bundleTotal);
   let best = null;
   for (const row of rows) {
-    const value = Number(row.discount_value || 0);
+    const value = M.paise(row.discount_value||0);
     let offerTotal = null;
     if (row.offer_price != null) offerTotal = Number(row.offer_price);
-    else if (value > 0 && row.discount_type === "percentage") offerTotal = Math.max(0.01, roundMoney(total * (1 - value / 100)));
-    else if (value > 0 && row.discount_type === "fixed") offerTotal = Math.max(0.01, roundMoney(total - value));
+    else if (value > 0n && row.discount_type === "percentage" && value<=10000n) {const p=(M.paise(bundleTotal)*(10000n-value)+5000n)/10000n;offerTotal=Number(M.decimal(p>0n?p:1n));}
+    else if (value > 0n && row.discount_type === "fixed") {const p=M.paise(bundleTotal)-value;offerTotal=Number(M.decimal(p>0n?p:1n));}
     if (offerTotal === null || !(offerTotal > 0) || offerTotal > total) continue;
     const contentId = Number(row.content_id);
     if (!best || offerTotal < best.total || (offerTotal === best.total && contentId < best.contentId)) {
@@ -159,15 +175,7 @@ async function getBestBundleOffer(bundleId, bundleTotal, conn = db) {
  * prices. Rounding goes to the last item so the parts sum to the total.
  */
 function splitBundleOffer(prices, offerTotal) {
-  const base = prices.reduce((sum, price) => sum + Number(price || 0), 0);
-  let allocated = 0;
-  return prices.map((price, index) => {
-    if (index === prices.length - 1) return roundMoney(offerTotal - allocated);
-    const share = base > 0 ? Number(price || 0) / base : 1 / prices.length;
-    const part = roundMoney(offerTotal * share);
-    allocated = roundMoney(allocated + part);
-    return part;
-  });
+  return M.split(prices,offerTotal);
 }
 
 module.exports = {
@@ -179,4 +187,5 @@ module.exports = {
   serviceOfferRewards,
   getBestBundleOffer,
   splitBundleOffer,
+  servicePriceSql,
 };

@@ -14,6 +14,7 @@ import {
   FiPackage,
   FiShoppingCart,
   FiSliders,
+  FiStar,
   FiTag,
   FiUser,
   FiUsers,
@@ -90,6 +91,7 @@ export default function ManagerNavbar() {
           ],
         },
         { label: "Flash sales", to: routes.manager.flashSales.list, Icon: FiZap, matches: ["/manager/flash-sales/"] },
+        { label: "Featured products", to: routes.manager.featuredProducts.list, Icon: FiStar, matches: ["/manager/featured-products/"] },
         {
           label: "Rewards",
           Icon: FiGift,

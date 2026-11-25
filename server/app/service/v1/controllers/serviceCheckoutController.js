@@ -2,6 +2,8 @@ const db = require("../../../../config/database");
 const CartModel = require("../models/serviceCartModel");
 const ServiceOrderModel = require("../models/serviceOrderModel");
 const crypto = require("crypto");
+const ServiceMoney=require("../utils/serviceMoney");
+const {lockCheckoutAddress,lockCheckoutVariant,lockCheckoutBundle}=require('../utils/checkoutGuards');
 const { allocateRedeemedCoins } = require("../utils/serviceRewards");
 const {
   getBestServiceOffer,
@@ -51,19 +53,9 @@ function parseSelectedItemIds(selectedItems) {
 //calculate summary utility function
 function calculateSummary({ bundles = [], individual_items = [] }) {
   // 1 Individual items total
-  const individual_total = individual_items.reduce(
-    (sum, item) => sum + item.price * (item.quantity || 1),
-    0,
-  );
-
-  // 2 Bundle total
-  const bundle_total = bundles.reduce(
-    (sum, bundle) => sum + bundle.bundle_total,
-    0,
-  );
-
-  // 3 Combined item total
-  const item_total = individual_total + bundle_total;
+  const individual_total=Number(ServiceMoney.sum(individual_items.map(item=>ServiceMoney.line(item.price,item.quantity||1))));
+  const bundle_total=Number(ServiceMoney.sum(bundles.map(bundle=>bundle.bundle_total)));
+  const item_total=Number(ServiceMoney.sum([individual_total,bundle_total]));
 
   // 4 Other fields (same as before)
   const discount = 0;
@@ -114,7 +106,7 @@ async function applyRedemptionPreview(userId, items, requestedCoins, summary) {
     requested_redeem_coins: redemption.requested_coins,
     redeem_coins: redemption.redeem_coins,
     reward_discount: redemption.redeem_coins,
-    total: Math.max(0, summary.total - redemption.redeem_coins),
+    total: Number(ServiceMoney.payable(summary.total,redemption.redeem_coins)),
   };
 }
 
@@ -123,7 +115,7 @@ async function applyRedemptionPreview(userId, items, requestedCoins, summary) {
 async function resolveBundleOffer(bundleId, bundleType, isFullBundleSelected, items, conn = db) {
   if (bundleType !== "fixed" && !isFullBundleSelected) return null;
   const prices = items.map((item) => Number(item.bundle_price));
-  const bundleTotal = prices.reduce((sum, price) => sum + price, 0);
+  const bundleTotal = ServiceMoney.sum(prices);
   const offer = await getBestBundleOffer(bundleId, bundleTotal, conn);
   if (!offer) return null;
   const parts = splitBundleOffer(prices, offer.total);
@@ -163,7 +155,13 @@ class ServiceCheckoutController {
       // the normal price rather than a stale cart price.
       conn = await db.getConnection();
       await conn.beginTransaction();
+      await lockCheckoutAddress(conn,addressId,userId);
+      // Lock the cart before reading its items so two concurrent checkout requests
+      // cannot both consume the same pre-clear snapshot.
+      await conn.execute('SELECT id FROM service_cart WHERE id=? AND user_id=? FOR UPDATE',[cart.id,userId]);
       const cartData = await CartModel.getCart(cart.id, conn);
+      for (const bundle of cartData.bundles || []) await lockCheckoutBundle(conn,bundle.bundle_id);
+      for(const item of [...(cartData.individual_items||[]),...(cartData.bundles||[]).flatMap(bundle=>bundle.items)])await lockCheckoutVariant(conn,item.service_id,item.variant_id);
 
       const { bundles = [], individual_items = [] } = cartData;
 
@@ -266,7 +264,7 @@ class ServiceCheckoutController {
       }
 
       console.log(err);
-      res.status(500).json({
+      res.status(err.status||500).json({
         success: false,
         message: err.message,
       });
@@ -309,13 +307,10 @@ class ServiceCheckoutController {
       }
 
       // get price from variant
-      const [[variant]] = await db.execute(
-        `SELECT price, can_earn_reward, earn_reward_type, earn_reward_value,
-                max_earn_reward, can_redeem_reward, redemption_type,
-                redemption_value, max_redemption_amount
-         FROM service_variants WHERE id = ? AND service_id = ?`,
-        [variant_id, service_id],
-      );
+      conn = await db.getConnection();
+      await conn.beginTransaction();
+      await lockCheckoutAddress(conn,addressId,userId);
+      const variant=await lockCheckoutVariant(conn,service_id,variant_id);
 
       if (!variant) {
         return res.status(404).json({
@@ -325,8 +320,6 @@ class ServiceCheckoutController {
       }
 
       const parentOrderId = crypto.randomUUID();
-      conn = await db.getConnection();
-      await conn.beginTransaction();
       // Resolved inside the transaction so an offer that ends mid-checkout
       // charges the normal price rather than a stale preview price.
       const offer = await getBestServiceOffer(variant_id, conn);
@@ -380,7 +373,7 @@ class ServiceCheckoutController {
       });
     } catch (err) {
       if (conn) await conn.rollback();
-      res.status(500).json({
+      res.status(err.status||500).json({
         success: false,
         message: err.message,
       });
@@ -421,10 +414,9 @@ class ServiceCheckoutController {
       }
 
       // get bundle
-      const [[bundle]] = await db.execute(
-        `SELECT id,type FROM service_bundles WHERE id = ?`,
-        [bundle_id],
-      );
+      conn=await db.getConnection();await conn.beginTransaction();
+      await lockCheckoutAddress(conn,addressId,userId);
+      const bundle=await lockCheckoutBundle(conn,bundle_id);
 
       if (!bundle) {
         return res.status(404).json({
@@ -434,7 +426,7 @@ class ServiceCheckoutController {
       }
 
       // get bundle items
-      const [items] = await db.execute(
+      const [items] = await conn.execute(
         `SELECT 
           bi.id,
           bi.service_id,
@@ -456,8 +448,10 @@ class ServiceCheckoutController {
         WHERE bi.bundle_id = ?`,
         [bundle_id],
       );
+      for(const item of items)await lockCheckoutVariant(conn,item.service_id,item.variant_id);
 
       if (!items.length) {
+        await conn.rollback();
         return res.status(400).json({
           success: false,
           message: "No items found in bundle",
@@ -488,6 +482,7 @@ class ServiceCheckoutController {
         hasOptional &&
         selectedItemIds.length === 0
       ) {
+        await conn.rollback();
         return res.status(400).json({
           success: false,
           message: "Please select at least one service",
@@ -501,8 +496,6 @@ class ServiceCheckoutController {
 
       const createdOrders = [];
 
-      conn = await db.getConnection();
-      await conn.beginTransaction();
       const offer = await resolveBundleOffer(
         bundle_id, bundle.type, isFullBundleSelected, items, conn,
       );
@@ -590,7 +583,7 @@ class ServiceCheckoutController {
         await conn.rollback();
       }
 
-      res.status(500).json({
+      res.status(err.status||500).json({
         success: false,
         message: err.message,
       });
@@ -650,7 +643,7 @@ class ServiceCheckoutController {
       });
     } catch (err) {
       console.log(err);
-      res.status(500).json({
+      res.status(err.status||500).json({
         success: false,
         message: err.message,
       });
@@ -775,7 +768,7 @@ class ServiceCheckoutController {
     } catch (err) {
       console.log(err);
 
-      res.status(500).json({
+      res.status(err.status||500).json({
         success: false,
         message: err.message,
       });
@@ -933,15 +926,12 @@ class ServiceCheckoutController {
         bundle_name: bundle.name,
         bundle_image: getPublicUrl(bundle.banner_image),
         items: selectedItems,
-        bundle_total: selectedItems.reduce(
-          (sum, i) => sum + Number(i.price),
-          0,
-        ),
+        bundle_total: Number(ServiceMoney.sum(selectedItems.map(item=>item.price))),
 
         is_bundle_applied: bundle.type === "fixed" || isFullBundleSelected,
         is_offer: Boolean(offer),
         content_id: offer ? offer.contentId : null,
-        regular_bundle_total: selectedItems.reduce((sum, i) => sum + i.regular_bundle_price, 0),
+        regular_bundle_total: Number(ServiceMoney.sum(selectedItems.map(item=>item.regular_bundle_price))),
       };
 
       // 6 Summary (reuse your helper)
@@ -966,7 +956,7 @@ class ServiceCheckoutController {
       });
     } catch (err) {
       console.log(err);
-      res.status(500).json({
+      res.status(err.status||500).json({
         success: false,
         message: err.message,
       });

@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const {managerScope}=require('../middlewares/managerScope');
 const ServiceEnquiryController = require("../controllers/serviceEnquiryController");
 const {
   authenticateToken,
@@ -15,6 +16,7 @@ router.get(
   "/",
   authenticateToken,
   authorizeRoles("vendor_manager", "service_manager", "admin"),
+  managerScope(),
   ServiceEnquiryController.getAllEnquiries,
 );
 
@@ -23,6 +25,7 @@ router.get(
   "/:id",
   authenticateToken,
   authorizeRoles("vendor_manager", "service_manager", "admin"),
+  managerScope('enquiry'),
   ServiceEnquiryController.getEnquiryById,
 );
 
@@ -31,6 +34,7 @@ router.put(
   "/:id/status",
   authenticateToken,
   authorizeRoles("vendor_manager", "service_manager", "admin"),
+  managerScope('enquiry'),
   ServiceEnquiryController.updateEnquiryStatus,
 );
 

@@ -54,6 +54,11 @@ export const routes = {
       create: "/manager/flash-sales/create",
       edit: "/manager/flash-sales/:id",
     },
+    featuredProducts: {
+      list: "/manager/featured-products",
+      create: "/manager/featured-products/create",
+      edit: "/manager/featured-products/:id",
+    },
     orders:{
       orderList: "/manager/orders",
       returns: "/manager/orders/returns",
@@ -155,6 +160,12 @@ export const routes = {
     departments: "/hr/departments",
   },
   service: {
+    inHouse: '/service/in-house',
+    pricing: '/service/pricing',
+    rewards: '/service/rewards',
+    activity: '/service/activity',
+    classification: '/service/classification',
+    partners: '/service/partners/:section',
     dashboard: "/service/dashboard",
     profile: "/service/profile",
     changePassword: "/service/change-password",

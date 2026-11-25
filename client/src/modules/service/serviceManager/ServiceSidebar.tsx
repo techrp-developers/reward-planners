@@ -1,36 +1,44 @@
-import BrandLogo from "../../../common/components/BrandLogo";
-import { NavLink } from "react-router-dom";
-import { FiGrid, FiList, FiInbox, FiShoppingBag, FiXCircle, FiUser, FiLock, FiLogOut } from "react-icons/fi";
-import { useAuth } from "../../../common/auth/useAuth";
-import { routes } from "../../../routes";
-
+import { useState } from 'react';
+import { NavLink } from 'react-router-dom';
+import { Activity, BarChart3, BriefcaseBusiness, ChevronDown, CircleDollarSign, ClipboardList, Coins, Grid2X2, Inbox, Layers, List, LockKeyhole, LogOut, Settings, ShoppingBag, Tags, UserRound, UsersRound, XCircle } from 'lucide-react';
+import BrandLogo from '../../../common/components/BrandLogo';
+import { useAuth } from '../../../common/auth/useAuth';
+import { routes } from '../../../routes';
 const groups = [
-  { label: "Workspace", links: [
-    { label: "Dashboard", to: routes.service.dashboard, Icon: FiGrid },
-    { label: "Enquiries", to: routes.service.enquiries, Icon: FiInbox },
-    { label: "Orders", to: routes.service.orders, Icon: FiShoppingBag },
-    { label: "Cancellations", to: routes.service.cancellations, Icon: FiXCircle },
+  { label: 'Overview', links: [{ label: 'Dashboard', to: routes.service.dashboard, icon: Grid2X2 }] },
+  { label: 'In-House Services', links: [
+    { label: 'Overview', to: '/service/in-house', icon: BriefcaseBusiness },
+    { label: 'Categories', to: '/service/catalog/categories', icon: List },
+    { label: 'Services', to: '/service/catalog/services', icon: Layers },
+    { label: 'Variants', to: '/service/catalog/variants', icon: Tags },
+    { label: 'Pricing Management', to: '/service/pricing', icon: CircleDollarSign },
+    { label: 'Reward Rules', to: '/service/rewards', icon: Coins },
+    { label: 'Enquiries', to: routes.service.enquiries, icon: Inbox },
+    { label: 'Orders', to: routes.service.orders, icon: ShoppingBag },
+    { label: 'Cancellations & Refunds', to: routes.service.cancellations, icon: XCircle },
   ] },
-  { label: "Catalogue", links: [
-    { label: "Categories", to: routes.service.catalog.replace(":section?", "categories"), Icon: FiList },
-    { label: "Services", to: routes.service.catalog.replace(":section?", "services"), Icon: FiList },
-    { label: "Variants", to: routes.service.catalog.replace(":section?", "variants"), Icon: FiList },
+  { label: 'Partner Services', links: [
+    { label: 'Overview', to: '/service/partners/overview', icon: BriefcaseBusiness },
+    { label: 'Partner Catalogue', to: '/service/partners/catalogue', icon: Layers },
+    { label: 'Partner Assignments', to: '/service/partners/assignments', icon: UsersRound },
+    { label: 'Partner Pricing', to: '/service/partners/pricing', icon: CircleDollarSign },
+    { label: 'Partner Enquiries', to: '/service/partners/enquiries', icon: Inbox },
+    { label: 'Partner Orders', to: '/service/partners/orders', icon: ShoppingBag },
   ] },
-  { label: "Account", links: [
-    { label: "Profile", to: routes.service.profile, Icon: FiUser },
-    { label: "Change password", to: routes.service.changePassword, Icon: FiLock },
+  { label: 'Management', links: [
+    { label: 'Reports & Analytics', to: routes.service.reports, icon: BarChart3 },
+    { label: 'Activity Logs', to: '/service/activity', icon: Activity },
+    { label: 'Classification Review', to: '/service/classification', icon: ClipboardList },
+    { label: 'Settings', to: routes.service.settings, icon: Settings },
+  ] },
+  { label: 'Account', links: [
+    { label: 'My Profile', to: routes.service.profile, icon: UserRound },
+    { label: 'Change Password', to: routes.service.changePassword, icon: LockKeyhole },
   ] },
 ];
-
 export default function ServiceNavbar() {
   const { user, logout } = useAuth();
-  return <nav aria-label="Service Manager navigation" className="fixed inset-y-0 left-0 flex w-64 flex-col border-r border-slate-200 bg-white">
-    <div className="border-b border-slate-100 px-6 py-5"><BrandLogo className="w-32" /><p className="mt-2 text-xs font-medium text-slate-500">Service Manager</p></div>
-    <div className="flex-1 space-y-6 overflow-y-auto px-3 py-5">
-      {groups.map(group => <section key={group.label}><h2 className="mb-2 px-3 text-xs font-medium text-slate-400">{group.label}</h2><div className="space-y-1">
-        {group.links.map(({ label, to, Icon }) => <NavLink key={to} to={to} className={({ isActive }) => `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${isActive ? "bg-purple-50 text-[#852BAF]" : "text-slate-600 hover:bg-slate-50"}`}><Icon size={17} /><span>{label}</span></NavLink>)}
-      </div></section>)}
-    </div>
-    <div className="border-t border-slate-100 p-4"><p className="truncate px-2 text-sm font-medium text-slate-800">{user?.name || user?.email}</p><button onClick={logout} className="mt-2 flex w-full cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-sm text-slate-500 hover:bg-red-50 hover:text-red-600"><FiLogOut size={17} />Sign out</button></div>
-  </nav>;
+  const [collapsed, setCollapsed] = useState<string[]>(() => { try { const stored: unknown = JSON.parse(localStorage.getItem('sm-navigation') || '[]'); return Array.isArray(stored) ? stored.filter((value): value is string => typeof value === 'string') : []; } catch { return []; } });
+  const toggle = (label: string) => { const next = collapsed.includes(label) ? collapsed.filter(item => item !== label) : [...collapsed, label]; setCollapsed(next); try { localStorage.setItem('sm-navigation', JSON.stringify(next)); } catch { /* Navigation works without storage. */ } };
+  return <nav aria-label="Service Manager navigation" className="sm-sidebar"><div className="sm-brand"><BrandLogo className="w-32" /><span>Service Manager</span></div><div className="sm-menu">{groups.map((group, index) => <section key={group.label}><button className="sm-group-toggle" aria-expanded={!collapsed.includes(group.label)} aria-controls={`sm-group-${index}`} onClick={() => toggle(group.label)}>{group.label}<ChevronDown size={13} style={{ transform: collapsed.includes(group.label) ? 'rotate(-90deg)' : undefined }} /></button><div id={`sm-group-${index}`} hidden={collapsed.includes(group.label)}>{group.links.map(({ label, to, icon: Icon }) => <NavLink key={to} end to={to} className={({ isActive }) => `sm-nav-link ${isActive ? 'sm-nav-active' : ''}`}><Icon size={16} strokeWidth={1.7} /><span>{label}</span></NavLink>)}</div></section>)}</div><div className="sm-user"><div className="sm-avatar">{(user?.name || user?.email || 'S').slice(0, 1).toUpperCase()}</div><div><strong>{user?.name || 'Service Manager'}</strong><span>{user?.email}</span></div><button onClick={() => void logout()} title="Sign out" aria-label="Sign out"><LogOut size={17} /></button></div></nav>;
 }

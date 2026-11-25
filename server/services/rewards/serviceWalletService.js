@@ -1,8 +1,10 @@
+const M=require('../../app/service/v1/utils/serviceMoney');
+const {assertServiceSettlementReady,insertServiceLedger,changed}=require('./serviceLedger');
 async function ensureWallet(conn, userId) {
   await conn.execute(
     `INSERT INTO customer_wallet (user_id, balance) VALUES (?, 0)
      ON DUPLICATE KEY UPDATE user_id = user_id`,
-    [userId],
+    [M.reference(userId)],
   );
 }
 
@@ -12,12 +14,17 @@ async function getWalletBalance(conn, userId, lock = false) {
     `SELECT balance FROM customer_wallet WHERE user_id = ?${lock ? " FOR UPDATE" : ""}`,
     [userId],
   );
-  return Math.max(0, Math.floor(Number(wallet?.balance || 0)));
+  return M.coins(wallet?.balance||0);
 }
 
 async function reserveServiceCoins(conn, { parentOrderId, userId, coins }) {
-  const amount = Math.floor(Number(coins || 0));
+  const amount = M.coins(coins||0);
   if (amount <= 0) return 0;
+  await assertServiceSettlementReady(conn);
+  M.reference(userId);
+  if(!/^[a-f0-9-]{36}$/i.test(String(parentOrderId)))throw M.failure('Invalid service parent reference.');
+  const [[existing]]=await conn.execute('SELECT user_id,coins,status FROM service_wallet_reservations WHERE parent_order_id=? FOR UPDATE',[parentOrderId]);
+  if(existing){if(Number(existing.user_id)===Number(userId)&&M.coins(existing.coins)===amount&&existing.status==='reserved')return amount;throw M.failure('Reservation reference was already used.','SERVICE_RESERVATION_CONFLICT');}
 
   await ensureWallet(conn, userId);
   const [updated] = await conn.execute(
@@ -27,12 +34,13 @@ async function reserveServiceCoins(conn, { parentOrderId, userId, coins }) {
   );
   if (updated.affectedRows !== 1) throw new Error("INSUFFICIENT_WALLET_BALANCE");
 
-  await conn.execute(
+  const [inserted] = await conn.execute(
     `INSERT INTO service_wallet_reservations
        (parent_order_id, user_id, coins, status)
      VALUES (?, ?, ?, 'reserved')`,
     [parentOrderId, userId, amount],
   );
+  changed(inserted,'Reservation insert');
   return amount;
 }
 
@@ -44,24 +52,15 @@ async function consumeServiceCoins(conn, parentOrderId) {
   );
   if (!reservation || reservation.status === "consumed") return false;
   if (reservation.status !== "reserved") throw new Error("SERVICE_WALLET_RESERVATION_RELEASED");
-
-  await conn.execute(
-    `UPDATE service_wallet_reservations
-     SET status = 'consumed', consumed_at = NOW() WHERE id = ?`,
-    [reservation.id],
-  );
+  await assertServiceSettlementReady(conn);
   const balance = await getWalletBalance(conn, reservation.user_id, true);
   const [[serviceOrder]] = await conn.execute(
-    `SELECT MIN(id) AS id FROM service_orders WHERE parent_order_id = ?`,
-    [parentOrderId],
+    `SELECT MIN(id) AS id,SUM(reward_coins_used) AS coins FROM service_orders WHERE parent_order_id = ? AND user_id=?`,
+    [parentOrderId,reservation.user_id],
   );
-  await conn.execute(
-    `INSERT IGNORE INTO wallet_transactions
-       (user_id, title, transaction_type, coins, balance_after, category,
-        reference_id, description, reason_code)
-     VALUES (?, 'Coins used for service', 'debit', ?, ?, 'order', ?, ?, 'SERVICE_REDEEM')`,
-    [reservation.user_id, reservation.coins, balance, serviceOrder.id, `Used ${reservation.coins} coins`],
-  );
+  if(!serviceOrder?.id||M.coins(serviceOrder.coins)!==M.coins(reservation.coins))throw M.failure('Reservation does not match saved service orders.','SERVICE_RESERVATION_MISMATCH');
+  await insertServiceLedger(conn,{userId:reservation.user_id,referenceId:serviceOrder.id,transactionType:'debit',reasonCode:'SERVICE_REDEEM',amount:reservation.coins,balanceAfter:balance,title:'Coins used for service'});
+  const [consumed]=await conn.execute("UPDATE service_wallet_reservations SET status='consumed',consumed_at=NOW() WHERE id=? AND status='reserved'",[reservation.id]);changed(consumed,'Reservation consumption');
   return true;
 }
 
@@ -74,15 +73,17 @@ async function releaseServiceCoins(conn, parentOrderId) {
   if (!reservation || reservation.status !== "reserved") return false;
 
   await ensureWallet(conn, reservation.user_id);
-  await conn.execute(
+  const [restored]=await conn.execute(
     `UPDATE customer_wallet SET balance = balance + ? WHERE user_id = ?`,
     [reservation.coins, reservation.user_id],
   );
-  await conn.execute(
+  changed(restored,'Reserved coin release');
+  const [released]=await conn.execute(
     `UPDATE service_wallet_reservations
      SET status = 'released', released_at = NOW() WHERE id = ?`,
     [reservation.id],
   );
+  changed(released,'Reservation release');
   return true;
 }
 

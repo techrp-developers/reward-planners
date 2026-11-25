@@ -29,6 +29,8 @@ const ALLOWED_REDIRECT_TYPES = [
 ];
 
 const ALLOWED_MODULES = ["product", "service"];
+const FEATURED_BACKGROUND_TYPES = ["solid", "gradient", "image"];
+const FEATURED_IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const PRODUCT_REDIRECT_TYPES = ["category", "subcategory", "product", "brand"];
 const SERVICE_REDIRECT_TYPES = ["service", "service_category", "service_bundle"];
 const MULTI_TARGET_REDIRECT_TYPES = ["product", "service"];
@@ -65,6 +67,65 @@ const badRequest = (message) => {
   const err = new Error(message);
   err.statusCode = 400;
   return err;
+};
+
+const validateFeaturedConfiguration = (data, existing = {}, hasNewImage = false) => {
+  const title = data.title ?? existing.title;
+  const backgroundType = data.background_type ?? existing.background_type ?? "gradient";
+  const backgroundColor = data.background_color ?? existing.background_color ?? "#4B0082";
+  const gradientEndColor = data.gradient_end_color ?? existing.gradient_end_color ?? "#6A00FF";
+  const textColor = data.text_color ?? existing.text_color ?? "#FFFFFF";
+  const ctaText = data.cta_text ?? existing.cta_text ?? "Explore More";
+  const bannerImage = hasNewImage ? true : existing.banner_image_path || existing.banner_image;
+
+  if (typeof title !== "string" || !title.trim() || title.trim().length > 255) {
+    throw badRequest("Featured campaign title must be between 1 and 255 characters");
+  }
+  if (!FEATURED_BACKGROUND_TYPES.includes(backgroundType)) {
+    throw badRequest("background_type must be solid, gradient, or image");
+  }
+  for (const [label, value] of [
+    ["background_color", backgroundColor],
+    ["gradient_end_color", gradientEndColor],
+    ["text_color", textColor],
+  ]) {
+    if (typeof value !== "string" || !/^#[0-9A-Fa-f]{6}$/.test(value)) {
+      throw badRequest(`${label} must be a six-digit hex color`);
+    }
+  }
+  if (typeof ctaText !== "string" || !ctaText.trim() || ctaText.length > 60) {
+    throw badRequest("cta_text must be between 1 and 60 characters");
+  }
+  if (backgroundType === "image" && !bannerImage) {
+    throw badRequest("Upload a background image before using image background type");
+  }
+};
+
+const uploadCampaignImage = async (file, campaignId, featured) => {
+  if (featured && !FEATURED_IMAGE_MIME_TYPES.includes(file.mimetype)) {
+    throw badRequest("Featured backgrounds must be JPG, PNG, or WebP images");
+  }
+
+  const crypto = require("crypto");
+  let buffer = fs.readFileSync(file.path);
+  let extension = path.extname(file.originalname).toLowerCase();
+  let contentType = file.mimetype;
+  if (featured) {
+    try {
+      buffer = await require("sharp")(buffer, { limitInputPixels: 25000000 })
+        .rotate()
+        .resize({ width: 2000, withoutEnlargement: true })
+        .webp({ quality: 85 })
+        .toBuffer();
+    } catch {
+      throw badRequest("This background image could not be read");
+    }
+    extension = ".webp";
+    contentType = "image/webp";
+  }
+  const key = `public/campaigns/${campaignId}/${featured ? "featured" : "campaign"}-${crypto.randomUUID()}${extension}`;
+  await uploadToR2(buffer, key, contentType);
+  return key;
 };
 
 const parseRedirectIds = (value) => {
@@ -130,6 +191,7 @@ class CampaignController {
   // Create Campaign
   // ==========================
   async createCampaign(req, res) {
+    let uploadedBannerPath = null;
     try {
       const {
         title,
@@ -166,11 +228,31 @@ class CampaignController {
         });
       }
 
+      if (campaign_type === "featured" && module && module !== "product") {
+        return res.status(400).json({
+          success: false,
+          message: "Featured campaigns are only available for products",
+        });
+      }
+      if (campaign_type === "featured" && status === "active") {
+        return res.status(400).json({
+          success: false,
+          message: "Create the featured campaign as a draft, add products, then activate it",
+        });
+      }
+
       if (campaign_type === "flash_sale" && (!start_at || !end_at)) {
         return res.status(400).json({
           success: false,
           message: "A flash sale needs a start and end time",
         });
+      }
+
+      if (campaign_type === "featured") {
+        validateFeaturedConfiguration(req.body, {}, Boolean(req.file));
+        if (req.file && !FEATURED_IMAGE_MIME_TYPES.includes(req.file.mimetype)) {
+          throw badRequest("Featured backgrounds must be JPG, PNG, or WebP images");
+        }
       }
 
       if (["poster", "dashboard_poster"].includes(campaign_type) && !req.file) {
@@ -243,10 +325,13 @@ class CampaignController {
       validateRedirectModule(campaign_type, module, normalizedRedirectType);
       await redirectTargetsExist(normalizedRedirectType, normalizedRedirectId, normalizedRedirectIds);
 
-      if (display_order !== undefined && Number(display_order) < 0) {
+      if (
+        display_order !== undefined &&
+        (!/^\d+$/.test(String(display_order)) || !Number.isSafeInteger(Number(display_order)))
+      ) {
         return res.status(400).json({
           success: false,
-          message: "display_order must be 0 or greater",
+          message: "display_order must be a non-negative whole number",
         });
       }
 
@@ -270,35 +355,19 @@ class CampaignController {
 
       if (req.file) {
         if (!req.file.mimetype.startsWith("image/")) {
-          if (fs.existsSync(req.file.path)) {
-            fs.unlinkSync(req.file.path);
-          }
-
-          return res.status(400).json({
-            success: false,
-            message: "Invalid image file",
-          });
+          throw badRequest("Invalid image file");
         }
-
-        const fileBuffer = fs.readFileSync(req.file.path);
-
-        const extension = path.extname(req.file.originalname);
-
-        const filename = `campaign-${Date.now()}-${Math.random()
-          .toString(36)
-          .substring(2, 8)}${extension}`;
-
-        banner_image = `public/campaigns/${campaignId}/${filename}`;
-
-        await uploadToR2(fileBuffer, banner_image, req.file.mimetype);
+        banner_image = await uploadCampaignImage(
+          req.file,
+          campaignId,
+          campaign_type === "featured",
+        );
+        uploadedBannerPath = banner_image;
 
         await CampaignModel.updateCampaignImage(campaignId, banner_image);
-
-        if (fs.existsSync(req.file.path)) {
-          fs.unlinkSync(req.file.path);
-        }
       }
 
+      uploadedBannerPath = null;
       return res.status(201).json({
         success: true,
         campaign_id: campaignId,
@@ -310,14 +379,25 @@ class CampaignController {
     } catch (err) {
       console.error(err);
 
-      if (req.file && fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
+      if (uploadedBannerPath) {
+        try {
+          await deleteFromR2(uploadedBannerPath);
+        } catch (cleanupError) {
+          console.error("NEW CAMPAIGN IMAGE CLEANUP ERROR", cleanupError);
+        }
       }
-
       return res.status(err.statusCode || 500).json({
         success: false,
         message: err.message,
       });
+    } finally {
+      if (req.file?.path && fs.existsSync(req.file.path)) {
+        try {
+          fs.unlinkSync(req.file.path);
+        } catch (cleanupError) {
+          console.error("CAMPAIGN TEMP IMAGE CLEANUP ERROR", cleanupError);
+        }
+      }
     }
   }
 
@@ -373,6 +453,8 @@ class CampaignController {
   // Update Campaign
   // ==========================
   async updateCampaign(req, res) {
+    let uploadedBannerPath = null;
+    let previousBannerPath = null;
     try {
       const { id } = req.params;
 
@@ -448,6 +530,12 @@ class CampaignController {
         throw badRequest("A flash sale cannot be converted to another campaign type");
       }
       if (existing.campaign_type === "flash_sale") delete req.body.module;
+      if (nextType === "featured" && (req.body.module || existing.module) !== "product") {
+        throw badRequest("Featured campaigns are only available for products");
+      }
+      if (nextType === "featured") {
+        validateFeaturedConfiguration(req.body, existing, Boolean(req.file));
+      }
 
       // Omitted destination fields leave the saved destination untouched.
       if (req.body.redirect_screen !== undefined) {
@@ -480,11 +568,12 @@ class CampaignController {
 
       if (
         req.body.display_order !== undefined &&
-        Number(req.body.display_order) < 0
+        (!/^\d+$/.test(String(req.body.display_order)) ||
+          !Number.isSafeInteger(Number(req.body.display_order)))
       ) {
         return res.status(400).json({
           success: false,
-          message: "display_order must be 0 or greater",
+          message: "display_order must be a non-negative whole number",
         });
       }
 
@@ -493,39 +582,26 @@ class CampaignController {
 
       if (req.file) {
         if (!req.file.mimetype.startsWith("image/")) {
-          return res.status(400).json({
-            success: false,
-            message: "Invalid image file",
-          });
+          throw badRequest("Invalid image file");
         }
-
-        const fileBuffer = fs.readFileSync(req.file.path);
-
-        const extension = path.extname(req.file.originalname);
-
-        const filename = `campaign-${Date.now()}-${Math.random()
-          .toString(36)
-          .substring(2, 8)}${extension}`;
-
-        bannerImage = `public/campaigns/${id}/${filename}`;
-
-        await uploadToR2(fileBuffer, bannerImage, req.file.mimetype);
-
-        if (existing.banner_image_path) {
-          try {
-            await deleteFromR2(existing.banner_image_path);
-          } catch (err) {
-            console.error("OLD CAMPAIGN IMAGE DELETE ERROR", err);
-          }
-        }
-
-        if (fs.existsSync(req.file.path)) {
-          fs.unlinkSync(req.file.path);
-        }
+        bannerImage = await uploadCampaignImage(
+          req.file,
+          id,
+          nextType === "featured",
+        );
+        uploadedBannerPath = bannerImage;
+        previousBannerPath = existing.banner_image_path;
       }
 
       await CampaignModel.updateCampaign(id, req.body, bannerImage);
-
+      uploadedBannerPath = null;
+      if (previousBannerPath) {
+        try {
+          await deleteFromR2(previousBannerPath);
+        } catch (err) {
+          console.error("OLD CAMPAIGN IMAGE DELETE ERROR", err);
+        }
+      }
       return res.json({
         success: true,
         message: "Campaign updated successfully",
@@ -536,14 +612,25 @@ class CampaignController {
     } catch (err) {
       console.error("UPDATE CAMPAIGN ERROR:", err);
 
-      if (req.file && fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
+      if (uploadedBannerPath) {
+        try {
+          await deleteFromR2(uploadedBannerPath);
+        } catch (cleanupError) {
+          console.error("NEW CAMPAIGN IMAGE CLEANUP ERROR", cleanupError);
+        }
       }
-
       return res.status(err.statusCode || 500).json({
         success: false,
         message: err.message,
       });
+    } finally {
+      if (req.file?.path && fs.existsSync(req.file.path)) {
+        try {
+          fs.unlinkSync(req.file.path);
+        } catch (cleanupError) {
+          console.error("CAMPAIGN TEMP IMAGE CLEANUP ERROR", cleanupError);
+        }
+      }
     }
   }
 
@@ -610,6 +697,58 @@ class CampaignController {
       return res.json({
         success: true,
         data: items,
+      });
+    } catch (err) {
+      return res.status(err.statusCode || 500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  async searchFeaturedProductOptions(req, res) {
+    try {
+      const data = await CampaignModel.getFeaturedProductOptions(req.query.search || "");
+      return res.json({ success: true, data });
+    } catch (err) {
+      return res.status(err.statusCode || 500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  async getFeaturedProducts(req, res) {
+    try {
+      validateId(req.params.id, "campaign id");
+      const campaign = await CampaignModel.getCampaignById(req.params.id);
+      if (!campaign) {
+        return res.status(404).json({ success: false, message: "Campaign not found" });
+      }
+      if (campaign.campaign_type !== "featured" || campaign.module !== "product") {
+        return res.status(400).json({ success: false, message: "This is not a product featured campaign" });
+      }
+      const data = await CampaignModel.getFeaturedProducts(req.params.id);
+      return res.json({ success: true, data });
+    } catch (err) {
+      return res.status(err.statusCode || 500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  async saveFeaturedProducts(req, res) {
+    try {
+      validateId(req.params.id, "campaign id");
+      const data = await CampaignModel.saveFeaturedProducts(
+        req.params.id,
+        req.body.product_ids,
+      );
+      return res.json({
+        success: true,
+        message: "Featured product order saved",
+        data,
       });
     } catch (err) {
       return res.status(err.statusCode || 500).json({
