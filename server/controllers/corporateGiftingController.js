@@ -2,13 +2,9 @@ const db = require('../config/database');
 const { createHash } = require('node:crypto');
 const { getPublicUrl } = require('../utils/publicUrl');
 const statuses = ['new', 'contacted', 'quoted', 'confirmed', 'closed'];
-const eligible = "p.status = 'approved' AND v.status = 'approved' AND pv.is_visible = 1";
-const catalogueSelect = `SELECT p.product_id, p.product_name, p.short_description,
-  pv.variant_id, pv.sku, pv.variant_attributes, pv.sale_price,
-  v.vendor_id, v.company_name AS vendor_name,
-  (SELECT image_url FROM product_images pi WHERE pi.product_id = p.product_id ORDER BY pi.image_id LIMIT 1) AS image_url
-  FROM product_variants pv JOIN eproducts p ON p.product_id = pv.product_id
-  JOIN vendors v ON v.vendor_id = p.vendor_id`;
+const categorySelect = `SELECT c.category_id, c.category_name, c.cover_image,
+  sc.subcategory_id, sc.subcategory_name FROM categories c
+  LEFT JOIN sub_categories sc ON sc.category_id = c.category_id AND sc.status = 1`;
 
 function bad(message, status = 400) { return Object.assign(new Error(message), { status }); }
 function integer(value) {
@@ -44,13 +40,16 @@ function normalize(body) {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     if (!/^\d{4}-\d{2}-\d{2}$/.test(data.delivery_date) || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== data.delivery_date || data.delivery_date < today) throw bad('Choose today or a future delivery date');
   }
-  if (!Array.isArray(body.items) || !body.items.length || body.items.length > 50) throw bad('Select 1 to 50 catalogue items');
+  if (!Array.isArray(body.items) || !body.items.length || body.items.length > 50) throw bad('Select 1 to 50 categories or subcategories');
   const ids = new Set();
   data.items = body.items.map(item => {
-    if (!item || !integer(item.variant_id) || !integer(item.quantity) || Number(item.quantity) > 100000 || ids.has(Number(item.variant_id))) throw bad('Each product variant must have a unique selection and quantity between 1 and 100000');
-    ids.add(Number(item.variant_id));
-    return { variant_id: Number(item.variant_id), quantity: Number(item.quantity) };
-  }).sort((a, b) => a.variant_id - b.variant_id);
+    if (!item || !integer(item.category_id) || (item.subcategory_id != null && !integer(item.subcategory_id)) || !integer(item.quantity) || Number(item.quantity) > 100000) throw bad('Choose a category and a quantity between 1 and 100000');
+    const key = `${Number(item.category_id)}:${item.subcategory_id == null ? 0 : Number(item.subcategory_id)}`;
+    if (ids.has(key)) throw bad('Each category/subcategory can only be selected once');
+    ids.add(key);
+    return { category_id: Number(item.category_id), subcategory_id: item.subcategory_id == null ? null : Number(item.subcategory_id),
+      preferred_brand: text(item.preferred_brand, 150, 'Preferred brand'), quantity: Number(item.quantity) };
+  }).sort((a, b) => a.category_id - b.category_id || (a.subcategory_id || 0) - (b.subcategory_id || 0));
   return data;
 }
 function handle(error, res) {
@@ -72,10 +71,18 @@ exports.catalogue = async (req, res) => {
     const search = text(req.query.search, 100, 'Search');
     const page = Math.max(1, Math.min(100000, Number(req.query.page) || 1));
     if (!Number.isInteger(page)) throw bad('Invalid page');
-    const [rows] = await db.query(`${catalogueSelect} WHERE ${eligible}
-      AND (p.product_name LIKE ? OR pv.sku LIKE ?) ORDER BY p.product_name, pv.variant_id LIMIT 25 OFFSET ?`,
+    const [rows] = await db.query(`SELECT c.category_id, c.category_name, c.cover_image FROM categories c
+      WHERE c.status = 1 AND (c.category_name LIKE ? OR EXISTS (
+        SELECT 1 FROM sub_categories sc WHERE sc.category_id = c.category_id AND sc.status = 1 AND sc.subcategory_name LIKE ?))
+      ORDER BY c.category_name, c.category_id LIMIT 25 OFFSET ?`,
     [`%${search}%`, `%${search}%`, (page - 1) * 24]);
-    return res.json({ success: true, hasMore: rows.length > 24, data: rows.slice(0, 24).map(row => ({ ...row, image_url: getPublicUrl(row.image_url) })) });
+    const visible = rows.slice(0, 24);
+    const [subcategories] = visible.length ? await db.query(`SELECT category_id, subcategory_id, subcategory_name
+      FROM sub_categories WHERE status = 1 AND category_id IN (${visible.map(() => '?').join(',')}) ORDER BY subcategory_name`, visible.map(row => row.category_id)) : [[]];
+    return res.json({ success: true, hasMore: rows.length > 24, data: visible.map(row => ({
+      category_id: row.category_id, category_name: row.category_name, image_url: getPublicUrl(row.cover_image),
+      subcategories: subcategories.filter(sub => Number(sub.category_id) === Number(row.category_id)),
+    })) });
   } catch (error) { return handle(error, res); }
 };
 
@@ -95,9 +102,15 @@ exports.create = async (req, res) => {
     const respond = (id, code) => res.status(code).json({ success: true, data: { id, reference: `CG-${id}` } });
     const prior = await existing();
     if (prior) return respond(prior.id, 200);
-    const [products] = await db.query(`${catalogueSelect} WHERE ${eligible} AND pv.variant_id IN (${data.items.map(() => '?').join(',')})`, data.items.map(item => item.variant_id));
-    if (products.length !== data.items.length) throw bad('A selected product is no longer available. Refresh the catalogue and update your selection.');
-    const items = data.items.map(item => ({ ...products.find(product => Number(product.variant_id) === item.variant_id), quantity: item.quantity }));
+    const categoryIds = [...new Set(data.items.map(item => item.category_id))];
+    const [categories] = await db.query(`${categorySelect} WHERE c.status = 1 AND c.category_id IN (${categoryIds.map(() => '?').join(',')})`, categoryIds);
+    const items = data.items.map(item => {
+      const category = categories.find(row => Number(row.category_id) === item.category_id
+        && (item.subcategory_id === null || Number(row.subcategory_id) === item.subcategory_id));
+      if (!category) throw bad('A selected category or subcategory is no longer available. Refresh and update your selection.');
+      return { ...item, selection_type: 'category', category_name: category.category_name,
+        subcategory_name: item.subcategory_id === null ? null : category.subcategory_name };
+    });
     const fields = ['recipient_type', 'recipient_details', 'occasion', 'contact_name', 'contact_email', 'contact_phone', 'delivery_date', 'delivery_address', 'budget', 'requirements'];
     try {
       const [result] = await db.query(`INSERT INTO corporate_gifting_enquiries
