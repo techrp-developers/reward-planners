@@ -69,7 +69,7 @@ async function sendEcommerceOrderPlacedEmails(orderId) {
               LEFT JOIN vendor_contacts vc ON vc.vendor_id = v.vendor_id
               LEFT JOIN eusers eu ON eu.user_id = v.user_id
               WHERE oi.order_id = ?`, [orderId]),
-    db.query(`SELECT invoice_id, vendor_id FROM invoices WHERE order_id = ? ORDER BY invoice_id`, [orderId]),
+    db.query(`SELECT invoice_id, vendor_id FROM invoices WHERE order_id = ? AND source = 'ecommerce' ORDER BY invoice_id`, [orderId]),
     db.query(`SELECT name, email FROM eusers
               WHERE role = 'vendor_manager' AND email IS NOT NULL
               ORDER BY is_verified DESC, user_id LIMIT 1`),

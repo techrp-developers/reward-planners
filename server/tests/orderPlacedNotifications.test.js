@@ -24,7 +24,10 @@ for (const failPdf of [false, true]) {
       [[{ invoice_id: 11, vendor_id: 1 }, { invoice_id: 22, vendor_id: 2 }]], [[]],
     ];
     const service = load("services/mailBuilder/ecommerceOrderPlaced.js", {
-      "../../config/database": { query: async () => results.shift() },
+      "../../config/database": { query: async sql => {
+        if (sql.includes("FROM invoices")) assert.match(sql, /source = 'ecommerce'/);
+        return results.shift();
+      } },
       "../mailService": { sendMailBestEffort: async message => { messages.push(message); return { ok: true }; } },
       "../../app/ecommerce/v1/models/orderModel": {
         getInvoiceData: async id => ({ invoice_number: `INV-${id}` }), getInvoiceItems: async () => [],
@@ -53,7 +56,9 @@ test("vendor WhatsApp queues independently with vendor-specific totals and stabl
   const queued = [];
   const service = load("services/whatsapp/vendorOrderNotification.js", {
     "../../config/database": { query: async (sql, params) => {
-      assert.match(sql, /o.status = 'paid'/);
+      assert.match(sql, /payment.status = 'success'/);
+      assert.match(sql, /payment.order_id = o.order_id/);
+      assert.doesNotMatch(sql, /o.status = 'paid'/);
       assert.equal(params[0], 7);
       return [[{ vendor_id: 1, vendor_name: "A", phone: "9876543210", order_ref: "ORDER-7", item_count: 2, subtotal: 20 },
         { vendor_id: 2, vendor_name: "B", phone: null, order_ref: "ORDER-7", item_count: 3, subtotal: 30 }]];
@@ -91,4 +96,36 @@ test("vendor template maps its four parameters in order", async () => {
   } });
   assert.equal(result.ok, true);
   assert.deepEqual(values, ["Vendor A", "ORDER-7", "2", "20.00"]);
+});
+
+test("missing WhatsApp configuration returns a failure without inserting a queue row", async () => {
+  let queries = 0;
+  const service = load("services/whatsapp/waEnqueueService.js", {
+    "../../config/database": { query: async sql => {
+      queries++;
+      assert.match(sql, /FROM wa_rules/);
+      return [[]];
+    } },
+    "./phone": { normalizeIndianMobile: phone => phone },
+  });
+  const result = await service.enqueueWhatsApp({
+    eventName: "vendor_ecommerce_order_created", ctx: { phone: "919876543210", order_id: 7 },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, "NO_RULE");
+  assert.equal(queries, 1);
+});
+
+test("background notification failures are caught and do not prevent another notification", async () => {
+  const errors = [];
+  const context = { module: { exports: {} }, setImmediate, console: { error: (...args) => errors.push(args) } };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../utils/nonBlocking.js"), "utf8"), context);
+  let delivered = false;
+  context.module.exports.runNonBlocking(async () => { throw new Error("Provider unavailable"); }, "vendor WhatsApp");
+  context.module.exports.runNonBlocking(async () => { delivered = true; }, "customer invoice");
+  assert.equal(delivered, false);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(delivered, true);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0][0], /vendor WhatsApp/);
 });

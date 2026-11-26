@@ -12,7 +12,11 @@ async function notifyVendorsNewEcommerceOrder(orderId) {
        JOIN eproducts p ON p.product_id = oi.product_id
        JOIN vendors v ON v.vendor_id = p.vendor_id
        LEFT JOIN vendor_contacts vc ON vc.vendor_id = v.vendor_id
-      WHERE o.order_id = ? AND o.status = 'paid'
+      WHERE o.order_id = ?
+        AND EXISTS (
+          SELECT 1 FROM order_payments payment
+          WHERE payment.order_id = o.order_id AND payment.status = 'success'
+        )
       GROUP BY o.order_ref, p.vendor_id, v.company_name, vc.primary_contact`,
     [orderId],
   );
