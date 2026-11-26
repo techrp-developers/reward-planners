@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { deferred, makeMeta } from "./fixtures";
+import { makeMeta } from "./fixtures";
 import type { ManagerMeta } from "../notificationTypes";
 
 const api = vi.hoisted(() => ({
@@ -46,7 +46,7 @@ beforeEach(() => {
   api.createCampaign.mockImplementation(async (input: Record<string, unknown>) => ({
     ...input, campaign_id: 9, status: "draft", can_manage: true, can_send: true, approved_languages: [], variables: {},
     audience_filter: input.audience_filter ?? {}, timezone: "Asia/Kolkata", scheduled_at: null, expires_at: null, recurrence_end_at: null,
-    recurrence_type: "none", delivery_mode: "now", module: "common", source: "manual", template_id: null, audience_type: "test",
+    recurrence_type: "none", delivery_mode: "now", module: "common", source: "manual", template_id: null, audience_type: input.audience_type,
   }));
   api.updateCampaign.mockImplementation(async (_id: number, input: Record<string, unknown>) => api.createCampaign(input));
 });
@@ -75,109 +75,15 @@ describe("helpers", () => {
   });
 });
 
-describe("Send test", () => {
-  it("needs a chosen device when the test employee has two, then sends once to that device only", async () => {
-    const user = userEvent.setup();
-    const pending = deferred<unknown[]>();
-    api.testCampaign.mockReturnValueOnce(pending.promise);
-    renderCompose(ready());
-    const button = await screen.findByRole("button", { name: /Send test/ });
-    expect(button.hasAttribute("disabled")).toBe(true); // two devices, none chosen
-    await fillMessage(user);
-    await user.selectOptions(await screen.findByRole("combobox", { name: /Test device/ }), "3:1713");
-    expect(screen.getByRole("button", { name: /Send test/ }).hasAttribute("disabled")).toBe(false);
-
-    await user.dblClick(screen.getByRole("button", { name: /Send test/ }));
-    await waitFor(() => expect(api.testCampaign).toHaveBeenCalledTimes(1));
-    expect(api.testCampaign).toHaveBeenCalledWith(9, { user_id: 3, device_id: 1713 });
-    pending.resolve([{ user_id: 3, name: "Sahil", language: "en", inbox_saved: true, devices_attempted: 1, firebase_accepted: 1, skipped_reason: null, errors: [], device: { id: 1713, platform: "android", token: "ft7m6a...9vcw", firebaseProjectId: "reward-planners-2324d" } }]);
-    expect(await screen.findByText(/Device #1713/)).toBeTruthy();
-    expect(screen.getByText("Accepted by Firebase")).toBeTruthy();
-    expect(screen.queryByText(/delivered/i)).toBeNull(); // acceptance is never called delivery
-    expect(api.testCampaign).toHaveBeenCalledTimes(1);
-    expect(api.sendCampaign).not.toHaveBeenCalled(); // a test never queues the campaign
-  });
-
-  it("works on a brand-new notification: the default time with no date is sent to the server as is", async () => {
-    const user = userEvent.setup();
-    api.testDevices.mockResolvedValue([{ ...TWO_DEVICES[0], devices: [TWO_DEVICES[0].devices[0]] }]);
-    api.testCampaign.mockResolvedValue([]);
-    renderCompose(ready());
-    await fillMessage(user);
-    const button = await screen.findByRole("button", { name: /Send test/ });
-    await waitFor(() => expect(button.hasAttribute("disabled")).toBe(false));
-    await user.click(button);
-    await waitFor(() => expect(api.testCampaign).toHaveBeenCalledTimes(1));
-    expect(api.createCampaign.mock.calls[0][0]).toMatchObject({ delivery_mode: "once", send_date: "", send_time: "09:00" });
-  });
-
-  it("is disabled with the real reason while Firebase is unavailable", async () => {
-    api.testDevices.mockResolvedValue([{ ...TWO_DEVICES[0], devices: [TWO_DEVICES[0].devices[0]] }]);
-    renderCompose(ready({ firebase: { enabled: false, reason: "Credentials missing" } } as Partial<ManagerMeta>));
-    await screen.findByRole("combobox", { name: /Test device/ });
-    const button = screen.getByRole("button", { name: /Send test/ });
-    expect(button.hasAttribute("disabled")).toBe(true);
-    expect(button.getAttribute("title")).toMatch(/Credentials missing/);
-  });
-
-  it("a single registered device is preselected; the picker shows only masked tokens", async () => {
-    api.testDevices.mockResolvedValue([{ ...TWO_DEVICES[0], devices: [TWO_DEVICES[0].devices[0]] }]);
-    renderCompose(ready());
-    const picker = await screen.findByRole("combobox", { name: /Test device/ });
-    await waitFor(() => expect((picker as HTMLSelectElement).value).toBe("3:1713"));
-    expect(picker.textContent).toMatch(/ft7m6a\.\.\.9vcw/);
-  });
-});
-
-describe("Send test keeps the campaign as it is", () => {
-  const stored = {
-    campaign_id: 12, name: "Scheduled", status: "scheduled", can_manage: true, can_send: true, occurrences_started: 0, source: "manual", template_id: null,
-    module: "common", category: "marketing", priority: "normal", title_en: "Hello", body_en: "World", approved_languages: [], variables: {},
-    audience_type: "selected", audience_filter: { user_ids: [3] }, delivery_mode: "once", timezone: "Asia/Kolkata",
-    scheduled_at: "2099-01-01 04:30:00", next_run_at: "2099-01-01 04:30:00", expires_at: null, recurrence_end_at: null, recurrence_type: "none",
-  };
-  const open = (campaign: Record<string, unknown>) => {
-    api.campaign.mockResolvedValue(campaign);
-    api.testDevices.mockResolvedValue([{ ...TWO_DEVICES[0], devices: [TWO_DEVICES[0].devices[0]] }]);
-    return render(<ComposeTab meta={ready()} nav={nav} campaignId={12} templateId={null} />);
-  };
-
-  it("a scheduled campaign is tested as stored, never saved back to draft", async () => {
-    const user = userEvent.setup();
-    api.testCampaign.mockResolvedValue([]);
-    open(stored);
-    const button = await screen.findByRole("button", { name: /Send test/ });
-    await waitFor(() => expect(button.hasAttribute("disabled")).toBe(false));
-    await user.click(button);
-    await waitFor(() => expect(api.testCampaign).toHaveBeenCalledTimes(1));
-    expect(api.testCampaign).toHaveBeenCalledWith(12, { user_id: 3, device_id: 1713 });
-    expect(api.updateCampaign).not.toHaveBeenCalled();
-  });
-
-  it("a finished campaign can still be tested without saving", async () => {
-    const user = userEvent.setup();
-    api.testCampaign.mockResolvedValue([]);
-    open({ ...stored, status: "completed", occurrences_started: 1 });
-    const button = await screen.findByRole("button", { name: /Send test/ });
-    await waitFor(() => expect(button.hasAttribute("disabled")).toBe(false));
-    await user.click(button);
-    await waitFor(() => expect(api.testCampaign).toHaveBeenCalledTimes(1));
-    expect(api.updateCampaign).not.toHaveBeenCalled();
-  });
-
-  it("an expired draft offers no test, send or schedule", async () => {
-    open({ ...stored, status: "draft", delivery_mode: "now", scheduled_at: null, next_run_at: null, expires_at: "2026-10-30 13:41:00" });
-    expect(await screen.findByText(/It has expired/)).toBeTruthy();
-    for (const name of [/Send test/, /Send now/, /^Schedule$/, /Save draft/]) {
-      expect(screen.getByRole("button", { name }).hasAttribute("disabled")).toBe(true);
-    }
-  });
-
-  it("explains a device list that failed to load instead of reporting no device", async () => {
-    api.testDevices.mockRejectedValue({ response: { data: { message: "Database unavailable" } } });
-    renderCompose(ready());
-    expect(await screen.findByText(/Test devices could not be loaded: Database unavailable/)).toBeTruthy();
-    expect(screen.queryByText(/No test device is registered/)).toBeNull();
+describe("Live campaign composer", () => {
+  it("defaults to explicit company selection and removes test sending", async () => {
+    renderCompose(ready({ audienceTypes: ["test", "company"] } as Partial<ManagerMeta>));
+    const select = await screen.findByRole("combobox", { name: /Send to/ });
+    expect((select as HTMLSelectElement).value).toBe("company");
+    expect(screen.queryByRole("option", { name: /test/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Send test/ })).toBeNull();
+    expect(api.testDevices).not.toHaveBeenCalled();
+    expect(api.sendCampaign).not.toHaveBeenCalled();
   });
 });
 
@@ -215,6 +121,26 @@ describe("Send now", () => {
     await pickCompany(user);
     await fillMessage(user);
     await waitFor(() => expect(screen.getByRole("button", { name: /Send now/ }).hasAttribute("disabled")).toBe(false));
+  });
+
+  it("sends a live campaign only after explicit confirmation", async () => {
+    const user = userEvent.setup();
+    api.previewAudience.mockResolvedValue({ ...audience, eligible: 1, reachable: 1 });
+    api.sendCampaign.mockResolvedValue({ campaign_id: 9, status: "scheduled" });
+    renderCompose(companyMeta());
+    await pickCompany(user);
+    await fillMessage(user);
+    await user.click(screen.getByRole("button", { name: /^Send now$/ }));
+    await waitFor(() => expect(api.createCampaign).toHaveBeenCalledTimes(1));
+    expect(api.createCampaign.mock.calls[0][0].audience_type).toBe("company");
+    expect(api.createCampaign.mock.calls[0][0].audience_filter.company_ids).toEqual([1]);
+    expect(api.sendCampaign).not.toHaveBeenCalled();
+    const buttons = await screen.findAllByRole("button", { name: /^Send now$/ });
+    await user.click(buttons[buttons.length - 1]);
+    await waitFor(() => expect(api.sendCampaign).toHaveBeenCalledTimes(1));
+    expect(api.sendCampaign.mock.calls[0][0]).toBe(9);
+    expect(api.sendCampaign.mock.calls[0][1].mode).toBe("now");
+    expect(api.testCampaign).not.toHaveBeenCalled();
   });
 
   it("is disabled with the real reason while the campaign worker is off", async () => {

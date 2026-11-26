@@ -9,7 +9,7 @@ export function Card({ title, subtitle, actions, children, className = "" }: { t
       {(title || actions) && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-4">
           <div>
-            {title && <h2 className="font-extrabold text-gray-900">{title}</h2>}
+            {title && <h2 className="font-semibold text-gray-900">{title}</h2>}
             {subtitle && <p className="mt-0.5 text-xs text-gray-500">{subtitle}</p>}
           </div>
           {actions}
@@ -23,9 +23,9 @@ export function Card({ title, subtitle, actions, children, className = "" }: { t
 export function Metric({ label, value, hint, tone = "bg-violet-600" }: { label: string; value: number | string | null; hint?: string; tone?: string }) {
   return (
     <article className="relative overflow-hidden rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-      <span className={`absolute -right-6 -top-6 h-16 w-16 rounded-full opacity-10 ${tone}`} />
-      <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">{label}</p>
-      <p className="mt-2 text-2xl font-black tracking-tight text-gray-900">{value === null ? "—" : typeof value === "number" ? value.toLocaleString() : value}</p>
+      <span aria-hidden="true" className={`mb-3 block h-1 w-6 rounded-full ${tone}`} />
+      <p className="text-xs font-medium text-gray-500">{label}</p>
+      <p className="mt-2 text-2xl font-semibold tracking-tight text-gray-900">{value === null ? "—" : typeof value === "number" ? value.toLocaleString() : value}</p>
       {hint && <p className="mt-1 text-xs text-gray-500">{hint}</p>}
     </article>
   );
@@ -244,6 +244,6 @@ export function NotificationPreviews({ title, message, imageUrl, note, tapOpens 
 
 export const inputCls = "w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-[#852BAF] focus:ring-2 focus:ring-purple-100 disabled:bg-gray-50 disabled:text-gray-500";
 export const labelCls = "mb-1 block text-xs font-bold text-gray-600";
-export const primaryBtn = "inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#C64EFE] px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md disabled:translate-y-0 disabled:opacity-50";
+export const primaryBtn = "inline-flex items-center justify-center gap-2 rounded-xl bg-[#852BAF] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition enabled:hover:bg-[#702393] disabled:cursor-not-allowed disabled:opacity-50";
 export const secondaryBtn = "inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-bold text-gray-700 transition hover:border-[#852BAF] hover:text-[#852BAF] disabled:opacity-50";
 export const dangerBtn = "inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-bold text-red-600 transition hover:bg-red-50 disabled:opacity-50";

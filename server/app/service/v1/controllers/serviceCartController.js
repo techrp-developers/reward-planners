@@ -1,10 +1,6 @@
 const db = require("../../../../config/database");
 const CartModel = require("../models/serviceCartModel");
-const {
-  toContentId,
-  getLiveServiceOfferPrice,
-  getLiveBundleOfferTotal,
-} = require("../utils/serviceOffers");
+const { getBestServiceOffer, getBestBundleOffer } = require("../utils/serviceOffers");
 
 class ServiceCartController {
   async addToCart(req, res) {
@@ -41,18 +37,16 @@ class ServiceCartController {
         });
       }
 
-      // A banner that no longer prices this variant falls back to the normal
-      // price instead of failing, matching the ecommerce cart.
-      const contentId = toContentId(req.body?.content_id);
-      const offerPrice = await getLiveServiceOfferPrice(contentId, variant_id);
+      // The cart re-prices live; this records the offer in effect when added.
+      const offer = await getBestServiceOffer(variant_id);
 
       const cart = await CartModel.getOrCreateCart(userId);
 
       await CartModel.addItem(cart.id, {
         service_id,
         variant_id,
-        price: offerPrice ?? variant.price,
-        promotional_content_id: offerPrice === null ? null : contentId,
+        price: offer ? offer.price : variant.price,
+        promotional_content_id: offer ? offer.contentId : null,
       });
 
       // -------------------------------
@@ -195,11 +189,8 @@ class ServiceCartController {
 
       const selectedSet = new Set(selected_items || []);
       const insertedItems = [];
-      // Remember the banner only while it prices this bundle; the cart re-checks
-      // it live and applies it only when the full-bundle price applies.
-      const contentId = toContentId(req.body?.content_id);
-      const bundleOffer = await getLiveBundleOfferTotal(
-        contentId,
+      // The cart re-checks bundle offers live; this records the one in effect.
+      const bundleOffer = await getBestBundleOffer(
         bundleId,
         items.reduce((sum, item) => sum + Number(item.bundle_price), 0),
       );
@@ -223,7 +214,7 @@ class ServiceCartController {
           variant_id: item.variant_id,
           price: finalPrice,
           bundle_id: bundleId,
-          promotional_content_id: bundleOffer === null ? null : contentId,
+          promotional_content_id: bundleOffer ? bundleOffer.contentId : null,
         });
 
         insertedItems.push(item.id);

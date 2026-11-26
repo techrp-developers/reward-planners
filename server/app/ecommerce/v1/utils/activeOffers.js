@@ -2,6 +2,11 @@ const db = require("../../../../config/database");
 
 const OFFER_ZONES = "'promotional_banner', 'offers_banner', 'brand_promotional_banner'";
 
+// The normal price can drop after an offer is saved, so it is rechecked here:
+// an offer above it must never be charged.
+const normalPriceOf = (variantColumn) =>
+  `(SELECT pv.sale_price FROM product_variants pv WHERE pv.variant_id = ${variantColumn})`;
+
 /**
  * Active offer candidates per variant, cheapest first (flash sale wins ties).
  * Flash-sale candidates carry the quantity still available at that price.
@@ -22,6 +27,7 @@ async function getOfferCandidates(variantIds, { conn = db, forUpdate = false } =
        AND c.status = 'active'
        AND NOW() BETWEEN c.start_at AND c.end_at
        AND ci.offer_price > 0
+       AND ci.offer_price < ${normalPriceOf("ci.variant_id")}
        AND ci.max_qty > COALESCE(ci.sold_qty, 0)${lock}`,
     [ids],
   );
@@ -31,6 +37,7 @@ async function getOfferCandidates(variantIds, { conn = db, forUpdate = false } =
      JOIN content_zone_entries cze ON cze.content_id = o.content_id
      WHERE o.variant_id IN (?)
        AND o.offer_price > 0
+       AND o.offer_price <= ${normalPriceOf("o.variant_id")}
        AND cze.module = 'product'
        AND cze.zone IN (${OFFER_ZONES})
        AND cze.is_published = 1

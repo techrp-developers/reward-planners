@@ -83,12 +83,12 @@ export default function CancellationDetail() {
       const courierFailed = approving && axios.isAxiosError<{ code?: string }>(error)
         && error.response?.data?.code === "COURIER_CANCELLATION_FAILED";
       if (courierFailed) {
-        // The AWB may already have been cancelled by hand in the XpressBees
+        // The AWB may already have been cancelled by hand in the courier
         // panel, in which case the courier API refuses a second cancel.
         const manual = await Swal.fire({
           icon: "warning",
-          title: "XpressBees could not cancel the shipment",
-          html: `${escapeHtml(getErrorMessage(error, "Courier cancellation failed."))}<br/><br/>If this AWB was <b>already cancelled manually</b> in the XpressBees panel, you can approve and refund now.`,
+          title: "Courier could not cancel the shipment",
+          html: `${escapeHtml(getErrorMessage(error, "Courier cancellation failed."))}<br/><br/>If this AWB was <b>already cancelled manually</b> in the courier panel, you can approve and refund now.`,
           showCancelButton: true,
           confirmButtonColor: "#16a34a",
           confirmButtonText: "AWB cancelled manually – refund",
@@ -128,10 +128,10 @@ export default function CancellationDetail() {
   const eligibleTotal = eligibleMoney + eligibleWallet;
 
   return (
-    <div className="min-h-screen p-6 md:p-10">
+    <div className="w-full pb-8">
       <div className="mb-8 flex items-center justify-between">
-        <button onClick={() => navigate(-1)} className="cursor-pointer rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-5 py-2.5 font-semibold text-white">← Back</button>
-        <h1 className="text-3xl font-bold">Item Cancellation</h1>
+        <button onClick={() => navigate(-1)} className="inline-flex w-fit items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">← Back</button>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Item Cancellation</h1>
       </div>
       <section className={card}>
         <h2 className="mb-4 text-xs font-bold uppercase tracking-widest text-gray-400">Item summary</h2>

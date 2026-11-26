@@ -226,7 +226,7 @@ export default function ContentForm({ draft, entries, now, module, onChange, onS
                         key={preset.name}
                         type="button"
                         onClick={() => onChange({ colorValue: makeGradientColorValue(preset.colors, gradient.direction) })}
-                        className="overflow-hidden rounded-xl border border-white bg-white p-0 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                        className="overflow-hidden rounded-xl border border-white bg-white p-0 text-left shadow-sm transition hover:shadow-md"
                       >
                         <span className="block h-12" style={cmsColorToBackground(makeGradientColorValue(preset.colors, gradient.direction))} />
                         <span className="block px-3 py-2 text-xs font-black text-slate-700">{preset.name}</span>
@@ -331,7 +331,7 @@ export default function ContentForm({ draft, entries, now, module, onChange, onS
           <input value={draft.redirectLink} onChange={(event) => onChange({ redirectLink: event.target.value })} placeholder="https://..." className={inputClass} />
         </label>
 
-        {(module === "product" || module === "service") && draft.zone !== "navbar_background" && (
+        {(module === "product" || module === "service" || module === "mobile_dashboard") && draft.zone !== "navbar_background" && (
           <details className="sm:col-span-2 rounded-xl border border-slate-200 p-3">
             <summary className="cursor-pointer text-sm font-semibold text-slate-600">Campaign fallback destination (optional)</summary>
             <p className="my-2 text-xs text-slate-500">Set each image's destination using Set destination on its thumbnail. This fallback is used only when an image has no destination of its own.</p>
@@ -382,7 +382,7 @@ export default function ContentForm({ draft, entries, now, module, onChange, onS
         <button type="button" onClick={onSaveDraft} disabled={saving} className="inline-flex items-center gap-2 rounded-xl border border-purple-200 bg-purple-50 px-5 py-3 text-sm font-bold text-[#852BAF] hover:bg-purple-100 disabled:opacity-50">
           <FiSave /> Save as Draft
         </button>
-        <button type="button" onClick={onPublish} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-5 py-3 text-sm font-extrabold text-white shadow disabled:opacity-50">
+        <button type="button" onClick={onPublish} disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] from-60% to-[#C13A8E] px-5 py-3 text-sm font-extrabold text-white shadow disabled:opacity-50">
           Publish
         </button>
       </div>

@@ -4,7 +4,10 @@ const rows = new Map();
 let nextId;
 const dbPath = require.resolve('../config/database');
 const db = {
+  async execute(sql, params) { return this.query(sql, params); },
   async query(sql, params = []) {
+    // This CMS fixture has no flash-sale schema or service offer bindings.
+    if (sql.includes('information_schema.COLUMNS') || sql.includes('SELECT live.service_id')) return [[]];
     if (sql.includes('FROM content_zone_entry_images')) return [[]];
     if (sql.includes('INSERT INTO content_zone_entries')) {
       const columns = sql.match(/content_zone_entries\s*\(([^)]+)\)/)[1].split(',').map(value => value.trim());

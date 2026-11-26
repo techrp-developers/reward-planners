@@ -17,6 +17,7 @@ import {
 
 import { useNavigate, useParams } from "react-router-dom";
 import QuillEditor from "../components/QuillEditor";
+import { RETURN_WINDOW_LABEL, returnWindowLabel } from "../utils/returnPolicy";
 
 // const API_BASE = import.meta.env.VITE_API_URL;
 import { api } from "../../../common/api/api";
@@ -64,6 +65,7 @@ interface ProductView {
   isDiscountEligible?: number;
   isReturnable?: number;
   isReplaceable?: number;
+  openBoxDelivery?: number;
   returnWindowDays?: number | null;
 
   deliverySlaMinDays?: number;
@@ -137,7 +139,7 @@ const SectionHeader = ({ icon: Icon, title, description }: any) => (
     <div
       className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
       style={{
-        background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
+        background: "linear-gradient(90deg, #852BAF 60%, #C13A8E 100%)",
       }}
     >
       <Icon className="text-white" style={{ fontSize: 15 }} />
@@ -265,8 +267,9 @@ export default function ReviewProductPage() {
 
         product_status: raw.status ?? "",
         isDiscountEligible: raw.is_discount_eligible ?? 1,
-        isReturnable: raw.is_returnable ?? 1,
-        isReplaceable: raw.is_replaceable ?? 1,
+        isReturnable: Number(raw.is_returnable ?? 1),
+        isReplaceable: Number(raw.is_replaceable ?? 1),
+        openBoxDelivery: Number(raw.open_box_delivery) || 0,
         returnWindowDays: raw.return_window_days ?? null,
 
         deliverySlaMinDays: raw.delivery_sla_min_days ?? 1,
@@ -551,27 +554,13 @@ export default function ReviewProductPage() {
     : [];
 
   return (
-    <div
-      className="min-h-screen p-6"
-      style={{
-        background:
-          "linear-gradient(160deg, #fdf8ff 0%, #fff5f8 50%, #f8f9ff 100%)",
-      }}
-    >
-      <div className="mx-auto max-w-7xl">
+    <div className="pb-8">
+      <div>
         {/* PAGE HEADER */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-start gap-4">
-            <div
-              className="w-12 h-12 rounded-full flex items-center justify-center shrink-0 shadow-md"
-              style={{
-                background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
-              }}
-            >
-              <FaBox className="text-white text-xl" />
-            </div>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">
+              <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
                 Product Review
               </h1>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
@@ -621,7 +610,7 @@ export default function ReviewProductPage() {
 
           <button
             onClick={() => navigate(-1)}
-            className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white rounded-xl shadow-md transition-all bg-gradient-to-r from-[#852BAF] to-[#FC3F78] hover:opacity-90 active:scale-95 cursor-pointer"
+            className="inline-flex w-fit items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             <FaArrowLeft /> Back
           </button>
@@ -799,12 +788,7 @@ export default function ReviewProductPage() {
             />
             <div className="w-full overflow-x-auto overscroll-x-contain rounded-xl border border-gray-100">
               <table className="min-w-max text-sm text-left">
-                <thead
-                  style={{
-                    background:
-                      "linear-gradient(135deg, #fdf8ff 0%, #fff5f8 100%)",
-                  }}
-                >
+                <thead>
                   <tr>
                     {[
                       "Images",
@@ -985,11 +969,17 @@ export default function ReviewProductPage() {
             title="Pricing & Commercial Controls"
             description="Discount eligibility and return policy"
           />
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
             <FormInput
               id="isDiscountEligible"
               label="Discount Eligible"
               value={product.isDiscountEligible === 1 ? "Yes" : "No"}
+            />
+
+            <FormInput
+              id="isReturnable"
+              label="Returnable"
+              value={product.isReturnable === 1 ? "Yes" : "No"}
             />
 
             <FormInput
@@ -999,14 +989,12 @@ export default function ReviewProductPage() {
               readOnly
             />
 
-            <FormInput
-              label="Return Policy"
+            <FormInput id="openBoxDelivery" label="Open-box delivery" value={product.openBoxDelivery === 1 ? "Yes" : "No"} readOnly />
+              <FormInput id="replacementVideo" label="Damaged-product video for replacement" value={product.isReplaceable === 1 ? "Required" : "Not applicable"} readOnly />
+              <FormInput
+              label={RETURN_WINDOW_LABEL}
               id="returnWindowDays"
-              value={
-                product.isReturnable === 1
-                  ? `Returnable (${product.returnWindowDays ?? "-"} days)`
-                  : "Not Returnable"
-              }
+              value={returnWindowLabel(product)}
             />
           </div>
         </div>
@@ -1134,7 +1122,7 @@ export default function ReviewProductPage() {
                       )}
                       <button
                         onClick={() => downloadFile(fileUrl, doc.document_name)}
-                        className="w-9 h-9 flex items-center justify-center text-white rounded-xl bg-gradient-to-br from-[#852BAF] to-[#FC3F78] hover:opacity-90 shadow-sm cursor-pointer transition-all"
+                        className="w-9 h-9 flex items-center justify-center text-white rounded-xl bg-gradient-to-br from-[#852BAF] from-60% to-[#C13A8E] hover:opacity-90 shadow-sm cursor-pointer transition-all"
                       >
                         <FaDownload className="text-sm" />
                       </button>

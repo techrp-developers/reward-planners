@@ -1,8 +1,18 @@
 const express = require("express");
 const router = express.Router();
+const {managerScope}=require('../app/service/v1/middlewares/managerScope');
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 const orderController = require("../controllers/orderController");
 const ecommerceOrderController = require("../app/ecommerce/v1/controllers/orderController");
+
+const returnRequests = require("../controllers/returnRequestController");
+router.get("/return-requests", authenticateToken, authorizeRoles("vendor"), returnRequests.list);
+router.get("/return-requests/:id", authenticateToken, authorizeRoles("vendor"), returnRequests.detail);
+router.patch("/return-requests/:id", authenticateToken, authorizeRoles("vendor"), returnRequests.review);
+
+router.get("/manager/return-requests", authenticateToken, authorizeRoles("vendor_manager", "admin"), returnRequests.list);
+router.get("/manager/return-requests/:id", authenticateToken, authorizeRoles("vendor_manager", "admin"), returnRequests.detail);
+router.patch("/manager/return-requests/:id", authenticateToken, authorizeRoles("vendor_manager", "admin"), returnRequests.review);
 
 // Get all orders
 router.get(
@@ -115,6 +125,7 @@ router.get(
   "/service-cancellation-requests",
   authenticateToken,
   authorizeRoles("vendor_manager", "service_manager", "admin"),
+  managerScope(),
   orderController.getServiceCancellationRequests,
 );
 
@@ -122,6 +133,7 @@ router.get(
   "/service-cancellation-request/:serviceOrderId",
   authenticateToken,
   authorizeRoles("vendor_manager", "service_manager", "admin"),
+  managerScope('order'),
   orderController.getServiceCancellationDetails,
 );
 
@@ -130,6 +142,7 @@ router.post(
   "/approve-service-cancellation/:serviceOrderId",
   authenticateToken,
   authorizeRoles("vendor_manager", "service_manager", "admin"),
+  managerScope('order'),
   orderController.approveServiceCancellation,
 );
 
@@ -144,6 +157,7 @@ router.post(
   "/cancel-service/:serviceOrderId",
   authenticateToken,
   authorizeRoles("vendor_manager", "service_manager", "admin"),
+  managerScope('order'),
   orderController.cancelServiceAsManager,
 );
 
@@ -152,6 +166,7 @@ router.post(
   "/reject-service-cancellation/:serviceOrderId",
   authenticateToken,
   authorizeRoles("vendor_manager", "service_manager", "admin"),
+  managerScope('order'),
   orderController.rejectServiceCancellation,
 );
 

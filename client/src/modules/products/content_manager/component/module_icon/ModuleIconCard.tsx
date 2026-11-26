@@ -389,7 +389,7 @@ export default function ModuleIconCard({ module, onSaved }: Props) {
           type="button"
           onClick={() => void handleSave()}
           disabled={saving || deleting}
-          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-5 py-2.5 text-sm font-extrabold text-white shadow disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] from-60% to-[#C13A8E] px-5 py-2.5 text-sm font-extrabold text-white shadow disabled:opacity-50"
         >
           {saving ? "Saving..." : "Save Changes"}
         </button>

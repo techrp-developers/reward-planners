@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+router.use('/service-manager', require('./serviceManagerRoute'));
 
 const serviceCategoryRoute = require("./serviceCategoryRoute");
 const serviceRoute = require("./serviceRoute");
@@ -13,6 +14,7 @@ const serviceCartRoute = require("./serviceCartRoute");
 const serviceCheckoutRoute = require("./serviceCheckoutRoute");
 const serviceBundleRoute = require("./serviceBundleRoute");
 const serviceBannerRoute = require("./serviceBannerRoute");
+const serviceCampaignRoute = require("./serviceCampaignRoute");
 const insuranceRoute = require("./insuranceRoute");
 const mfRoute = require("./mfRoute");
 
@@ -28,6 +30,7 @@ router.use("/service-form",serviceFormRoute)
 router.use("/service-orders",serviceOrderRoute)
 router.use('/service-bundle',serviceBundleRoute)
 router.use('/service-banner',serviceBannerRoute)
+router.use('/service-campaign',serviceCampaignRoute)
 router.use("/service-order-documents",serviceOrderDocumentRoute)
 router.use("/mutual-fund",mfRoute)
 

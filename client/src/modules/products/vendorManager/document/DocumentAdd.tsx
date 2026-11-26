@@ -8,7 +8,6 @@ import {
   FiPlus,
   FiX,
   FiSave,
-  FiFileText,
 } from "react-icons/fi";
 
 // const API_BASE = import.meta.env.VITE_API_URL;
@@ -197,11 +196,9 @@ const handleAdd = async () => {
 };
 
   return (
-    <div className="min-h-screen p-6 bg-gray-50">
+    <div className="w-full pb-8">
       {/* HEADER */}
-      <h1 className="flex items-center gap-2 mb-6 text-3xl font-bold text-purple-700">
-        <FiFileText /> Document Management
-      </h1>
+      <h1 className="mb-6 text-2xl font-semibold tracking-tight text-slate-900">Document Management</h1>
 
       {/* ADD DOCUMENT */}
       <div className="flex flex-col gap-4 mb-6 md:flex-row">

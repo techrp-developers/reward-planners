@@ -1,4 +1,5 @@
 const ServiceOrderModel = require("../models/serviceOrderModel");
+const ServiceMoney=require('../utils/serviceMoney');
 const ServiceEnquiryModel = require("../models/serviceEnquiryModel");
 const ServiceOrderDocumentModel = require("../models/serviceOrderDocumentModel");
 const { UPLOAD_BASE } = require("../../../../config/path");
@@ -70,19 +71,9 @@ const ALLOWED_STATUSES = [
 //calculate summary utility function
 function calculateSummary({ bundles = [], individual_items = [] }) {
   // 1 Individual items total
-  const individual_total = individual_items.reduce(
-    (sum, item) => sum + item.price * (item.quantity || 1),
-    0,
-  );
-
-  // 2 Bundle total
-  const bundle_total = bundles.reduce(
-    (sum, bundle) => sum + bundle.bundle_total,
-    0,
-  );
-
-  // 3 Combined item total
-  const item_total = individual_total + bundle_total;
+  const individual_total=Number(ServiceMoney.sum(individual_items.map(item=>ServiceMoney.line(item.price,item.quantity||1))));
+  const bundle_total=Number(ServiceMoney.sum(bundles.map(bundle=>bundle.bundle_total)));
+  const item_total=Number(ServiceMoney.sum([individual_total,bundle_total]));
 
   // 4 Other fields (same as before)
   const discount = 0;
@@ -167,15 +158,7 @@ class ServiceOrderController {
         });
       }
 
-      const totalAmount = orders.reduce(
-        (sum, order) =>
-          sum +
-          Math.max(
-            0,
-            Number(order.price || 0) - Number(order.reward_coins_used || 0),
-          ),
-        0,
-      );
+      const totalAmount = ServiceMoney.decimal(orders.reduce((sum,order)=>sum+ServiceMoney.paise(ServiceMoney.payable(order.price,order.reward_coins_used||0)),0n));
 
       if (totalAmount <= 0) {
         await connection.rollback();
@@ -203,7 +186,7 @@ class ServiceOrderController {
           data: {
             key: process.env.RAZOR_API_KEY,
             orderId: existingPaymentOrder.razorpay_order_id,
-            amount: Math.round(Number(existingPaymentOrder.amount) * 100),
+            amount: Number(ServiceMoney.paise(existingPaymentOrder.amount)),
             currency: "INR",
             parent_order_id,
           },
@@ -211,7 +194,7 @@ class ServiceOrderController {
       }
 
       const razorpayOrder = await razorpay.orders.create({
-        amount: Math.round(totalAmount * 100),
+        amount: Number(ServiceMoney.paise(totalAmount)),
         currency: "INR",
         receipt: parent_order_id,
         notes: {
@@ -1210,6 +1193,19 @@ class ServiceOrderController {
 
   // order status
   async updateOrderStatus(req, res) {
+    if (['service_manager','vendor_manager','admin'].includes(req.user?.role)) {
+      try {
+        const result = await require('../utils/managerOrderStatus').updateManagerOrderStatus(db,req.user.user_id,req.params.id,req.body.status,{inHouseOnly:req.user.role==='service_manager'});
+        if(result.changed) {
+          runNonBlocking(() => sendServiceOrderStatusEmail(req.params.id, req.body.status), 'service manager status email');
+          notifyUser({userId:result.user_id,module:'service',type:`service_order_${req.body.status}`,title:'Service order updated',message:`Your service order status is now ${req.body.status.replace(/_/g,' ')}.`,icon:'briefcase',reference_type:'service_order',reference_id:result.parent_order_id||req.params.id,action_url:`/service-orders/${result.parent_order_id||req.params.id}`,metadata:{status:req.body.status,service_order_id:req.params.id}},'service manager order status notification');
+        }
+        return res.json({success:true,message:'Service status updated'});
+      } catch(error) {
+        if(!error.status) console.error('[manager fulfilment]',error.code||error.message);
+        return res.status(error.status||500).json({success:false,message:error.status?error.message:'Unable to update service status.'});
+      }
+    }
     try {
       const { id } = req.params;
       const { status } = req.body;
@@ -1961,6 +1957,7 @@ class ServiceOrderController {
       const search = req.query.search || null;
 
       const result = await ServiceOrderModel.getAllOrders({
+        inHouseOnly: req.inHouseOnly === true,
         page,
         limit,
         status,

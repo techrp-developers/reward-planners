@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from "react";
 import type { ChangeEvent, FormEvent } from "react";
-import type { ComponentType } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import QuillEditor from "../components/QuillEditor";
 import CustomAttributeBuilder, { type CustomAttributeRow } from "../components/CustomAttributeBuilder";
+import { RETURN_WINDOW_LABEL } from "../utils/returnPolicy";
 import { FaArrowLeft } from "react-icons/fa";
 // import imageCompression from "browser-image-compression";
 
-type IconComp = ComponentType<any>;
 
 interface ImagePreview {
   file: File;
@@ -17,33 +16,6 @@ interface ImagePreview {
 interface VideoPreview {
   file: File;
   url: string;
-}
-
-function SectionHeader({
-  icon: Icon,
-  title,
-  description,
-}: {
-  icon: IconComp;
-  title: string;
-  description?: string;
-}) {
-  return (
-    <div className="flex items-start space-x-3">
-      <div
-        className="p-3 text-white rounded-md"
-        style={{ background: "linear-gradient(to right, #852BAF, #FC3F78)" }}
-      >
-        <Icon />
-      </div>
-      <div>
-        <h3 className="text-lg font-semibold">{title}</h3>
-        {description && (
-          <p className="mt-1 text-sm text-gray-500">{description}</p>
-        )}
-      </div>
-    </div>
-  );
 }
 
 function FormInput(props: {
@@ -100,6 +72,7 @@ import {
 
 // const API_BASE = import.meta.env.VITE_API_URL;
 import { api } from "../../../common/api/api";
+import SectionHeader from "./SectionHeader";
 // const API_BASEIMAGE_URL = "https://rewardplanners.com/api/crm";
 const R2_BASE_URL = "https://cdn.rewardplanners.com";
 
@@ -150,6 +123,7 @@ interface ProductData {
   isDiscountEligible: 1 | 0;
   isReturnable: 1 | 0;
   isReplaceable: 1 | 0;
+  openBoxDelivery: 1 | 0;
   returnWindowDays: string;
 
   deliveryMinDays: string;
@@ -175,6 +149,7 @@ const initialProductData: ProductData = {
   isDiscountEligible: 1,
   isReturnable: 1,
   isReplaceable: 1,
+  openBoxDelivery: 0,
   returnWindowDays: "",
 
   deliveryMinDays: "1",
@@ -662,6 +637,7 @@ export default function EditProductPage() {
         isDiscountEligible: p.is_discount_eligible ?? 1,
         isReturnable: p.is_returnable ?? 1,
         isReplaceable: p.is_replaceable ?? 1,
+        openBoxDelivery: Number(p.open_box_delivery) === 1 ? 1 : 0,
         returnWindowDays: p.return_window_days
           ? String(p.return_window_days)
           : "",
@@ -774,10 +750,10 @@ export default function EditProductPage() {
       }
 
       /* ================= RETURN WINDOW VALIDATION ================= */
-      if (product.isReturnable === 1) {
+      if (product.isReturnable === 1 || product.isReplaceable === 1) {
         const days = Number(product.returnWindowDays);
         if (!days || days < 1 || days > 30) {
-          throw new Error("Return window must be between 1 and 30 days");
+          throw new Error("Return / replacement window must be between 1 and 30 days");
         }
       }
 
@@ -846,8 +822,9 @@ export default function EditProductPage() {
       formData.append("is_returnable", String(product.isReturnable));
 
       formData.append("is_replaceable", String(product.isReplaceable));
+      formData.append("open_box_delivery", String(product.openBoxDelivery));
 
-      if (product.isReturnable === 1) {
+      if (product.isReturnable === 1 || product.isReplaceable === 1) {
         formData.append("return_window_days", product.returnWindowDays);
       }
 
@@ -993,11 +970,11 @@ export default function EditProductPage() {
   const coverImage = product.existingImages?.[0];
 
   return (
-    <div className="p-6 premium-form" style={{ backgroundColor: "#FFFAFB" }}>
+    <div className="premium-form pb-8">
       <div className="p-6 mx-auto bg-white border border-gray-100 shadow-xl rounded-2xl max-w-7xl">
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h1 className="mb-1 text-3xl font-bold text-gray-900">
+            <h1 className="mb-1 text-2xl font-semibold tracking-tight text-slate-900">
               Edit Product Details
             </h1>
             <p className="text-sm text-gray-600">
@@ -1435,6 +1412,12 @@ export default function EditProductPage() {
                   </select>
                 </div>
 
+
+              <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-purple-100 bg-purple-50/40 p-4 text-sm text-slate-700">
+                <input type="checkbox" checked={product.openBoxDelivery === 1} onChange={event => setProduct(prev => ({ ...prev, openBoxDelivery: event.target.checked ? 1 : 0 }))} className="h-4 w-4 accent-[#852BAF]" />
+                <span><span className="block font-semibold">Open-box delivery</span><span className="block text-xs text-slate-500">Allow the customer to inspect the product at delivery.</span></span>
+              </label>
+              {product.isReplaceable === 1 && <p className="rounded-xl border border-purple-100 bg-purple-50/40 p-4 text-sm text-slate-600">Customers must upload a video showing the damaged product when requesting a replacement.</p>}
                 {/* Returnable */}
                 <div>
                   <label className="block mb-1 text-sm font-medium text-gray-700">
@@ -1445,6 +1428,7 @@ export default function EditProductPage() {
                     value={product.isReturnable}
                     onChange={(e) => {
                       const val = Number(e.target.value) as 1 | 0;
+                      // Turning returns off defaults replacement to off too; the vendor can switch it back on.
                       setProduct((prev) => ({
                         ...prev,
                         isReturnable: val,
@@ -1468,25 +1452,27 @@ export default function EditProductPage() {
                   <select
                     name="isReplaceable"
                     value={product.isReplaceable}
-                    disabled={product.isReturnable === 0}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const val = Number(e.target.value) as 1 | 0;
                       setProduct((prev) => ({
                         ...prev,
-                        isReplaceable: Number(e.target.value) as 1 | 0,
-                      }))
-                    }
-                    className="w-full p-3 border rounded-lg disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        isReplaceable: val,
+                        returnWindowDays:
+                          val === 0 && prev.isReturnable === 0 ? "" : prev.returnWindowDays,
+                      }));
+                    }}
+                    className="w-full p-3 border rounded-lg"
                   >
                     <option value={1}>Yes</option>
                     <option value={0}>No</option>
                   </select>
                 </div>
 
-                {/* Return Window */}
-                {product.isReturnable === 1 && (
+                {/* Return / Replacement Window */}
+                {(product.isReturnable === 1 || product.isReplaceable === 1) && (
                   <FormInput
                     id="returnWindowDays"
-                    label="Return Window (Days)"
+                    label={`${RETURN_WINDOW_LABEL} (Days)`}
                     type="number"
                     value={product.returnWindowDays}
                     onChange={handleFieldChange}
@@ -1718,7 +1704,7 @@ export default function EditProductPage() {
               disabled={isSubmitting}
               className="flex items-center justify-center w-full px-6 py-3 text-lg font-bold text-white rounded-full transition-all duration-300 cursor-pointer hover:opacity-90 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
               style={{
-                background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
+                background: "linear-gradient(90deg, #852BAF 60%, #C13A8E 100%)",
                 boxShadow: "0 8px 24px rgba(133,43,175,0.3)",
               }}
             >

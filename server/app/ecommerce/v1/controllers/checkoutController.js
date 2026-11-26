@@ -1,6 +1,13 @@
 const CheckoutModel = require("../models/checkoutModel");
 const NotificationModel = require("../../../common/models/notificationModel");
 const db = require("../../../../config/database");
+const {
+  DELIVERY_PREFERENCES,
+} = require("../../../../services/courier/courierPolicy");
+
+const isValidDeliveryPreference = (value) =>
+  value === undefined ||
+  Object.values(DELIVERY_PREFERENCES).includes(value);
 
 class CheckoutController {
   // checkout cart Items
@@ -54,6 +61,7 @@ class CheckoutController {
         useRewards,
         expectedTotal,
         expectedRedeemable,
+        req.body?.delivery_preference,
       );
 
       return res.json({
@@ -163,6 +171,7 @@ class CheckoutController {
         use_rewards = true,
         expected_total,
         expected_redeemable = 0,
+        delivery_preference,
       } = req.body;
 
       if (!address_id) {
@@ -191,6 +200,7 @@ class CheckoutController {
         useRewards: use_rewards,
         expectedTotal: expected_total,
         expectedRedeemable: expected_redeemable,
+        deliveryPreference: delivery_preference,
       });
 
       // await NotificationModel.create({
@@ -292,7 +302,15 @@ class CheckoutController {
         });
       }
 
-      const { use_rewards = "true", address_id } = req.query;
+      const { use_rewards = "true", address_id, delivery_preference } =
+        req.query;
+
+      if (!isValidDeliveryPreference(delivery_preference)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid delivery_preference",
+        });
+      }
 
       const addressId = address_id ? Number(address_id) : null;
       if (address_id && (!Number.isInteger(addressId) || addressId < 1)) {
@@ -306,6 +324,7 @@ class CheckoutController {
         userId,
         use_rewards === "true",
         addressId,
+        delivery_preference,
       );
 
       return res.json({
@@ -358,7 +377,15 @@ class CheckoutController {
         address_id,
         campaign_id,
         content_id,
+        delivery_preference,
       } = req.query;
+
+      if (!isValidDeliveryPreference(delivery_preference)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid delivery_preference",
+        });
+      }
 
       if (!product_id || !variant_id || Number(qty) < 1) {
         return res.status(400).json({
@@ -384,6 +411,7 @@ class CheckoutController {
         useRewards: use_rewards === "true",
         userId,
         addressId,
+        deliveryPreference: delivery_preference,
       });
 
       return res.json({

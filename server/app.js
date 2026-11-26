@@ -206,7 +206,7 @@ app.use("/api/crm/v1/rm/assignments", require("./app/common/routes/rmAssignmentR
 
 // App Routes 
 app.use("/v1", ecommerceRoute);
-app.use("/v1", serviceRoute);
+require('./routes/mountServiceRoutes')(app, serviceRoute);
 app.use("/v1", stepCounterRoute);
 app.use("/v1", commonRoute);
 app.use("/v1", bbpsRoute);

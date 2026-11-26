@@ -136,7 +136,7 @@ class ServiceEnquiryController {
   // Fetch all Enquiries
   async getAllEnquiries(req, res) {
     try {
-      const enquiries = await ServiceEnquiryModel.findAll();
+      const enquiries = await ServiceEnquiryModel.findAll(req.inHouseOnly === true);
 
       res.json({
         success: true,
@@ -191,7 +191,7 @@ class ServiceEnquiryController {
         });
       }
 
-      const [result] = await db.query(
+      const [result] = req.inHouseOnly ? [await require('../models/managerWorkspaceModel').createWorkspaceModel(db).enquiryStatus(id,status,req.user.user_id)] : await db.query(
         `
       UPDATE service_enquiries
       SET status = ?

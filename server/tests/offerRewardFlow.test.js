@@ -105,6 +105,7 @@ for (const rewardScope of ['product', 'category', 'subcategory']) {
       for (const item of writes.filter(write => write.sql?.includes('INSERT INTO eorder_items'))) {
         assert.equal(Number(item.params[5]), price);
         assert.equal(item.params[8], earn);
+        assert.deepEqual(item.params.slice(11), [offerMode === 'flash' ? 6 : null, offerMode === 'content' ? 7 : null, 200]);
       }
     });
   }

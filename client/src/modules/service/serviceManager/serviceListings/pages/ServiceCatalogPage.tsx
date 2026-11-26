@@ -1,107 +1,64 @@
-import { useCallback, useEffect, useState } from "react";
-import { FiEdit2, FiLayers, FiPlus, FiRefreshCw, FiTag, FiTrash2, FiX } from "react-icons/fi";
-import axios from "axios";
-import { Link, Navigate, useParams } from "react-router-dom";
-import Swal from "sweetalert2";
-import { api } from "../../../../../common/api/api";
-import { routes } from "../../../../../routes";
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
+import { Eye, Pencil, Plus, RefreshCw, Search } from 'lucide-react';
+import { api } from '../../../../../common/api/api';
+import { assetUrl, catalogueOptions, dateLabel, getCatalogue, inr, workspaceApi, workspaceError, type CatalogueRow, type PageData } from '../../shared/workspaceApi';
+import { Drawer, EmptyState, ErrorState, LoadingState, PageHeader, Pagination, StatusBadge } from '../../shared/WorkspaceUI';
 
-interface Category { id: number; name: string; icon?: string | null; image_url?: string | null; status?: number; }
-interface Service { id: number; category_id: number; name: string; description?: string; price: number; estimated_days?: number; service_image?: string | null; image_url?: string | null; status?: number; }
-interface Variant { id: number; service_id?: number; variant_name: string; title: string; short_description: string; price: number; image_url?: string | null; status?: number; }
-type Entity = Category | Service | Variant;
-type Kind = "category" | "service" | "variant";
-type Section = "categories" | "services" | "variants";
-
-const message = (error: unknown) => axios.isAxiosError(error) ? String(error.response?.data?.message || "Please try again.") : "Please try again.";
-const input = "mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100";
-
-export default function ServiceCatalogPage() {
-  const { section = "categories" } = useParams();
-  const current = section as Section;
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [services, setServices] = useState<Service[]>([]);
-  const [variants, setVariants] = useState<Variant[]>([]);
-  const [categoryId, setCategoryId] = useState<number | null>(null);
-  const [serviceId, setServiceId] = useState<number | null>(null);
-  const [dialog, setDialog] = useState<Kind | null>(null);
-  const [editing, setEditing] = useState<Entity | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-
-  const loadCategories = useCallback(async () => {
-    const response = await api.get("/v1/category/all-categories");
-    const rows = response.data?.data || [];
-    setCategories(rows);
-    setCategoryId((value) => value && rows.some((row: Category) => row.id === value) ? value : rows[0]?.id || null);
-  }, []);
-  const loadServices = useCallback(async () => {
-    if (!categoryId) { setServices([]); return; }
-    const response = await api.get("/v1/service/all-services", { params: { category_id: categoryId, limit: 50 } });
-    const rows = response.data?.data || [];
-    setServices(rows);
-    setServiceId((value) => value && rows.some((row: Service) => row.id === value) ? value : rows[0]?.id || null);
-  }, [categoryId]);
-  const loadVariants = useCallback(async () => {
-    if (!serviceId) { setVariants([]); return; }
-    const response = await api.get(`/v1/service-variant/find/${serviceId}`);
-    setVariants(response.data?.data || []);
-  }, [serviceId]);
-  const refresh = useCallback(async () => { try { setLoading(true); await loadCategories(); } catch (error) { await Swal.fire("Unable to load catalogue", message(error), "error"); } finally { setLoading(false); } }, [loadCategories]);
-  useEffect(() => { void refresh(); }, [refresh]);
-  useEffect(() => { void loadServices(); }, [loadServices]);
-  useEffect(() => { void loadVariants(); }, [loadVariants]);
-
-  const openCreate = (kind: Kind) => { setEditing(null); setDialog(kind); };
-  const openEdit = (kind: Kind, entity: Entity) => { setEditing(entity); setDialog(kind); };
-  const reloadKind = async (kind: Kind) => { if (kind === "category") await loadCategories(); else if (kind === "service") await loadServices(); else await loadVariants(); };
-  const remove = async (kind: Kind, entity: Entity) => {
-    const label = "name" in entity ? entity.name : "title" in entity ? entity.title : "item";
-    const result = await Swal.fire({ title: `Remove ${kind}?`, text: `${label} will no longer be available.`, icon: "warning", showCancelButton: true, confirmButtonText: "Remove", confirmButtonColor: "#DC2626" });
-    if (!result.isConfirmed) return;
-    const path = kind === "category" ? `/v1/category/remove/${entity.id}` : kind === "service" ? `/v1/service/remove/${entity.id}` : `/v1/service-variant/remove/${entity.id}`;
-    try { await api.delete(path); await reloadKind(kind); await Swal.fire({ icon: "success", title: "Removed", timer: 900, showConfirmButton: false }); } catch (error) { await Swal.fire("Unable to remove", message(error), "error"); }
+type Kind = 'categories' | 'services' | 'variants';
+export default function ServiceCatalogPage({ classification = false }: { classification?: boolean }) {
+  const { section = 'categories' } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const kind = (classification ? searchParams.get('kind') || 'categories' : section) as Kind;
+  const [data, setData] = useState<PageData<CatalogueRow>>({ rows: [], total: 0, page: 1, limit: 20 });
+  const [categories, setCategories] = useState<CatalogueRow[]>([]), [services, setServices] = useState<CatalogueRow[]>([]);
+  const [error, setError] = useState(''), [loading, setLoading] = useState(true), [notice, setNotice] = useState('');
+  const [search, setSearch] = useState(''), [status, setStatus] = useState(''), [category, setCategory] = useState(''), [service, setService] = useState(''), [sort, setSort] = useState('recent'), [page, setPage] = useState(1);
+  const [editor, setEditor] = useState<{ row: CatalogueRow | null } | null>(null), [preview, setPreview] = useState<CatalogueRow | null>(null);
+  const load = useCallback(async () => { setLoading(true); setError(''); try { setData(await getCatalogue(kind, { page, search, status, sort, category_id: category || undefined, service_id: service || undefined, scope: classification ? 'unclassified' : 'in_house' })); } catch (err) { setError(workspaceError(err)); } finally { setLoading(false); } }, [kind, page, search, status, sort, category, service, classification]);
+  useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 200); return () => window.clearTimeout(timer); }, [load]);
+  useEffect(() => { let active = true; void Promise.all([catalogueOptions('categories'), catalogueOptions('services')]).then(([cats, items]) => { if (active) { setCategories(cats); setServices(items); } }).catch(() => { /* The main request displays migration/API errors. */ }); return () => { active = false; }; }, [notice]);
+  useEffect(() => { if (searchParams.get('add') === '1') { setEditor({ row: null }); setSearchParams({}, { replace: true }); } }, [searchParams, setSearchParams]);
+  const singular = kind === 'categories' ? 'category' : kind === 'services' ? 'service' : 'variant';
+  const toggleStatus = async (row: CatalogueRow) => {
+    if (!window.confirm(`${Number(row.status) === 1 ? 'Deactivate' : 'Activate'} this ${singular}? Historical records will be retained.`)) return;
+    try { await api.patch(`${workspaceApi}/catalog/${kind}/${row.id}`, { ...row, status: Number(row.status) === 1 ? 0 : 1, reason: Number(row.status) === 1 ? 'Manager deactivated catalogue record' : 'Manager activated catalogue record' }); setNotice(`Status updated at ${new Date().toLocaleTimeString()}`); await load(); } catch (err) { setError(workspaceError(err)); }
   };
-  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault(); if (!dialog) return; const data = new FormData(event.currentTarget); data.set("status", "1");
-    if (dialog === "service" && categoryId) data.set("category_id", String(categoryId));
-    if (dialog === "variant" && serviceId) data.set("service_id", String(serviceId));
-    const base = dialog === "category" ? "/v1/category" : dialog === "service" ? "/v1/service" : "/v1/service-variant";
-    const create = dialog === "category" ? "create-category" : dialog === "service" ? "create-service" : "create-variant";
-    const update = dialog === "category" ? "update" : dialog === "service" ? "update" : "update-variant";
-    try { setSaving(true); if (editing) await api.put(`${base}/${update}/${editing.id}`, data); else await api.post(`${base}/${create}`, data); await reloadKind(dialog); setDialog(null); setEditing(null); await Swal.fire({ icon: "success", title: `${dialog[0].toUpperCase()}${dialog.slice(1)} ${editing ? "updated" : "created"}`, timer: 1000, showConfirmButton: false }); } catch (error) { await Swal.fire("Unable to save", message(error), "error"); } finally { setSaving(false); }
+  if (!['categories','services','variants'].includes(kind)) return <Navigate to="/service/catalog/categories" replace />;
+  return <div className="sm-workspace"><PageHeader eyebrow="In-House Services" title={classification ? 'Classification review' : 'Service catalogue'} description={classification ? 'Review legacy categories first, then explicitly classify their services. Unclassified records stay out of workspace totals.' : 'Manage categories, services and variants with a complete record of every change.'}><button className="sm-btn" onClick={() => void load()} disabled={loading}><RefreshCw size={15} />Refresh</button>{!classification && <button className="sm-btn sm-primary" onClick={() => setEditor({ row: null })}><Plus size={16} />Add {singular}</button>}</PageHeader>
+    <nav className="sm-tabs" aria-label="Catalogue sections">{(['categories','services',...classification ? [] : ['variants']] as Kind[]).map(item => classification ? <button key={item} className={kind === item ? 'sm-tab-active' : ''} onClick={() => { setSearchParams({ kind: item }); setPage(1); }}>{item}</button> : <Link key={item} aria-current={kind === item ? 'page' : undefined} className={kind === item ? 'sm-tab-active' : ''} to={`/service/catalog/${item}`}>{item}</Link>)}</nav>
+    {notice && <p className="sm-notice" role="status">{notice}</p>}
+    <section className="sm-panel"><div className="sm-toolbar"><label className="sm-search"><Search size={16} /><input aria-label={`Search ${kind}`} placeholder={`Search ${kind}…`} value={search} maxLength={100} onChange={event => { setSearch(event.target.value); setPage(1); }} /></label><div className="sm-actions"><select aria-label="Filter by status" value={status} onChange={event => { setStatus(event.target.value); setPage(1); }}><option value="">All statuses</option><option value="1">Active</option><option value="0">Inactive</option></select>{kind === 'services' && <select aria-label="Filter category" value={category} onChange={event => { setCategory(event.target.value); setPage(1); }}><option value="">All categories</option>{categories.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select>}{kind === 'variants' && <select aria-label="Filter service" value={service} onChange={event => { setService(event.target.value); setPage(1); }}><option value="">All services</option>{services.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select>}<select aria-label="Sort records" value={sort} onChange={event => { setSort(event.target.value); setPage(1); }}><option value="recent">Newest first</option><option value="name">Name A–Z</option></select></div></div>
+      {error ? <ErrorState message={error} retry={() => void load()} /> : loading ? <LoadingState /> : <><div className="sm-table-wrap"><table className="sm-table"><thead><tr><th>{singular}</th>{kind !== 'categories' && <th>{kind === 'services' ? 'Category' : 'Service'}</th>}<th>{kind === 'categories' ? 'Services' : kind === 'services' ? 'Variants / Price from' : 'Selling price / Rewards'}</th><th>Status</th><th>{kind === 'variants' ? 'Created' : 'Last updated'}</th><th>Actions</th></tr></thead><tbody>{data.rows.map(row => <tr key={row.id}><td><div className="sm-entity">{assetUrl(row.icon || row.service_image || row.image_url) ? <img src={assetUrl(row.icon || row.service_image || row.image_url)} alt="" /> : <span className="sm-entity-initial">{(row.name || row.variant_name || 'S')[0]}</span>}<div><strong>{row.name || row.variant_name}</strong><small>{row.title || row.description?.slice(0,80) || `#${row.id}`}</small></div></div></td>{kind !== 'categories' && <td>{row.category_name || row.service_name || '—'}</td>}<td>{kind === 'categories' ? row.service_count : kind === 'services' ? <>{row.variant_count} variants<small>{row.price_from == null ? 'No active variants' : `From ${inr(row.price_from)}`}</small></> : <>{inr(row.price)}<small>{Number(row.can_earn_reward) ? 'Earn enabled' : 'No earning'} · {Number(row.can_redeem_reward) ? 'Redeem enabled' : 'No redemption'}</small></>}</td><td><StatusBadge status={Number(row.status)} /></td><td>{dateLabel(row.updated_at || row.created_at)}</td><td><div className="sm-actions"><button className="sm-icon-btn" aria-label={`View ${row.name || row.variant_name}`} onClick={() => setPreview(row)}><Eye size={16} /></button><button className="sm-icon-btn" aria-label={`Edit ${row.name || row.variant_name}`} onClick={() => setEditor({ row })}><Pencil size={16} /></button>{!classification && <button className="sm-text-btn" onClick={() => void toggleStatus(row)}>{Number(row.status) === 1 ? 'Deactivate' : 'Activate'}</button>}</div></td></tr>)}</tbody></table>{!data.rows.length && <EmptyState title={`No ${kind} found`} description={classification ? 'There are no unclassified records in this section.' : 'Add a record or adjust your filters.'} />}</div><Pagination page={page} total={data.total} limit={20} onChange={setPage} /></>}
+    </section>
+    {editor && <CatalogueEditor key={`${kind}-${editor.row?.id || 'new'}`} kind={kind} row={editor.row} categories={categories} services={services} classification={classification} onClose={() => setEditor(null)} onSaved={() => { setEditor(null); setNotice(`Catalogue saved at ${new Date().toLocaleTimeString()}`); void load(); }} />}
+    {preview && <Drawer title="Service preview" onClose={() => setPreview(null)}><div className="sm-form"><h3>{preview.name || preview.variant_name}</h3>{assetUrl(preview.icon || preview.service_image || preview.image_url) && <img className="sm-image-preview" src={assetUrl(preview.icon || preview.service_image || preview.image_url)} alt="Service" />}<StatusBadge status={Number(preview.status)} /><p>{preview.description || preview.short_description || 'No description provided.'}</p>{preview.price != null && <strong>{inr(preview.price)}</strong>}<p className="sm-help">Catalogue preview. Offers, checkout eligibility and customer pricing are resolved by the existing customer APIs.</p></div></Drawer>}
+  </div>;
+}
+function CatalogueEditor({ kind, row, categories, services, classification, onClose, onSaved }: { kind: Kind; row: CatalogueRow | null; categories: CatalogueRow[]; services: CatalogueRow[]; classification: boolean; onClose: () => void; onSaved: () => void }) {
+  const [dirty, setDirty] = useState(false), [saving, setSaving] = useState(false), [error, setError] = useState(''), [image, setImage] = useState('');
+  useEffect(() => () => { if (image) URL.revokeObjectURL(image); }, [image]);
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); setSaving(true); setError('');
+    const body = new FormData(event.currentTarget);
+    if (row) body.set('version', row.version);
+    if (classification) body.set('classify','in_house');
+    try { if (row) await api.patch(`${workspaceApi}/catalog/${kind}/${row.id}`, body); else await api.post(`${workspaceApi}/catalog/${kind}`, body); onSaved(); } catch (err) { setError(workspaceError(err)); } finally { setSaving(false); }
   };
-
-  const tabs: { key: Section; label: string }[] = [{ key: "categories", label: "1. Categories" }, { key: "services", label: "2. Services" }, { key: "variants", label: "3. Variants" }];
-  const selectedCategory = categories.find((row) => row.id === categoryId);
-  const selectedService = services.find((row) => row.id === serviceId);
-  const title = current === "categories" ? "Service Categories" : current === "services" ? "Services" : "Service Variants";
-  const kind: Kind = current === "categories" ? "category" : current === "services" ? "service" : "variant";
-  const canAdd = current === "categories" || current === "services" && Boolean(categoryId) || current === "variants" && Boolean(serviceId);
-  if (!tabs.some((tab) => tab.key === current)) return <Navigate to={routes.service.catalog.replace(":section?", "categories")} replace />;
-
-  return <main className="space-y-6"><header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#25103d] via-[#68258d] to-[#c33076] p-7 text-white shadow-[0_24px_65px_rgba(91,33,124,0.24)]"><div className="absolute -right-16 -top-24 h-64 w-64 rounded-full bg-white/10 blur-2xl" /><div className="relative flex flex-wrap items-center justify-between gap-5"><div><p className="text-[10px] font-bold uppercase tracking-[0.24em] text-purple-200">Service catalogue</p><h1 className="mt-1 text-3xl font-black">{title}</h1><p className="mt-2 text-sm text-purple-100/80">Manage the catalogue in sequence: categories, their services, and service variants.</p></div><button onClick={() => void refresh()} className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-bold hover:bg-white/20"><FiRefreshCw className={loading ? "animate-spin" : ""} /> Refresh</button></div></header>
-    <nav className="grid gap-2 rounded-2xl border border-purple-100 bg-white p-2 shadow-sm sm:grid-cols-3">{tabs.map((tab) => <Link key={tab.key} to={routes.service.catalog.replace(":section?", tab.key)} className={`rounded-xl px-4 py-3 text-center text-sm font-extrabold transition ${current === tab.key ? "bg-[#852BAF] text-white shadow" : "text-slate-500 hover:bg-purple-50 hover:text-[#852BAF]"}`}>{tab.label}</Link>)}</nav>
-    {current !== "categories" && <section className="grid gap-3 rounded-2xl border border-purple-100 bg-white p-4 shadow-sm md:grid-cols-2"><label className="text-xs font-bold text-slate-500">Category<select value={categoryId || ""} onChange={(event) => setCategoryId(Number(event.target.value))} className={input}>{categories.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>{current === "variants" && <label className="text-xs font-bold text-slate-500">Service<select value={serviceId || ""} onChange={(event) => setServiceId(Number(event.target.value))} className={input}>{services.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>}</section>}
-    <section className="overflow-hidden rounded-3xl border border-purple-100 bg-white shadow-[0_18px_55px_rgba(67,31,91,0.08)]"><div className="flex items-center justify-between border-b border-slate-100 px-6 py-5"><div><h2 className="font-black text-slate-900">{title}</h2><p className="mt-1 text-xs text-slate-400">{current === "services" ? `Category: ${selectedCategory?.name || "select a category"}` : current === "variants" ? `Service: ${selectedService?.name || "select a service"}` : `${categories.length} active categories`}</p></div><button disabled={!canAdd} onClick={() => openCreate(kind)} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-4 py-2.5 text-sm font-extrabold text-white shadow disabled:cursor-not-allowed disabled:opacity-40"><FiPlus /> Add {kind}</button></div>
-      <div className="p-5">{loading ? <div className="grid min-h-60 place-items-center"><FiRefreshCw className="animate-spin text-3xl text-[#852BAF]" /></div> : current === "categories" ? <Grid entities={categories} kind="category" edit={openEdit} remove={remove} /> : current === "services" ? <Grid entities={services} kind="service" edit={openEdit} remove={remove} /> : <Grid entities={variants} kind="variant" edit={openEdit} remove={remove} />}</div></section>
-    {dialog && <Editor kind={dialog} entity={editing} saving={saving} close={() => { setDialog(null); setEditing(null); }} submit={submit} />}
-  </main>;
+  return <Drawer title={`${classification ? 'Classify' : row ? 'Edit' : 'Add'} ${kind === 'categories' ? 'category' : kind === 'services' ? 'service' : 'variant'}`} onClose={onClose} dirty={dirty && !saving}><form className="sm-form" onSubmit={event => void submit(event)} onChange={() => setDirty(true)}>
+    <label>{kind === 'variants' ? 'Variant name' : 'Name'}<input autoFocus name={kind === 'variants' ? 'variant_name' : 'name'} required maxLength={kind === 'categories' ? 100 : 255} defaultValue={row?.name || row?.variant_name} /></label>
+    {kind !== 'categories' && <label>{kind === 'services' ? 'Category' : 'Parent service'}<select name={kind === 'services' ? 'category_id' : 'service_id'} required defaultValue={row?.category_id || row?.service_id || ''}><option value="">Select…</option>{(kind === 'services' ? categories : services).filter(item => kind !== 'variants' || !row || item.id === row.service_id).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
+    {kind === 'variants' && <label>Display title<input name="title" required maxLength={255} defaultValue={row?.title} /></label>}
+    <label>Description<textarea name={kind === 'variants' ? 'short_description' : 'description'} rows={4} maxLength={kind === 'services' ? 20000 : 5000} defaultValue={row?.description || row?.short_description} /></label>
+    {!row && kind !== 'categories' && <label>{kind === 'services' ? 'Legacy service base price (variant prices drive checkout)' : 'Initial selling price (INR)'}<input name="price" type="number" min="0" max="99999999.99" step="0.01" required defaultValue="0" /></label>}
+    {row && kind !== 'categories' && <p className="sm-help">Change selling prices from <Link to="/service/pricing">Pricing Management</Link> to preserve commercial history. {kind === 'services' && <Link to={`/service/documents/${row.id}`}>Manage document requirements</Link>}</p>}
+    {kind === 'services' && <><label>Estimated processing days<input name="estimated_days" type="number" min="0" max="3650" required defaultValue={row?.estimated_days || 0} /></label><label>Featured<select name="is_featured" defaultValue={row?.is_featured || 0}><option value="0">No</option><option value="1">Yes</option></select></label></>}
+    {kind !== 'variants' && <label>Display order<input name="sort_order" type="number" min="0" max="1000000" required defaultValue={row?.sort_order || 0} /></label>}
+    <label>Status<select name="status" defaultValue={row?.status ?? 1}><option value="1">Active</option><option value="0">Inactive</option></select></label>
+    <label>Image (PNG, JPEG or WebP, up to 5 MB)<input name="image" type="file" accept="image/png,image/jpeg,image/webp" onChange={event => { const file = event.target.files?.[0]; if (file && file.size > 5 * 1024 * 1024) { event.target.value = ''; setError('Choose an image smaller than 5 MB.'); return; } setImage(file ? URL.createObjectURL(file) : ''); }} /></label>{image && <img className="sm-image-preview" src={image} alt="Selected image preview" />}
+    {classification && <label className="sm-checkbox"><input type="checkbox" required />I confirm this record belongs to In-House Services.</label>}
+    <label>Change reason<textarea name="reason" required maxLength={500} rows={2} placeholder="Explain this change for the audit history." /></label>
+    {error && <ErrorState message={error} />}
+    <footer><button type="button" className="sm-btn" disabled={saving} onClick={() => { if (!dirty || window.confirm('Discard unsaved changes?')) onClose(); }}>Cancel</button><button className="sm-btn sm-primary" disabled={saving}>{saving ? 'Saving…' : classification ? 'Confirm classification' : 'Save changes'}</button></footer>
+  </form></Drawer>;
 }
-
-function Grid({ entities, kind, edit, remove }: { entities: Entity[]; kind: Kind; edit: (kind: Kind, entity: Entity) => void; remove: (kind: Kind, entity: Entity) => void }) {
-  if (!entities.length) return <div className="grid min-h-56 place-items-center text-center text-sm text-slate-400">No {kind}s found. Use Add {kind} to create one.</div>;
-  return <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{entities.map((entity) => { const name = "name" in entity ? entity.name : entity.title; const subtitle = "variant_name" in entity ? entity.variant_name : "price" in entity ? `₹${Number(entity.price).toLocaleString("en-IN")}` : "Service category"; const image = "icon" in entity ? entity.icon : "service_image" in entity ? entity.service_image : entity.image_url; return <article key={entity.id} className="rounded-2xl border border-slate-100 p-4 transition hover:border-purple-200 hover:shadow-md"><div className="flex items-start gap-3"><span className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-purple-50 text-[#852BAF]">{image ? <img src={image} alt="" className="h-full w-full object-cover" /> : kind === "category" ? <FiTag /> : <FiLayers />}</span><div className="min-w-0 flex-1"><h3 className="truncate font-extrabold text-slate-900">{name}</h3><p className="mt-1 text-xs font-semibold text-slate-400">{subtitle}</p></div></div><div className="mt-4 flex gap-2 border-t border-slate-100 pt-3"><button onClick={() => edit(kind, entity)} className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-purple-50 px-3 py-2 text-xs font-bold text-[#852BAF] hover:bg-[#852BAF] hover:text-white"><FiEdit2 /> Edit</button><button onClick={() => void remove(kind, entity)} className="inline-flex items-center justify-center rounded-lg bg-red-50 px-3 py-2 text-red-600 hover:bg-red-600 hover:text-white" aria-label={`Remove ${name}`}><FiTrash2 /></button></div></article>; })}</div>;
-}
-
-function Editor({ kind, entity, saving, close, submit }: { kind: Kind; entity: Entity | null; saving: boolean; close: () => void; submit: (event: React.FormEvent<HTMLFormElement>) => void }) {
-  const category = kind === "category" ? entity as Category | null : null; const service = kind === "service" ? entity as Service | null : null; const variant = kind === "variant" ? entity as Variant | null : null;
-  return <div className="fixed inset-0 z-[1000] grid place-items-center bg-slate-950/45 p-4 backdrop-blur-sm" onMouseDown={(event) => event.target === event.currentTarget && close()}><div className="w-full max-w-xl overflow-hidden rounded-3xl bg-white shadow-2xl"><div className="flex items-center justify-between bg-gradient-to-r from-[#25103d] to-[#852BAF] px-6 py-5 text-white"><div><p className="text-[10px] font-bold uppercase tracking-wider text-purple-200">Catalogue editor</p><h2 className="text-xl font-black">{entity ? "Edit" : "Add"} {kind}</h2></div><button onClick={close} className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 hover:bg-white/20"><FiX /></button></div><form onSubmit={submit} className="grid gap-4 p-6 sm:grid-cols-2">
-    {kind === "category" && <><Field label="Category name" name="name" value={category?.name} /><File label="Category icon" name="icon" /></>}
-    {kind === "service" && <><Field label="Service name" name="name" value={service?.name} wide /><Field label="Starting price" name="price" type="number" value={service?.price} /><Field label="Estimated days" name="estimated_days" type="number" value={service?.estimated_days} /><Field label="Description" name="description" value={service?.description} wide area /><File label="Service image" name="service_image" wide /></>}
-    {kind === "variant" && <><Field label="Variant name" name="variant_name" value={variant?.variant_name} /><Field label="Display title" name="title" value={variant?.title} /><Field label="Price" name="price" type="number" value={variant?.price} /><File label="Variant image" name="service_variant_image" /><Field label="Short description" name="short_description" value={variant?.short_description} wide area /></>}
-    <div className="flex justify-end gap-3 pt-2 sm:col-span-2"><button type="button" onClick={close} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-bold text-slate-600">Cancel</button><button disabled={saving} className="rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-5 py-3 text-sm font-extrabold text-white shadow disabled:opacity-50">{saving ? "Saving..." : entity ? "Save changes" : `Create ${kind}`}</button></div>
-  </form></div></div>;
-}
-function Field({ label, name, value, type = "text", wide, area }: { label: string; name: string; value?: string | number; type?: string; wide?: boolean; area?: boolean }) { return <label className={`text-xs font-bold text-slate-500 ${wide ? "sm:col-span-2" : ""}`}>{label}{area ? <textarea name={name} required defaultValue={value} className={`${input} min-h-24`} /> : <input name={name} required type={type} min={type === "number" ? 0 : undefined} step={type === "number" ? "0.01" : undefined} defaultValue={value} className={input} />}</label>; }
-function File({ label, name, wide }: { label: string; name: string; wide?: boolean }) { return <label className={`text-xs font-bold text-slate-500 ${wide ? "sm:col-span-2" : ""}`}>{label}<input name={name} type="file" accept="image/*" className={input} /><span className="mt-1 block text-[10px] font-medium text-slate-400">Optional when editing</span></label>; }

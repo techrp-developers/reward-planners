@@ -1,4 +1,5 @@
 const CAMPAIGN_WORKER_JOB = '../services/Notifications/campaignWorkerCron';
+const PROMOTION_WORKER_JOB = '../services/promotions/worker';
 const JOBS = [
   '../services/Bbps/retryCron', '../services/Bbps/refundCron',
   '../services/Razorpay/retryCron', '../services/Maintenance/maintenanceCron',
@@ -40,18 +41,29 @@ function loadJobs(jobs, load) {
 
 function startScheduledJobs(env = process.env, load = require, logger = console) {
   if (!localJobsEnabled(env)) {
+    const jobs = [];
     if (campaignWorkerEnabled(env)) {
       logger.info('[scheduler] Local scheduled jobs disabled; campaign worker only (ENABLE_LOCAL_CAMPAIGN_WORKER=true).');
       runtime.mode = 'campaign_worker_only';
-      return loadJobs([CAMPAIGN_WORKER_JOB], load);
+      jobs.push(CAMPAIGN_WORKER_JOB);
     }
+    if (isLocalMode(env) && env.ENABLE_LOCAL_PROMOTION_WORKER === 'true') {
+      logger.info('[scheduler] Promotion email worker enabled (ENABLE_LOCAL_PROMOTION_WORKER=true).');
+      jobs.push(PROMOTION_WORKER_JOB);
+    }
+    if (jobs.length) return loadJobs(jobs, load);
     logger.info('[scheduler] Local scheduled jobs disabled. Set ENABLE_LOCAL_SCHEDULED_JOBS=true to opt in.');
     return [];
   }
   const jobs = [...JOBS];
-  // Preserve the pre-existing production switch for these two jobs only.
+  // Preserve the pre-existing production switch for these jobs only.
   if (String(env.RUN_SCHEDULED_JOBS ?? 'true').toLowerCase() === 'true') {
-    jobs.unshift('../services/ExpressBees/cron/shipmentCron', '../services/Status/statusCleanupCron');
+    jobs.unshift(
+      '../services/ExpressBees/cron/shipmentCron', '../services/Status/statusCleanupCron',
+      '../services/rewards/transactionRewardCron', PROMOTION_WORKER_JOB,
+    );
+  } else {
+    logger.warn('[COURIER_BOOKING] Cron OFF: RUN_SCHEDULED_JOBS is not true, so this process will not book or track shipments');
   }
   runtime.mode = 'all_jobs';
   return loadJobs(jobs, load);

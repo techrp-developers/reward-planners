@@ -241,3 +241,44 @@ module.exports = async (req, res, next) => {
     message: "Invalid access token",
   });
 };
+
+const optionalAuth = async (req, res, next) => {
+  const tokenCandidates = getRequestTokens(req);
+
+  if (!tokenCandidates.length) {
+    return next();
+  }
+
+  for (const candidate of tokenCandidates) {
+    const { token, source } = candidate;
+
+    if (
+      source === "cookie" &&
+      !["GET", "HEAD", "OPTIONS"].includes(req.method) &&
+      !isCsrfValid(req)
+    ) {
+      continue;
+    }
+
+    try {
+      const customerResult = await tryCustomerAuth(token);
+      if (customerResult?.ok) {
+        req.user = customerResult.user;
+        return next();
+      }
+    } catch (_) {}
+
+    try {
+      const crmResult = await tryCrmAuth(token);
+      if (crmResult?.ok) {
+        req.user = crmResult.user;
+        return next();
+      }
+    } catch (_) {}
+  }
+
+  return next();
+};
+
+module.exports.optionalAuth = optionalAuth;
+

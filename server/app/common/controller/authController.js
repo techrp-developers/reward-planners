@@ -62,6 +62,35 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
     return digits;
   }
 
+  // Dummy/test accounts that always use the fixed OTP below — no email/WhatsApp
+  // code is generated or sent for them, and the fixed code always verifies.
+  // Configure in .env:
+  //   OTP_BYPASS_IDENTIFIERS=test@example.com,9876543210  (emails and/or phones, comma-separated)
+  //   OTP_BYPASS_CODE=123456                              (the fixed code these accounts enter)
+  // Leave OTP_BYPASS_IDENTIFIERS empty in production to disable this entirely.
+  const otpBypassIdentifiers = new Set(
+    (process.env.OTP_BYPASS_IDENTIFIERS || "")
+      .split(",")
+      .map((raw) => {
+        const value = raw.trim();
+        if (!value) return "";
+        return value.includes("@") ? normalizeEmail(value) : normalizePhone(value);
+      })
+      .filter(Boolean),
+  );
+
+  const OTP_BYPASS_CODE = String(process.env.OTP_BYPASS_CODE || "123456");
+
+  // True for a whitelisted dummy/test account (regardless of the code entered).
+  function isOtpBypassIdentifier(otpKey) {
+    return otpBypassIdentifiers.size > 0 && otpBypassIdentifiers.has(otpKey);
+  }
+
+  // True when a whitelisted account entered the fixed bypass code.
+  function isOtpBypass(otpKey, otp) {
+    return isOtpBypassIdentifier(otpKey) && String(otp) === OTP_BYPASS_CODE;
+  }
+
   function escapeVCardValue(value) {
     return String(value ?? "")
       .replace(/\\/g, "\\\\")
@@ -128,39 +157,45 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
     return null;
   }
 
-  function sendActivationOtpNotifications({ email, employee, otp }) {
-    setImmediate(() => {
-      if (email) {
-        sendOtpMail({
-          email,
-          name: employee.name,
-          otp,
-        }).catch((error) => {
-          console.error("Activation OTP email failed:", error);
-        });
-      }
+  const USER_INACTIVE_MESSAGE = "User inactive. Please contact your HR.";
 
-      // Send to the channel the employee selected on the login screen.
-      if (email || !employee.phone) return;
+  // Deactivated by the platform (RM). Self-deleted accounts (deleted_at set) are
+  // not blocked here: they can still be reactivated within the grace period.
+  async function isAccountDeactivated(employeeId) {
+    const customer = await AuthModel.findByCompanyUserId(employeeId);
+    return !!customer && Number(customer.status) !== 1 && !customer.deleted_at;
+  }
 
-      enqueueWhatsApp({
-        eventName: "onbord_verify",
-        ctx: {
-          phone: employee.phone,
-          company_id: employee.company_id ?? null,
-          customer_name: employee.name || "User",
-          otp,
-        },
-      })
-        .then((result) => {
-          if (!result.ok) {
-            console.warn("Activation OTP WhatsApp not queued:", result);
-          }
-        })
-        .catch((error) => {
-          console.error("Activation OTP WhatsApp enqueue failed:", error);
-        });
+  function sendUserInactive(res) {
+    return res.status(403).json({
+      success: false,
+      code: "USER_INACTIVE",
+      message: USER_INACTIVE_MESSAGE,
     });
+  }
+
+  async function sendActivationOtpNotifications({ email, employee, otp }) {
+    if (email) {
+      try {
+        await sendOtpMail({ email, name: employee.name, otp });
+        return true;
+      } catch {
+        console.error("Activation OTP email delivery failed");
+        return false;
+      }
+    }
+
+    const result = await enqueueWhatsApp({
+      eventName: "onbord_verify",
+      sendImmediately: true,
+      ctx: {
+        phone: employee.phone,
+        company_id: employee.company_id ?? null,
+        customer_name: employee.name || "User",
+        otp,
+      },
+    });
+    return result.ok;
   }
 
   function sendForgotPasswordOtpNotifications({ email, user, otp }) {
@@ -357,6 +392,21 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
         const employee = await findEmployeeForActivation(identity);
 
         if (!employee) {
+          if (await AuthModel.isEmployeeInactive(identity)) {
+            return sendUserInactive(res);
+          }
+
+          return res.json({
+            success: true,
+            message: "If your employee account is eligible, a code has been sent.",
+          });
+        }
+
+        if (await isAccountDeactivated(employee.id)) return sendUserInactive(res);
+
+        // Dummy/test account: no code is generated or sent — the fixed
+        // OTP_BYPASS_CODE will verify directly in verifyActivationOTP.
+        if (isOtpBypassIdentifier(identity.otpKey)) {
           return res.json({
             success: true,
             message: "If your employee account is eligible, a code has been sent.",
@@ -369,11 +419,20 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
 
         await AuthModel.storeActivationOTP(identity.otpKey, otp);
 
-        sendActivationOtpNotifications({
+        const accepted = await sendActivationOtpNotifications({
           email: identity.email,
           employee,
           otp,
         });
+        if (!accepted) {
+          return res.status(503).json({
+            success: false,
+            code: "OTP_DELIVERY_FAILED",
+            message: identity.email
+              ? "Unable to send your login code by email. Please try again later."
+              : "WhatsApp login codes are currently unavailable. Please sign in using your registered email or contact support.",
+          });
+        }
 
         return res.json({
           success: true,
@@ -404,9 +463,24 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
         const employee = await findEmployeeForActivation(identity);
 
         if (!employee) {
+          if (await AuthModel.isEmployeeInactive(identity)) {
+            return sendUserInactive(res);
+          }
+
           return res.json({
             success: true,
             message: "If your employee account is eligible, a code has been sent.",
+          });
+        }
+
+        if (await isAccountDeactivated(employee.id)) return sendUserInactive(res);
+
+        // Dummy/test account: nothing to resend — the fixed OTP_BYPASS_CODE
+        // always verifies in verifyActivationOTP.
+        if (isOtpBypassIdentifier(identity.otpKey)) {
+          return res.json({
+            success: true,
+            message: "OTP resent successfully",
           });
         }
 
@@ -416,11 +490,20 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
 
         await AuthModel.storeActivationOTP(identity.otpKey, otp);
 
-        sendActivationOtpNotifications({
+        const accepted = await sendActivationOtpNotifications({
           email: identity.email,
           employee,
           otp,
         });
+        if (!accepted) {
+          return res.status(503).json({
+            success: false,
+            code: "OTP_DELIVERY_FAILED",
+            message: identity.email
+              ? "Unable to send your login code by email. Please try again later."
+              : "WhatsApp login codes are currently unavailable. Please sign in using your registered email or contact support.",
+          });
+        }
 
         return res.json({
           success: true,
@@ -451,28 +534,36 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
           });
         }
 
-        const attempt = await AuthModel.getOtpAttempts(identity.otpKey);
+        // Whitelisted dummy/test accounts verify with the fixed bypass code
+        // and skip the real OTP lookup (no code was ever generated for them).
+        if (!isOtpBypass(identity.otpKey, otp)) {
+          const attempt = await AuthModel.getOtpAttempts(identity.otpKey);
 
-        if (attempt && attempt.attempt_count >= 5) {
-          return res.status(429).json({
-            success: false,
-            message: "Too many OTP attempts. Try again later.",
-          });
-        }
+          if (attempt && attempt.attempt_count >= 5) {
+            return res.status(429).json({
+              success: false,
+              message: "Too many OTP attempts. Try again later.",
+            });
+          }
 
-        const otpRecord = await AuthModel.verifyOTP(identity.otpKey, otp);
+          const otpRecord = await AuthModel.verifyOTP(identity.otpKey, otp);
 
-        if (!otpRecord) {
-          await AuthModel.incrementOtpAttempts(identity.otpKey);
+          if (!otpRecord) {
+            await AuthModel.incrementOtpAttempts(identity.otpKey);
 
-          return res.status(400).json({
-            success: false,
-            message: "Invalid or expired OTP",
-          });
+            return res.status(400).json({
+              success: false,
+              message: "Invalid or expired OTP",
+            });
+          }
         }
 
         const employee = await findEmployeeForActivation(identity);
         if (!employee) {
+          if (await AuthModel.isEmployeeInactive(identity)) {
+            return sendUserInactive(res);
+          }
+
           return res.status(401).json({
             success: false,
             message: "Invalid or expired OTP",
@@ -489,12 +580,7 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
             existingCustomer.deleted_at,
           );
 
-          if (!reactivated) {
-            return res.status(403).json({
-              success: false,
-              message: "Account inactive",
-            });
-          }
+          if (!reactivated) return sendUserInactive(res);
         }
 
         const { deviceId, deviceName } = readDeviceFields(req.body);
@@ -831,10 +917,7 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
             user.deleted_at,
           );
 
-          if (!reactivated)
-            return res
-              .status(403)
-              .json({ success: false, message: "Account inactive" });
+          if (!reactivated) return sendUserInactive(res);
 
           user.status = 1;
         }
@@ -849,6 +932,11 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
           : await AuthModel.findEmployeeByEmail(user.email);
 
         if (!employee) {
+          const employmentInactive = await AuthModel.isEmployeeInactive(
+            user.company_user_id ? { id: user.company_user_id } : { email: user.email },
+          );
+          if (employmentInactive) return sendUserInactive(res);
+
           return res.status(404).json({
             success: false,
             message: "Employee not found",
@@ -1758,10 +1846,10 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
         const randomThought =
           thoughts[Math.floor(Math.random() * thoughts.length)];
 
-        const [userInfo, todaySummary, birthdayEmployees] = await Promise.all([
+        const [userInfo, todaySummary, birthdayData] = await Promise.all([
           AuthModel.getUserInfo(userId),
           FitnessService.getTodaySummary(userId),
-          AuthModel.getTodayBirthdayEmployees(userId),
+          AuthModel.getCompanyBirthdays(userId),
         ]);
 
         if (!userInfo) {
@@ -1781,7 +1869,11 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
               progress_percent: todaySummary?.progress_percent || 0,
             },
             thought: randomThought,
-            birthday_employees: birthdayEmployees || [],
+            birthday_employees: birthdayData?.today || [],
+            today_birthdays: birthdayData?.today || [],
+            upcoming_birthdays: birthdayData?.upcoming || [],
+            today_birthday_count: birthdayData?.todayCount || 0,
+            upcoming_birthday_count: birthdayData?.upcomingCount || 0,
             visit_card: {
               qr_code_url: "/v1/auth/visit-card/qr",
               format: "vcard",
@@ -1794,6 +1886,75 @@ const { FIRST_LOGIN_REWARD_COINS } = require("../constants/rewards");
         return res.status(500).json({
           success: false,
           message: "Failed to fetch user info",
+        });
+      }
+    }
+
+    async getCompanyBirthdays(req, res) {
+      try {
+        const userId = req.user?.user_id;
+        if (!userId) {
+          return res.status(401).json({ success: false, message: "Unauthorized user" });
+        }
+
+        const data = await AuthModel.getCompanyBirthdays(userId);
+        return res.json({
+          success: true,
+          data,
+        });
+      } catch (error) {
+        console.error("Get Company Birthdays Error:", error);
+        return res.status(500).json({
+          success: false,
+          message: "Failed to fetch company birthdays",
+        });
+      }
+    }
+
+    async sendBirthdayWish(req, res) {
+      try {
+        const senderUserId = req.user?.user_id;
+        if (!senderUserId) {
+          return res.status(401).json({ success: false, message: "Unauthorized user" });
+        }
+
+        const { employeeId, recipientUserId, message } = req.body;
+        const sender = await AuthModel.findById(senderUserId);
+        const senderName = sender?.name || "A coworker";
+
+        let targetUserId = recipientUserId;
+        if (!targetUserId && employeeId) {
+          const recipientUser = await AuthModel.findByCompanyUserId(employeeId);
+          targetUserId = recipientUser?.user_id;
+        }
+
+        if (targetUserId) {
+          notifyUser(
+            {
+              userId: targetUserId,
+              module: "birthday",
+              type: "birthday_wish",
+              title: `Birthday wish from ${senderName}! 🎂`,
+              message: message || `${senderName} wished you a very Happy Birthday! 🎉`,
+              icon: "cake",
+              reference_type: "birthday",
+              reference_id: String(senderUserId),
+              action_url: "/dashboard",
+              screen: "Dashboard",
+            },
+            "birthday wish notification",
+          );
+        }
+
+        return res.json({
+          success: true,
+          message: "Birthday wish sent successfully!",
+        });
+      } catch (error) {
+        console.error("Send Birthday Wish Error:", error);
+        return res.status(500).json({
+          success: false,
+          message: "Failed to send birthday wish",
         });
       }
     }

@@ -1,6 +1,6 @@
 const { transporter, assertMailConfigured } = require("../config/mailTransport");
 
-async function sendMail({ to, subject, html, text, attachments }) {
+async function sendMail({ to, subject, html, text, attachments, replyTo }) {
   assertMailConfigured();
 
   return transporter.sendMail({
@@ -10,6 +10,7 @@ async function sendMail({ to, subject, html, text, attachments }) {
     html,
     text,
     attachments,
+    ...(replyTo ? { replyTo } : {}),
   });
 }
 

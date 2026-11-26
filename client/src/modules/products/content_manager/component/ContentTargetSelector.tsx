@@ -6,7 +6,10 @@ import type { ContentTargetType } from "../types";
 
 interface Props {
   perImage?: boolean;
-  module?: "product" | "service";
+  module?: "product" | "service" | "mobile_dashboard";
+  excludeBundles?: boolean;
+  title?: string;
+  description?: string;
   targetType: ContentTargetType | "";
   targetId: number | null;
   targetIds: number[];
@@ -18,7 +21,7 @@ const fieldClass = "w-full rounded-xl border border-slate-200 bg-white px-4 py-3
 // const R2_BASE_URL = "https://cdn.rewardplanners.com";
 // const productImageUrl = (path?: string | null) => !path ? "" : /^https?:\/\//i.test(path) ? path : `${R2_BASE_URL}/${path.replace(/^\/+/, "")}`;
 
-export default function ContentTargetSelector({ perImage = false, module = "product", targetType, targetId, targetIds, multiple = false, onChange }: Props) {
+export default function ContentTargetSelector({ perImage = false, module = "product", excludeBundles = false, title, description, targetType, targetId, targetIds, multiple = false, onChange }: Props) {
   const destinationLabel = targetType.replaceAll("_", " ");
   const [search, setSearch] = useState("");
   const [options, setOptions] = useState<ContentTargetOption[]>([]);
@@ -48,20 +51,21 @@ export default function ContentTargetSelector({ perImage = false, module = "prod
 
   return (
     <div className="sm:col-span-2 rounded-2xl border border-purple-100 bg-purple-50/40 p-4">
-      <div className="flex items-center gap-2"><FiLink className="text-[#852BAF]" /><p className="text-xs font-black text-slate-700">{perImage ? "This image's destination" : "Campaign destination"}</p></div>
-      <p className="mt-1 text-[11px] text-slate-500">{module === "service" ? "Choose a service category, individual service, or bundle to open when this banner is tapped." : "Choose products, a category, or a subcategory to open when this banner is tapped."} {perImage ? "This destination applies only to this image." : "Images without their own destination use this campaign destination."}</p>
-      {multiple && module === "product" && <p className="mt-1 text-[11px] text-slate-500">For a brand campaign, search by brand name and select the products to feature.</p>}
+      <div className="flex items-center gap-2"><FiLink className="text-[#852BAF]" /><p className="text-xs font-black text-slate-700">{title ?? (perImage ? "This image's destination" : "Campaign destination")}</p></div>
+      <p className="mt-1 text-[11px] text-slate-500">{description ?? <>{module === "service" ? "Choose a service category, individual service, or bundle to open when this banner is tapped." : module === "mobile_dashboard" ? "Choose products, services, or a category to open when this banner is tapped." : "Choose products, a category, or a subcategory to open when this banner is tapped."} {perImage ? "This destination applies only to this image." : "Images without their own destination use this campaign destination."}</>}</p>
+      {multiple && module !== "service" && !description && <p className="mt-1 text-[11px] text-slate-500">For a brand campaign, search by brand name and select the products to feature.</p>}
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <select value={targetType} onChange={(event) => { onChange(event.target.value as ContentTargetType | "", null, []); setSearch(""); }} className={fieldClass}>
           <option value="">{perImage ? "Use campaign fallback" : "No destination"}</option>
-          {module === "service" ? <>
-            <option value="service_category">Service category</option>
-            <option value="service">Services</option>
-            <option value="service_bundle">Service bundle</option>
-          </> : <>
+          {module !== "service" && <>
             <option value="product">{multiple ? "Products" : "Product"}</option>
             <option value="category">Category</option>
             <option value="subcategory">Subcategory</option>
+          </>}
+          {module !== "product" && <>
+            <option value="service_category">Service category</option>
+            <option value="service">Services</option>
+            {!excludeBundles && <option value="service_bundle">Service bundle</option>}
           </>}
         </select>
         {targetType && (

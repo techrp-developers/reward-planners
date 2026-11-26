@@ -1,52 +1,53 @@
-import { FiArrowRight, FiGrid, FiInbox, FiLayers, FiShoppingBag, FiXCircle, FiZap } from "react-icons/fi";
-import { Link } from "react-router-dom";
-import { routes } from "../../../../../routes";
-
-const workspaces = [
-  { label: "Services & variants", eyebrow: "Catalogue", description: "Manage categories, services and their variants.", to: routes.service.catalog.replace(":section?", "categories"), Icon: FiLayers, tone: "bg-purple-50 text-[#852BAF]" },
-  { label: "Service enquiries", eyebrow: "Customer requests", description: "Review and progress incoming customer enquiries.", to: routes.service.enquiries, Icon: FiInbox, tone: "bg-amber-50 text-amber-600" },
-  { label: "Service orders", eyebrow: "Fulfilment", description: "Track documentation, delivery and completion.", to: routes.service.orders, Icon: FiShoppingBag, tone: "bg-blue-50 text-blue-600" },
-  { label: "Cancellations", eyebrow: "Resolutions", description: "Review cancellation and refund requests.", to: routes.service.cancellations, Icon: FiXCircle, tone: "bg-red-50 text-red-600" },
+import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { ArrowUpRight, CircleDollarSign, Coins, Inbox, Layers, List, Plus, RefreshCw, ShoppingBag, Tags, XCircle } from 'lucide-react';
+import { api } from '../../../../../common/api/api';
+import { workspaceApi, workspaceError, inr, dateLabel } from '../../shared/workspaceApi';
+import { EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge } from '../../shared/WorkspaceUI';
+interface Summary {
+  metrics: Record<string, number | string>;
+  performance: { status: string; total: number }[];
+  trend: { month: string; amount: string }[];
+  top: { id: number; name: string; completed_orders: number; amount: string }[];
+  recentOrders: { id: number; parent_order_id: string; order_ref: string; service_name: string; status: string; price: string }[];
+  recentEnquiries: { id: number; enquiry_ref: string; name: string; status: string }[];
+  recentServices: { id: number; name: string; status: number; created_at: string }[];
+  activity: { id: number; action: string; entity_type: string; actor_name: string; reason: string; created_at: string }[];
+  definitions: { revenue: string; coins: string; dates: string };
+}
+const shortcuts = [
+  { label: 'Categories', text: 'Organise your catalogue', to: '/service/catalog/categories', Icon: List },
+  { label: 'Services', text: 'Manage service details', to: '/service/catalog/services', Icon: Layers },
+  { label: 'Variants', text: 'Options and configurations', to: '/service/catalog/variants', Icon: Tags },
+  { label: 'Pricing', text: 'Prices and change history', to: '/service/pricing', Icon: CircleDollarSign },
+  { label: 'Reward Rules', text: 'Earning and redemption', to: '/service/rewards', Icon: Coins },
+  { label: 'Enquiries', text: 'Follow up customer requests', to: '/service/enquiries', Icon: Inbox },
+  { label: 'Orders', text: 'Track service fulfilment', to: '/service/orders', Icon: ShoppingBag },
+  { label: 'Cancellations', text: 'Review requests and refunds', to: '/service/cancellations', Icon: XCircle },
 ];
-
-export default function ServiceDashboard() {
-  return (
-    <main className="space-y-8">
-      <header className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-[#25103d] via-[#68258d] to-[#c33076] p-7 text-white shadow-[0_24px_65px_rgba(91,33,124,0.24)] sm:p-10">
-        <div className="absolute -right-16 -top-24 h-72 w-72 rounded-full bg-white/10 blur-2xl" />
-        <div className="absolute -bottom-32 left-1/3 h-64 w-64 rounded-full bg-fuchsia-300/10 blur-3xl" />
-        <div className="relative grid items-end gap-8 lg:grid-cols-[1fr_auto]">
-          <div>
-            <span className="grid h-13 w-13 place-items-center rounded-2xl border border-white/20 bg-white/10 shadow-inner backdrop-blur-sm"><FiGrid size={23} /></span>
-            <p className="mt-6 text-[10px] font-bold uppercase tracking-[0.25em] text-purple-200">Service manager workspace</p>
-            <h1 className="mt-1 max-w-2xl text-3xl font-black tracking-tight sm:text-4xl">Service operations, all in one place.</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-purple-100/80">Manage your catalogue and move every customer request from enquiry to successful completion.</p>
-          </div>
-          <div className="hidden items-center gap-3 rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm lg:flex">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/15"><FiZap /></span>
-            <span><span className="block text-[10px] font-bold uppercase tracking-widest text-purple-200">Quick access</span><span className="text-sm font-extrabold">4 operation areas</span></span>
-          </div>
-        </div>
-      </header>
-
-      <section aria-labelledby="operations-heading">
-        <div className="mb-5 flex items-end justify-between gap-4">
-          <div><h2 id="operations-heading" className="text-xl font-black text-slate-900">Operations</h2><p className="mt-1 text-sm text-slate-500">Choose a workspace to continue</p></div>
-          <span className="hidden rounded-full border border-purple-100 bg-purple-50 px-3 py-1 text-xs font-bold text-[#852BAF] sm:block">4 workspaces</span>
-        </div>
-        <div className="grid gap-4 md:grid-cols-2">
-          {workspaces.map(({ label, eyebrow, description, to, Icon, tone }) => (
-            <Link key={label} to={to} className="group relative overflow-hidden rounded-2xl border border-slate-100 bg-white p-5 shadow-[0_12px_35px_rgba(67,31,91,0.06)] transition duration-200 hover:-translate-y-1 hover:border-purple-200 hover:shadow-[0_20px_45px_rgba(83,35,112,0.12)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-purple-200">
-              <div className="absolute inset-x-0 top-0 h-0.5 origin-left scale-x-0 bg-gradient-to-r from-[#852BAF] to-[#FC3F78] transition-transform duration-300 group-hover:scale-x-100" />
-              <div className="flex items-start gap-4">
-                <span className={`grid h-12 w-12 shrink-0 place-items-center rounded-xl transition-transform duration-200 group-hover:scale-105 ${tone}`}><Icon size={20} /></span>
-                <span className="min-w-0 flex-1"><span className="block text-[10px] font-bold uppercase tracking-widest text-slate-400">{eyebrow}</span><span className="mt-1 block font-extrabold text-slate-900">{label}</span><span className="mt-1.5 block text-sm leading-5 text-slate-500">{description}</span></span>
-                <span className="mt-2 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-50 text-slate-300 transition group-hover:bg-purple-50 group-hover:text-[#852BAF]"><FiArrowRight className="transition-transform group-hover:translate-x-0.5" /></span>
-              </div>
-            </Link>
-          ))}
-        </div>
-      </section>
-    </main>
-  );
+export default function ServiceDashboard({ inHouse = false, reports = false }: { inHouse?: boolean; reports?: boolean }) {
+  const [data, setData] = useState<Summary | null>(null), [error, setError] = useState(''), [loading, setLoading] = useState(true);
+  const [from, setFrom] = useState(''), [to, setTo] = useState('');
+  const load = useCallback(async () => { setLoading(true); setError(''); try { const response = await api.get(`${workspaceApi}/${inHouse ? 'in-house' : 'dashboard'}/summary`, { params: { from: from || undefined, to: to || undefined } }); setData(response.data.data); } catch (err) { setError(workspaceError(err)); } finally { setLoading(false); } }, [inHouse, from, to]);
+  useEffect(() => { void load(); }, [load]);
+  const metrics = inHouse ? [['Total Categories','categories'],['Active Services','active_services'],['Active Variants','active_variants'],['Pending Enquiries','pending_enquiries'],['Active Orders','active_orders'],['Completed Orders','completed_orders'],['Pending Cancellations','pending_cancellations'],['Service Revenue','revenue']]
+    : [['In-House Services','services'],['Partner Services','partner_services'],['Active Orders','active_orders'],['Pending Enquiries','pending_enquiries'],['Completed Orders','completed_orders'],['Pending Cancellations','pending_cancellations'],['Service Revenue','revenue'],['Reward Coins Issued','coins_issued']];
+  return <div className="sm-workspace">
+    <PageHeader eyebrow={reports ? 'Management' : inHouse ? 'In-House Services' : 'Service operations'} title={reports ? 'Reports & Analytics' : inHouse ? 'In-House Services' : 'Service overview'} description={inHouse ? 'Manage your service catalogue, pricing, rewards and fulfilment in one workspace.' : 'A clear view of your catalogue and daily service operations.'}>
+      <button className="sm-btn" disabled={loading} onClick={() => void load()}><RefreshCw size={15} className={loading ? 'animate-spin' : ''} />Refresh</button><Link className="sm-btn sm-primary" to="/service/catalog/services?add=1"><Plus size={16} />Add Service</Link>
+    </PageHeader>
+    <div className="sm-toolbar"><span className="sm-badge sm-purple">Live workspace data</span><div className="sm-actions"><label className="sm-date">From<input type="date" value={from} max={to || undefined} onChange={event => setFrom(event.target.value)} /></label><label className="sm-date">To<input type="date" value={to} min={from || undefined} onChange={event => setTo(event.target.value)} /></label>{(from || to) && <button className="sm-btn" onClick={() => { setFrom(''); setTo(''); }}>All time</button>}</div></div>
+    {error ? <ErrorState message={error} retry={() => void load()} /> : loading ? <LoadingState /> : data && <>
+      {Number(data.metrics.unclassified_services) > 0 && <div className="sm-notice"><strong>{data.metrics.unclassified_services} services need classification.</strong><span> Review existing records before they appear in workspace statistics.</span><Link to="/service/classification">Review catalogue <ArrowUpRight size={14} /></Link></div>}
+      <section aria-label="Key performance indicators" className="sm-kpis">{metrics.map(([label, key]) => <article className="sm-kpi" key={key}><p>{label}</p><strong>{key === 'revenue' ? inr(data.metrics[key]) : Number(data.metrics[key] || 0).toLocaleString('en-IN')}</strong><span>{key === 'partner_services' ? 'Explicitly classified catalogue' : key === 'coins_issued' ? 'Actual wallet credits' : key === 'revenue' ? 'Paid completed item value' : 'In-House workspace'}</span></article>)}</section>
+      <section><div className="sm-section-title"><h2>Manage your workspace</h2><Link to="/service/in-house">In-House overview <ArrowUpRight size={15} /></Link></div><div className="sm-shortcuts">{shortcuts.map(({ label, text, to: path, Icon }) => <Link key={label} to={path} className="sm-shortcut"><Icon size={19} /><strong>{label}</strong><span>{text}</span><ArrowUpRight size={14} /></Link>)}</div></section>
+      <div className="sm-two-col"><section className="sm-panel"><div className="sm-section-title"><h2>Service performance</h2><span>Order items</span></div>{!data.performance.length ? <EmptyState /> : <div className="sm-bars">{data.performance.map(row => <div key={row.status}><div><StatusBadge status={row.status} /><strong>{row.total}</strong></div><progress aria-label={row.status} value={Number(row.total)} max={Math.max(1, Number(data.metrics.orders))} /></div>)}</div>}</section>
+      <section className="sm-panel"><div className="sm-section-title"><h2>Revenue analytics</h2><span>INR</span></div>{!data.trend.length ? <EmptyState title="No completed paid orders" /> : <div className="sm-bars">{data.trend.map(row => <div key={row.month}><div><span>{row.month}</span><strong>{inr(row.amount)}</strong></div><progress aria-label={`${row.month} revenue`} value={Number(row.amount)} max={Math.max(1,...data.trend.map(item => Number(item.amount)))} /></div>)}</div>}<p className="sm-help">{data.definitions.revenue}</p></section></div>
+      <div className="sm-two-col"><section className="sm-panel"><div className="sm-section-title"><h2>Recent orders</h2><Link to="/service/orders">View orders <ArrowUpRight size={14} /></Link></div><div className="sm-table-wrap"><table className="sm-table"><thead><tr><th>Order / Service</th><th>Value</th><th>Status</th></tr></thead><tbody>{data.recentOrders.map(row => <tr key={row.id}><td><Link to={`/service/orders/${row.parent_order_id}`}>{row.order_ref || `#${row.id}`}</Link><small>{row.service_name}</small></td><td>{inr(row.price)}</td><td><StatusBadge status={row.status} /></td></tr>)}</tbody></table>{!data.recentOrders.length && <EmptyState title="No orders in this period" />}</div></section>
+      <section className="sm-panel"><div className="sm-section-title"><h2>Pending follow-ups</h2><Link to="/service/enquiries">Enquiries <ArrowUpRight size={14} /></Link></div>{data.recentEnquiries.filter(row => ['new','contacted'].includes(row.status)).map(row => <Link className="sm-list-row" key={row.id} to={`/service/enquiries/${row.id}`}><div><strong>{row.enquiry_ref}</strong><span>{row.name}</span></div><StatusBadge status={row.status} /></Link>)}{!data.recentEnquiries.some(row => ['new','contacted'].includes(row.status)) && <EmptyState title="No recent pending follow-ups" />}<div className="sm-notice">{data.metrics.delayed_orders} orders exceed the service’s configured processing days. <Link to="/service/orders">Review orders</Link></div></section></div>
+      <div className="sm-two-col"><section className="sm-panel"><div className="sm-section-title"><h2>Top performing services</h2><span>Completed paid items</span></div>{data.top.map((row, index) => <div key={row.id} className="sm-list-row"><div><strong>{index + 1}. {row.name}</strong><span>{row.completed_orders} completed items</span></div><strong>{inr(row.amount)}</strong></div>)}{!data.top.length && <EmptyState />}</section><section className="sm-panel"><div className="sm-section-title"><h2>Recent activity</h2><Link to="/service/activity">All activity <ArrowUpRight size={14} /></Link></div>{data.activity.map(row => <div key={row.id} className="sm-activity"><span className="sm-activity-dot" /><div><strong>{row.actor_name || 'Manager'} · {row.action} {row.entity_type}</strong><p>{row.reason}</p><small>{dateLabel(row.created_at)}</small></div></div>)}{!data.activity.length && <EmptyState title="No recorded changes yet" description="Catalogue, pricing and reward edits will appear here." />}</section></div>
+      {inHouse && <section className="sm-panel"><div className="sm-section-title"><h2>Recently added services</h2><Link to="/service/pricing">Manage pricing</Link><Link to="/service/rewards">Configure rewards</Link></div>{data.recentServices.map(row => <div className="sm-list-row" key={row.id}><div><strong>{row.name}</strong><span>{dateLabel(row.created_at)}</span></div><StatusBadge status={Number(row.status)} /></div>)}{!data.recentServices.length && <EmptyState />}</section>}
+      <p className="sm-help">{data.definitions.dates} Operational metrics cover In-House services only. Partner operations await an approved ownership model.</p>
+    </>}
+  </div>;
 }

@@ -2,32 +2,9 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api } from "../../../common/api/api";
 import { FaArrowLeft, FaCubes } from "react-icons/fa";
+import SectionHeader from "./SectionHeader";
 
 /* ================= SMALL UI HELPERS (same as onboarding) ================= */
-
-function SectionHeader({
-  icon: Icon,
-  title,
-  description,
-}: {
-  icon: any;
-  title: string;
-  description?: string;
-}) {
-  return (
-    <div className="flex items-center space-x-4 pb-4 border-b border-gray-100 mb-6">
-      <div className="p-4 text-white rounded-2xl" style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)", boxShadow: "0 6px 20px rgba(133,43,175,0.25)" }}>
-        <Icon className="text-2xl" />
-      </div>
-      <div>
-        <h3 className="text-xl font-bold text-gray-800">{title}</h3>
-        {description && (
-          <p className="text-sm text-gray-500 font-medium">{description}</p>
-        )}
-      </div>
-    </div>
-  );
-}
 
 function FormInput({
   label,
@@ -162,18 +139,12 @@ export default function ProductVariantEdit() {
   return (
     <div className="max-w-6xl mx-auto">
       {/* PAGE HEADER */}
-      <div
-        className="flex items-center justify-between mb-6 p-5 rounded-2xl"
-        style={{
-          background: "linear-gradient(135deg, rgba(133,43,175,0.06) 0%, rgba(252,63,120,0.04) 100%)",
-          border: "1px solid rgba(133,43,175,0.1)",
-        }}
-      >
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
             Edit Product <span className="gradient-text-brand">Variant</span>
           </h1>
-          <p className="text-xs text-gray-500 font-medium mt-0.5">
+          <p className="mt-1 text-sm text-slate-500">
             Update pricing, stock and lifecycle details
           </p>
         </div>
@@ -187,7 +158,7 @@ export default function ProductVariantEdit() {
       </div>
 
       {/* Variant Summary */}
-      <section className="space-y-4 bg-white rounded-2xl p-6 sm:p-8 vendor-section-card" style={{ border: "1px solid rgba(133,43,175,0.08)", boxShadow: "0 4px 24px rgba(133,43,175,0.06)" }}>
+      <section className="space-y-4 bg-white rounded-2xl p-6 sm:p-8 border border-gray-100 shadow-sm">
         <SectionHeader
           icon={FaCubes}
           title="Variant Summary"
@@ -224,7 +195,7 @@ export default function ProductVariantEdit() {
       </section>
 
       {/* Editable Form */}
-      <section className="mt-4 space-y-4 bg-white rounded-2xl p-6 sm:p-8 vendor-section-card" style={{ border: "1px solid rgba(133,43,175,0.08)" }}>
+      <section className="mt-4 space-y-4 bg-white rounded-2xl p-6 sm:p-8 border border-gray-100 shadow-sm">
         <SectionHeader
           icon={FaCubes}
           title="Variant Details"
@@ -376,7 +347,7 @@ export default function ProductVariantEdit() {
           onClick={handleSave}
           disabled={saving}
           className="px-6 py-2.5 text-sm rounded-xl text-white font-semibold hover:opacity-90 active:scale-95 transition disabled:opacity-60 cursor-pointer"
-          style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)", boxShadow: "0 4px 14px rgba(133,43,175,0.28)" }}
+          style={{ background: "linear-gradient(90deg, #852BAF 60%, #C13A8E 100%)", boxShadow: "0 4px 14px rgba(133,43,175,0.28)" }}
         >
           {saving ? "Saving..." : "Save Variant"}
         </button>

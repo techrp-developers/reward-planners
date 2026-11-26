@@ -8,7 +8,7 @@ import {
   FaEye,
   FaFileAlt,
 } from "react-icons/fa";
-import { FiCalendar, FiDownload, FiSearch, FiUsers, FiX } from "react-icons/fi";
+import { FiCalendar, FiDownload, FiSearch, FiX } from "react-icons/fi";
 import { Link } from "react-router-dom";
 import Swal from "sweetalert2";
 import { api } from "../../../common/api/api";
@@ -221,53 +221,28 @@ export default function VendorApprovalList() {
       {reportModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget && !reportDownloading) setReportModalOpen(false); }}>
           <div role="dialog" aria-modal="true" aria-labelledby="vendor-report-title" className="w-full max-w-xl overflow-hidden rounded-3xl border border-white/70 bg-white shadow-[0_28px_90px_rgba(39,20,58,0.3)]">
-            <div className="relative overflow-hidden bg-gradient-to-br from-[#25103d] via-[#64248c] to-[#b72f72] px-6 py-6 text-white"><div className="absolute -right-10 -top-16 h-40 w-40 rounded-full bg-white/10 blur-2xl" /><div className="relative flex items-start justify-between gap-4"><div className="flex items-center gap-4"><div className="grid h-12 w-12 place-items-center rounded-2xl border border-white/15 bg-white/10"><FiDownload size={21} /></div><div><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-purple-200">Vendor analytics</p><h2 id="vendor-report-title" className="mt-1 text-xl font-extrabold">Download vendor report</h2><p className="mt-1 text-xs text-purple-100/75">Export vendor onboarding data matching your selection.</p></div></div><button type="button" disabled={reportDownloading} onClick={() => setReportModalOpen(false)} className="grid h-9 w-9 place-items-center rounded-xl border border-white/15 bg-white/10 transition hover:bg-white/20" aria-label="Close"><FiX /></button></div></div>
+            <header className="flex items-start justify-between gap-4 border-b border-gray-100 px-6 py-5"><div><h2 id="vendor-report-title" className="text-lg font-semibold text-gray-900">Download vendor report</h2><p className="mt-1 text-sm text-gray-500">Export vendor onboarding data matching your selection.</p></div><button type="button" disabled={reportDownloading} onClick={() => setReportModalOpen(false)} className="rounded-md p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700" aria-label="Close"><FiX /></button></header>
             <div className="space-y-5 p-6">
               <div className="grid gap-4 sm:grid-cols-2"><div><label htmlFor="vendor-report-search" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Vendor or company</label><div className="relative"><FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" /><input id="vendor-report-search" value={reportSearch} onChange={(event) => setReportSearch(event.target.value)} placeholder="All vendors" className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm outline-none transition focus:border-purple-400 focus:bg-white focus:ring-4 focus:ring-purple-100" /></div></div><div><label htmlFor="vendor-report-status" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Onboarding status</label><select id="vendor-report-status" value={reportStatus} onChange={(event) => setReportStatus(event.target.value as FilterValue)} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-purple-400 focus:bg-white focus:ring-4 focus:ring-purple-100"><option value="All">All statuses</option><option value="sent_for_approval">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="resubmission">Resubmission</option><option value="deleted">Inactive</option></select></div></div>
               <div className="rounded-2xl border border-purple-100 bg-purple-50/50 p-4"><div className="mb-3 flex items-center gap-2"><FiCalendar className="text-[#852BAF]" /><div><p className="text-sm font-extrabold text-slate-800">Custom period</p><p className="text-xs text-slate-500">Filter by vendor registration date.</p></div></div><div className="grid gap-3 sm:grid-cols-2"><div><label htmlFor="vendor-report-from" className="mb-1.5 block text-xs font-semibold text-slate-500">From date</label><input id="vendor-report-from" type="date" value={fromDate} max={toDate || undefined} onChange={(event) => setFromDate(event.target.value)} className="w-full rounded-xl border border-purple-100 bg-white px-3 py-2.5 text-sm outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100" /></div><div><label htmlFor="vendor-report-to" className="mb-1.5 block text-xs font-semibold text-slate-500">To date</label><input id="vendor-report-to" type="date" value={toDate} min={fromDate || undefined} onChange={(event) => setToDate(event.target.value)} className="w-full rounded-xl border border-purple-100 bg-white px-3 py-2.5 text-sm outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100" /></div></div></div>
-              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between"><button type="button" disabled={reportDownloading} onClick={() => { setReportSearch(""); setReportStatus("All"); setFromDate(""); setToDate(""); }} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-500 transition hover:bg-slate-50">Clear filters</button><button type="button" disabled={reportDownloading} onClick={() => void handleDownloadVendorReport()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-purple-500/20 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60">{reportDownloading ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Generating...</> : <><FiDownload /> Download Excel</>}</button></div>
+              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between"><button type="button" disabled={reportDownloading} onClick={() => { setReportSearch(""); setReportStatus("All"); setFromDate(""); setToDate(""); }} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-500 transition hover:bg-slate-50">Clear filters</button><button type="button" disabled={reportDownloading} onClick={() => void handleDownloadVendorReport()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] from-60% to-[#C13A8E] px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-purple-500/20 transition disabled:cursor-not-allowed disabled:opacity-60">{reportDownloading ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Generating...</> : <><FiDownload /> Download Excel</>}</button></div>
             </div>
           </div>
         </div>
       )}
       {/* ── PAGE HEADER ── */}
-      <div
-        className="flex items-center justify-between p-5 rounded-2xl"
-        style={{
-          background:
-            "linear-gradient(135deg, rgba(133,43,175,0.06) 0%, rgba(252,63,120,0.04) 100%)",
-          border: "1px solid rgba(133,43,175,0.1)",
-        }}
-      >
-        <div className="flex items-center gap-4">
-          <div
-            className="flex items-center justify-center text-white w-11 h-11 rounded-2xl shrink-0"
-            style={{
-              background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
-              boxShadow: "0 6px 20px rgba(133,43,175,0.25)",
-            }}
-          >
-            <FiUsers size={20} />
-          </div>
-          <div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">
-              Vendor <span className="gradient-text-brand">Approvals</span>
-            </h1>
-            <p className="text-xs text-gray-500 font-medium mt-0.5">
-              Review and manage vendor onboarding submissions
-            </p>
-          </div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Vendor approvals</h1>
+          <p className="mt-1 text-sm text-slate-500">Review and manage vendor onboarding submissions</p>
         </div>
 
         <div className="flex items-center gap-2 text-xs font-bold text-gray-500">
-          <span
-            className="px-3 py-1.5 rounded-xl"
-            style={{ background: "rgba(133,43,175,0.07)", color: "#852BAF" }}
-          >
+          <span className="rounded-lg bg-purple-50 px-3 py-1.5 text-[#852BAF]">
             {filteredVendors.length} vendor
             {filteredVendors.length !== 1 ? "s" : ""}
           </span>
-          <button type="button" onClick={() => { setReportSearch(search); setReportStatus(filter); setReportModalOpen(true); }} className="inline-flex items-center gap-2 rounded-xl border border-purple-200 bg-white px-4 py-2.5 text-sm font-bold text-[#852BAF] shadow-sm transition hover:-translate-y-0.5 hover:border-[#852BAF] hover:bg-purple-50 hover:shadow-md"><FiDownload /> Vendor report</button>
+          <button type="button" onClick={() => { setReportSearch(search); setReportStatus(filter); setReportModalOpen(true); }} className="inline-flex items-center gap-2 rounded-xl border border-purple-200 bg-white px-4 py-2.5 text-sm font-bold text-[#852BAF] shadow-sm transition hover:border-[#852BAF] hover:bg-purple-50 hover:shadow-md"><FiDownload /> Vendor report</button>
         </div>
       </div>
 
@@ -284,29 +259,13 @@ export default function VendorApprovalList() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             {/* Status Tabs */}
             <div
-              className="flex gap-1 p-1 rounded-xl"
-              style={{
-                background: "rgba(133,43,175,0.04)",
-                border: "1px solid rgba(133,43,175,0.08)",
-              }}
+              className="flex flex-wrap gap-2"
             >
               {filterTabs.map(({ label, value }) => (
                 <button
                   key={value}
                   onClick={() => setFilter(value)}
-                  className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all duration-200 cursor-pointer ${
-                    filter === value
-                      ? "text-white shadow-sm"
-                      : "text-gray-500 hover:text-[#852BAF]"
-                  }`}
-                  style={
-                    filter === value
-                      ? {
-                          background:
-                            "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
-                        }
-                      : {}
-                  }
+                  className={`rounded-md px-3 py-2 text-sm font-semibold ${filter === value ? "bg-[#852BAF] text-white" : "border border-gray-200 bg-white text-gray-600"}`}
                 >
                   {label}
                 </button>
@@ -334,12 +293,7 @@ export default function VendorApprovalList() {
         <div className="overflow-x-auto">
           <table className="min-w-full">
             <thead>
-              <tr
-                style={{
-                  background:
-                    "linear-gradient(90deg, rgba(133,43,175,0.04) 0%, rgba(252,63,120,0.02) 100%)",
-                }}
-              >
+              <tr>
                 <th className="px-6 py-4 text-xs font-bold tracking-wider text-left text-gray-400 uppercase">
                   Vendor
                 </th>
@@ -364,22 +318,12 @@ export default function VendorApprovalList() {
                 >
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <div
-                        className="flex items-center justify-center text-sm font-bold text-white w-9 h-9 rounded-xl shrink-0"
-                        style={{
-                          background:
-                            "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
-                        }}
-                      >
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-sm font-semibold text-[#852BAF]">
                         {v.company_name?.charAt(0).toUpperCase() ?? "?"}
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-gray-900">
-                          <p>{v.company_name ?? "N/A"}</p>
-                        </p>
-                        <p className="text-xs text-gray-400 mt-0.5">
-                          <p>Owner: {v.full_name ?? "N/A"}</p>
-                        </p>
+                        <p className="text-sm font-semibold text-gray-900">{v.company_name ?? "N/A"}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">Owner: {v.full_name ?? "N/A"}</p>
                         <p className="text-xs text-gray-400">
                           {v.submitted_at}
                         </p>
@@ -408,11 +352,7 @@ export default function VendorApprovalList() {
                       <div className="flex items-center gap-2">
                         <Link to={`/manager/vendor-review/${v.vendor_id}`}>
                           <button
-                            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white rounded-xl cursor-pointer transition-all hover:opacity-90 active:scale-95"
-                            style={{
-                              background:
-                                "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
-                            }}
+                            className="flex items-center gap-1.5 rounded-lg bg-[#852BAF] px-3 py-2 text-xs font-semibold text-white hover:bg-[#702393]"
                           >
                             <FaEye size={11} /> Review
                           </button>

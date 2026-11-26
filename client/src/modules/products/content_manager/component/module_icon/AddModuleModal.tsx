@@ -233,7 +233,7 @@ export default function AddModuleModal({ onClose, onCreated }: Props) {
             type="button"
             onClick={() => void handleCreate()}
             disabled={saving}
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-5 py-2.5 text-sm font-extrabold text-white shadow disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#852BAF] from-60% to-[#C13A8E] px-5 py-2.5 text-sm font-extrabold text-white shadow disabled:opacity-50"
           >
             {saving ? "Creating..." : "Create Module"}
           </button>

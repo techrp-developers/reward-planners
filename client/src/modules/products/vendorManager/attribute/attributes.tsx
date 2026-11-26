@@ -213,23 +213,11 @@ export default function CategoryAttributeManagement() {
   const inputCls = "w-full h-10 px-3 rounded-xl border border-gray-200 bg-gray-50/60 text-sm font-medium text-gray-800 outline-none focus:ring-2 focus:ring-[#852BAF]/20 focus:border-[#852BAF]/40 transition";
 
   return (
-    <main className="min-h-full bg-gradient-to-br from-[#fdf8ff] via-white to-[#fff5f8] p-4 sm:p-6 lg:p-8">
-      <div className="mx-auto max-w-[1500px] space-y-6">
+    <main className="pb-8">
+      <div className="space-y-6">
 
         {/* HEADER */}
-        <header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#25103d] via-[#68258d] to-[#c33076] p-6 text-white shadow-[0_24px_65px_rgba(91,33,124,0.24)] sm:p-8">
-          <div className="absolute -right-16 -top-24 h-64 w-64 rounded-full bg-white/10 blur-2xl" />
-          <div className="relative flex items-center gap-4">
-            <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-white/20 bg-white/10 shadow-inner">
-              <FiLayers className="text-2xl text-white" />
-            </div>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-purple-200">Product configuration</p>
-              <h1 className="mt-1 text-2xl font-black sm:text-3xl">Category Attributes</h1>
-              <p className="mt-1 text-sm text-purple-100/80">Define reusable product fields, variant rules and required information.</p>
-            </div>
-          </div>
-        </header>
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><h1 className="text-2xl font-semibold tracking-tight text-slate-900">Category attributes</h1><p className="mt-1 text-sm text-slate-500">Define reusable product fields, variant rules and required information.</p></div></header>
 
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {[
@@ -242,7 +230,7 @@ export default function CategoryAttributeManagement() {
 
         {/* FILTERS + ADD FORM CARD */}
         <section className="overflow-hidden rounded-3xl border border-purple-100 bg-white shadow-[0_18px_55px_rgba(67,31,91,0.07)]">
-          <div className="border-b border-slate-100 bg-gradient-to-r from-purple-50/70 to-pink-50/40 px-6 py-5"><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-white text-[#852BAF] shadow-sm"><FiSliders /></span><div><h2 className="font-black text-slate-900">Attribute setup</h2><p className="text-xs text-slate-400">Choose where this attribute belongs, then configure its display.</p></div></div></div>
+          <div className="border-b border-slate-100 px-6 py-5"><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-white text-[#852BAF] shadow-sm"><FiSliders /></span><div><h2 className="font-black text-slate-900">Attribute setup</h2><p className="text-xs text-slate-400">Choose where this attribute belongs, then configure its display.</p></div></div></div>
           <div className="p-6">
           <p className="mb-4 text-[10px] font-black tracking-[0.18em] text-gray-400 uppercase">Assignment</p>
 
@@ -332,7 +320,7 @@ export default function CategoryAttributeManagement() {
             <div className="col-span-2 flex justify-stretch md:col-span-3 md:col-start-10">
               <button
                 type="submit"
-                className="flex h-11 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] px-5 text-sm font-semibold text-white shadow-md transition-all hover:opacity-90 active:scale-95 cursor-pointer"
+                className="flex h-11 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-gradient-to-r from-[#852BAF] from-60% to-[#C13A8E] px-5 text-sm font-semibold text-white shadow-md transition-all hover:opacity-90 active:scale-95 cursor-pointer"
               >
                 <FiPlus /> Add Attribute
               </button>
@@ -361,7 +349,7 @@ export default function CategoryAttributeManagement() {
 
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
-              <thead style={{ background: "linear-gradient(135deg, #fdf8ff 0%, #fff5f8 100%)" }}>
+              <thead>
                 <tr>
                   {["Category", "Subcategory", "Key", "Label", "Type", "Variant", "Required", "Status", "Actions"].map((h) => (
                     <th key={h} className="px-4 py-4 text-[10px] font-black tracking-widest text-gray-400 uppercase whitespace-nowrap">{h}</th>
@@ -441,7 +429,7 @@ export default function CategoryAttributeManagement() {
                   <button
                     key={page}
                     onClick={() => setCurrentPage(page)}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition cursor-pointer ${currentPage === page ? "bg-gradient-to-r from-[#852BAF] to-[#FC3F78] text-white border-transparent shadow-sm" : "bg-white border-gray-200 text-gray-600 hover:border-[#852BAF] hover:text-[#852BAF]"}`}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition cursor-pointer ${currentPage === page ? "bg-gradient-to-r from-[#852BAF] from-60% to-[#C13A8E] text-white border-transparent shadow-sm" : "bg-white border-gray-200 text-gray-600 hover:border-[#852BAF] hover:text-[#852BAF]"}`}
                   >
                     {page}
                   </button>
@@ -464,9 +452,9 @@ export default function CategoryAttributeManagement() {
         <div className="fixed inset-0 z-[1000] flex justify-end bg-slate-950/40 backdrop-blur-sm" onMouseDown={(event) => event.target === event.currentTarget && setDrawerOpen(false)}>
           <div className="flex h-screen w-full max-w-[480px] flex-col bg-white shadow-2xl">
             {/* Drawer Header */}
-            <div className="flex items-center justify-between p-5 border-b border-gray-100" style={{ background: "linear-gradient(135deg, #fdf8ff 0%, #fff5f8 100%)" }}>
+            <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] flex items-center justify-center shadow-sm">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-[#852BAF] from-60% to-[#C13A8E] flex items-center justify-center shadow-sm">
                   <FiLayers className="text-white" size={16} />
                 </div>
                 <div>
@@ -518,7 +506,7 @@ export default function CategoryAttributeManagement() {
                 <button
                   type="button"
                   onClick={() => setSelected({ ...selected, is_variant: selected.is_variant === 1 ? 0 : 1 })}
-                  className={`relative w-11 h-6 rounded-full transition-all cursor-pointer ${selected.is_variant === 1 ? "bg-gradient-to-r from-[#852BAF] to-[#FC3F78]" : "bg-gray-200"}`}
+                  className={`relative w-11 h-6 rounded-full transition-all cursor-pointer ${selected.is_variant === 1 ? "bg-gradient-to-r from-[#852BAF] from-60% to-[#C13A8E]" : "bg-gray-200"}`}
                 >
                   <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${selected.is_variant === 1 ? "translate-x-5" : ""}`} />
                 </button>
@@ -533,7 +521,7 @@ export default function CategoryAttributeManagement() {
                 <button
                   type="button"
                   onClick={() => setSelected({ ...selected, is_required: selected.is_required === 1 ? 0 : 1 })}
-                  className={`relative w-11 h-6 rounded-full transition-all cursor-pointer ${selected.is_required === 1 ? "bg-gradient-to-r from-[#852BAF] to-[#FC3F78]" : "bg-gray-200"}`}
+                  className={`relative w-11 h-6 rounded-full transition-all cursor-pointer ${selected.is_required === 1 ? "bg-gradient-to-r from-[#852BAF] from-60% to-[#C13A8E]" : "bg-gray-200"}`}
                 >
                   <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${selected.is_required === 1 ? "translate-x-5" : ""}`} />
                 </button>
@@ -558,7 +546,7 @@ export default function CategoryAttributeManagement() {
             <div className="p-5 border-t border-gray-100">
               <button
                 onClick={handleSave}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-[#852BAF] to-[#FC3F78] text-white font-bold text-sm flex items-center justify-center gap-2 shadow-md hover:opacity-90 active:scale-95 transition-all cursor-pointer"
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-[#852BAF] from-60% to-[#C13A8E] text-white font-bold text-sm flex items-center justify-center gap-2 shadow-md hover:opacity-90 active:scale-95 transition-all cursor-pointer"
               >
                 <FiSave size={16} /> Save Changes
               </button>

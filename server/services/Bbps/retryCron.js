@@ -1,3 +1,5 @@
+const { settleTransactionReward } = require("../rewards/transactionRewardService");
+const { sendTransactionSuccessEmail } = require("../mailBuilder/transactionSuccess");
 const cron = require("node-cron");
 const TransactionModel = require("../../app/bbps/v1/models/transactionModel");
 const RefundModel = require("../../app/bbps/v1/models/refundModel");
@@ -31,6 +33,9 @@ cron.schedule("*/5 * * * *", async () => {
       await TransactionModel.updateStatus(freshTxn.id, "PAID", res, conn);
 
       await conn.commit();
+
+      void sendTransactionSuccessEmail("bbps", freshTxn.id);
+      await settleTransactionReward("bbps", freshTxn.id);
 
       console.log(`✅ Retried success: ${freshTxn.id}`);
     } catch (err) {
@@ -70,7 +75,16 @@ cron.schedule("*/5 * * * *", async () => {
         await conn.commit();
       }
     } finally {
-      conn.release();
+      // The recovery transaction in catch can fail too. Never return an open
+      // transaction to the shared pool, where unrelated jobs would inherit it.
+      // ROLLBACK is also safe after a successful COMMIT.
+      try {
+        await conn.rollback();
+        conn.release();
+      } catch (cleanupError) {
+        conn.destroy();
+        console.error("[BBPS retry] Discarded connection after rollback failure:", cleanupError.code || cleanupError.message);
+      }
     }
   }
 

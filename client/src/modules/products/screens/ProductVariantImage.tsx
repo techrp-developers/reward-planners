@@ -22,6 +22,7 @@ import {
 } from "@dnd-kit/sortable";
 
 import { CSS } from "@dnd-kit/utilities";
+import SectionHeader from "./SectionHeader";
 
 // const BASE_IMAGE_URL = "https://rewardplanners.com/api/crm/uploads";
 const R2_BASE_URL = "https://cdn.rewardplanners.com";
@@ -80,22 +81,6 @@ function SortableImage({
       {/* ORDER BADGE */}
       <div className="absolute top-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
         #{img.sort_order}
-      </div>
-    </div>
-  );
-}
-
-function SectionHeader({ icon: Icon, title, description }: any) {
-  return (
-    <div className="flex items-center space-x-4 pb-4 border-b border-gray-100 mb-6">
-      <div className="p-4 text-white rounded-2xl" style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)", boxShadow: "0 6px 20px rgba(133,43,175,0.25)" }}>
-        <Icon className="text-2xl" />
-      </div>
-      <div>
-        <h3 className="text-xl font-bold text-gray-800">{title}</h3>
-        {description && (
-          <p className="text-sm text-gray-500 font-medium">{description}</p>
-        )}
       </div>
     </div>
   );
@@ -313,18 +298,12 @@ export default function ProductVariantImages() {
   return (
     <div className="max-w-6xl mx-auto">
       {/* PAGE HEADER */}
-      <div
-        className="flex items-center justify-between mb-6 p-5 rounded-2xl"
-        style={{
-          background: "linear-gradient(135deg, rgba(133,43,175,0.06) 0%, rgba(252,63,120,0.04) 100%)",
-          border: "1px solid rgba(133,43,175,0.1)",
-        }}
-      >
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
             Variant <span className="gradient-text-brand">Images</span>
           </h1>
-          <p className="text-xs text-gray-500 font-medium mt-0.5">
+          <p className="mt-1 text-sm text-slate-500">
             Upload and manage images for this variant (max {MAX_IMAGES})
           </p>
         </div>
@@ -338,7 +317,7 @@ export default function ProductVariantImages() {
       </div>
 
       {/* Upload Section */}
-      <section className="space-y-4 bg-white rounded-2xl p-6 sm:p-8 vendor-section-card" style={{ border: "1px solid rgba(133,43,175,0.08)", boxShadow: "0 4px 24px rgba(133,43,175,0.06)" }}>
+      <section className="space-y-4 bg-white rounded-2xl p-6 sm:p-8 border border-gray-100 shadow-sm">
         <SectionHeader
           icon={FaImages}
           title="Upload Images"
@@ -360,7 +339,7 @@ export default function ProductVariantImages() {
               type="button"
               onClick={() => fileInputRef.current?.click()}
               className="px-6 py-2.5 rounded-xl text-white font-semibold hover:opacity-90 active:scale-95 transition cursor-pointer"
-              style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)", boxShadow: "0 4px 14px rgba(133,43,175,0.28)" }}
+              style={{ background: "linear-gradient(90deg, #852BAF 60%, #C13A8E 100%)", boxShadow: "0 4px 14px rgba(133,43,175,0.28)" }}
             >
               Select Images
             </button>
@@ -385,7 +364,7 @@ export default function ProductVariantImages() {
 
       {/* Preview Section */}
       {previews.length > 0 && (
-        <section className="mt-4 space-y-4 bg-white rounded-2xl p-6 sm:p-8 vendor-section-card" style={{ border: "1px solid rgba(133,43,175,0.08)" }}>
+        <section className="mt-4 space-y-4 bg-white rounded-2xl p-6 sm:p-8 border border-gray-100 shadow-sm">
           <SectionHeader
             icon={FaImages}
             title="Preview Before Upload"

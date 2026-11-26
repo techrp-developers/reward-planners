@@ -10,6 +10,12 @@ const EcommerceRefundService = require("../../../../services/Razorpay/ecommerceR
 const {
   shouldWaiveDeliveryFee,
 } = require("../utils/deliveryFeePolicy");
+const {
+  buildBypassCaptureEvent,
+  bypassOrderId,
+  rupeesToPaise,
+  shouldBypassPayment,
+} = require("../utils/paymentBypassPolicy");
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZOR_API_KEY,
@@ -106,6 +112,46 @@ class PaymentController {
       }
 
       const amount = Number(order.total_amount);
+      const amountInPaise = rupeesToPaise(amount);
+
+      // ==========================
+      // TEST ACCOUNT PAYMENT BYPASS
+      // Commit first: the paid path locks this order on its own connection.
+      // ==========================
+      if (shouldBypassPayment({ userId })) {
+        await conn.query(
+          `UPDATE order_payments SET status = 'failed'
+           WHERE order_id = ? AND status IN ('created', 'pending')`,
+          [orderId],
+        );
+        await conn.query(
+          `INSERT INTO order_payments
+            (order_id, razorpay_order_id, amount, status)
+           VALUES (?, ?, ?, 'created')
+           ON DUPLICATE KEY UPDATE amount = VALUES(amount), status = 'created'`,
+          [orderId, bypassOrderId(orderId), amount],
+        );
+        await conn.commit();
+
+        console.warn(
+          `[PAYMENT_TEST_MODE] Bypassing Razorpay for order ${orderId}, user ${userId}`,
+        );
+
+        // Loaded here because webhook.js requires this controller for refunds
+        const { processEvent } = require("../utils/webhook");
+        await processEvent({
+          parsedBody: buildBypassCaptureEvent({ orderId, amount }),
+        });
+
+        return res.status(200).json({
+          bypassed: true,
+          paymentStatus: "paid",
+          key: process.env.RAZOR_API_KEY,
+          orderId: bypassOrderId(orderId),
+          amount: amountInPaise,
+          currency: "INR",
+        });
+      }
 
       // ==========================
       // CHECK FOR EXISTING RAZORPAY ORDER
@@ -143,7 +189,7 @@ class PaymentController {
         return res.status(200).json({
           key: process.env.RAZOR_API_KEY,
           orderId: existing.razorpay_order_id,
-          amount: amount * 100,
+          amount: amountInPaise,
           currency: "INR",
         });
       }
@@ -164,7 +210,7 @@ class PaymentController {
 
       try {
         razorpayOrder = await razorpay.orders.create({
-          amount: amount * 100,
+          amount: amountInPaise,
           currency: "INR",
           receipt: orderId.toString(),
           payment_capture: 1,
@@ -238,7 +284,7 @@ class PaymentController {
           return res.status(200).json({
             key: process.env.RAZOR_API_KEY,
             orderId: race?.razorpay_order_id,
-            amount: amount * 100,
+            amount: amountInPaise,
             currency: "INR",
           });
         }

@@ -1,3 +1,4 @@
+const { confirmationContent, money } = require("./transactionSuccess");
 const { sendMailBestEffort } = require("../mailService");
 const db = require("../../config/database");
 
@@ -21,9 +22,9 @@ async function sendServiceInvoiceEmail({
   parentOrderId,
   invoiceNumber,
   pdf,
+  totalAmount,
+  paymentId,
 }) {
-  const textName = customerName ? ` ${customerName}` : "";
-  const htmlName = customerName ? ` ${escapeHtml(customerName)}` : "";
   const htmlInvoiceNumber = escapeHtml(invoiceNumber);
   const htmlParentOrderId = escapeHtml(parentOrderId);
 
@@ -31,12 +32,10 @@ async function sendServiceInvoiceEmail({
     {
       to: email,
       subject: `Your service invoice ${invoiceNumber}`,
-      text: `Hello${textName},\n\nPlease find attached your invoice ${invoiceNumber} for service order ${parentOrderId}.\n\nThank you for choosing Reward Planners.`,
-      html: `
-        <p>Hello${htmlName},</p>
-        <p>Please find attached your invoice <strong>${htmlInvoiceNumber}</strong> for service order <strong>${htmlParentOrderId}</strong>.</p>
-        <p>Thank you for choosing Reward Planners.</p>
-      `,
+      ...confirmationContent(customerName, "Your service payment was successful. Your generated invoice is attached.", [
+        ["Service order", parentOrderId], ["Invoice", invoiceNumber],
+        ["Invoice total", money(totalAmount)], ["Payment reference", paymentId], ["Payment status", "Paid"],
+      ]),
       attachments: [
         {
           filename: `${invoiceNumber}.pdf`,

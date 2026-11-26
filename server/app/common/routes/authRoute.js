@@ -97,6 +97,10 @@ router.get("/address/:address_id", auth, authController.getAddressById);
 // user information overall
 router.get("/user-info", auth, authController.getUserInfo);
 
+// Company Birthdays & Wishes
+router.get("/birthdays", auth, authController.getCompanyBirthdays);
+router.post("/birthdays/wish", auth, authController.sendBirthdayWish);
+
 router.get("/visit-card/qr", auth, authController.getVisitCardQr);
 
 // update profile information

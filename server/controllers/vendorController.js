@@ -63,6 +63,22 @@ class VendorController {
       const vndID = req.user?.vendor_id;
       const data = req.body;
       const files = req.files;
+      let removedDocumentKeys;
+      try {
+        removedDocumentKeys = JSON.parse(data.removedDocumentKeys || "[]");
+      } catch {
+        await connection.rollback();
+        return res.status(400).json({ success: false, message: "Invalid document removal list" });
+      }
+      const allowedDocumentKeys = new Set([
+        "gstinFile", "panFile", "bankProofFile", "signatoryIdFile",
+        "businessProfileFile", "vendorAgreementFile", "brandLogoFile",
+        "authorizationLetterFile", "electricityBillFile", "rightsAdvisoryFile", "nocFile",
+      ]);
+      if (!Array.isArray(removedDocumentKeys) || removedDocumentKeys.some((key) => !allowedDocumentKeys.has(key))) {
+        await connection.rollback();
+        return res.status(400).json({ success: false, message: "Invalid document removal list" });
+      }
 
       // fetch vendor
       const [rows] = await connection.query(
@@ -102,6 +118,14 @@ class VendorController {
 
       await VendorModel.insertBankDetails(connection, vndID, data);
       await VendorModel.insertContacts(connection, vndID, data);
+
+      // Apply removals within the submission transaction, before replacements.
+      for (const key of new Set(removedDocumentKeys)) {
+        await connection.execute(
+          "UPDATE vendor_documents SET is_active = 0 WHERE vendor_id = ? AND document_key = ? AND is_active = 1",
+          [vndID, key],
+        );
+      }
 
       // ===== Upload documents to R2 (PRIVATE) =====
       if (files) {

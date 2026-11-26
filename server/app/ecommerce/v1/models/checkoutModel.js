@@ -2,7 +2,11 @@ const db = require("../../../../config/database");
 const fs = require("fs");
 const path = require("path");
 const AddressModel = require("../../../common/models/addressModel");
-const xpressService = require("../../../../services/ExpressBees/xpressbees_service");
+const courierService = require("../../../../services/courier/courierService");
+const {
+  buildDeliveryChoices,
+  selectCourierForPreference,
+} = require("../../../../services/courier/courierPolicy");
 const {
   reserveWalletCoins,
 } = require("../../../../services/rewards/ecommerceWalletService");
@@ -15,6 +19,7 @@ const {
 } = require("../utils/rewardCalculate");
 const { priceLines } = require("../utils/activeOffers");
 const { deliveryChargeForUser } = require("../utils/deliveryFeePolicy");
+const { orderOfferColumns, orderOffer } = require("../../../../utils/orderOffer");
 
 const CDN_BASE_URL = "https://cdn.rewardplanners.com";
 function getPublicUrl(path) {
@@ -40,6 +45,7 @@ class CheckoutModel {
     useRewards = true,
     expectedTotal,
     expectedRedeemable,
+    deliveryPreference,
   ) {
     const conn = await db.getConnection();
 
@@ -238,7 +244,7 @@ class CheckoutModel {
         const breadth = Math.round(vendor.breadth);
         const height = Math.round(vendor.height);
 
-        const serviceResponse = await xpressService.checkServiceability({
+        const serviceResponse = await courierService.checkServiceability({
           origin: vendorAddress.pincode,
           destination: customerAddress.zipcode,
           payment_type: "prepaid",
@@ -265,9 +271,10 @@ class CheckoutModel {
           throw new Error("NOT_SERVICEABLE");
         }
 
-        const selectedCourier = [...validOptions].sort(
-          (a, b) => a.total_charges - b.total_charges,
-        )[0];
+        const selectedCourier = selectCourierForPreference(
+          validOptions,
+          deliveryPreference,
+        );
 
         // =====================
         // DELIVERY DATE
@@ -448,8 +455,8 @@ class CheckoutModel {
         await conn.execute(
           `
         INSERT INTO eorder_items
-        (order_id, vendor_order_id, product_id, variant_id, quantity, price, reward_discount, reward_coins_used, reward_earned, reward_coins_earned, final_price, flash_sale_campaign_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (order_id, vendor_order_id, product_id, variant_id, quantity, price, reward_discount, reward_coins_used, reward_earned, reward_coins_earned, final_price, flash_sale_campaign_id, promotional_content_id, original_price)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
           [
             orderId,
@@ -464,6 +471,8 @@ class CheckoutModel {
             pricing.rewardEarn,
             pricing.finalItemTotal,
             item.flash_sale_campaign_id,
+            item.promotional_content_id,
+            item.base_sale_price,
           ],
         );
 
@@ -553,6 +562,7 @@ class CheckoutModel {
     useRewards = true,
     expectedTotal,
     expectedRedeemable,
+    deliveryPreference,
   }) {
     const conn = await db.getConnection();
 
@@ -663,7 +673,7 @@ class CheckoutModel {
       const breadth = Math.round(item.breadth);
       const height = Math.round(quantity * Number(item.height));
 
-      const serviceResponse = await xpressService.checkServiceability({
+      const serviceResponse = await courierService.checkServiceability({
         origin: vendorAddress.pincode,
         destination: customerAddress.zipcode,
         payment_type: "prepaid",
@@ -678,9 +688,10 @@ class CheckoutModel {
         throw new Error("NOT_SERVICEABLE");
       }
 
-      const courier = serviceResponse.data
-        .filter((o) => o.total_charges > 0)
-        .sort((a, b) => a.total_charges - b.total_charges)[0];
+      const courier = selectCourierForPreference(
+        serviceResponse.data,
+        deliveryPreference,
+      );
 
       if (!courier) throw new Error("NOT_SERVICEABLE");
 
@@ -829,8 +840,8 @@ class CheckoutModel {
       (order_id, vendor_order_id, product_id, variant_id, quantity, price,
        reward_discount, reward_coins_used,
        reward_earned, reward_coins_earned,
-       final_price, flash_sale_campaign_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       final_price, flash_sale_campaign_id, promotional_content_id, original_price)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
         [
           orderId,
@@ -845,6 +856,8 @@ class CheckoutModel {
           rewardEarn,
           finalItemTotal,
           item.flash_sale_campaign_id,
+          item.promotional_content_id,
+          item.base_sale_price,
         ],
       );
 
@@ -917,7 +930,12 @@ class CheckoutModel {
   }
 
   // Get checkout details
-  async getCheckoutCart(userId, useRewards = true, addressId = null) {
+  async getCheckoutCart(
+    userId,
+    useRewards = true,
+    addressId = null,
+    deliveryPreference,
+  ) {
     // ===============================
     // 1. WALLET
     // ===============================
@@ -1026,6 +1044,9 @@ class CheckoutModel {
 
         mrp: Number(row.mrp),
         price: Number(row.sale_price),
+        original_price: row.base_sale_price,
+        offer_price: row.offer_price,
+        is_offer: row.offer_price !== null,
         quantity: Number(row.quantity),
 
         itemTotal,
@@ -1152,6 +1173,7 @@ class CheckoutModel {
     const shippingBreakdown = [];
     const eddList = [];
     const vendorEDDMap = {};
+    const vendorCourierOptions = [];
     // Shipping cannot be calculated until the user selects an address.
     if (!addressRequired) {
       for (const vendorId in vendorGroups) {
@@ -1167,7 +1189,7 @@ class CheckoutModel {
 
         if (!vendorAddress?.pincode) continue;
 
-        const serviceResponse = await xpressService.checkServiceability({
+        const serviceResponse = await courierService.checkServiceability({
           origin: vendorAddress.pincode,
           destination: destinationPincode,
           payment_type: "prepaid",
@@ -1186,11 +1208,14 @@ class CheckoutModel {
           continue;
         }
 
-        const courier = courierOptions
-          .filter((option) => Number(option.total_charges) > 0)
-          .sort((a, b) => Number(a.total_charges) - Number(b.total_charges))[0];
+        const courier = selectCourierForPreference(
+          courierOptions,
+          deliveryPreference,
+        );
 
         if (!courier) continue;
+
+        vendorCourierOptions.push(courierOptions);
 
         const shippingCharge = deliveryChargeForUser({
           userId,
@@ -1261,6 +1286,14 @@ class CheckoutModel {
       addressRequired,
       shippingCalculated: !addressRequired,
       shippingBreakdown,
+      deliveryChoices: buildDeliveryChoices(vendorCourierOptions, {
+        chargeFor: (courier) =>
+          deliveryChargeForUser({
+            userId,
+            calculatedCharge: courier.total_charges,
+          }),
+        baseAmount: finalProductTotal,
+      }),
     };
   }
 
@@ -1274,6 +1307,7 @@ class CheckoutModel {
     useRewards = true,
     userId,
     addressId = null,
+    deliveryPreference,
   }) {
     // ===============================
     // 1. WALLET
@@ -1403,6 +1437,7 @@ class CheckoutModel {
     let shippingCharge = 0;
     let expectedDeliveryDate = null;
     let shippingBreakdown = [];
+    let deliveryChoices = [];
 
     if (!addressRequired) {
       const [[vendorAddress]] = await db.execute(
@@ -1413,7 +1448,7 @@ class CheckoutModel {
 
       if (!vendorAddress) throw new Error("VENDOR_ADDRESS_MISSING");
 
-      const serviceResponse = await xpressService.checkServiceability({
+      const serviceResponse = await courierService.checkServiceability({
         origin: vendorAddress.pincode,
         destination: destinationPincode,
         payment_type: "prepaid",
@@ -1430,15 +1465,25 @@ class CheckoutModel {
         throw new Error("NOT_SERVICEABLE");
       }
 
-      const courier = serviceResponse.data
-        .filter((o) => Number(o.total_charges) > 0)
-        .sort((a, b) => Number(a.total_charges) - Number(b.total_charges))[0];
+      const courier = selectCourierForPreference(
+        serviceResponse.data,
+        deliveryPreference,
+      );
 
       if (!courier) throw new Error("NOT_SERVICEABLE");
 
       shippingCharge = deliveryChargeForUser({
         userId,
         calculatedCharge: courier.total_charges,
+      });
+
+      deliveryChoices = buildDeliveryChoices([serviceResponse.data], {
+        chargeFor: (option) =>
+          deliveryChargeForUser({
+            userId,
+            calculatedCharge: option.total_charges,
+          }),
+        baseAmount: finalItemTotal,
       });
 
       if (courier.estimated_delivery_date) {
@@ -1487,7 +1532,13 @@ class CheckoutModel {
         return_window: row.return_window_days,
         is_replaceable: row.is_replaceable,
 
+        mrp: Number(row.mrp),
         price: salePrice,
+        original_price: row.base_sale_price,
+        offer_price: row.offer_price,
+        is_offer: row.offer_price !== null,
+        flash_sale_campaign_id: row.flash_sale_campaign_id,
+        promotional_content_id: row.promotional_content_id,
         quantity,
 
         item_total: itemTotal,
@@ -1517,6 +1568,7 @@ class CheckoutModel {
       addressRequired,
       shippingCalculated: !addressRequired,
       shippingBreakdown,
+      deliveryChoices,
       estimated_delivery_date: expectedDeliveryDate,
     };
   }
@@ -1582,6 +1634,7 @@ class CheckoutModel {
       oi.price,
       oi.final_price,
       oi.reward_discount,
+      ${orderOfferColumns("oi")},
       p.product_name,
 
       (
@@ -1675,6 +1728,7 @@ class CheckoutModel {
         item_total: Number(i.price) * i.quantity,
         final_price: Number(i.final_price),
         reward_discount: Number(i.reward_discount),
+        offer: orderOffer(i, i.price, i.quantity),
       })),
 
       bill: {
@@ -1688,6 +1742,10 @@ class CheckoutModel {
             Number(order.total_amount),
         ),
         reward_discount: Number(order.reward_discount),
+        offer_savings: items.reduce(
+          (sum, i) => sum + (orderOffer(i, i.price, i.quantity)?.savings || 0),
+          0,
+        ),
         order_total: Number(order.total_amount),
       },
 

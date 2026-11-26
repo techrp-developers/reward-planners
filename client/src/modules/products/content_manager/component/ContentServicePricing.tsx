@@ -71,6 +71,7 @@ export default function ContentServicePricing({ contentId }: { contentId: number
     const value = bundleDrafts[row.bundle_id]?.trim() || "";
     const price = value === "" ? null : Number(value);
     if (price !== null && (!Number.isFinite(price) || price <= 0)) { toast.error("Enter a bundle price greater than zero"); return; }
+    if (price !== null && price > Number(row.bundle_total)) { toast.error(`Price cannot exceed the bundle total of ₹${row.bundle_total}`); return; }
     setBusy(true);
     try {
       await api.put(`/content/entries/${contentId}/bundle-pricing/${row.bundle_id}`, { offer_price: price });
@@ -83,6 +84,7 @@ export default function ContentServicePricing({ contentId }: { contentId: number
     const value = drafts[row.variant_id]?.trim() || "";
     const price = value === "" ? null : Number(value);
     if (price !== null && (!Number.isFinite(price) || price <= 0)) { toast.error("Enter a price greater than zero"); return; }
+    if (price !== null && price > Number(row.price)) { toast.error(`Price cannot exceed the normal price of ₹${row.price}`); return; }
     setBusy(true);
     try {
       await api.put(`/content/entries/${contentId}/service-pricing/${row.variant_id}`, { offer_price: price });

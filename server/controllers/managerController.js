@@ -26,6 +26,90 @@ const RESOLVED_DEVICE_PLATFORM_SQL = `CASE
 END`;
 
 class ManagerController {
+  async employeeDirectoryPlatformCounts(req, res) {
+    try {
+      // Match the directory's active-company/account and platform rules.
+      // Aggregate customer IDs directly to avoid multiplying counts by employee rows.
+      const [[counts]] = await db.execute(`
+        SELECT
+          COUNT(DISTINCT CASE WHEN ${ANDROID_DEVICE_SQL} AND NOT ${IOS_DEVICE_SQL} THEN c.user_id END) AS android_user_count,
+          COUNT(DISTINCT CASE WHEN ${IOS_DEVICE_SQL} THEN c.user_id END) AS ios_user_count
+        FROM customer c
+        INNER JOIN companies co ON co.company_id = c.company_id
+        WHERE co.status = 1 AND c.status = 1 AND ${REGISTERED_DEVICE_SQL}
+      `);
+      const android = Number(counts.android_user_count || 0);
+      const ios = Number(counts.ios_user_count || 0);
+      // Count employee records independently of accounts: multiple accounts for
+      // one employee must not inflate coverage or reduce pending registration.
+      const [[employees]] = await db.execute(`
+        SELECT
+          COUNT(*) AS total_employee_count,
+          COALESCE(SUM(cu.status = 1), 0) AS enabled_employee_count,
+          COALESCE(SUM(cu.status = 1 AND registered.company_user_id IS NOT NULL), 0) AS enabled_registered_employee_count
+        FROM company_users cu
+        INNER JOIN companies co ON co.company_id = cu.company_id AND co.status = 1
+        LEFT JOIN (
+          SELECT DISTINCT company_user_id, company_id FROM customer
+        ) registered ON registered.company_user_id = cu.id AND registered.company_id = cu.company_id
+      `);
+      // Registration means an account exists, regardless of account/device status.
+      const [[accounts]] = await db.execute(`
+        SELECT
+          COUNT(DISTINCT c.user_id) AS registered_app_user_count,
+          COUNT(DISTINCT CASE WHEN cu.status <> 1 OR cu.status IS NULL THEN
+            CASE WHEN cu.id IS NOT NULL THEN c.user_id END
+          END) AS registered_disabled_employee_user_count
+        FROM customer c
+        INNER JOIN companies co ON co.company_id = c.company_id AND co.status = 1
+        LEFT JOIN company_users cu ON cu.id = c.company_user_id AND cu.company_id = c.company_id
+      `);
+      const [[partners]] = await db.execute(`
+        SELECT
+          (SELECT COUNT(*) FROM companies WHERE status = 1) AS corporate_client_count,
+          (SELECT COUNT(*) FROM vendors) AS vendor_partner_count
+      `);
+      const totalEmployees = Number(employees.total_employee_count || 0);
+      const enabledEmployees = Number(employees.enabled_employee_count || 0);
+      const registeredEmployees = Number(employees.enabled_registered_employee_count || 0);
+      return res.json({
+        success: true,
+        data: {
+          android_user_count: android,
+          ios_user_count: ios,
+          total_mobile_user_count: android + ios,
+          total_employee_count: totalEmployees,
+          disabled_employee_count: totalEmployees - enabledEmployees,
+          registered_app_user_count: Number(accounts.registered_app_user_count || 0),
+          registered_disabled_employee_user_count: Number(accounts.registered_disabled_employee_user_count || 0),
+          enabled_employee_count: enabledEmployees,
+          enabled_registered_employee_count: registeredEmployees,
+          pending_registration_count: enabledEmployees - registeredEmployees,
+          registration_coverage_percentage: enabledEmployees
+            ? Number(((registeredEmployees / enabledEmployees) * 100).toFixed(2))
+            : 0,
+          corporate_client_count: Number(partners.corporate_client_count || 0),
+          vendor_partner_count: Number(partners.vendor_partner_count || 0),
+          rewards_earned: null,
+          rewards_earned_status: "unavailable",
+          last_successful_refresh_at: new Date().toISOString(),
+          refresh_interval_seconds: 30,
+          metric_definitions: {
+            employee_scope: "Employee records belonging to active companies; enabled means employee status = 1",
+            registered_app_users: "Customer accounts belonging to active companies, regardless of account or device status",
+            enabled_registered_employees: "Enabled employee records with at least one linked customer account in the same company",
+            mobile_users: "Active customer accounts in active companies with a saved device ID and a recognized Android or iOS platform; not store downloads",
+            corporate_clients: "Active companies",
+            vendor_partners: "All vendor records, including pending approvals",
+          },
+        },
+      });
+    } catch (error) {
+      console.error("Employee directory platform counts error:", error);
+      return res.status(500).json({ success: false, message: "Failed to fetch platform counts" });
+    }
+  }
+
   async createCompanyEmployee(req, res) {
     try {
       const employee = {
@@ -184,8 +268,14 @@ class ManagerController {
       if (!Number.isInteger(companyId) || companyId < 1 || !Number.isInteger(employeeId) || employeeId < 1) {
         return res.status(400).json({ success: false, message: "Invalid company or employee ID" });
       }
-      if (!(await EmployeeModel.findById(employeeId, companyId))) {
+      const existing = await EmployeeModel.findById(employeeId, companyId);
+      if (!existing) {
         return res.status(404).json({ success: false, message: "Employee not found" });
+      }
+      // RM manages only the app account status; employment status belongs to company HR.
+      const accountStatus = req.body.account_status;
+      if (accountStatus !== undefined && ![0, 1, "0", "1"].includes(accountStatus)) {
+        return res.status(400).json({ success: false, message: "account_status must be 1 (active) or 0 (inactive)" });
       }
       const employee = {
         company_id: companyId,
@@ -210,10 +300,19 @@ class ManagerController {
         return res.status(400).json({ success: false, message: "Date of birth must be a valid past date" });
       }
       if (employee.ctc !== null && (!Number.isFinite(employee.ctc) || employee.ctc < 0)) return res.status(400).json({ success: false, message: "CTC must be a non-negative number" });
-      const duplicate = await EmployeeModel.findDuplicate({ ...employee, excludeId: employeeId });
+      // Existing shared contact details must not block unrelated profile edits.
+      // Check each changed identity independently so an unchanged duplicate does
+      // not prevent correcting the other contact field.
+      const changedEmail = employee.email !== String(existing.email || "").trim().toLowerCase();
+      const changedPhone = employee.phone !== String(existing.phone || "").trim();
+      const duplicate = (changedEmail || changedPhone) && await EmployeeModel.findDuplicate({
+        email: changedEmail ? employee.email : undefined,
+        phone: changedPhone ? employee.phone : undefined,
+        excludeId: employeeId,
+      });
       if (duplicate) return res.status(409).json({ success: false, message: "Another employee with this email or phone already exists" });
       await EmployeeModel.update(employeeId, companyId, employee);
-      if (req.body.status !== undefined) await EmployeeModel.setStatus(employeeId, companyId, Number(req.body.status) === 1);
+      if (accountStatus !== undefined) await EmployeeModel.setAccountStatus(employeeId, companyId, Number(accountStatus) === 1);
       return res.json({ success: true, message: "Employee updated successfully", data: await EmployeeModel.findById(employeeId, companyId) });
     } catch (error) {
       console.error("Update company employee error:", error);
@@ -379,10 +478,11 @@ class ManagerController {
            cu.address2,
            cu.reporting_manager,
            cu.ctc,
-           cu.status,
+           cu.status AS employment_status,
            cu.created_at,
            c.user_id AS customer_id,
-           c.status AS customer_status,
+           c.status AS account_status,
+           c.deleted_at AS account_deleted_at,
            c.is_verified AS customer_is_verified,
            c.last_login_at,
            c.device_id,

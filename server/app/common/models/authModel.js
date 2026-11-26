@@ -135,20 +135,32 @@ class authModel {
   //   return rows[0];
   // }
 
+  // status = app account status (customer.status, managed by RM).
+  // employment_status = company_users.status (managed by company HR); NULL
+  // when the customer is not linked to an employee record.
   async findById(userId) {
     const [rows] = await db.execute(
       ` SELECT
-        user_id,
-        name,
-        email,
-        status,
-        is_verified,
-        last_login_at
-       FROM customer
-       WHERE user_id = ?`,
+        c.user_id,
+        c.name,
+        c.email,
+        c.status,
+        c.is_verified,
+        c.last_login_at,
+        cu.status AS employment_status
+       FROM customer c
+       LEFT JOIN company_users cu ON cu.id = c.company_user_id
+       WHERE c.user_id = ?`,
       [userId],
     );
     return rows[0];
+  }
+
+  // A customer can use the app only while both the app account (RM) and the
+  // employment record (HR) are active.
+  isCustomerActive(user) {
+    if (!user || Number(user.status) !== 1) return false;
+    return user.employment_status == null || Number(user.employment_status) === 1;
   }
 
   /* ======================================================
@@ -187,6 +199,23 @@ class authModel {
     );
 
     return rows[0];
+  }
+
+  // Employee that exists but was deactivated by HR.
+  async isEmployeeInactive({ id, email, phone }) {
+    let where;
+    let value;
+    if (id) [where, value] = ["id = ?", id];
+    else if (email) [where, value] = ["email = ?", email.toLowerCase()];
+    else if (phone) [where, value] = ["TRIM(contact) = ?", phone];
+    else return false;
+
+    const [rows] = await db.execute(
+      `SELECT id FROM company_users WHERE ${where} AND status != 1 LIMIT 1`,
+      [value],
+    );
+
+    return rows.length > 0;
   }
 
   async storeActivationOTP(email, otp) {
@@ -630,57 +659,175 @@ class authModel {
     };
   }
 
-  // Get employee birthday
-  async getTodayBirthdayEmployees(userId) {
-    const [rows] = await db.execute(
+  // Get all company birthdays (both today and upcoming) - Strictly scoped to user's company only
+  async getCompanyBirthdays(userId) {
+    // 1. Identify logged-in customer's exact company_id
+    const [[loggedUser]] = await db.execute(
       `
-    SELECT
-      cu_emp.id,
-      cu_emp.name,
-      cu_emp.email,
-      cu_emp.contact,
-      cu_emp.department,
-      cu_emp.role,
-      cu_emp.dob,
-      c.user_image,
-      c.updated_at AS user_image_updated_at,
-      cu_emp.id = cu_logged.id AS is_self,
-      EXISTS (
-        SELECT 1 FROM chat_messages m
-        WHERE m.sender_id = c_logged.user_id
-          AND m.client_message_id = CONCAT('birthday-wish:', c.user_id, ':', DATE_FORMAT(CURDATE(), '%Y-%m-%d'))
-      ) AS wished
-    FROM customer c_logged
 
-    INNER JOIN company_users cu_logged
-      ON c_logged.company_user_id = cu_logged.id
-
-    INNER JOIN company_users cu_emp
-      ON cu_logged.company_id = cu_emp.company_id
-
-    LEFT JOIN customer c
-      ON c.company_user_id = cu_emp.id
-
-    WHERE c_logged.user_id = ?
-      AND MONTH(cu_emp.dob) = MONTH(CURDATE())
-      AND DAY(cu_emp.dob) = DAY(CURDATE())
-      AND cu_emp.status = 1
-    `,
+      SELECT 
+        c.user_id,
+        c.company_user_id,
+        COALESCE(cu.company_id, (
+          SELECT cu2.company_id 
+          FROM company_users cu2 
+          WHERE LOWER(TRIM(cu2.email)) = LOWER(TRIM(c.email)) 
+          LIMIT 1
+        )) AS company_id,
+        comp.company_name
+      FROM customer c
+      LEFT JOIN company_users cu ON cu.id = c.company_user_id
+      LEFT JOIN companies comp ON comp.company_id = cu.company_id
+      WHERE c.user_id = ?
+      LIMIT 1
+      `,
       [userId],
     );
 
-    return rows.map((emp) => ({
-      employeeId: emp.id,
-      name: emp.name,
-      email: emp.email,
-      phone: emp.contact,
-      department: emp.department,
-      role: emp.role,
-      dob: emp.dob,
-      image: getPublicUrl(emp.user_image, emp.user_image_updated_at),
-      isSelf: Boolean(emp.is_self),
-      wished: Boolean(emp.wished),
-    }));
+    const companyId = loggedUser?.company_id;
+    if (!companyId) {
+      return {
+        companyId: null,
+        companyName: null,
+        today: [],
+        upcoming: [],
+        all: [],
+        todayCount: 0,
+        upcomingCount: 0,
+      };
+    }
+
+    // 2. Fetch ALL active employees strictly belonging to this user's company ONLY
+    const [rows] = await db.execute(
+      `
+      SELECT
+        cu.id AS employee_id,
+        cu.company_id,
+        comp.company_name,
+        cu.name,
+        cu.email,
+        cu.contact AS phone,
+        cu.department,
+        cu.role,
+        cu.dob,
+        c.user_id AS recipient_user_id,
+        c.user_image,
+        c.updated_at AS user_image_updated_at
+      FROM company_users cu
+      INNER JOIN companies comp 
+        ON comp.company_id = cu.company_id 
+       AND comp.status = 1
+      LEFT JOIN customer c 
+        ON c.company_user_id = cu.id
+      WHERE cu.company_id = ?
+        AND cu.status = 1
+      ORDER BY cu.name ASC
+      `,
+      [companyId],
+    );
+
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1; // 1-12
+    const currentDay = now.getDate(); // 1-31
+    const currentYear = now.getFullYear();
+
+    const monthNames = [
+      "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    ];
+
+    const parsedList = [];
+    const seen = new Set();
+
+    for (const emp of rows) {
+      if (seen.has(emp.employee_id)) continue;
+      seen.add(emp.employee_id);
+
+      let isToday = false;
+      let daysUntil = 999;
+      let dateStr = "Upcoming";
+
+      if (emp.dob) {
+        const str = String(emp.dob).trim();
+        const match = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+        let m = 0;
+        let d = 0;
+        if (match) {
+          m = parseInt(match[2], 10);
+          d = parseInt(match[3], 10);
+        } else {
+          const parsed = new Date(str);
+          if (!isNaN(parsed.getTime())) {
+            m = parsed.getMonth() + 1;
+            d = parsed.getDate();
+          }
+        }
+
+        if (m && d) {
+          isToday = (m === currentMonth && d === currentDay);
+          if (isToday) {
+            daysUntil = 0;
+            dateStr = "Birthday today";
+          } else {
+            let nextBday = new Date(currentYear, m - 1, d);
+            if (nextBday < now && (nextBday.toDateString() !== now.toDateString())) {
+              nextBday = new Date(currentYear + 1, m - 1, d);
+            }
+            daysUntil = Math.max(1, Math.ceil((nextBday.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+            dateStr = `${monthNames[m - 1]} ${d}`;
+          }
+        }
+      }
+
+      parsedList.push({
+        id: String(emp.employee_id),
+        employeeId: emp.employee_id,
+        userId: emp.recipient_user_id || null,
+        companyId: emp.company_id,
+        companyName: emp.company_name,
+        name: emp.name,
+        email: emp.email,
+        phone: emp.phone,
+        department: emp.department || "Team Member",
+        role: emp.role || emp.department || "Colleague",
+        dob: emp.dob,
+        isToday,
+        daysUntil,
+        dateStr,
+        avatar: emp.user_image ? getPublicUrl(emp.user_image, emp.user_image_updated_at) : null,
+        image: emp.user_image ? getPublicUrl(emp.user_image, emp.user_image_updated_at) : null,
+      });
+    }
+
+    parsedList.sort((a, b) => {
+      if (a.isToday && !b.isToday) return -1;
+      if (!a.isToday && b.isToday) return 1;
+      return a.daysUntil - b.daysUntil;
+    });
+
+    const today = parsedList.filter((x) => x.isToday);
+    const upcoming = parsedList.filter((x) => !x.isToday);
+
+    return {
+      companyId,
+      companyName: loggedUser?.company_name || null,
+      today,
+      upcoming,
+      all: parsedList,
+      todayCount: today.length,
+      upcomingCount: upcoming.length,
+    };
+  }
+
+  // Get employee birthday (today only - backward compatible)
+  async getTodayBirthdayEmployees(userId) {
+    try {
+      const bdays = await this.getCompanyBirthdays(userId);
+      return bdays.today;
+    } catch {
+      return [];
+    }
+
   }
 
   // Delete Customer — soft delete only. The account and its cart/wishlist/

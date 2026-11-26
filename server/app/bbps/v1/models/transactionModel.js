@@ -169,6 +169,8 @@ class TransactionModel {
         t.confirmation_mobile_no,
         t.sender_name,
         t.amount,
+        COALESCE((SELECT a.points FROM transaction_reward_awards a
+          WHERE a.module = 'bbps' AND a.reference_id = t.id), 0) AS reward_coins_earned,
         t.bbps_status,
         t.provider_client_ref_id,
         t.recharge_circle_id,

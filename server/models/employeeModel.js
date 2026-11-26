@@ -30,27 +30,99 @@ class EmployeeModel {
     return company;
   }
 
+  // Departments HR has configured, plus any free-text values already on employees
+  // (bulk upload, manager edits) so the dropdown never hides an existing value.
   async getDepartments(companyId) {
     const [rows] = await db.execute(
-      `SELECT TRIM(department) AS name, COUNT(*) AS employee_count
-       FROM company_users
-       WHERE company_id = ?
-         AND department IS NOT NULL
-         AND TRIM(department) != ''
-       GROUP BY TRIM(department)
-       ORDER BY name ASC`,
-      [companyId],
+      `SELECT d.name, MAX(cd.department_id) AS department_id, COUNT(cu.id) AS employee_count
+       FROM (
+         SELECT name FROM company_departments WHERE company_id = ?
+         UNION
+         SELECT TRIM(department)
+         FROM company_users
+         WHERE company_id = ? AND department IS NOT NULL AND TRIM(department) != ''
+       ) d
+       LEFT JOIN company_departments cd ON cd.company_id = ? AND cd.name = d.name
+       LEFT JOIN company_users cu ON cu.company_id = ? AND TRIM(cu.department) = d.name
+       GROUP BY d.name
+       ORDER BY d.name ASC`,
+      [companyId, companyId, companyId, companyId],
     );
     return rows.map((row) => ({
+      id: row.department_id ? Number(row.department_id) : null,
       name: row.name,
       employee_count: Number(row.employee_count),
     }));
   }
 
+  async findDepartmentByName(companyId, name) {
+    const [[department]] = await db.execute(
+      `SELECT department_id, name FROM company_departments WHERE company_id = ? AND name = ? LIMIT 1`,
+      [companyId, name],
+    );
+    return department;
+  }
+
+  async createDepartment(companyId, name, createdBy = null) {
+    const [result] = await db.execute(
+      `INSERT INTO company_departments (company_id, name, created_by) VALUES (?, ?, ?)`,
+      [companyId, name, createdBy],
+    );
+    return result.insertId;
+  }
+
+  // Renames the department and moves its employees along with it.
+  async renameDepartment(companyId, currentName, newName, createdBy = null) {
+    const connection = await db.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [updated] = await connection.execute(
+        `UPDATE company_departments SET name = ? WHERE company_id = ? AND name = ?`,
+        [newName, companyId, currentName],
+      );
+      if (!updated.affectedRows) {
+        await connection.execute(
+          `INSERT INTO company_departments (company_id, name, created_by) VALUES (?, ?, ?)`,
+          [companyId, newName, createdBy],
+        );
+      }
+      const [moved] = await connection.execute(
+        `UPDATE company_users SET department = ? WHERE company_id = ? AND TRIM(department) = ?`,
+        [newName, companyId, currentName],
+      );
+      await connection.commit();
+      return moved.affectedRows;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async countDepartmentEmployees(companyId, name) {
+    const [[row]] = await db.execute(
+      `SELECT COUNT(*) AS total FROM company_users WHERE company_id = ? AND TRIM(department) = ?`,
+      [companyId, name],
+    );
+    return Number(row.total);
+  }
+
+  async deleteDepartment(companyId, name) {
+    const [result] = await db.execute(
+      `DELETE FROM company_departments WHERE company_id = ? AND name = ?`,
+      [companyId, name],
+    );
+    return result.affectedRows;
+  }
+
+  // HR list status. 'pending' = employed but has not activated the app yet;
+  // queries using this must LEFT JOIN customer c.
   buildStatusExpression() {
     return `CASE
-      WHEN cu.status = 1 THEN 'active'
-      ELSE 'inactive'
+      WHEN cu.status != 1 THEN 'inactive'
+      WHEN c.user_id IS NULL THEN 'pending'
+      ELSE 'active'
     END`;
   }
 
@@ -336,30 +408,25 @@ class EmployeeModel {
     );
   }
 
-  async setStatus(employeeId, companyId, isActive, conn = db) {
-    const status = isActive ? 1 : 0;
-    const connection = conn === db ? await db.getConnection() : conn;
-    const ownsTransaction = conn === db;
+  // Employment status (company_users.status) is owned by company HR. It is kept
+  // separate from the app account status so each side can be traced to who
+  // changed it; login requires both to be active.
+  async setEmploymentStatus(employeeId, companyId, isActive, conn = db) {
+    await conn.execute(
+      `UPDATE company_users SET status = ? WHERE id = ? AND company_id = ?`,
+      [isActive ? 1 : 0, employeeId, companyId],
+    );
+  }
 
-    try {
-      if (ownsTransaction) await connection.beginTransaction();
-      await connection.execute(
-        `UPDATE company_users SET status = ? WHERE id = ? AND company_id = ?`,
-        [status, employeeId, companyId],
-      );
-      await connection.execute(
-        `UPDATE customer
-         SET status = ?
-         WHERE company_user_id = ? AND company_id = ?`,
-        [status, employeeId, companyId],
-      );
-      if (ownsTransaction) await connection.commit();
-    } catch (error) {
-      if (ownsTransaction) await connection.rollback();
-      throw error;
-    } finally {
-      if (ownsTransaction) connection.release();
-    }
+  // App account status (customer.status) is owned by the platform (RM).
+  // Activating also clears any pending self-deletion so the purge cron skips it.
+  async setAccountStatus(employeeId, companyId, isActive, conn = db) {
+    await conn.execute(
+      isActive
+        ? `UPDATE customer SET status = 1, deleted_at = NULL WHERE company_user_id = ? AND company_id = ?`
+        : `UPDATE customer SET status = 0 WHERE company_user_id = ? AND company_id = ?`,
+      [employeeId, companyId],
+    );
   }
 
   async getExportRows(companyId) {

@@ -3,6 +3,10 @@ const axios = require("axios");
 const db = require("../../config/database");
 const { notifyUser } = require("../../app/common/utils/notification");
 const { makeRefundKey } = require("./refundKey");
+const {
+  bypassRefundId,
+  isBypassPayment,
+} = require("../../app/ecommerce/v1/utils/paymentBypassPolicy");
 
 function getRazorpay() {
   return new Razorpay({
@@ -205,6 +209,11 @@ async function processRefund({
     }
 
     await conn.commit();
+
+    if (isBypassPayment(payment.razorpay_payment_id)) {
+      await completeRefund(refundId, { id: bypassRefundId(refundId) });
+      return { status: "completed", refundId };
+    }
 
     const refundResponse = await axios.post(
       `https://api.razorpay.com/v1/payments/${payment.razorpay_payment_id}/refund`,

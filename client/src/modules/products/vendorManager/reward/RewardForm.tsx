@@ -134,7 +134,7 @@ const RewardForm: React.FC = () => {
   return (
     <div className="order-page">
       <div className="form-container">
-        <h2 style={{ marginBottom: "24px", fontSize: "24px", color: "#111" }}>
+        <h2 className="mb-6 text-2xl font-semibold tracking-tight text-slate-900">
           {isEdit ? "Edit Reward Rule" : "Create Reward Rule"}
         </h2>
 

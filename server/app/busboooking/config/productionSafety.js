@@ -4,6 +4,7 @@ const PROVIDER_URL_KEYS = [
   "SRDV_BOARDING_DROPPING_URL",
   "SRDV_BLOCK_URL",
   "SRDV_BOOK_URL",
+  "SRDV_BOOKING_DETAILS_URL",
   "SRDV_CANCEL_URL",
   "SRDV_BALANCE_URL",
   "SRDV_BALANCE_LOG_URL",
@@ -12,7 +13,6 @@ const PROVIDER_URL_KEYS = [
 const REQUIRED_KEYS = [
   ...PROVIDER_URL_KEYS,
   "SRDV_API_TOKEN",
-  "SRDV_END_USER_IP",
   "RAZOR_API_KEY",
   "RAZOR_SECRET_KEY",
   "RAZORPAY_WEBHOOK_SECRET",
@@ -44,6 +44,10 @@ function getProductionConfigurationErrors(env) {
 
   if (/^rzp_test_/i.test(String(env.RAZOR_API_KEY || ""))) {
     errors.push("RAZOR_API_KEY must not be a Razorpay test key");
+  }
+
+  if (String(env.SRDV_EXCHANGE_LOG || "").toLowerCase() === "true") {
+    errors.push("SRDV_EXCHANGE_LOG must be disabled in production");
   }
 
   return errors;

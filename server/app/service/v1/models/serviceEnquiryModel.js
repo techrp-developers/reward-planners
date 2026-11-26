@@ -1,4 +1,5 @@
 const db = require("../../../../config/database");
+const {enquiryScope}=require('./managerWorkspaceModel');
 
 class ServiceEnquiryModel {
   async create(data) {
@@ -34,7 +35,7 @@ class ServiceEnquiryModel {
   }
 
   // All the Enquiries
-  async findAll() {
+  async findAll(inHouseOnly = false) {
     const [rows] = await db.execute(
       `
     SELECT
@@ -59,10 +60,11 @@ class ServiceEnquiryModel {
       sb.banner_image AS bundle_banner_image
 
     FROM service_enquiries se
-    JOIN services s ON s.id = se.service_id
+    LEFT JOIN services s ON s.id = se.service_id
     LEFT JOIN service_variants sv ON sv.id = se.variant_id
     LEFT JOIN service_bundles sb ON sb.id = se.bundle_id
 
+    ${inHouseOnly ? `WHERE ${enquiryScope('se')}` : ''}
     ORDER BY se.created_at DESC
     `,
     );
@@ -104,7 +106,7 @@ class ServiceEnquiryModel {
       sb.description AS bundle_description,
       sb.banner_image AS bundle_banner_image
     FROM service_enquiries se
-    JOIN services s ON s.id = se.service_id
+    LEFT JOIN services s ON s.id = se.service_id
     LEFT JOIN service_variants sv ON sv.id = se.variant_id
     LEFT JOIN service_bundles sb ON sb.id = se.bundle_id
     WHERE se.id = ?

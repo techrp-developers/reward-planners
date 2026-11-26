@@ -18,6 +18,7 @@ export const routes = {
     },
     orders:{
       summary: "/vendor/orders/summary",
+      returns: "/vendor/orders/returns",
       details: "/vendor/orders/details/:orderId",
     },
     reports: {
@@ -29,6 +30,7 @@ export const routes = {
     fleaMarketPurchases: "/vendor/flea-market/purchases",
   },
    manager: {
+    corporateGifting: "/manager/corporate-gifting",
     dashboard: "/manager/dashboard",
     changePassword: "/manager/change-password",
     profile: "/manager/profile",
@@ -43,13 +45,24 @@ export const routes = {
     linkDocument:"/manager/document/DocumentCategory",
     attributes: "/manager/attributes",
     bbpsLogos: "/manager/bbps-logos",
+    posters: {
+      list: "/manager/posters",
+      create: "/manager/posters/create",
+      edit: "/manager/posters/:id",
+    },
     flashSales: {
       list: "/manager/flash-sales",
       create: "/manager/flash-sales/create",
       edit: "/manager/flash-sales/:id",
     },
+    featuredProducts: {
+      list: "/manager/featured-products",
+      create: "/manager/featured-products/create",
+      edit: "/manager/featured-products/:id",
+    },
     orders:{
       orderList: "/manager/orders",
+      returns: "/manager/orders/returns",
       details: "/manager/order-view/:orderId",
       cancellationRequest: "/manager/cancellation-request",
       cancellationDetail: "/manager/cancellation-detail/:orderId",
@@ -67,6 +80,7 @@ export const routes = {
       orders: "/manager/reports/orders",
     },
     rewards:{
+      transactionRanges:"/manager/transaction-rewards",
       rewardRule:"/manager/rewards-rule",
       create:"/manager/reward-create",
       edit:"/manager/reward-edit/:id",
@@ -139,6 +153,7 @@ export const routes = {
     },
   },
   hr: {
+    corporateGifting: "/hr/corporate-gifting",
     dashboard: "/hr/dashboard",
     changePassword: "/hr/change-password",
     profile: "/hr/profile",
@@ -146,9 +161,15 @@ export const routes = {
     employees: "/hr/employees",
     rewards: "/hr/rewards",
     polls: "/hr/polls",
-
+    departments: "/hr/departments",
   },
   service: {
+    inHouse: '/service/in-house',
+    pricing: '/service/pricing',
+    rewards: '/service/rewards',
+    activity: '/service/activity',
+    classification: '/service/classification',
+    partners: '/service/partners/:section',
     dashboard: "/service/dashboard",
     profile: "/service/profile",
     changePassword: "/service/change-password",
@@ -177,6 +198,7 @@ export const routes = {
     settings: "/service/settings",
   },
   rm: {
+    promotions: "/rm/promotions",
     dashboard: "/rm/dashboard",
     changePassword: "/rm/change-password",
     profile: "/rm/profile",
@@ -187,6 +209,7 @@ export const routes = {
     notifications: "/rm/notifications",
     reports: {
       usage: "/rm/reports/usage",
+      usageUsers: "/rm/reports/usage/:module",
       inactiveUsers: "/rm/reports/inactive-users",
     },
   },

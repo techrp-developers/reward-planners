@@ -48,12 +48,46 @@ async function sendTemplateMessage({
       },
       timeout: 15000,
     });
+    if (res.data?.result !== true) {
+      const error = new Error("INTERAKT_MESSAGE_REJECTED");
+      error.code = "INTERAKT_MESSAGE_REJECTED";
+      throw error;
+    }
     return res.data;
   } catch (err) {
-    console.log("❌ Interakt request failed:", JSON.stringify(payload));
-    console.log("❌ Interakt error response:", err.response?.status, err.response?.data);
+    // Never log the request body: authentication templates contain live OTPs.
+    console.error("Interakt template request failed", {
+      status: err.response?.status,
+      code: err.code,
+      templateName,
+    });
     throw err;
   }
 }
 
-module.exports = { sendTemplateMessage };
+async function sendTextMessage({ phone, message, callbackData }) {
+  const fullPhoneNumber = normalizeIndianMobile(phone);
+  if (!fullPhoneNumber) throw new Error("INTERAKT_PHONE_INVALID");
+  if (!process.env.INTERAKT_API_KEY || !process.env.INTERAKT_BASE_URL) {
+    throw new Error("INTERAKT_CONFIG_MISSING");
+  }
+  // Same recipient shape as sendTemplateMessage, which is proven against this Interakt account.
+  const { data } = await axios.post(process.env.INTERAKT_BASE_URL, {
+    countryCode: "+91",
+    phoneNumber: fullPhoneNumber.slice(3),
+    ...(callbackData ? { callbackData } : {}),
+    type: "Text",
+    data: { message },
+  }, {
+    headers: { Authorization: `Basic ${process.env.INTERAKT_API_KEY}`, "Content-Type": "application/json" },
+    timeout: 15000,
+  });
+  if (data?.result !== true) {
+    const error = new Error("INTERAKT_MESSAGE_REJECTED");
+    error.providerData = data;
+    throw error;
+  }
+  return data;
+}
+
+module.exports = { sendTemplateMessage, sendTextMessage };

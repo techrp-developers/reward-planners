@@ -374,28 +374,13 @@ const ProductRewardMapping = () => {
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       {/* ── PAGE HEADER ── */}
-      <div
-        className="flex items-center justify-between p-5 rounded-2xl"
-        style={{
-          background: "linear-gradient(135deg, rgba(133,43,175,0.06) 0%, rgba(252,63,120,0.04) 100%)",
-          border: "1px solid rgba(133,43,175,0.1)",
-        }}
-      >
-        <div className="flex items-center gap-4">
-          <div
-            className="w-11 h-11 rounded-2xl flex items-center justify-center text-white shrink-0"
-            style={{
-              background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
-              boxShadow: "0 6px 20px rgba(133,43,175,0.25)",
-            }}
-          >
-            <FiGift size={20} />
-          </div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
           <div>
-            <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
               Reward <span className="gradient-text-brand">Mapping</span>
             </h1>
-            <p className="text-xs text-gray-500 font-medium mt-0.5">
+            <p className="mt-1 text-sm text-slate-500">
               Map reward rules to products, variants, categories, or globally
             </p>
           </div>
@@ -554,7 +539,7 @@ const ProductRewardMapping = () => {
           <button
             type="submit"
             className="flex items-center gap-2 px-6 py-3 text-sm font-bold text-white rounded-xl cursor-pointer transition-all hover:opacity-90 active:scale-[0.98]"
-            style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }}
+            style={{ background: "linear-gradient(90deg, #852BAF 60%, #C13A8E 100%)" }}
           >
             {editingId ? <FiEdit2 size={14} /> : <FiPlus size={14} />}
             {editingId ? "Update Existing Mapping" : "Create Mapping"}
@@ -570,7 +555,7 @@ const ProductRewardMapping = () => {
         <div className="overflow-x-auto">
           <table className="min-w-full">
             <thead>
-              <tr style={{ background: "linear-gradient(90deg, rgba(133,43,175,0.04) 0%, rgba(252,63,120,0.02) 100%)" }}>
+              <tr>
                 {["Target", "Details", "Rule", "Earn", "Redeem", "Actions"].map((h) => (
                   <th
                     key={h}

@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { FiEdit2, FiRefreshCw, FiSearch } from "react-icons/fi";
-import { notificationApi, type AttemptRow, type RecipientRow, type TestDeviceUser } from "../notificationApi";
-import TestDevicePicker, { type TestTarget } from "./TestDevicePicker";
+import { notificationApi, type AttemptRow, type RecipientRow } from "../notificationApi";
 import type { Campaign, CampaignDiagnostics, DiagnosticState, Language, ManagerMeta } from "../notificationTypes";
 import { Card, EmptyState, LanguageTabs, Metric, Modal, Notice, NotificationPreviews, Pagination, Spinner, StatusPill, Tag, dangerBtn, inputCls, labelCls, primaryBtn, secondaryBtn } from "../components";
-import { AUDIENCE_LABELS, LANGUAGE_LABELS, SKIP_REASON_LABELS, SCHEDULER_OFF_MESSAGE, apiErrorMessage, campaignActions, defaultTestTarget, displayStatus, firebaseUnavailableText, formatInZone, sendNowBlockedReason, toNumber, toZonedInputs, waitingNote } from "../notificationUtils";
+import { AUDIENCE_LABELS, LANGUAGE_LABELS, SKIP_REASON_LABELS, SCHEDULER_OFF_MESSAGE, apiErrorMessage, campaignActions, displayStatus, firebaseUnavailableText, formatInZone, sendNowBlockedReason, toNumber, toZonedInputs, waitingNote } from "../notificationUtils";
 import { confirmDialog } from "../../../../common/utils/confirmDialog";
 import type { TabNavigation } from "../NotificationManager";
 
@@ -132,17 +131,7 @@ function CampaignDetail({ meta, nav, campaignId, onClose, onChanged }: { meta: M
   const [recipientPage, setRecipientPage] = useState(1);
   const [attempts, setAttempts] = useState<{ available: boolean; rows: AttemptRow[] } | null>(null);
   const [sectionError, setSectionError] = useState("");
-  const [testUsers, setTestUsers] = useState<TestDeviceUser[] | null>(null);
-  const [testTarget, setTestTarget] = useState<TestTarget>(null);
-  const [testDevicesError, setTestDevicesError] = useState("");
-  useEffect(() => {
-    if (!meta.testUsers.length) return undefined;
-    let active = true;
-    notificationApi.testDevices()
-      .then((users) => { if (!active) return; setTestUsers(users); setTestTarget(defaultTestTarget(users)); setTestDevicesError(""); })
-      .catch((error) => { if (active) { setTestUsers([]); setTestDevicesError(apiErrorMessage(error)); } });
-    return () => { active = false; };
-  }, [meta.testUsers.length]);
+
 
   const load = useCallback(() => {
     notificationApi.campaign(campaignId).then((result) => {
@@ -237,7 +226,7 @@ function CampaignDetail({ meta, nav, campaignId, onClose, onChanged }: { meta: M
           <Notice tone="red">{SCHEDULER_OFF_MESSAGE} {meta.scheduler?.reason || "The campaign worker does not run on this server."} This campaign will not be sent from here. Open "Delivery check" for details.</Notice>
         )}
         {campaign.rejection_reason && <Notice tone="red">{campaign.status === "rejected" ? "Rejected: " : ""}{campaign.rejection_reason}</Notice>}
-        {displayStatus(campaign, Boolean(meta.scheduler?.running)) === "draft_expired" && <Notice>This draft has expired, so it can no longer be edited, tested or sent. Create a new campaign instead.</Notice>}
+        {displayStatus(campaign, Boolean(meta.scheduler?.running)) === "draft_expired" && <Notice>This draft has expired, so it can no longer be edited or sent. Create a new campaign instead.</Notice>}
         {(campaign.warnings || []).map((warning) => <Notice key={warning}>{warning}</Notice>)}
 
         <div className="flex gap-1 border-b border-gray-100">
@@ -319,10 +308,7 @@ function CampaignDetail({ meta, nav, campaignId, onClose, onChanged }: { meta: M
 
               <div className="flex flex-wrap gap-2">
                 {actions.edit && <button type="button" className={secondaryBtn} onClick={() => { onClose(); nav.go("compose", { campaign: String(campaign.campaign_id) }); }}><FiEdit2 /> Edit</button>}
-                {actions.test && meta.testUsers.length > 0 && <div className="w-full"><TestDevicePicker users={testUsers} value={testTarget} onChange={setTestTarget} disabled={busy} error={testDevicesError} /></div>}
-                {actions.test && <button type="button" className={secondaryBtn} disabled={busy || !meta.firebase.enabled || !meta.testUsers.length || !testTarget}
-                  title={!meta.firebase.enabled ? firebaseUnavailableText(meta.firebase) : !meta.testUsers.length ? "No test users are configured" : !testTarget ? "Choose the test device" : "One test to the chosen device only"}
-                  onClick={() => testTarget && run("Test accepted by Firebase. Check the test phone.", () => notificationApi.testCampaign(campaign.campaign_id, { user_id: testTarget.userId, device_id: testTarget.deviceId }))}>Send test</button>}
+
                 {actions.retry && <button type="button" className={secondaryBtn} disabled={busy || !meta.firebase.enabled} onClick={() => run("Retryable failures were queued again.", () => notificationApi.retryCampaign(campaign.campaign_id))}>Retry failed</button>}
                 {actions.cancel && <button type="button" className={dangerBtn} disabled={busy} onClick={async () => {
                   const ok = await confirmDialog({ title: "Cancel this campaign?", text: "Unsent notifications are cancelled. Messages already sent cannot be recalled.", confirmButtonText: "Cancel campaign" });

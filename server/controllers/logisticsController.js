@@ -1,5 +1,5 @@
 const db = require("../config/database");
-const xpressService = require("../services/ExpressBees/xpressbees_service");
+const courierService = require("../services/courier/courierService");
 
 class LogisticsController {
   // Resolve NDR
@@ -29,7 +29,7 @@ class LogisticsController {
       //   "notes": "Customer confirmed availability"
       // }
 
-      await xpressService.resolveNDR({
+      await courierService.resolveNDR({
         shipmentId,
         action,
         new_address_id,

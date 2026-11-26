@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FiPlus, FiTrash2, FiEye, FiX, FiFileText } from "react-icons/fi";
+import { FiPlus, FiTrash2, FiEye, FiX } from "react-icons/fi";
 import Swal from "sweetalert2";
 // const API_BASE = import.meta.env.VITE_API_URL;
 import { api } from "../../../../common/api/api";
@@ -204,10 +204,8 @@ const handleAdd = async () => {
         UI
   ========================= */
   return (
-    <div className="min-h-screen p-6 bg-gray-50">
-      <h1 className="flex items-center gap-2 mb-6 text-3xl font-bold text-purple-700">
-        <FiFileText /> Document Management
-      </h1>
+    <div className="w-full pb-8">
+      <h1 className="mb-6 text-2xl font-semibold tracking-tight text-slate-900">Document Management</h1>
 
       {/* ADD SECTION */}
      <div className="flex flex-col gap-4 p-6 bg-white shadow rounded-xl md:flex-row md:items-center md:gap-6">

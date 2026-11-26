@@ -23,9 +23,12 @@ require.cache[dbPath] = { id: dbPath, filename: dbPath, loaded: true, exports: {
 } };
 const model = require('../models/campaignModel');
 
-test('custom prices can exceed normal sale price; invalid prices and quantities are rejected', async () => {
-  await model.updateCampaignItem(1, 2, 125.50, 5);
-  assert.deepEqual(saved, [125.50, 5, 1, 2]);
+test('flash price must be below the normal price; invalid prices and quantities are rejected', async () => {
+  await model.updateCampaignItem(1, 2, 75.50, 5);
+  assert.deepEqual(saved, [75.50, 5, 1, 2]);
+  for (const price of [100, 125.50]) {
+    await assert.rejects(model.updateCampaignItem(1, 2, price, 5), /below the normal price/);
+  }
   for (const price of [0, -1, Infinity, 'invalid']) {
     await assert.rejects(model.updateCampaignItem(1, 2, price, 5), /positive number/);
   }

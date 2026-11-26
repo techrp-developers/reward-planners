@@ -14,6 +14,7 @@ const {
   calculateRedeemableCoins,
 } = require("../utils/rewardCalculate");
 const { getOfferCandidates, pickOffer } = require("../utils/activeOffers");
+const { resolveModuleContent } = require("../../../common/controller/cmsController");
 
 async function addWishlistStatus(products, userId) {
   products.forEach((product) => {
@@ -90,6 +91,7 @@ async function presentProducts(products, userId) {
 
         image: getPublicUrl(image_url, image_updated_at),
 
+        final_price: salePrice,
         price: `₹${salePrice.toFixed(2)}`,
         originalPrice: mrp ? `₹${mrp.toFixed(2)}` : null,
 
@@ -115,13 +117,98 @@ async function presentProducts(products, userId) {
 
 class CampaignController {
   // ========================================user==========================================
-  async getHomeCampaigns(req, res) {
+  async getActiveFeaturedCampaign(req, res) {
     try {
-      const data = await CampaignModel.getHomeCampaigns();
+      const campaign = await CampaignModel.getActiveFeaturedCampaign();
+      if (!campaign) return res.json({ success: true, data: null });
+
+      const result = await CampaignModel.getPublicFeaturedProducts(
+        campaign.campaign_id,
+        1,
+        10,
+      );
+      const ratedProducts = result.products.map((product) => ({
+        ...product,
+        rating: Number(product.total_reviews) > 0
+          ? Number(product.avg_rating).toFixed(1)
+          : null,
+        reviews: Number(product.total_reviews),
+      }));
+      const products = await presentProducts(ratedProducts, req.user?.user_id);
 
       return res.json({
         success: true,
-        data,
+        data: {
+          ...campaign,
+          campaign_type: "featured",
+          total_products: result.pagination.total,
+          products,
+        },
+      });
+    } catch (err) {
+      return res.status(err.statusCode || 500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  async getPublicFeaturedProducts(req, res) {
+    const campaignId = String(req.params.id || "");
+    const pageValue = req.query.page === undefined ? "1" : String(req.query.page);
+    const limitValue = req.query.limit === undefined ? "20" : String(req.query.limit);
+    if (!/^[1-9]\d*$/.test(campaignId) || !/^[1-9]\d*$/.test(pageValue) || !/^[1-9]\d*$/.test(limitValue)) {
+      return res.status(400).json({
+        success: false,
+        message: "Campaign ID, page, and limit must be positive integers",
+      });
+    }
+    const page = Number(pageValue);
+    const limit = Number(limitValue);
+    if (!Number.isSafeInteger(page) || !Number.isSafeInteger(limit) || limit > 100) {
+      return res.status(400).json({
+        success: false,
+        message: "Page must be a safe integer and limit must be between 1 and 100",
+      });
+    }
+
+    try {
+      const result = await CampaignModel.getPublicFeaturedProducts(campaignId, page, limit);
+      const ratedProducts = result.products.map((product) => ({
+        ...product,
+        rating: Number(product.total_reviews) > 0
+          ? Number(product.avg_rating).toFixed(1)
+          : null,
+        reviews: Number(product.total_reviews),
+      }));
+      const products = await presentProducts(ratedProducts, req.user?.user_id);
+      return res.json({
+        success: true,
+        data: {
+          campaign_id: result.campaign_id,
+          title: result.title,
+          products,
+          pagination: result.pagination,
+        },
+      });
+    } catch (err) {
+      return res.status(err.statusCode || 500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  }
+
+  async getHomeCampaigns(req, res) {
+    try {
+      const [data, content] = await Promise.all([
+        CampaignModel.getHomeCampaigns("product"),
+        resolveModuleContent("product"),
+      ]);
+
+      return res.json({
+        success: true,
+        data: { ...data, content },
       });
     } catch (err) {
       return res.status(err.statusCode || 500).json({
@@ -133,7 +220,7 @@ class CampaignController {
 
   async getUserCampaigns(req, res) {
     try {
-      const campaigns = await CampaignModel.getUserCampaigns(req.query);
+      const campaigns = await CampaignModel.getUserCampaigns({ ...req.query, module: "product" });
 
       return res.json({
         success: true,
@@ -150,7 +237,7 @@ class CampaignController {
 
   async getUserCampaignById(req, res) {
     try {
-      const campaign = await CampaignModel.getUserCampaignById(req.params.id);
+      const campaign = await CampaignModel.getUserCampaignById(req.params.id, "product");
 
       return res.json({
         success: true,
@@ -166,7 +253,7 @@ class CampaignController {
 
   async getCampaignProducts(req, res) {
     try {
-      const data = await presentProducts(await CampaignModel.getCampaignProducts(req.params.id), req.user?.user_id);
+      const data = await presentProducts(await CampaignModel.getCampaignProducts(req.params.id, req.query), req.user?.user_id);
       return res.json({
         success: true,
         count: data.length,

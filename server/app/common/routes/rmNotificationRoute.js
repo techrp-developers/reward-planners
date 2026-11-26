@@ -23,7 +23,6 @@ const perUser = (limit, message) => rateLimit({
 
 router.use(perUser(240, "Too many requests. Please slow down."));
 const writeLimit = perUser(30, "Too many changes in a minute. Please wait and try again.");
-const testLimit = perUser(5, "Test sends are limited to 5 per minute.");
 
 const bind = (name) => controller[name].bind(controller);
 
@@ -72,8 +71,6 @@ router.get("/campaigns", bind("listCampaigns"));
 router.post("/campaigns", writeLimit, bind("createCampaign"));
 router.get("/campaigns/:id", bind("getCampaign"));
 router.put("/campaigns/:id", writeLimit, bind("updateCampaign"));
-router.get("/test-devices", bind("testDevices"));
-router.post("/campaigns/:id/test", testLimit, bind("testCampaign"));
 // Direct sending (no approval step): Send Now / Schedule / reschedule.
 router.post("/campaigns/:id/send", writeLimit, bind("sendCampaign"));
 router.post("/campaigns/:id/schedule", writeLimit, (req, res) => {

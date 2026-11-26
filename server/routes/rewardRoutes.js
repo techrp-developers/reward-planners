@@ -2,6 +2,9 @@ const express = require("express");
 const router = express.Router();
 const RewardController = require("../controllers/rewardController");
 const { authenticateToken, authorizeRoles } = require("../middleware/auth");
+const transactionRewards = require("../controllers/transactionRewardController");
+router.get("/transaction-ranges/:module", authenticateToken, authorizeRoles("vendor_manager", "admin"), transactionRewards.get);
+router.put("/transaction-ranges/:module", authenticateToken, authorizeRoles("vendor_manager", "admin"), transactionRewards.save);
 
 // ===================================================Reward Rules===================================
 // CREATE RULES

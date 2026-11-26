@@ -1,6 +1,6 @@
 const orderModel = require("../models/orderModel");
 const db = require("../config/database");
-const xpressService = require("../services/ExpressBees/xpressbees_service");
+const courierService = require("../services/courier/courierService");
 const ServiceOrderModel = require("../app/service/v1/models/serviceOrderModel");
 const { sendOpsAlert } = require("../services/alertService");
 const EcommerceRefundService = require("../services/Razorpay/ecommerceRefundService");
@@ -32,10 +32,13 @@ function getCourierErrorMessage(result) {
     }
     return String(value);
   };
-  return pick(result?.error) || pick(result?.message) || pick(result?.data) || "XpressBees rejected the cancellation";
+  return pick(result?.error) || pick(result?.message) || pick(result?.data) || "Courier rejected the cancellation";
 }
 
 function getServiceCancellationError(error) {
+  if (/^(SERVICE_|INVALID_SERVICE_)/.test(error.code || '') && [400,409,503].includes(error.status)) {
+    return {status:error.status,message:error.message};
+  }
   const errors = {
     CANCELLATION_REQUEST_NOT_FOUND: [404, "Cancellation request not found"],
     INVALID_CANCELLATION_STATE: [409, "Cancellation request has already been decided"],
@@ -298,7 +301,7 @@ class OrderController {
         for (const shipment of refundData.cancellableShipments) {
           try {
             const cancelResult =
-              await xpressService.cancelShipmentExpressBees(
+              await courierService.cancelAtCourier(
                 shipment.awb_number,
               );
             if (!cancelResult?.status) {
@@ -509,7 +512,7 @@ class OrderController {
           orderItemId,
         );
       let courierCancellationConfirmed = false;
-      // Ops sometimes cancel the AWB directly in the XpressBees panel; the
+      // Ops sometimes cancel the AWB directly in the courier panel; the
       // courier API then answers "Unable to cancel". The manager confirms the
       // manual cancellation so the refund can proceed, and it is audited.
       const courierCancelledManually =
@@ -525,15 +528,15 @@ class OrderController {
         };
       } else if (candidate.requiresCourierCancellation) {
         const courierResult =
-          await xpressService.cancelShipmentExpressBees(
+          await courierService.cancelAtCourier(
             candidate.awb_number,
           );
         const reason = getCourierErrorMessage(courierResult);
-        // A shipment already cancelled at XpressBees is the outcome we need,
+        // A shipment already cancelled at the courier is the outcome we need,
         // so it must not block the refund forever.
         if (!courierResult?.status && !/already\s+cancel/i.test(reason)) {
           const error = new Error("COURIER_CANCELLATION_FAILED");
-          error.cause = `XpressBees: ${reason}`;
+          error.cause = `Courier: ${reason}`;
           throw error;
         }
         courierCancellationConfirmed = true;
@@ -627,13 +630,13 @@ class OrderController {
         ],
         COURIER_CANCELLATION_REQUIRED: [
           409,
-          "XpressBees cancellation must complete before approving the refund",
+          "Courier cancellation must complete before approving the refund",
         ],
         // Not 502: Cloudflare replaces origin 502s with its own error page,
         // which hides this message from the manager.
         COURIER_CANCELLATION_FAILED: [
           409,
-          `${error.cause || "XpressBees could not cancel this shipment"}. No refund was started.`,
+          `${error.cause || "Courier could not cancel this shipment"}. No refund was started.`,
         ],
       };
       const [status, message] = errors[error.message] || [
@@ -693,6 +696,7 @@ class OrderController {
       const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
       const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 20));
       const data = await ServiceOrderModel.getServiceCancellationRequests({
+        inHouseOnly: req.inHouseOnly === true,
         status: req.query.status || null,
         page,
         limit,
@@ -745,6 +749,7 @@ class OrderController {
       const refundData = await ServiceOrderModel.approveCancellation(
         serviceOrderId,
         conn,
+        req.inHouseOnly ? req.user.user_id : null,
       );
 
       await conn.commit();
@@ -859,7 +864,7 @@ class OrderController {
         throw new Error("INVALID_CANCELLATION_STATE");
       }
 
-      refundData = await ServiceOrderModel.approveCancellation(serviceOrderId, conn);
+      refundData = await ServiceOrderModel.approveCancellation(serviceOrderId, conn, req.inHouseOnly ? req.user.user_id : null);
       await conn.commit();
 
       notifyUser({
@@ -906,7 +911,7 @@ class OrderController {
         return res.status(400).json({ success: false, message: "Invalid service order id" });
       }
 
-      const rejection = await ServiceOrderModel.rejectCancellation(serviceOrderId, conn);
+      const rejection = await ServiceOrderModel.rejectCancellation(serviceOrderId, conn, req.inHouseOnly ? req.user.user_id : null);
 
       await conn.commit();
 

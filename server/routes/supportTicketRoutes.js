@@ -4,6 +4,9 @@ const { authenticateToken, authorizeRoles } = require("../middleware/auth");
 const SupportController = require("../app/common/controller/supportController");
 
 const guard = [authenticateToken, authorizeRoles("admin", "rm")];
+const { listWebsiteEnquiries } = require("../controllers/websiteEnquiryController");
+
+router.get("/website-enquiries", ...guard, listWebsiteEnquiries);
 
 // list every support ticket, across all customers
 router.get("/support-tickets", ...guard, SupportController.getAllTickets);

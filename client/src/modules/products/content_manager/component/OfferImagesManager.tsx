@@ -139,7 +139,7 @@ export default function OfferImagesManager({ module = "product", contentId, imag
         {sorted.map((image, index) => (
           <div key={image.imageId ?? image.imageUrl} className="w-32 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white">
             <OfferImageThumb image={image} order={index + 1} zone={zone} />
-            {(module === "product" || module === "service") && <button type="button" disabled={busy || image.imageId == null} onClick={() => setEditingImageId(image.imageId)} className="w-full px-1 py-2 text-xs font-semibold text-purple-700">{image.targetType ? "Edit destination" : "Set destination"}</button>}
+            {(module === "product" || module === "service" || module === "mobile_dashboard") && <button type="button" disabled={busy || image.imageId == null} onClick={() => setEditingImageId(image.imageId)} className="w-full px-1 py-2 text-xs font-semibold text-purple-700">{image.targetType ? "Edit destination" : "Set destination"}</button>}
             {image.isActive === false && <p className="text-center text-xs text-slate-500">Inactive</p>}
             {allowActivation && <button type="button" disabled={busy || image.imageId == null} className="w-full py-1 text-xs font-semibold" onClick={async () => {
               if (image.imageId == null) return;
@@ -204,12 +204,12 @@ export default function OfferImagesManager({ module = "product", contentId, imag
           />
         </label>
       </div>
-      {editingImage && (module === "product" || module === "service") && <ImageDestinationEditor key={editingImage.imageId} image={editingImage} module={module} contentId={contentId} onCancel={() => setEditingImageId(null)} onSaved={(updated) => { onChange(images.map(image => image.imageId === updated.imageId ? updated : image)); setEditingImageId(null); }} />}
+      {editingImage && (module === "product" || module === "service" || module === "mobile_dashboard") && <ImageDestinationEditor key={editingImage.imageId} image={editingImage} module={module} contentId={contentId} onCancel={() => setEditingImageId(null)} onSaved={(updated) => { onChange(images.map(image => image.imageId === updated.imageId ? updated : image)); setEditingImageId(null); }} />}
     </div>
   );
 }
 
-function ImageDestinationEditor({ image, module, contentId, onSaved, onCancel }: { image: ContentZoneImage; module: "product" | "service"; contentId: number; onSaved: (image: ContentZoneImage) => void; onCancel: () => void }) {
+function ImageDestinationEditor({ image, module, contentId, onSaved, onCancel }: { image: ContentZoneImage; module: "product" | "service" | "mobile_dashboard"; contentId: number; onSaved: (image: ContentZoneImage) => void; onCancel: () => void }) {
   const [type, setType] = useState<ContentTargetType | "">(image.targetType || "");
   const [id, setId] = useState<number | null>(image.targetId ?? null);
   const [ids, setIds] = useState<number[]>(image.targetIds?.length ? image.targetIds : image.targetId ? [image.targetId] : []);

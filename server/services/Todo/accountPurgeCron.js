@@ -17,7 +17,9 @@ async function purgeExpiredDeletedAccounts() {
       `SELECT user_id FROM customer
        WHERE status = 0
          AND deleted_at IS NOT NULL
-         AND deleted_at <= DATE_SUB(NOW(), INTERVAL ? DAY)`,
+         AND deleted_at <= DATE_SUB(NOW(), INTERVAL ? DAY)
+         AND NOT EXISTS (SELECT 1 FROM service_orders so WHERE so.user_id=customer.user_id)`,
+      // Financial service history needs an approved retention/reconciliation path;
       [GRACE_PERIOD_DAYS],
     );
 

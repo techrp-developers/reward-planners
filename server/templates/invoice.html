@@ -55,14 +55,15 @@ padding-bottom:30px;
 .company-logo{
 display:block;
 width:180px;
-height:60px;
+height:82px;
 flex-shrink:0;
 margin-bottom:10px;
 }
-.company-logo svg{
+.company-logo img{
 display:block;
 width:100%;
 height:100%;
+object-fit:contain;
 }
 
 .invoice-label h1{
@@ -236,7 +237,7 @@ Payment: Prepaid
 </p>
 
 <div class="logistics-badge" style="margin-top:10px">
-Logistics by XPRESSBEES
+Shipped by our logistics partner
 </div>
 </div>
 
@@ -293,7 +294,7 @@ Logistics by XPRESSBEES
 
 <div class="disclaimer">
 This invoice is issued on behalf of the Vendor mentioned above. Any returns or warranty claims should be initiated via the MyStore App quoting the Order ID. <br>
-<strong>Express Logistics:</strong> Track your shipment using the AWB number provided in your dashboard.
+<strong>Delivery partner: {{delivery_partner}}</strong><br>Track your shipment using the AWB number provided in your dashboard. Check the dashboard for the latest delivery partner if shipment arrangements change.
 </div>
 
 </div>

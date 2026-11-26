@@ -1,3 +1,4 @@
+const M=require('./serviceMoney');
 function positiveMoney(value) {
   const amount = Number(value || 0);
   return Number.isFinite(amount) && amount > 0 ? amount : 0;
@@ -10,8 +11,8 @@ function calculateServiceRewards(price, variant = {}) {
   if (Number(variant.can_earn_reward) === 1) {
     earnCoins =
       variant.earn_reward_type === "percentage"
-        ? (amount * positiveMoney(variant.earn_reward_value)) / 100
-        : positiveMoney(variant.earn_reward_value);
+        ? M.percentageCoins(price,variant.earn_reward_value||0)
+        : Number(M.paise(variant.earn_reward_value||0)/100n);
 
     const cap = positiveMoney(variant.max_earn_reward);
     if (cap) earnCoins = Math.min(earnCoins, cap);
@@ -21,16 +22,16 @@ function calculateServiceRewards(price, variant = {}) {
   if (Number(variant.can_redeem_reward) === 1) {
     maxRedeemCoins =
       variant.redemption_type === "percentage"
-        ? (amount * positiveMoney(variant.redemption_value)) / 100
-        : positiveMoney(variant.redemption_value);
+        ? M.percentageCoins(price,variant.redemption_value||0)
+        : Number(M.paise(variant.redemption_value||0)/100n);
 
     const cap = positiveMoney(variant.max_redemption_amount);
     if (cap) maxRedeemCoins = Math.min(maxRedeemCoins, cap);
     maxRedeemCoins = Math.min(maxRedeemCoins, amount);
   }
 
-  earnCoins = Math.floor(earnCoins);
-  maxRedeemCoins = Math.floor(maxRedeemCoins);
+  earnCoins = M.coins(Math.floor(earnCoins));
+  maxRedeemCoins = M.coins(Math.floor(maxRedeemCoins));
 
   return {
     can_earn: earnCoins > 0,
@@ -49,8 +50,8 @@ function attachServiceRewards(item) {
 }
 
 function allocateRedeemedCoins(items, requestedCoins, walletBalance) {
-  const requested = Math.max(0, Math.floor(Number(requestedCoins || 0)));
-  const available = Math.max(0, Math.floor(Number(walletBalance || 0)));
+  const requested = M.coins(requestedCoins||0);
+  const available = M.coins(walletBalance||0);
   const maximum = items.reduce(
     (sum, item) => sum + Number(item.rewards?.max_redeem_coins || 0),
     0,
@@ -61,7 +62,7 @@ function allocateRedeemedCoins(items, requestedCoins, walletBalance) {
     const limit = Number(item.rewards?.max_redeem_coins || 0);
     const coins = Math.min(remaining, limit);
     remaining -= coins;
-    return { ...item, redeem_coins: coins, final_price: Number(item.price) - coins };
+    return { ...item, redeem_coins: coins, final_price: Number(M.payable(item.price,coins)) };
   });
 
   return {
@@ -74,7 +75,7 @@ function allocateRedeemedCoins(items, requestedCoins, walletBalance) {
 }
 
 async function creditCompletedServiceReward(db, orderId) {
-  const { addWalletAdjustment } = require("../../../../services/rewards/ecommerceWalletService");
+  const { creditServiceCoins } = require("../../../../services/rewards/serviceLedger");
   const conn = await db.getConnection();
   try {
     await conn.beginTransaction();
@@ -89,9 +90,9 @@ async function creditCompletedServiceReward(db, orderId) {
       return false;
     }
 
-    const credited = await addWalletAdjustment(conn, {
+    const credited = await creditServiceCoins(conn, {
       userId: order.user_id,
-      coins: order.reward_coins_earned,
+      amount: order.reward_coins_earned,
       orderId: order.id,
       referenceId: order.id,
       transactionType: "credit",

@@ -16,7 +16,7 @@ import {
   FaFilePdf,
   FaClock,
 } from "react-icons/fa";
-import { FiChevronLeft, FiShield } from "react-icons/fi";
+import { FiChevronLeft } from "react-icons/fi";
 import Swal from "sweetalert2";
 import { api } from "../../../common/api/api";
 import { SERVER_CONFIG } from "../../../common/config/serverConfig";
@@ -265,7 +265,7 @@ const SectionHeader = ({
   <div className="flex items-center gap-3 mb-5 pb-3" style={{ borderBottom: "1px solid rgba(133,43,175,0.1)" }}>
     <div
       className="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0"
-      style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)" }}
+      style={{ background: "linear-gradient(90deg, #852BAF 60%, #C13A8E 100%)" }}
     >
       <Icon size={16} />
     </div>
@@ -433,29 +433,14 @@ export default function VendorApprovalForm() {
     <div className="max-w-7xl mx-auto space-y-6">
 
       {/* ── PAGE HEADER ── */}
-      <div
-        className="flex items-center justify-between p-5 rounded-2xl"
-        style={{
-          background: "linear-gradient(135deg, rgba(133,43,175,0.06) 0%, rgba(252,63,120,0.04) 100%)",
-          border: "1px solid rgba(133,43,175,0.1)",
-        }}
-      >
-        <div className="flex items-center gap-4">
-          <div
-            className="w-11 h-11 rounded-2xl flex items-center justify-center text-white shrink-0"
-            style={{
-              background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)",
-              boxShadow: "0 6px 20px rgba(133,43,175,0.25)",
-            }}
-          >
-            <FiShield size={20} />
-          </div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
           <div>
-            <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
               Vendor Review:{" "}
               <span className="gradient-text-brand">{formData.companyName}</span>
             </h1>
-            <p className="text-xs text-gray-500 font-medium mt-0.5">
+            <p className="mt-1 text-sm text-slate-500">
               Vendor ID: {vendorId} · Review all submitted data before making a decision
             </p>
           </div>
@@ -516,7 +501,7 @@ export default function VendorApprovalForm() {
               onClick={() => handleFinalDecision("approved")}
               disabled={isSubmitting}
               className="flex items-center justify-center gap-2 px-6 py-3 text-sm font-bold text-white rounded-2xl transition-all cursor-pointer disabled:opacity-50 active:scale-95 hover:opacity-90"
-              style={{ background: "linear-gradient(135deg, #852BAF 0%, #FC3F78 100%)", boxShadow: "0 6px 20px rgba(133,43,175,0.3)" }}
+              style={{ background: "linear-gradient(90deg, #852BAF 60%, #C13A8E 100%)" }}
             >
               <FaCheckCircle size={14} />
               {isSubmitting ? "Approving…" : "Final Approve"}
