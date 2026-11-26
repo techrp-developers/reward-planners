@@ -268,7 +268,8 @@ class ManagerController {
       if (!Number.isInteger(companyId) || companyId < 1 || !Number.isInteger(employeeId) || employeeId < 1) {
         return res.status(400).json({ success: false, message: "Invalid company or employee ID" });
       }
-      if (!(await EmployeeModel.findById(employeeId, companyId))) {
+      const existing = await EmployeeModel.findById(employeeId, companyId);
+      if (!existing) {
         return res.status(404).json({ success: false, message: "Employee not found" });
       }
       // RM manages only the app account status; employment status belongs to company HR.
@@ -299,7 +300,16 @@ class ManagerController {
         return res.status(400).json({ success: false, message: "Date of birth must be a valid past date" });
       }
       if (employee.ctc !== null && (!Number.isFinite(employee.ctc) || employee.ctc < 0)) return res.status(400).json({ success: false, message: "CTC must be a non-negative number" });
-      const duplicate = await EmployeeModel.findDuplicate({ ...employee, excludeId: employeeId });
+      // Existing shared contact details must not block unrelated profile edits.
+      // Check each changed identity independently so an unchanged duplicate does
+      // not prevent correcting the other contact field.
+      const changedEmail = employee.email !== String(existing.email || "").trim().toLowerCase();
+      const changedPhone = employee.phone !== String(existing.phone || "").trim();
+      const duplicate = (changedEmail || changedPhone) && await EmployeeModel.findDuplicate({
+        email: changedEmail ? employee.email : undefined,
+        phone: changedPhone ? employee.phone : undefined,
+        excludeId: employeeId,
+      });
       if (duplicate) return res.status(409).json({ success: false, message: "Another employee with this email or phone already exists" });
       await EmployeeModel.update(employeeId, companyId, employee);
       if (accountStatus !== undefined) await EmployeeModel.setAccountStatus(employeeId, companyId, Number(accountStatus) === 1);
