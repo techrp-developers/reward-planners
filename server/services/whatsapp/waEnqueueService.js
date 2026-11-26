@@ -207,6 +207,10 @@ function buildBodyValues(templateKey, ctx) {
     case "order_place_confirm":
       return [name, orderId, amount];
 
+    case "vendor_new_ecommerce_order":
+      return [String(ctx.vendor_name || "Vendor"), String(ctx.order_ref || orderId),
+        String(ctx.item_count || "0"), String(ctx.subtotal || "0.00")];
+
     // --- ADMIN ALERTS ---
     case "admin_new_service_order":
       return [name, orderId, amount, String(ctx.service_name || "Service")];

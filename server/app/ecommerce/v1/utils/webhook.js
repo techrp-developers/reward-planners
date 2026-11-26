@@ -11,6 +11,7 @@ const { sendOpsAlert } = require("../../../../services/alertService");
 const { sendEcommerceOrderPlacedEmails } = require("../../../../services/mailBuilder/ecommerceOrderPlaced");
 const { runNonBlocking } = require("../../../../utils/nonBlocking");
 const { notifyNewEcommerceOrder } = require("../../../../services/whatsapp/adminNotificationService");
+const { notifyVendorsNewEcommerceOrder } = require("../../../../services/whatsapp/vendorOrderNotification");
 const { notifyUser } = require("../../../common/utils/notification");
 const RefundService = require("../controllers/paymentController");
 const {
@@ -1009,6 +1010,11 @@ async function processEvent(req) {
       runNonBlocking(
         () => sendEcommerceOrderPlacedEmails(order_id),
         "order placed recipient emails",
+      );
+
+      runNonBlocking(
+        () => notifyVendorsNewEcommerceOrder(order_id),
+        "vendor ecommerce order WhatsApp",
       );
 
       console.log("Ecommerce payment success", {
