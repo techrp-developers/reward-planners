@@ -81,6 +81,7 @@ export default function ManagerNavbar() {
     {
       title: "Sales",
       items: [
+        { label: "Corporate Gifting", to: routes.manager.corporateGifting, Icon: FiGift },
         {
           label: "Orders",
           Icon: FiShoppingCart,

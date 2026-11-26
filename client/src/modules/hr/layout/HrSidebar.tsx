@@ -36,6 +36,7 @@ const navGroups: { title: string; links: NavLink[] }[] = [
     title: "Engagement",
     links: [
       { label: "Rewards", to: "/hr/rewards", Icon: FiGift },
+      { label: "Corporate Gifting", to: "/hr/corporate-gifting", Icon: FiGift },
       { label: "Polls", to: "/hr/polls", Icon: FiBarChart2 },
     ],
   },

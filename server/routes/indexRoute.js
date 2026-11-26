@@ -49,6 +49,7 @@ router.use("/maintenance", maintenanceRoutes);
 router.use("/campaign", campaignRoutes);
 router.use("/content", contentRoutes);
 router.use("/employees", employeeRoutes);
+router.use("/corporate-gifting", require("./corporateGiftingRoutes"));
 router.use("/company-wallet", companyWalletRoutes);
 router.use("/client-onboarding/otp", clientOnboardingOtpRoutes);
 router.use("/client-onboarding/reviews", clientOnboardingReviewRoutes);

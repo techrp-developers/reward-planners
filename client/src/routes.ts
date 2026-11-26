@@ -30,6 +30,7 @@ export const routes = {
     fleaMarketPurchases: "/vendor/flea-market/purchases",
   },
    manager: {
+    corporateGifting: "/manager/corporate-gifting",
     dashboard: "/manager/dashboard",
     changePassword: "/manager/change-password",
     profile: "/manager/profile",
@@ -150,6 +151,7 @@ export const routes = {
     },
   },
   hr: {
+    corporateGifting: "/hr/corporate-gifting",
     dashboard: "/hr/dashboard",
     changePassword: "/hr/change-password",
     profile: "/hr/profile",

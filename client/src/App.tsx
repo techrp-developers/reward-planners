@@ -18,6 +18,8 @@ const VendorLayout = lazy(() => import("./modules/products/vendor/VendorLayout.t
 const ManagerLayout = lazy(() => import("./modules/products/vendorManager/ManagerLayout.tsx"));
 const AdminLayout = lazy(() => import("./modules/admin/layout/AdminLayout.tsx"));
 const HrLayout = lazy(() => import("./modules/hr/layout/HrLayout.tsx"));
+const CorporateGifting = lazy(() => import("./modules/hr/gifting/CorporateGifting.tsx"));
+const GiftingEnquiries = lazy(() => import("./modules/hr/gifting/GiftingEnquiries.tsx"));
 const WarehouseLayout = lazy(() => import("./modules/warehouse_manager/layout/WarehouseLayout.tsx"));
 const FleaMarketLayout = lazy(() => import("./modules/flea_market/layout/FleaMarketLayout.tsx"));
 const ServiceLayout = lazy(() => import("./modules/service/serviceManager/ServiceLayout.tsx"));
@@ -312,6 +314,7 @@ export default function App() {
 
       {/* ========== MANAGER ========== */}
       <Route element={<ManagerLayout />}>
+        <Route path={routes.manager.corporateGifting} element={<GiftingEnquiries manager />} />
         <Route path={routes.manager.dashboard} element={<ManagerDashboard />} />
         <Route path={routes.manager.vendors} element={<VendorApprovalList />} />
         <Route
@@ -620,6 +623,7 @@ export default function App() {
 
       {/* ========== HR ========== */}
       <Route element={<HrLayout />}>
+        <Route path={routes.hr.corporateGifting} element={<CorporateGifting />} />
         <Route path={routes.hr.dashboard} element={<HrDashboard />} />
         <Route path={routes.hr.onboarding} element={<EmployeeOnboarding />} />
         <Route path={routes.hr.employees} element={<EmployeeList />} />
