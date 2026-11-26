@@ -819,7 +819,7 @@ class FitnessService {
   ------------------------------------------ */
   async getPlan(customerId) {
     const [rows] = await db.execute(
-      `SELECT height_cm, weight_kg, bmi, goal_type
+      `SELECT gender, age, height_cm, weight_kg, bmi, goal_type
        FROM fitness_profiles
        WHERE user_id = ?`,
       [customerId],
@@ -869,6 +869,13 @@ class FitnessService {
 
     return {
       bmi,
+      // Saved profile details, so the app can restore them on any device
+      // instead of asking again (additive; older clients ignore them).
+      gender: profile.gender ?? null,
+      age: profile.age ?? null,
+      goal_type: profile.goal_type ?? null,
+      height_cm: profile.height_cm ?? null,
+      weight_kg: profile.weight_kg ?? null,
       category,
       recommended_steps,
       recommended_minutes,
