@@ -31,6 +31,7 @@ export const routes = {
   },
    manager: {
     corporateGifting: "/manager/corporate-gifting",
+    celebration: "/manager/celebration",
     dashboard: "/manager/dashboard",
     changePassword: "/manager/change-password",
     profile: "/manager/profile",
@@ -152,6 +153,7 @@ export const routes = {
   },
   hr: {
     corporateGifting: "/hr/corporate-gifting",
+    celebration: "/hr/celebration",
     dashboard: "/hr/dashboard",
     changePassword: "/hr/change-password",
     profile: "/hr/profile",

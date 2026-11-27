@@ -3,7 +3,8 @@ import { isAxiosError } from 'axios';
 import { FiGift, FiPlus, FiTrash2 } from 'react-icons/fi';
 import { api } from '../../../common/api/api';
 import { useAuth } from '../../../common/auth/useAuth';
-import { button, field, label, brandGradient } from '../components/styles';
+import { button, field, label } from '../components/styles';
+import { Card, CardHeader, PageHeader } from '../components/ui';
 import GiftingEnquiries from './GiftingEnquiries';
 import { type GiftSelection, type GiftCategory, selectionKey } from './types';
 
@@ -58,15 +59,18 @@ export default function CorporateGifting() {
     finally { setBusy(false); }
   }
   return <div className="space-y-6">
-    <header className={`${brandGradient} rounded-2xl p-6 text-white`}><FiGift className="mb-3 h-8 w-8" /><h1 className="text-2xl font-semibold">Corporate Gifting</h1><p className="mt-2 max-w-2xl text-sm text-purple-100">Thoughtful gifts for one person or the whole team. Choose categories and subcategories you are interested in. Our vendor manager will contact you to discuss products, brands and pricing.</p></header>
-    <div className="flex gap-2"><button className={tab === 'catalogue' ? button.primary : button.secondary} onClick={() => setTab('catalogue')}>Explore categories</button><button className={tab === 'enquiries' ? button.primary : button.secondary} onClick={() => setTab('enquiries')}>My enquiries</button></div>
+    <PageHeader title="Corporate Gifting" description="Choose categories and subcategories for one person or the whole team. Our vendor manager will contact you to discuss products, brands and pricing." />
+    <div className="flex flex-wrap gap-2" aria-label="Gifting sections"><button aria-pressed={tab === 'catalogue'} className={tab === 'catalogue' ? button.primary : button.secondary} onClick={() => setTab('catalogue')}>Explore categories</button><button aria-pressed={tab === 'enquiries'} className={tab === 'enquiries' ? button.primary : button.secondary} onClick={() => setTab('enquiries')}>My enquiries</button></div>
     {success && <p role="status" className="rounded-xl bg-green-50 p-4 text-sm text-green-800">{success}</p>}
-    {tab === 'enquiries' ? <GiftingEnquiries /> : <div className="grid items-start gap-6 xl:grid-cols-[1fr_380px]">
+    {tab === 'enquiries' ? <GiftingEnquiries /> : <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
       <section className="space-y-4"><div className="flex gap-2"><input className={field} aria-label="Search gift catalogue" placeholder="Search categories or subcategories" maxLength={100} value={search} onChange={event => { setSearch(event.target.value); setPage(1); }} /><button className={button.secondary} onClick={() => setRevision(value => value + 1)}>Refresh</button></div>
         {loading ? <p role="status" className="p-10 text-center text-slate-500">Loading catalogue...</p> : catalogueError ? <p role="alert" className="rounded-xl bg-red-50 p-4 text-red-700">{catalogueError}</p> : !categories.length ? <p className="rounded-xl bg-white p-10 text-center text-slate-500">No categories found. Try another search.</p> : <div className="grid gap-4 sm:grid-cols-2">{categories.map(category => <CategoryCard key={category.category_id} category={category} items={items} busy={busy} onAdd={item => setItems(current => [...current, item])} />)}</div>}
         <div className="flex items-center justify-center gap-3 text-sm"><button className={button.secondary} disabled={loading || page === 1} onClick={() => setPage(value => value - 1)}>Previous</button>Page {page}<button className={button.secondary} disabled={loading || !more} onClick={() => setPage(value => value + 1)}>Next</button></div>
       </section>
-      <form onSubmit={submit} className="space-y-4 rounded-2xl border border-purple-100 bg-white p-5 shadow-sm"><h2 className="text-lg font-semibold">Your gifting enquiry</h2><p className="text-xs text-slate-500">Select categories, add an estimated quantity and optionally a preferred brand. Our vendor manager will contact you to help choose the products.</p>
+      <Card>
+      <form onSubmit={submit}>
+        <CardHeader title="Your gifting enquiry" description="Select categories, add an estimated quantity and optionally a preferred brand. Our vendor manager will contact you to help choose the products." />
+        <div className="space-y-4 p-5">
         <fieldset disabled={busy} className="space-y-4">
           {!items.length ? <p className="rounded-xl bg-purple-50 p-4 text-sm text-purple-700">Add a category or subcategory to get started.</p> : items.map(item => <div key={selectionKey(item)} className="space-y-2 rounded-xl border border-purple-100 p-3">
             <p className="text-sm font-semibold">{item.category_name}</p><p className="text-xs text-slate-500">{item.subcategory_name || 'Any subcategory'}</p>
@@ -97,7 +101,9 @@ export default function CorporateGifting() {
         {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
         <button className={`${button.primary} w-full`} type="submit" disabled={busy || !items.length || (form.recipient_type === 'team' && (departmentLoading || !!departmentError || !departments.includes(form.recipient_details)))}>{busy ? 'Sending enquiry...' : 'Send to vendor manager'}</button>
         <p className="text-xs text-slate-500">Submitting an enquiry does not place an order or take payment.</p>
+        </div>
       </form>
+      </Card>
     </div>}
   </div>;
 }
@@ -109,14 +115,14 @@ function CategoryCard({ category, items, busy, onAdd }: { category: GiftCategory
     subcategory_name: category.subcategories.find(row => row.subcategory_id === Number(subcategory))?.subcategory_name || null,
     preferred_brand: '', quantity: 1 };
   const selected = items.some(row => selectionKey(row) === selectionKey(item));
-  return <article className="flex flex-col overflow-hidden rounded-2xl border border-purple-100 bg-white shadow-sm">
+  return <Card className="flex flex-col overflow-hidden">
     {category.image_url ? <img src={category.image_url} alt={category.category_name} loading="lazy" className="h-40 w-full bg-slate-50 object-contain p-3" /> : <div className="grid h-40 place-items-center bg-purple-50 text-purple-300"><FiGift size={44} /></div>}
-    <div className="flex flex-1 flex-col gap-3 p-4"><h2 className="font-semibold text-slate-900">{category.category_name}</h2>
+    <div className="flex flex-1 flex-col gap-3 p-4"><h2 className="text-sm font-semibold text-slate-900">{category.category_name}</h2>
       <label className={label}>Subcategory<select aria-label={`${category.category_name} subcategory`} className={field} value={subcategory} disabled={busy} onChange={event => setSubcategory(event.target.value)}>
         <option value="">Any subcategory</option>{category.subcategories.map(row => <option key={row.subcategory_id} value={row.subcategory_id}>{row.subcategory_name}</option>)}
       </select></label>
       <p className="text-xs text-slate-500">Tell us what you have in mind. We will help you find the right products.</p>
       <button className={selected ? button.secondary : button.primary} disabled={busy || selected || items.length >= 50} onClick={() => onAdd(item)}><FiPlus />{selected ? 'Added to enquiry' : 'Enquire about this category'}</button>
     </div>
-  </article>;
+  </Card>;
 }

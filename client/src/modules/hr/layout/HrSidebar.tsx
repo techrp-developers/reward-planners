@@ -4,6 +4,7 @@ import { useState } from "react";
 import {
   FiBarChart2,
   FiBriefcase,
+  FiCalendar,
   FiChevronUp,
   FiGift,
   FiGrid,
@@ -37,6 +38,7 @@ const navGroups: { title: string; links: NavLink[] }[] = [
     links: [
       { label: "Rewards", to: "/hr/rewards", Icon: FiGift },
       { label: "Corporate Gifting", to: "/hr/corporate-gifting", Icon: FiGift },
+      { label: "Celebration", to: "/hr/celebration", Icon: FiCalendar },
       { label: "Polls", to: "/hr/polls", Icon: FiBarChart2 },
     ],
   },

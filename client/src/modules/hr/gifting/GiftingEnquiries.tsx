@@ -24,7 +24,7 @@ export default function GiftingEnquiries({ manager = false }: { manager?: boolea
   }, [status, page, revision]);
   return <section className="space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><h2 className="text-xl font-semibold text-slate-900">{manager ? 'Corporate Gifting enquiries' : 'Your company enquiries'}</h2>
+      <div><h2 className="text-sm font-semibold text-slate-900">{manager ? 'Corporate Gifting enquiries' : 'Your company enquiries'}</h2>
         <p className="text-sm text-slate-500">{manager ? 'Review requirements and share updates with HR.' : 'Follow progress and read replies from your vendor manager.'}</p></div>
       <div className="flex gap-2"><select aria-label="Filter by enquiry status" className={field} value={status} onChange={event => { startLoading(); setStatus(event.target.value); setPage(1); }}>
         <option value="">All statuses</option>{Object.entries(statusLabels).map(([key, value]) => <option key={key} value={key}>{value}</option>)}

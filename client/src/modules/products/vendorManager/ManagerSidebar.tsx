@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   FiBarChart2,
+  FiCalendar,
   FiChevronDown,
   FiChevronUp,
   FiFileText,
@@ -82,6 +83,7 @@ export default function ManagerNavbar() {
       title: "Sales",
       items: [
         { label: "Corporate Gifting", to: routes.manager.corporateGifting, Icon: FiGift },
+        { label: "Celebration", to: routes.manager.celebration, Icon: FiCalendar },
         {
           label: "Orders",
           Icon: FiShoppingCart,
