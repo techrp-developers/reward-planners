@@ -1,5 +1,19 @@
 # Service classification review list
 
+Update, 28 November 2026: the business owner confirmed “All existing services are
+In-House.” Applied the 5 categories and 18 services listed below to the local
+development database using `scripts/classify-service-manager-local.js --apply
+--actor=35`. The repair reused classification validation, saved 23 audit entries,
+and committed as one transaction. A subsequent preview found zero pending changes.
+The NULL scopes below describe the original investigation, not the current local state.
+
+Cookie-authenticated checks against both the backend and Vite proxy returned HTTP
+200: 5 categories, 18 services, 25 variants, 26 enquiries, 86 parent orders, 9
+cancellations, and 23 audit entries. Dashboard totals include 123 individual order
+items. Pricing and rewards use the verified variants endpoint. Partner tabs remain
+unconfigured. No production database was changed. Service Manager tests: 35 passed,
+one optional database test skipped.
+
 Read from the local database on 17 November 2026. All entries below retain `service_scope = NULL`. No business assignments were inferred or applied.
 
 | Category ID | Category | Current scope |

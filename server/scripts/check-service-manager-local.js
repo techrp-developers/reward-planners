@@ -14,6 +14,10 @@ async function main(){
       AND ((TABLE_NAME IN ('services','service_categories') AND COLUMN_NAME='service_scope') OR TABLE_NAME='service_manager_audit_logs'
       OR (TABLE_NAME='service_orders' AND COLUMN_NAME IN ('flash_sale_campaign_id','original_price')))`);
     console.log('Schema prerequisites:',JSON.stringify(columns));
+    for (const table of ['service_categories','services']) {
+      const [counts]=await db.execute(`SELECT service_scope,COUNT(*) AS records FROM ${table} GROUP BY service_scope`);
+      console.log('Catalogue classification:',JSON.stringify({table,counts}));
+    }
   }finally{await db.end();}
   const origin=`http://localhost:${Number(process.env.PORT||5000)}`;
   let online=false;
@@ -23,20 +27,26 @@ async function main(){
   }
   if(!online)throw new Error('Local backend did not become ready.');
   const token=require('../utils/jwt').generateToken({user_id:user.user_id,role:user.role});
-  const targets=[
-    `${origin}/api/crm/v1/service-manager/catalog/categories?page=1&scope=in_house`,
-    `${origin}/api/crm/v1/service-manager/in-house/summary`,
-    `${origin}/api/crm/v1/service-orders/admin-orders?page=1&limit=10`,
-    `${origin}/v1/service-manager/in-house/summary`,
-    'http://localhost:5173/api/crm/v1/service-manager/catalog/categories?page=1&scope=in_house',
-    'http://localhost:5173/api/crm/v1/service-manager/in-house/summary',
-    'http://localhost:5173/api/crm/v1/service-orders/admin-orders?page=1&limit=10',
+  const paths=[
+    '/v1/service-manager/dashboard/summary',
+    '/v1/service-manager/in-house/summary',
+    ...['categories','services','variants'].map(kind=>`/v1/service-manager/catalog/${kind}?page=1&scope=in_house`),
+    ...['categories','services'].map(kind=>`/v1/service-manager/catalog/${kind}?page=1&scope=unclassified`),
+    '/v1/service-manager/audit-logs',
+    '/v1/service-enquiry',
+    '/v1/service-orders/admin-orders?page=1&limit=10',
+    '/order/service-cancellation-requests?status=all&page=1&limit=10',
   ];
+  const targets=[... [origin,'http://localhost:5173'].flatMap(base=>paths.map(path=>`${base}/api/crm${path}`)),
+    `${origin}/v1/service-manager/in-house/summary`];
   for(const url of targets){
     try{
-      const response=await fetch(url,{headers:{Authorization:`Bearer ${token}`},signal:AbortSignal.timeout(8000)});
+      // Exercise the same cookie authentication used by the React client.
+      const response=await fetch(url,{headers:{Cookie:`rp_access_v2=${token}`},signal:AbortSignal.timeout(8000)});
       const body=await response.json();
-      console.log(JSON.stringify({url,status:response.status,message:body.message||null,records:body.data?.total??body.total??null}));
+      console.log(JSON.stringify({url,status:response.status,message:body.message||null,
+        records:body.data?.total??body.total??(Array.isArray(body.data)?body.data.length:null),
+        metrics:body.data?.metrics}));
       if(!response.ok)process.exitCode=1;
     }catch(error){console.log(JSON.stringify({url,error:error.message}));process.exitCode=1;}
   }
