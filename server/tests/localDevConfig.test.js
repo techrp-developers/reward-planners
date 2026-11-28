@@ -9,15 +9,21 @@ function loadConfig(file, env, dependencies = {}, timers = {}) {
   const errors = [];
   const module = { exports: {} };
   runInNewContext(readFileSync(path.join(__dirname, "..", file), "utf8"), {
-    module, exports: module.exports, __dirname: path.join(__dirname, "../config"),
+    module,
+    exports: module.exports,
+    __dirname: path.join(__dirname, "../config"),
     process: { env },
     require(name) {
       if (name === "path") return path;
-      if (name === "dotenv") return { config() {} };
+      if (name === "dotenv") return dependencies.dotenv || { config() {} };
       if (name in dependencies) return dependencies[name];
       throw new Error(`Unexpected dependency: ${name}`);
     },
-    console: { log() {}, warn: (...args) => warnings.push(args.join(" ")), error: (...args) => errors.push(args.join(" ")) },
+    console: {
+      log() {},
+      warn: (...args) => warnings.push(args.join(" ")),
+      error: (...args) => errors.push(args.join(" ")),
+    },
     setImmediate: (callback) => callback(),
     ...timers,
   });
@@ -26,10 +32,19 @@ function loadConfig(file, env, dependencies = {}, timers = {}) {
 
 test("database keeps defaults and warns without exposing passwords", () => {
   let options;
-  const mysql = { createPool(config) {
-    options = config;
-    return { getConnection(callback) { callback(null, { release() {} }); }, promise() { return {}; } };
-  } };
+  const mysql = {
+    createPool(config) {
+      options = config;
+      return {
+        getConnection(callback) {
+          callback(null, { release() {} });
+        },
+        promise() {
+          return {};
+        },
+      };
+    },
+  };
   const result = loadConfig("config/database.js", {}, { mysql2: mysql });
   assert.equal(options.host, "localhost");
   assert.equal(options.user, "root");
@@ -40,16 +55,122 @@ test("database keeps defaults and warns without exposing passwords", () => {
   assert.equal(result.warnings.length, 2);
 });
 
+test("database loads local overrides after the shared env outside production", () => {
+  const calls = [];
+  const env = { NODE_ENV: "development" };
+  const mysql = {
+    createPool(config) {
+      assert.equal(config.database, "rewardplanners_test");
+      return {
+        getConnection(callback) {
+          callback({ code: "ECONNREFUSED" });
+        },
+        promise() {
+          return {};
+        },
+      };
+    },
+  };
+  loadConfig("config/database.js", env, {
+    mysql2: mysql,
+    dotenv: {
+      config(options) {
+        calls.push(options);
+        env.DB_NAME = options.override
+          ? "rewardplanners_test"
+          : "rewardplanners_db";
+      },
+    },
+  });
+  assert.equal(calls.length, 2);
+  assert.match(calls[0].path, /server\/\.env$/);
+  assert.match(calls[1].path, /server\/\.env\.local$/);
+  assert.equal(calls[1].override, true);
+});
+
+test("explicit process database overrides the local env file", () => {
+  const env = { NODE_ENV: "development", DB_NAME: "rewardplanners_fk_test" };
+  const mysql = {
+    createPool(config) {
+      assert.equal(config.database, "rewardplanners_fk_test");
+      return {
+        getConnection(callback) {
+          callback({ code: "ECONNREFUSED" });
+        },
+        promise() {
+          return {};
+        },
+      };
+    },
+  };
+  loadConfig("config/database.js", env, {
+    mysql2: mysql,
+    dotenv: {
+      config(options) {
+        if (options.override) env.DB_NAME = "rewardplanners_test";
+      },
+    },
+  });
+});
+
+test("production does not load local env overrides", () => {
+  const calls = [];
+  loadConfig(
+    "config/database.js",
+    { NODE_ENV: "production", DB_NAME: "rewardplanners_db" },
+    {
+      dotenv: {
+        config(options) {
+          calls.push(options);
+        },
+      },
+      mysql2: {
+        createPool() {
+          return {
+            getConnection(callback) {
+              callback({ code: "ECONNREFUSED" });
+            },
+            promise() {
+              return {};
+            },
+          };
+        },
+      },
+    },
+  );
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].path, /server\/\.env$/);
+});
+
 test("startup retries a timeout only once and respects configured timeout", () => {
   let attempts = 0;
   let timeout;
-  const mysql = { createPool(config) {
-    timeout = config.connectTimeout;
-    return { getConnection(callback) { attempts++; callback({ code: "ETIMEDOUT" }); }, promise() { return {}; } };
-  } };
-  const result = loadConfig("config/database.js", { DB_CONNECT_TIMEOUT_MS: "15000", DB_NAME: "rewardplanners_db" }, { mysql2: mysql }, {
-    setTimeout(callback, delay) { assert.equal(delay, 1000); callback(); return { unref() {} }; },
-  });
+  const mysql = {
+    createPool(config) {
+      timeout = config.connectTimeout;
+      return {
+        getConnection(callback) {
+          attempts++;
+          callback({ code: "ETIMEDOUT" });
+        },
+        promise() {
+          return {};
+        },
+      };
+    },
+  };
+  const result = loadConfig(
+    "config/database.js",
+    { DB_CONNECT_TIMEOUT_MS: "15000", DB_NAME: "rewardplanners_db" },
+    { mysql2: mysql },
+    {
+      setTimeout(callback, delay) {
+        assert.equal(delay, 1000);
+        callback();
+        return { unref() {} };
+      },
+    },
+  );
   assert.equal(timeout, 15000);
   assert.equal(attempts, 2);
   assert.equal(result.errors.length, 1);
@@ -58,31 +179,90 @@ test("startup retries a timeout only once and respects configured timeout", () =
 
 test("authentication errors are not retried", () => {
   let attempts = 0;
-  const mysql = { createPool() {
-    return { getConnection(callback) { attempts++; callback({ code: "ER_ACCESS_DENIED_ERROR" }); }, promise() { return {}; } };
-  } };
-  const result = loadConfig("config/database.js", {}, { mysql2: mysql }, {
-    setTimeout() { assert.fail("Authentication errors must not be retried"); },
-  });
+  const mysql = {
+    createPool() {
+      return {
+        getConnection(callback) {
+          attempts++;
+          callback({ code: "ER_ACCESS_DENIED_ERROR" });
+        },
+        promise() {
+          return {};
+        },
+      };
+    },
+  };
+  const result = loadConfig(
+    "config/database.js",
+    {},
+    { mysql2: mysql },
+    {
+      setTimeout() {
+        assert.fail("Authentication errors must not be retried");
+      },
+    },
+  );
   assert.equal(attempts, 1);
   assert.match(result.errors[0], /ER_ACCESS_DENIED_ERROR/);
 });
 
 test("missing Gmail credentials warn once and skip SMTP verification", () => {
-  const result = loadConfig("config/mailTransport.js", {}, {
-    nodemailer: { createTransport() { return { verify() { assert.fail("Missing credentials must not contact SMTP"); } }; } },
-  }, { setImmediate() { assert.fail("Missing credentials must not schedule SMTP verification"); } });
+  const result = loadConfig(
+    "config/mailTransport.js",
+    {},
+    {
+      nodemailer: {
+        createTransport() {
+          return {
+            verify() {
+              assert.fail("Missing credentials must not contact SMTP");
+            },
+          };
+        },
+      },
+    },
+    {
+      setImmediate() {
+        assert.fail("Missing credentials must not schedule SMTP verification");
+      },
+    },
+  );
   assert.equal(result.warnings.length, 1);
   assert.equal(result.errors.length, 0);
-  assert.throws(() => result.exports.assertMailConfigured(), /MAIL_CONFIG_MISSING/);
+  assert.throws(
+    () => result.exports.assertMailConfigured(),
+    /MAIL_CONFIG_MISSING/,
+  );
 });
 
 test("missing Firebase credentials warn once without failing module load", () => {
-  const result = loadConfig("config/firebase.js", {}, {
-    fs: { existsSync() { return false; } },
-    "./firebaseAdcReset": { resetApplicationDefaultClient() { assert.fail("Nothing to reset without credentials"); } },
-    "firebase-admin/app": { getApps() { return []; }, cert() { assert.fail("No credentials to certify"); }, initializeApp() { assert.fail("No credentials to initialize"); } },
-  });
+  const result = loadConfig(
+    "config/firebase.js",
+    {},
+    {
+      fs: {
+        existsSync() {
+          return false;
+        },
+      },
+      "./firebaseAdcReset": {
+        resetApplicationDefaultClient() {
+          assert.fail("Nothing to reset without credentials");
+        },
+      },
+      "firebase-admin/app": {
+        getApps() {
+          return [];
+        },
+        cert() {
+          assert.fail("No credentials to certify");
+        },
+        initializeApp() {
+          assert.fail("No credentials to initialize");
+        },
+      },
+    },
+  );
   assert.equal(result.warnings.length, 1);
   assert.match(result.warnings[0], /Firebase push notifications are disabled/);
   assert.equal(result.errors.length, 0);
@@ -91,27 +271,66 @@ test("missing Firebase credentials warn once without failing module load", () =>
 // ADC mode with an injectable ADC file and access-token behaviour. Nothing
 // contacts Google: firebase-admin/app and fs are replaced.
 function loadAdcFirebase({ adcFile = null, tokens, env = {}, fetch, cert }) {
-  const state = { adcFile, initialized: 0, tokenCalls: 0, resets: 0, timers: [], apps: [] };
-  const credential = { async getAccessToken() { return tokens[state.tokenCalls++](); } };
-  const result = loadConfig("config/firebase.js", {
-    FIREBASE_CREDENTIAL_MODE: "application_default", FIREBASE_PROJECT_ID: "reward-planners-2324d", HOME: "/home/test", ...env,
-  }, {
-    "./firebaseAdcReset": { resetApplicationDefaultClient() { state.resets += 1; return true; } },
-    fs: { existsSync: (file) => Boolean(state.adcFile) && /application_default_credentials\.json$/.test(file), readFileSync: () => JSON.stringify(state.adcFile) },
-    "firebase-admin/app": {
-      getApps: () => state.apps.map((name) => ({ name })),
-      initializeApp(options, name = "[DEFAULT]") { state.initialized += 1; state.apps.push(name); state[name] = options; },
-      applicationDefault: () => credential,
-      cert: cert || (() => assert.fail("ADC mode must not load a key")),
-      getApp: () => ({ options: { credential } }),
+  const state = {
+    adcFile,
+    initialized: 0,
+    tokenCalls: 0,
+    resets: 0,
+    timers: [],
+    apps: [],
+  };
+  const credential = {
+    async getAccessToken() {
+      return tokens[state.tokenCalls++]();
     },
-  }, {
-    fetch,
-    // Timers still pending (re-checks). The per-request timeout guard is cleared
-    // as soon as Google answers, so it drops out of this list.
-    setTimeout(callback, ms) { const timer = { callback, ms, unref() {} }; state.timers.push(timer); return timer; },
-    clearTimeout(timer) { state.timers = state.timers.filter((entry) => entry !== timer); },
-  });
+  };
+  const result = loadConfig(
+    "config/firebase.js",
+    {
+      FIREBASE_CREDENTIAL_MODE: "application_default",
+      FIREBASE_PROJECT_ID: "reward-planners-2324d",
+      HOME: "/home/test",
+      ...env,
+    },
+    {
+      "./firebaseAdcReset": {
+        resetApplicationDefaultClient() {
+          state.resets += 1;
+          return true;
+        },
+      },
+      fs: {
+        existsSync: (file) =>
+          Boolean(state.adcFile) &&
+          /application_default_credentials\.json$/.test(file),
+        readFileSync: () => JSON.stringify(state.adcFile),
+      },
+      "firebase-admin/app": {
+        getApps: () => state.apps.map((name) => ({ name })),
+        initializeApp(options, name = "[DEFAULT]") {
+          state.initialized += 1;
+          state.apps.push(name);
+          state[name] = options;
+        },
+        applicationDefault: () => credential,
+        cert: cert || (() => assert.fail("ADC mode must not load a key")),
+        getApp: () => ({ options: { credential } }),
+      },
+    },
+    {
+      fetch,
+      // Timers still pending (re-checks). The per-request timeout guard is cleared
+      // as soon as Google answers, so it drops out of this list.
+      setTimeout(callback, ms) {
+        const timer = { callback, ms, unref() {} };
+        state.timers.push(timer);
+        return timer;
+      },
+      clearTimeout(timer) {
+        state.timers = state.timers.filter((entry) => entry !== timer);
+      },
+    },
+  );
   return { ...result, state };
 }
 
@@ -119,10 +338,14 @@ const impersonating = (email) => ({
   type: "impersonated_service_account",
   service_account_impersonation_url: `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${email}:generateAccessToken`,
 });
-const PRIMARY_SA = "firebase-adminsdk-fbsvc@reward-planners-2324d.iam.gserviceaccount.com";
+const PRIMARY_SA =
+  "firebase-adminsdk-fbsvc@reward-planners-2324d.iam.gserviceaccount.com";
 
 test("ADC push is enabled only after a token is obtained, and the token is never kept", async () => {
-  const { exports, state } = loadAdcFirebase({ adcFile: impersonating(PRIMARY_SA), tokens: [async () => ({ access_token: "ya29.secret-token" })] });
+  const { exports, state } = loadAdcFirebase({
+    adcFile: impersonating(PRIMARY_SA),
+    tokens: [async () => ({ access_token: "ya29.secret-token" })],
+  });
   assert.equal(exports.firebaseStatus.enabled, false);
   await exports.firebaseReady;
   assert.equal(exports.firebaseStatus.enabled, true);
@@ -135,12 +358,20 @@ test("ADC push is enabled only after a token is obtained, and the token is never
 test("failed ADC stays disabled, is re-checked, and recovers without a second app", async () => {
   const { exports, state } = loadAdcFirebase({
     adcFile: impersonating(PRIMARY_SA),
-    tokens: [async () => { throw new Error("Could not load the default credentials.\nmore"); }, async () => ({ access_token: "t" })],
+    tokens: [
+      async () => {
+        throw new Error("Could not load the default credentials.\nmore");
+      },
+      async () => ({ access_token: "t" }),
+    ],
   });
   await exports.firebaseReady;
   assert.equal(exports.firebaseStatus.enabled, false);
   assert.equal(exports.firebaseStatus.credentialCheck, "failed");
-  assert.match(exports.firebaseStatus.reason, /\(Could not load the default credentials\.\)\. For local development run: gcloud/);
+  assert.match(
+    exports.firebaseStatus.reason,
+    /\(Could not load the default credentials\.\)\. For local development run: gcloud/,
+  );
   assert.equal(state.timers.length, 1);
   assert.equal(state.timers[0].ms, 5 * 60 * 1000);
   // The rejected client is dropped, so the re-check reads a re-login's new token.
@@ -166,7 +397,11 @@ test("a token request that never answers ends 'Verifying...' with a network diag
   await exports.firebaseReady;
   assert.equal(exports.firebaseStatus.enabled, false); // never claimed ready
   assert.equal(exports.firebaseStatus.credentialCheck, "unverified");
-  assert.ok(exports.firebaseStatus.reason.startsWith("Could not reach Google to verify Application Default Credentials (ETIMEDOUT"));
+  assert.ok(
+    exports.firebaseStatus.reason.startsWith(
+      "Could not reach Google to verify Application Default Credentials (ETIMEDOUT",
+    ),
+  );
   assert.doesNotMatch(exports.firebaseStatus.reason, /gcloud auth/); // not a credentials problem
   assert.equal(state.resets, 0); // the cached client is still good
   const recheck = state.timers.find((timer) => timer !== guard);
@@ -180,26 +415,51 @@ test("a token request that never answers ends 'Verifying...' with a network diag
 test("a re-check refuses ADC that now impersonates another project's service account", async () => {
   const { exports, state } = loadAdcFirebase({
     adcFile: null,
-    tokens: [async () => { throw new Error("Could not load the default credentials."); }, async () => assert.fail("must not request a token")],
+    tokens: [
+      async () => {
+        throw new Error("Could not load the default credentials.");
+      },
+      async () => assert.fail("must not request a token"),
+    ],
   });
   await exports.firebaseReady;
-  state.adcFile = impersonating("firebase-adminsdk-x@rewardplanners-ebbe4.iam.gserviceaccount.com");
+  state.adcFile = impersonating(
+    "firebase-adminsdk-x@rewardplanners-ebbe4.iam.gserviceaccount.com",
+  );
   await exports.verifyPrimaryCredentials();
   assert.equal(exports.firebaseStatus.enabled, false);
-  assert.match(exports.firebaseStatus.reason, /project mismatch.*rewardplanners-ebbe4/);
+  assert.match(
+    exports.firebaseStatus.reason,
+    /project mismatch.*rewardplanners-ebbe4/,
+  );
   assert.equal(state.tokenCalls, 1);
 });
 
-const LEGACY_ADC = { FIREBASE_LEGACY_CREDENTIAL_MODE: "application_default", FIREBASE_LEGACY_PROJECT_ID: "rewardplanners-ebbe4" };
+const LEGACY_ADC = {
+  FIREBASE_LEGACY_CREDENTIAL_MODE: "application_default",
+  FIREBASE_LEGACY_PROJECT_ID: "rewardplanners-ebbe4",
+};
 const iamResponse = (permissions) => async (url, init) => {
   assert.match(url, /\/v1\/projects\/rewardplanners-ebbe4:testIamPermissions$/);
-  assert.deepEqual(JSON.parse(init.body), { permissions: ["cloudmessaging.messages.create"] });
-  return { status: 200, async json() { return { permissions }; } };
+  assert.deepEqual(JSON.parse(init.body), {
+    permissions: ["cloudmessaging.messages.create"],
+  });
+  return {
+    status: 200,
+    async json() {
+      return { permissions };
+    },
+  };
 };
 
 test("keyless legacy app targets the legacy project and is enabled only when IAM grants FCM send", async () => {
   const { exports, state } = loadAdcFirebase({
-    adcFile: impersonating(PRIMARY_SA), env: LEGACY_ADC, tokens: [async () => ({ access_token: "t" }), async () => ({ access_token: "t" })],
+    adcFile: impersonating(PRIMARY_SA),
+    env: LEGACY_ADC,
+    tokens: [
+      async () => ({ access_token: "t" }),
+      async () => ({ access_token: "t" }),
+    ],
     fetch: iamResponse(["cloudmessaging.messages.create"]),
   });
   assert.equal(exports.legacyFirebaseStatus.enabled, false);
@@ -213,32 +473,70 @@ test("keyless legacy app targets the legacy project and is enabled only when IAM
 
 test("keyless legacy app stays disabled with an actionable reason when the permission is missing", async () => {
   const { exports, state } = loadAdcFirebase({
-    adcFile: impersonating(PRIMARY_SA), env: LEGACY_ADC, tokens: [async () => ({ access_token: "t" }), async () => ({ access_token: "t" })],
+    adcFile: impersonating(PRIMARY_SA),
+    env: LEGACY_ADC,
+    tokens: [
+      async () => ({ access_token: "t" }),
+      async () => ({ access_token: "t" }),
+    ],
     fetch: iamResponse([]),
   });
   await Promise.all([exports.firebaseReady, exports.legacyFirebaseReady]);
   assert.equal(exports.firebaseStatus.enabled, true);
   assert.equal(exports.legacyFirebaseStatus.enabled, false);
   assert.equal(exports.legacyFirebaseStatus.credentialCheck, "failed");
-  assert.match(exports.legacyFirebaseStatus.reason, /lacks cloudmessaging\.messages\.create on legacy project "rewardplanners-ebbe4".*roles\/firebasecloudmessaging\.admin/);
+  assert.match(
+    exports.legacyFirebaseStatus.reason,
+    /lacks cloudmessaging\.messages\.create on legacy project "rewardplanners-ebbe4".*roles\/firebasecloudmessaging\.admin/,
+  );
   assert.ok(state.timers.some((timer) => timer.ms === 5 * 60 * 1000));
 });
 
 test("keyless legacy mode rejects a missing or primary legacy project id", () => {
-  const missing = loadAdcFirebase({ adcFile: impersonating(PRIMARY_SA), env: { FIREBASE_LEGACY_CREDENTIAL_MODE: "application_default" }, tokens: [async () => ({ access_token: "t" })] });
-  assert.match(missing.exports.legacyFirebaseStatus.reason, /requires FIREBASE_LEGACY_PROJECT_ID/);
-  const primary = loadAdcFirebase({ adcFile: impersonating(PRIMARY_SA), env: { FIREBASE_LEGACY_CREDENTIAL_MODE: "application_default", FIREBASE_LEGACY_PROJECT_ID: "reward-planners-2324d" }, tokens: [async () => ({ access_token: "t" })] });
-  assert.match(primary.exports.legacyFirebaseStatus.reason, /is the primary project/);
+  const missing = loadAdcFirebase({
+    adcFile: impersonating(PRIMARY_SA),
+    env: { FIREBASE_LEGACY_CREDENTIAL_MODE: "application_default" },
+    tokens: [async () => ({ access_token: "t" })],
+  });
+  assert.match(
+    missing.exports.legacyFirebaseStatus.reason,
+    /requires FIREBASE_LEGACY_PROJECT_ID/,
+  );
+  const primary = loadAdcFirebase({
+    adcFile: impersonating(PRIMARY_SA),
+    env: {
+      FIREBASE_LEGACY_CREDENTIAL_MODE: "application_default",
+      FIREBASE_LEGACY_PROJECT_ID: "reward-planners-2324d",
+    },
+    tokens: [async () => ({ access_token: "t" })],
+  });
+  assert.match(
+    primary.exports.legacyFirebaseStatus.reason,
+    /is the primary project/,
+  );
   assert.deepEqual(primary.state.apps, ["[DEFAULT]"]);
 });
 
 test("a legacy key for a different project than FIREBASE_LEGACY_PROJECT_ID is rejected", () => {
-  const key = JSON.stringify({ type: "service_account", project_id: "some-other-project", client_email: "x@some-other-project.iam.gserviceaccount.com", private_key: "-----BEGIN PRIVATE KEY-----\nx\n-----END PRIVATE KEY-----\n" });
+  const key = JSON.stringify({
+    type: "service_account",
+    project_id: "some-other-project",
+    client_email: "x@some-other-project.iam.gserviceaccount.com",
+    private_key: "-----BEGIN PRIVATE KEY-----\nx\n-----END PRIVATE KEY-----\n",
+  });
   const { exports, state } = loadAdcFirebase({
-    adcFile: impersonating(PRIMARY_SA), env: { FIREBASE_LEGACY_PROJECT_ID: "rewardplanners-ebbe4", FIREBASE_LEGACY_SERVICE_ACCOUNT: key },
-    tokens: [async () => ({ access_token: "t" })], cert: () => ({}),
+    adcFile: impersonating(PRIMARY_SA),
+    env: {
+      FIREBASE_LEGACY_PROJECT_ID: "rewardplanners-ebbe4",
+      FIREBASE_LEGACY_SERVICE_ACCOUNT: key,
+    },
+    tokens: [async () => ({ access_token: "t" })],
+    cert: () => ({}),
   });
   assert.equal(exports.legacyFirebaseStatus.enabled, false);
-  assert.match(exports.legacyFirebaseStatus.reason, /Legacy Firebase project mismatch/);
+  assert.match(
+    exports.legacyFirebaseStatus.reason,
+    /Legacy Firebase project mismatch/,
+  );
   assert.deepEqual(state.apps, ["[DEFAULT]"]);
 });

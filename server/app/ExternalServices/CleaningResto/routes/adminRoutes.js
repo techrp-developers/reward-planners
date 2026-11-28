@@ -1,0 +1,2 @@
+const router=require('express').Router();const c=require('../controllers/adminController');const {authenticateToken,authorizeRoles}=require('../../../../middleware/auth');
+router.use(authenticateToken,authorizeRoles('service_manager','admin'));router.get('/enquiries',c.list);router.get('/enquiries/:enquiryId',c.detail);router.patch('/enquiries/:enquiryId/status',c.status);router.post('/enquiries/:enquiryId/activities',c.activity);module.exports=router;

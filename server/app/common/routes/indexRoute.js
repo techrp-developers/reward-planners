@@ -14,6 +14,7 @@ const statusRoutes = require("./statusRoute");
 const pollRoutes = require("./pollRoute");
 const otaRoutes = require("./otaRoute");
 const rmNotificationRoutes = require("./rmNotificationRoute");
+const { customerRouter: externalServicesCustomer } = require("../../ExternalServices/CleaningResto");
 
 router.use("/auth", authRoutes);
 router.use("/global", globalRoutes);
@@ -29,5 +30,6 @@ router.use("/polls", pollRoutes);
 router.use("/ota", otaRoutes);
 router.use("/rm/notifications", rmNotificationRoutes);
 router.use("/rm/assignments", require("./rmAssignmentRoute"));
+router.use("/external-services", externalServicesCustomer);
 
 module.exports = router;

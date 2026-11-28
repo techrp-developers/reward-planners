@@ -4,6 +4,7 @@
   "description": "Reward Planners Backend API",
   "main": "app.js",
   "scripts": {
+    "migrate:external-services": "node scripts/migrate-external-services.js",
     "migrate:corporate-gifting": "node scripts/migrate-corporate-gifting.js",
     "test:corporate-gifting": "node --test tests/corporateGifting.test.js tests/integration/corporateGifting.db.test.js",
     "migrate:poster-redirect-screen": "node scripts/migrate-poster-redirect-screen.js",

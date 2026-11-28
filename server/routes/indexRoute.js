@@ -24,6 +24,7 @@ const clientOnboardingOtpRoutes = require("./clientOnboardingOtpRoutes");
 const clientOnboardingReviewRoutes = require("./clientOnboardingReviewRoutes");
 const supportTicketRoutes = require("./supportTicketRoutes");
 const pollRoutes = require("./pollRoutes");
+const { adminRouter: externalServicesAdmin } = require("../app/ExternalServices/CleaningResto");
 
 // dashboard Routes
 // Expose app-global endpoints when this router is mounted at /api/crm.
@@ -55,5 +56,6 @@ router.use("/client-onboarding/otp", clientOnboardingOtpRoutes);
 router.use("/client-onboarding/reviews", clientOnboardingReviewRoutes);
 router.use("/manager", supportTicketRoutes);
 router.use("/polls", pollRoutes);
+router.use("/admin/external-services", externalServicesAdmin);
 
 module.exports = router;

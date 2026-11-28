@@ -203,3 +203,26 @@
 @media (prefers-reduced-motion: reduce) {
   .role-portal:has(.service-manager-ui) .page-enter { animation: none; }
 }
+
+/* Clean and restoration enquiry workspace */
+.cr-heading { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+.cr-heading h2 { font-size: 16px; font-weight: 600; }
+.cr-heading p { margin-top: 5px; color: var(--service-secondary); font-size: 12px; }
+.cr-heading > span { color: #852baf; background: #f4eaf9; border-radius: 20px; padding: 6px 10px; font-size: 11px; white-space: nowrap; }
+.cr-filters { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; margin: 22px 0; }
+.cr-filters label:not(.cr-check) { display: grid; gap: 6px; color: var(--service-secondary); font-size: 11px; font-weight: 500; }
+.cr-search { flex: 1 1 220px; max-width: 330px; }
+.cr-filters .cr-check { display: flex; align-items: center; gap: 7px; min-height: 37px; font-size: 12px; }
+.cr-table-wrap { border: 1px solid var(--service-border); border-radius: 9px; }
+.cr-table th { font-size: 11px; font-weight: 600; }
+.cr-table tbody tr:hover { background: #faf7fc; }
+.cr-table tbody tr:last-child td { border-bottom: 0; }
+.cr-table td { padding: 15px 12px; }
+.cr-table .cr-view { font-weight: 600; white-space: nowrap; }
+.cr-detail .sm-panel h2 { font-size: 15px; font-weight: 600; margin-bottom: 14px; }
+.cr-detail .sm-panel p { font-size: 12px; line-height: 1.6; margin: 6px 0; }
+.cr-detail .sm-panel label { display: grid; gap: 6px; font-size: 12px; font-weight: 500; margin: 14px 0 8px; }
+.cr-detail .sm-panel textarea { min-height: 76px; resize: vertical; }
+.cr-detail .sm-list-row { align-items: flex-start; }
+.cr-detail .sm-list-row img { display: inline-block; border-radius: 8px; margin: 6px 8px 0 0; }
+@media (max-width: 700px) { .cr-search { max-width: none; } .cr-heading { flex-wrap: wrap; } }

@@ -22,6 +22,8 @@ const CorporateGifting = lazy(() => import("./modules/hr/gifting/CorporateGiftin
 const GiftingEnquiries = lazy(() => import("./modules/hr/gifting/GiftingEnquiries.tsx"));
 const WarehouseLayout = lazy(() => import("./modules/warehouse_manager/layout/WarehouseLayout.tsx"));
 const FleaMarketLayout = lazy(() => import("./modules/flea_market/layout/FleaMarketLayout.tsx"));
+const CleaningRestoEnquiryList = lazy(() => import('./modules/service/serviceManager/CleaningRestoEnquiries').then(m => ({ default: m.CleaningRestoEnquiryList })));
+const CleaningRestoEnquiryDetail = lazy(() => import('./modules/service/serviceManager/CleaningRestoEnquiries').then(m => ({ default: m.CleaningRestoEnquiryDetail })));
 const ServiceLayout = lazy(() => import("./modules/service/serviceManager/ServiceLayout.tsx"));
 const ServicePartnerLayout = lazy(() => import("./modules/service/servicePartner/ServicePartnerLayout.tsx"));
 const RmLayout = lazy(() => import("./modules/rm/RmLayout.tsx"));
@@ -467,6 +469,8 @@ export default function App() {
       {/* ========== SERVICES ========== */}
       <Route element={<ServiceLayout />}>
         <Route path={routes.service.dashboard} element={<ServiceDashboard />} />
+        <Route path="/service/external-enquiries" element={<CleaningRestoEnquiryList />} />
+        <Route path="/service/external-enquiries/:id" element={<CleaningRestoEnquiryDetail />} />
         <Route path="/service/in-house" element={<ServiceDashboard inHouse />} />
         <Route path="/service/pricing" element={<CommercialPage />} />
         <Route path="/service/rewards" element={<CommercialPage rewards />} />

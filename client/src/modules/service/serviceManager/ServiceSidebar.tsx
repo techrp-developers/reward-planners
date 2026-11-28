@@ -18,6 +18,7 @@ const groups = [
     { label: 'Cancellations & Refunds', to: routes.service.cancellations, icon: XCircle },
   ] },
   { label: 'Partner Services', links: [
+    { label: 'Clean and Restoration', to: '/service/external-enquiries', icon: Inbox },
     { label: 'Overview', to: '/service/partners/overview', icon: BriefcaseBusiness },
     { label: 'Partner Catalogue', to: '/service/partners/catalogue', icon: Layers },
     { label: 'Partner Assignments', to: '/service/partners/assignments', icon: UsersRound },
