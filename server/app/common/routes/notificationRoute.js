@@ -14,6 +14,9 @@ router.post("/:notification_id/opened", auth, notificationController.recordOpene
 // my notification details
 router.get("/my-notification", auth, notificationController.getMyNotifications);
 
+// one notification (detail view), owner only
+router.get("/item/:notification_id", auth, notificationController.getNotification.bind(notificationController));
+
 // notification badge
 router.get("/notification-badge", auth, notificationController.getUnreadBadge);
 

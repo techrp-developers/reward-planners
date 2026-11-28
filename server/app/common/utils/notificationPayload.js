@@ -61,13 +61,36 @@ function inferScreen(data) {
   return SCREEN_BY_MODULE[data.module] || "Notifications";
 }
 
+// The destination a push opens, persisted in the shared shape so the inbox
+// opens the same screen (notificationDestinations.normalizeNotificationDestination).
+function withDestinationMetadata(payload) {
+  if (!payload.destination_type || !payload.target_route) return payload;
+  const metadata = payload.metadata && typeof payload.metadata === "object" ? payload.metadata : {};
+  const id = payload.target_id ? String(payload.target_id) : null;
+  return {
+    ...payload,
+    metadata: {
+      ...metadata,
+      destination_type: payload.destination_type,
+      destination_id: id,
+      destination: {
+        type: payload.destination_type,
+        id,
+        route: payload.target_route,
+        fallback_route: payload.fallback_route || null,
+        deep_link: payload.deep_link || null,
+      },
+    },
+  };
+}
+
 function buildNotificationPayload(data) {
-  const payload = {
+  const payload = withDestinationMetadata({
     priority: "normal",
     reference_type: "none",
     ...data,
     screen: inferScreen(data),
-  };
+  });
 
   const userId = payload.userId ?? payload.user_id;
   if (!payload.idempotency_key && IDEMPOTENT_TYPES.has(payload.type) &&

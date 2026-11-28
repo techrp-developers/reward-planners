@@ -11,6 +11,8 @@ const {
   getRefundableAmount,
 } = require("../utils/workflowPolicy");
 const { enqueueRefund, processRefund } = require("./refundService");
+const { notifyUser } = require("../../common/utils/notification");
+const { resolveDestination } = require("../../common/utils/notificationDestinations");
 
 const ORDER_COLUMNS = `
   id, user_id, order_ref, trace_id, srdv_index, result_index, seat_count,
@@ -118,8 +120,35 @@ async function markConfirmed(orderId, booking, rawResponse) {
       orderId,
     ],
   );
-  if (updated.affectedRows) void sendTransactionSuccessEmail("bus", orderId);
+  if (updated.affectedRows) {
+    void sendTransactionSuccessEmail("bus", orderId);
+    await notifyBookingConfirmed(orderId);
+  }
   await settleTransactionReward("busbooking", orderId);
+}
+
+// Transactional: opens this booking's details. The key makes a retried or
+// reviewed confirmation notify once.
+async function notifyBookingConfirmed(orderId) {
+  try {
+    const order = await getOrder(orderId);
+    if (!order?.user_id || !order.order_ref) return;
+    notifyUser({
+      userId: order.user_id,
+      module: "busbooking",
+      type: "bus_booking_confirmed",
+      title: "Bus ticket confirmed",
+      message: `Your bus booking ${order.order_ref} is confirmed${order.ticket_no ? `. Ticket ${order.ticket_no}` : ""}.`,
+      icon: "bus",
+      priority: "high",
+      reference_type: "bus_booking",
+      reference_id: order.order_ref,
+      idempotency_key: `busbooking:confirmed:${order.order_ref}`,
+      ...resolveDestination({ module: "busbooking", destinationType: "bus_booking", destinationId: order.order_ref }),
+    }, "bus booking confirmed");
+  } catch (error) {
+    console.error(`[BusBooking] Confirmation notification for order ${orderId} failed:`, error.message);
+  }
 }
 
 // A booking that definitely did not happen: record it and the full refund it

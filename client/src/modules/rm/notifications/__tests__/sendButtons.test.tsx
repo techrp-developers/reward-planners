@@ -130,6 +130,8 @@ describe("Send now", () => {
     renderCompose(companyMeta());
     await pickCompany(user);
     await fillMessage(user);
+    // The button enables once the audience preview has loaded.
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Send now$/ }).hasAttribute("disabled")).toBe(false));
     await user.click(screen.getByRole("button", { name: /^Send now$/ }));
     await waitFor(() => expect(api.createCampaign).toHaveBeenCalledTimes(1));
     expect(api.createCampaign.mock.calls[0][0].audience_type).toBe("company");

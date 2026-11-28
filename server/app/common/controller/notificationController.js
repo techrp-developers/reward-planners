@@ -1,6 +1,7 @@
 const NotificationModel = require("../models/notificationModel");
 const NotificationTemplateModel = require("../models/notificationTemplateModel");
 const { normalizePreferenceUpdate } = require("../utils/notificationTemplate");
+const { normalizeNotificationDestination } = require("../utils/notificationDestinations");
 
 function requireUserId(req, res) {
   const userId = req.user?.user_id;
@@ -113,9 +114,11 @@ class NotificationController {
       const notifications =
         await NotificationModel.getByUser(userId, req.query.limit, beforeId);
 
+      // destination: what tapping the row opens, in the same shape for new
+      // and legacy rows, so the app never guesses from action_url itself.
       return res.json({
         success: true,
-        data: notifications,
+        data: notifications.map((row) => ({ ...row, destination: normalizeNotificationDestination(row) })),
       });
     } catch (error) {
       console.error("Fetch Notifications Error:", { code: error.code, errno: error.errno, message: error.message, stack: error.stack });
@@ -124,6 +127,28 @@ class NotificationController {
         success: false,
         message: "Failed to fetch notifications",
       });
+    }
+  }
+
+  /* ================================
+     GET ONE (detail view / push tap for a row not yet loaded)
+     Same row shape as my-notification, including destination.
+  ================================= */
+  async getNotification(req, res) {
+    try {
+      const userId = requireUserId(req, res);
+      if (!userId) return;
+      const notificationId = Number(req.params.notification_id);
+      if (!Number.isSafeInteger(notificationId) || notificationId <= 0) {
+        return res.status(400).json({ success: false, message: "Invalid notification" });
+      }
+
+      const row = await NotificationModel.getOneByUser(userId, notificationId);
+      if (!row) return res.status(404).json({ success: false, message: "Notification not found" });
+      return res.json({ success: true, data: { ...row, destination: normalizeNotificationDestination(row) } });
+    } catch (error) {
+      console.error("Fetch Notification Error:", error.message);
+      return res.status(500).json({ success: false, message: "Failed to fetch notification" });
     }
   }
 

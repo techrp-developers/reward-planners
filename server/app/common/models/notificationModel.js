@@ -180,6 +180,20 @@ class NotificationModel {
     }));
   }
 
+  /** One of the user's own notifications (inbox detail view), or null. */
+  async getOneByUser(userId, notificationId) {
+    const [[row]] = await db.execute(
+      `
+      SELECT notification_id, module, type, title, message, icon, reference_type,
+             reference_id, action_url, metadata, priority, is_read, created_at
+      FROM notifications
+      WHERE notification_id = ? AND user_id = ?
+      `,
+      [notificationId, userId],
+    );
+    return row ? { ...row, metadata: parseMetadata(row.metadata) } : null;
+  }
+
   /* ================================
      MARK AS READ
   ================================= */

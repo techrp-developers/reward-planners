@@ -36,7 +36,9 @@ export default function MediaDestinationSection({ meta, editable, module, value,
   const mediaReady = meta.infrastructure.mediaTables;
   const backendModule = meta.modules.find((option) => option.value === module)?.module || "common";
   // A campaign may only open a screen the app has; the server refuses the rest.
-  const destinations = meta.destinations.filter((item) => item.campaignAllowed && item.mobileRoute === "verified" && (item.module === backendModule || item.module === "common"));
+  // General (common) campaigns may open any module's destination.
+  const destinations = meta.destinations.filter((item) => item.campaignAllowed && item.mobileRoute === "verified" &&
+    (backendModule === "common" || item.module === backendModule || item.module === "common"));
   const destination = meta.destinations.find((item) => item.key === value.destination_type) || null;
   const [pickerSlot, setPickerSlot] = useState<MediaSlot | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);

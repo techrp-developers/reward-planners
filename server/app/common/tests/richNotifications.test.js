@@ -45,6 +45,16 @@ test("destinations are validated against module, entity and privacy", () => {
   assert.deepEqual(validateDestination({ module: "games", destinationType: "notifications" }).errors, [], "common destinations work for any module");
 });
 
+test("a general (common) campaign may open any module's destination, still validated and never private", () => {
+  assert.deepEqual(validateDestination({ module: "common", destinationType: "product", destinationId: "1125" }).errors, []);
+  assert.deepEqual(validateDestination({ module: "common", destinationType: "bus_search" }).errors, []);
+  assert.match(validateDestination({ module: "common", destinationType: "product" }).errors[0], /Select the product/);
+  assert.match(validateDestination({ module: "common", destinationType: "bus_booking", destinationId: "RP1" }).errors[0], /private/);
+  const common = destinationsForModule("common").map((item) => item.key);
+  assert.ok(common.includes("product") && common.includes("service") && common.includes("wallet"));
+  assert.ok(!common.includes("order_details") && !common.includes("bus_booking"));
+});
+
 test("resolved destinations give the app a screen, typed params, deep link and fallback", () => {
   const product = resolveDestination({ module: "ecommerce", destinationType: "product", destinationId: "42" });
   assert.equal(product.screen, "ProductDetails");

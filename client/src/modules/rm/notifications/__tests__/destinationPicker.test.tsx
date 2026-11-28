@@ -18,8 +18,8 @@ const meta = makeMeta({ destinations: [
   { ...dest("events", "Events", null, "not_in_app"), module: "common" },
 ] });
 
-function renderSection(value: Partial<{ destination_type: string; destination_id: string }>, onName = vi.fn()) {
-  render(<MediaDestinationSection meta={meta} editable module="ecommerce" assets={{}} onAssets={vi.fn()} onChange={vi.fn()} approvedLanguages={["en"]} hasHindi={false} hasMarathi={false}
+function renderSection(value: Partial<{ destination_type: string; destination_id: string }>, onName = vi.fn(), module = "ecommerce") {
+  render(<MediaDestinationSection meta={meta} editable module={module} assets={{}} onAssets={vi.fn()} onChange={vi.fn()} approvedLanguages={["en"]} hasHindi={false} hasMarathi={false}
     onDestinationName={onName}
     value={{ content_type: "standard", destination_type: "", destination_id: "", catalog_product_ids: [], media: {}, ...value }} />);
   return onName;
@@ -32,6 +32,13 @@ describe("destination picker", () => {
     renderSection({});
     const options = screen.getAllByRole("option").map((option) => option.textContent);
     expect(options).toContain("Promotion (offer campaign)");
+    expect(options).not.toContain("Events");
+  });
+
+  it("lets a general (common) campaign open a product, not only e-commerce ones", () => {
+    renderSection({}, vi.fn(), "common");
+    const options = screen.getAllByRole("option").map((option) => option.textContent);
+    expect(options).toContain("Product details");
     expect(options).not.toContain("Events");
   });
 

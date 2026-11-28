@@ -71,7 +71,7 @@ const ANNOUNCEMENT_TYPES = {
   system_maintenance: "App maintenance",
   safety_notice: "Safety notice",
 };
-const ANNOUNCEMENT_DESTINATIONS = new Set(["home", "notifications", "announcements", "events", "support"]);
+const ANNOUNCEMENT_DESTINATIONS = new Set(["home", "notifications", "notification_details", "announcements", "events", "support"]);
 // (\b does not match before "₹", so the currency sign is matched on its own.)
 const PROMOTIONAL_WORDING = /(\d+\s*%\s*off|\bdiscount|\boffers?\b|\bsale\b|\bcoupon|\bcashback|\bbuy now\b|\bshop now\b|\bdeals?\b|(?:\brs\.?|\binr|₹)\s*\d)/i;
 
@@ -86,7 +86,7 @@ function validateAnnouncement(value) {
   if (value.module !== "common") errors.push("Announcements use the Common / General or Support module. Module promotions must be sent as Marketing.");
   if (value.content_type === "catalog") errors.push("Product catalogs are promotions: send them as Marketing.");
   if (value.destination_type && !ANNOUNCEMENT_DESTINATIONS.has(value.destination_type)) {
-    errors.push("Announcements may only open Home, Announcements, Events, Support or the inbox.");
+    errors.push("Announcements may only open Home, Announcements, Events, Support, the inbox or the message itself.");
   }
   const text = ["title_en", "body_en", "title_hi", "body_hi", "title_mr", "body_mr"].map((key) => value[key] || "").join(" ");
   if (PROMOTIONAL_WORDING.test(text)) {
